@@ -4,7 +4,7 @@
 **Phase**: SKILL-CATALOG-1
 **Status**: In Progress
 **Validation Gaps**: 5 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T11:09:09.403Z
+**Last Updated**: 2026-11-04T11:14:11.357Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -30,12 +30,13 @@
   - Files: src/server/catalog/types.ts, src/server/catalog/frontmatter.ts, src/server/catalog/opencode.ts, tests/unit/catalog-opencode.test.ts
 - [x] Phase SKILL-CATALOG-1, Task CAT-02: Implement Copilot CLI skill discovery (@backend-engineer)
   - Files: src/server/catalog/copilot.ts, tests/unit/catalog-copilot.test.ts, src/server/catalog/types.ts
+- [x] Phase SKILL-CATALOG-1, Task CAT-03: Merge catalog sources and expose the catalog API (@backend-engineer)
+  - Files: src/server/catalog/merge.ts, src/server/routes/catalog.ts, src/server/routes/index.ts, tests/unit/catalog-merge.test.ts, tests/integration/catalog-routes.test.ts, src/server/app.ts, src/server/catalog/types.ts
 
 ## Current Task
 - None currently running
 
 ## Remaining
-- [ ] Phase SKILL-CATALOG-1: Phase 1: Discovery and Catalog API
 - [ ] Phase SKILL-CATALOG-2: Phase 2: Catalog Panel and Live Verification
 - [ ] Phase CHAIN-AUTHORING-1: Phase 1: Model, Storage, and API
 - [ ] Phase CHAIN-AUTHORING-2: Phase 2: Chain Library and Builder

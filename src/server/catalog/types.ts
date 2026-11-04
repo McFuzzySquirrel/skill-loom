@@ -70,6 +70,7 @@ export const CATALOG_WARNING_CODES = {
   ENTRY_INVALID: 'SKILL_ENTRY_INVALID',
   SOURCE_UNKNOWN: 'SKILL_SOURCE_UNKNOWN',
   PATH_UNRESOLVED: 'SKILL_PATH_UNRESOLVED',
+  DISCOVERY_SLOW: 'CATALOG_DISCOVERY_SLOW',
 } as const;
 export type CatalogWarningCode =
   (typeof CATALOG_WARNING_CODES)[keyof typeof CATALOG_WARNING_CODES];
@@ -162,6 +163,9 @@ function sourceRank(source: SkillSource): number {
 /** Typed failure for invalid scanner input, not for a broken skills directory. */
 export const CATALOG_ERROR_CODES = {
   PROJECT_PATH_INVALID: 'CATALOG_PROJECT_PATH_INVALID',
+  PROJECT_ID_INVALID: 'CATALOG_PROJECT_ID_INVALID',
+  PROJECT_NOT_FOUND: 'CATALOG_PROJECT_NOT_FOUND',
+  HARNESS_UNSUPPORTED: 'CATALOG_HARNESS_UNSUPPORTED',
 } as const;
 export type CatalogErrorCode = (typeof CATALOG_ERROR_CODES)[keyof typeof CATALOG_ERROR_CODES];
 

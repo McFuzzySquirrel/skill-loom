@@ -15,6 +15,7 @@ import {
   createApiErrorEnvelope,
   type ActiveRunSummary,
 } from '../shared/api.js';
+import type { CatalogService } from './catalog/merge.js';
 import { createConfigStore, type ConfigStore } from './config/store.js';
 import type { GitInitRunner } from './projects/registry.js';
 import { routes } from './routes/index.js';
@@ -81,6 +82,8 @@ export interface BuildAppOptions {
   env?: NodeJS.ProcessEnv;
   /** Injected config store. Defaults to the process-wide store. */
   configStore?: ConfigStore;
+  /** Injected catalog service. Defaults to the v1 adapter registry. */
+  catalogService?: CatalogService;
   /** Injected package version. Defaults to the root package.json version. */
   version?: string;
   /** Fastify logger configuration. Tests pass `false`. */
@@ -318,6 +321,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     terminalManager,
     ...(options.getActiveRun === undefined ? {} : { getActiveRun: options.getActiveRun }),
     ...(options.projectGitInit === undefined ? {} : { gitInit: options.projectGitInit }),
+    ...(options.catalogService === undefined ? {} : { catalogService: options.catalogService }),
   });
 
   return app;

@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { catalogRoutes, type CatalogRoutesOptions } from './catalog.js';
 import { fsRoutes, type FsRouteOptions } from './fs.js';
 import { healthRoutes, type HealthRouteOptions } from './health.js';
 import { projectRoutes, type ProjectRoutesOptions } from './projects.js';
@@ -7,7 +8,8 @@ import { terminalRoutes, type TerminalRouteOptions } from './terminal.js';
 export type RouteRegistrationOptions = HealthRouteOptions &
   TerminalRouteOptions &
   FsRouteOptions &
-  ProjectRoutesOptions;
+  ProjectRoutesOptions &
+  CatalogRoutesOptions;
 
 /**
  * Single registration point for the HTTP and WebSocket surface. Every feature
@@ -18,5 +20,6 @@ export const routes: FastifyPluginAsync<RouteRegistrationOptions> = async (app, 
   await app.register(healthRoutes, options);
   await app.register(fsRoutes, options);
   await app.register(projectRoutes, options);
+  await app.register(catalogRoutes, options);
   await app.register(terminalRoutes, options);
 };

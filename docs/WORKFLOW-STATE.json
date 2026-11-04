@@ -1,7 +1,7 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T11:09:09.401Z",
+  "lastUpdatedAt": "2026-11-04T11:14:11.355Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
@@ -502,10 +502,55 @@
     },
     "CAT-03": {
       "taskId": "CAT-03",
-      "status": "pending",
+      "status": "complete",
       "ownerAgent": "backend-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 1,
+      "outputFiles": [
+        "src/server/catalog/merge.ts",
+        "src/server/routes/catalog.ts",
+        "src/server/routes/index.ts",
+        "tests/unit/catalog-merge.test.ts",
+        "tests/integration/catalog-routes.test.ts",
+        "src/server/app.ts",
+        "src/server/catalog/types.ts"
+      ],
+      "startedAt": "2026-11-04T11:09:09.828Z",
+      "usage": {
+        "inputTokens": 79705,
+        "outputTokens": 17737,
+        "reasoningTokens": 24000,
+        "cacheReadTokens": 3496064,
+        "cacheWriteTokens": 0,
+        "costUsd": 0.04748614200000001,
+        "source": "harness"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/CAT-03.2026-11-04T11-14-11-347Z.attempt-1.result.json",
+          "usage": {
+            "inputTokens": 79705,
+            "outputTokens": 17737,
+            "reasoningTokens": 24000,
+            "cacheReadTokens": 3496064,
+            "cacheWriteTokens": 0,
+            "costUsd": 0.04748614200000001,
+            "source": "harness"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T11:14:11.351Z",
+      "agentOutput": "I'll start by reading the execution file to understand the task.\nNow I understand the codebase. Let me implement the merge service, extra-directory settings logic, routes, and tests.\nImplemented and verified CAT-03.\n\n**What was built**\n- Harness-neutral catalog merge with stable ids, source grouping, counts, case-insensitive name/description search, preserved warnings, and a 3-second performance-budget warning that never hides entries.\n- Adapter registry wiring for OpenCode and Copilot; extra directories are read from global config and applied only where supported.\n- Global extra-skill-directory settings: list, add with canonical `realpath` validation and duplicate rejection, and remove (including after a directory is deleted).\n- `GET /api/projects/:projectId/catalog` and `/api/settings/extra-skill-directories` registered through `src/server/routes/index.ts` and reachable through `src/server/app.ts`, all using the shared error envelope.\n\n**Files created**\n- `src/server/catalog/merge.ts`\n- `src/server/routes/catalog.ts`\n- `tests/unit/catalog-merge.test.ts`\n- `tests/integration/catalog-routes.test.ts`\n\n**Files changed**\n- `src/server/routes/index.ts`\n- `src/server/app.ts`\n- `src/server/catalog/types.ts`\n\n**Validation**\n- `npx vitest run tests/unit/catalog-merge.test.ts tests/integration/catalog-routes.test.ts` — 20 passed\n- `npx vitest run` — 186 passed\n- `npm run typecheck` — passed\n- `npm run build` — passed\n\n```forge-result\n{\"summary\":\"Implemented catalog merge, search, source grouping, performance warnings, global extra-directory settings, and the catalog/settings HTTP routes through the Fastify composition root. Declared tests, full Vitest suite, typecheck, and production build all pass.\",\"decisions\":[\"Catalog adapters are registered as a harness-neutral registry; routes select by adapter id and never branch on OpenCode or Copilot names.\",\"Extra directories are read from global config on every request and passed only to adapters that declare support, so OpenCode merges Slan extras and Copilot does not.\",\"Stable ids are recomputed at the merge boundary from harness, source, canonical path, and name; duplicate names are never collapsed.\",\"Slow discovery appends a CATALOG_DISCOVERY_SLOW warning after the 3-second budget while returning every discovered entry.\",\"Extra-directory add canonicalizes with realpath and rejects duplicates including symlink aliases; removal still works after the configured directory is deleted.\",\"No catalog result cache exists, so project, config, and filesystem changes appear on the next request.\"],\"interfaces\":[\"src/server/catalog/merge.ts: CatalogAdapter, CatalogService, createCatalogService, createDefaultCatalogAdapters, CatalogResponse, CATALOG_PERF_BUDGET_MS\",\"src/server/catalog/merge.ts: listExtraSkillDirectories, addExtraSkillDirectory, removeExtraSkillDirectory, ExtraDirectoryError, EXTRA_DIRECTORY_ERROR_CODES\",\"GET /api/projects/:projectId/catalog?harness=&q= -> {harness,query,total,counts,groups,warnings,elapsedMs}\",\"GET|POST|DELETE /api/settings/extra-skill-directories -> {extraSkillDirectories, directory?}\",\"BuildAppOptions.catalogService for deterministic integration injection\"],\"tests\":[\"npx vitest run tests/unit/catalog-merge.test.ts tests/integration/catalog-routes.test.ts: 20 passed\",\"npx vitest run: 186 passed\",\"npm run typecheck: exit 0\",\"npm run build: exit 0\"],\"unresolved\":[]}\n```\n",
+      "artifactId": "work-cat-03-001",
+      "inputArtifactIds": [
+        "work-cat-01-001",
+        "work-cat-02-001",
+        "work-found-03-001",
+        "work-found-04-001",
+        "work-found-05-001",
+        "work-proj-03-001"
+      ]
     },
     "CAT-04": {
       "taskId": "CAT-04",
