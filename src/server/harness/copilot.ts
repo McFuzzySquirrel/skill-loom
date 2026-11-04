@@ -135,6 +135,8 @@ export function createCopilotAdapter(options: HarnessAdapterOptions = {}): Harne
     trust: TRUST,
     automaticAdvancement: 'process-exit',
     supervisedAdvancement: 'user-only',
+    // Copilot prints best-effort `skill(name)` evidence when it loads a skill.
+    skillObservation: 'log-lines',
     automaticPermissions: COPILOT_AUTOMATIC_PERMISSIONS,
     requiresAutomaticPermissionOptIn: true,
     permissionOptInField: 'automaticPermissionOptIn',

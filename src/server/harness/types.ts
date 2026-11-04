@@ -31,6 +31,16 @@ export type HarnessAdvancementSignal = 'osc-working-idle' | 'process-exit';
 export type HarnessSupervisedAdvancement = 'user-only';
 
 /**
+ * How skill firing can be observed in a harness's terminal output (RUN-FR-10).
+ *
+ * `log-lines` means the CLI may print `skill(name)` lines that Slan can report
+ * best-effort. `unobservable` means the harness exposes no equivalent visible
+ * signal, so the run records `not-observable` instead of guessing.
+ */
+export const HARNESS_SKILL_OBSERVATIONS = ['log-lines', 'unobservable'] as const;
+export type HarnessSkillObservation = (typeof HARNESS_SKILL_OBSERVATIONS)[number];
+
+/**
  * Fork mechanism for one command surface.
  *
  * `handoff` means the caller starts a new session and supplies a deterministic
@@ -93,6 +103,8 @@ export interface HarnessDescriptor {
   readonly trust: HarnessTrustDescriptor;
   readonly automaticAdvancement: HarnessAdvancementSignal;
   readonly supervisedAdvancement: HarnessSupervisedAdvancement;
+  /** Best-effort skill-firing evidence available on the terminal stream. */
+  readonly skillObservation: HarnessSkillObservation;
   /** Exact broad flags used by an automatic run; empty when none are needed. */
   readonly automaticPermissions: readonly string[];
   /** True when `automaticPermissions` require a per-chain opt-in. */

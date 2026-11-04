@@ -98,6 +98,8 @@ export function createOpenCodeAdapter(options: HarnessAdapterOptions = {}): Harn
     trust: TRUST,
     automaticAdvancement: 'osc-working-idle',
     supervisedAdvancement: 'user-only',
+    // Interactive OpenCode exposes no visible skill(name) line equivalent.
+    skillObservation: 'unobservable',
     automaticPermissions: Object.freeze([]),
     requiresAutomaticPermissionOptIn: false,
     permissionOptInField: null,

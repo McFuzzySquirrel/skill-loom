@@ -4,7 +4,7 @@
 **Phase**: RUN-EXECUTION-1
 **Status**: In Progress
 **Validation Gaps**: 25 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T13:04:59.749Z
+**Last Updated**: 2026-11-04T13:10:53.220Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -60,12 +60,13 @@
   - Files: src/server/runs/model.ts, src/server/runs/store.ts, tests/unit/run-model.test.ts, tests/unit/run-store.test.ts
 - [x] Phase RUN-EXECUTION-1, Task RUN-02: Implement prompt assembly, session planning, and handoff notes (@backend-engineer)
   - Files: src/server/runs/prompts.ts, src/server/runs/handoff.ts, tests/unit/prompts.test.ts
+- [x] Phase RUN-EXECUTION-1, Task RUN-03: Parse OpenCode terminal state and skill observations (@backend-engineer)
+  - Files: src/server/runs/osc.ts, src/server/runs/observations.ts, tests/unit/osc.test.ts, src/server/harness/copilot.ts, src/server/harness/opencode.ts, src/server/harness/types.ts
 
 ## Current Task
 - None currently running
 
 ## Remaining
-- [ ] Phase RUN-EXECUTION-1: Phase 1: Run Model, Prompts, and Signal Parsing
 - [ ] Phase RUN-EXECUTION-2: Phase 2: Supervised and Automatic Runners
 - [ ] Phase RUN-EXECUTION-3: Phase 3: Run Orchestration and API
 - [ ] Phase RUN-EXECUTION-4: Phase 4: Run View

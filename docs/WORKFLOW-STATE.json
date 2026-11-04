@@ -1,7 +1,7 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T13:04:59.746Z",
+  "lastUpdatedAt": "2026-11-04T13:10:53.217Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
@@ -1237,10 +1237,56 @@
     },
     "RUN-03": {
       "taskId": "RUN-03",
-      "status": "pending",
+      "status": "complete",
       "ownerAgent": "backend-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 1,
+      "outputFiles": [
+        "src/server/runs/osc.ts",
+        "src/server/runs/observations.ts",
+        "tests/unit/osc.test.ts",
+        "src/server/harness/copilot.ts",
+        "src/server/harness/opencode.ts",
+        "src/server/harness/types.ts"
+      ],
+      "startedAt": "2026-11-04T13:05:00.383Z",
+      "usage": {
+        "inputTokens": 70264,
+        "outputTokens": 14514,
+        "reasoningTokens": 31721,
+        "cacheReadTokens": 3226880,
+        "cacheWriteTokens": 0,
+        "costUsd": 0.047961240000000016,
+        "source": "harness"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/RUN-03.2026-11-04T13-10-53-207Z.attempt-1.result.json",
+          "usage": {
+            "inputTokens": 70264,
+            "outputTokens": 14514,
+            "reasoningTokens": 31721,
+            "cacheReadTokens": 3226880,
+            "cacheWriteTokens": 0,
+            "costUsd": 0.047961240000000016,
+            "source": "harness"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T13:10:53.212Z",
+      "agentOutput": "I'll start by reading the execution file.\nNow I have the context I need. Let me implement the streaming OSC parser first.\nNow let me install dependencies and run the required tests.\nImplemented the streaming OSC 7501 parser, the working→idle completion state machine, and best-effort skill observation parsing. Added adapter-declared observation capability so no parser branches on harness names.\n\n```forge-result\n{\n  \"summary\": \"Implemented chunk-safe OSC 7501 parsing with working→idle completion, clear resets, unrelated ANSI tolerance, bounded unterminated buffers, and best-effort skill observation driven by adapter capability. Added 35 passing tests covering split chunks, idle-only streams, clear resets, quiet terminals, ANSI noise, and Copilot/OpenCode observation behavior.\",\n  \"decisions\": [\n    \"The OSC parser retains only a possible introducer suffix or an unterminated 7501 fragment, caps that fragment at 64 KiB, and drops oversized fragments so terminal output can never grow an unbounded buffer.\",\n    \"Idle without a prior working event produces no state change at all; clear resets both working and completion, and repeated idle events do not re-report the completion edge.\",\n    \"Terminators support BEL, ESC backslash, and C1 ST; a malformed unterminated sequence is discarded without swallowing a later valid sequence.\",\n    \"Skill observation is capability-driven through a new adapter descriptor field (log-lines for Copilot, unobservable for OpenCode), so the parser and future runners never compare harness ids.\",\n    \"Skill log scanning strips ANSI, bounds evidence to 100 matches and 512 characters per line, and buffers only one capped incomplete line in streaming mode.\",\n    \"No timers, clocks, output-idle checks, animation quiescence, or fixed sleeps exist in either parser.\"\n  ],\n  \"interfaces\": [\n    \"src/server/runs/osc.ts: OSC7501_PREFIX, OSC7501_STATES, DEFAULT_OSC_BUFFER_BYTES, parseOsc7501Params, parseOsc7501Chunk, Osc7501Parser, Osc7501StateMachine\",\n    \"Osc7501Parser: push(chunk), remainder, bufferedBytes, reset\",\n    \"Osc7501StateMachine: push(chunk) returns OscStateChange[], phase, state, sawWorking, completed, advanced, sessionId, reset\",\n    \"src/server/runs/observations.ts: SKILL_OBSERVATION_CAPABILITIES, observeSkillFiring, observeSkillFiringForAdapter, findSkillObservations, extractSkillNames, stripTerminalEscapes, SkillObservationTracker\",\n    \"HarnessDescriptor now includes skillObservation: 'log-lines' | 'unobservable'\"\n  ],\n  \"tests\": [\n    \"npx vitest run tests/unit/osc.test.ts: exit 0, 35 tests passed\",\n    \"npx vitest run tests/unit/harness-registry.test.ts tests/unit/osc.test.ts tests/unit/preflight-engine.test.ts: exit 0, 107 tests passed\",\n    \"npm run test:unit: exit 0, 359 tests passed\",\n    \"npm run test:integration: exit 0, 75 tests passed\",\n    \"npm run typecheck: exit 0\",\n    \"npm run build:server: exit 0\"\n  ],\n  \"warnings\": [\n    \"npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.\",\n    \"docs/EXECUTION-AUDIT.jsonl was already modified before this task and was left untouched.\"\n  ],\n  \"unresolved\": []\n}\n```\n\nFiles created:\n- `src/server/runs/osc.ts`\n- `src/server/runs/observations.ts`\n- `tests/unit/osc.test.ts`\n\nFiles changed:\n- `src/server/harness/types.ts`\n- `src/server/harness/opencode.ts`\n- `src/server/harness/copilot.ts`\n",
+      "artifactId": "work-run-03-001",
+      "inputArtifactIds": [
+        "work-run-01-001",
+        "work-found-04-001",
+        "work-found-05-001",
+        "work-proj-03-001",
+        "work-chain-04-001",
+        "work-chain-05-001",
+        "work-chain-06-001",
+        "work-pre-04-001"
+      ]
     },
     "RUN-04": {
       "taskId": "RUN-04",
