@@ -1,12 +1,12 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T10:41:23.821Z",
+  "lastUpdatedAt": "2026-11-04T10:44:29.984Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
   "status": "running",
-  "currentPhase": "APP-FOUNDATION-2",
+  "currentPhase": "PROJECT-WORKSPACE-1",
   "tasks": {
     "FOUND-01": {
       "taskId": "FOUND-01",
@@ -265,10 +265,51 @@
     },
     "PROJ-01": {
       "taskId": "PROJ-01",
-      "status": "pending",
+      "status": "complete",
       "ownerAgent": "backend-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 1,
+      "outputFiles": [
+        "src/server/projects/paths.ts",
+        "src/server/projects/browser.ts",
+        "src/server/routes/fs.ts",
+        "src/server/routes/index.ts",
+        "tests/unit/projects-paths.test.ts",
+        "tests/integration/fs-routes.test.ts"
+      ],
+      "startedAt": "2026-11-04T10:41:24.438Z",
+      "usage": {
+        "inputTokens": 48839,
+        "outputTokens": 12928,
+        "reasoningTokens": 15134,
+        "cacheReadTokens": 1191808,
+        "cacheWriteTokens": 0,
+        "costUsd": 0.027738473999999992,
+        "source": "harness"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/PROJ-01.2026-11-04T10-44-29-978Z.attempt-1.result.json",
+          "usage": {
+            "inputTokens": 48839,
+            "outputTokens": 12928,
+            "reasoningTokens": 15134,
+            "cacheReadTokens": 1191808,
+            "cacheWriteTokens": 0,
+            "costUsd": 0.027738473999999992,
+            "source": "harness"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T10:44:29.981Z",
+      "agentOutput": "I'll start by reading the execution file and understanding the project structure.\nLet me explore the existing code structure and relevant docs.\nDependencies aren't installed. I'll install them while I implement.\nNow I'll implement the path resolution and directory browser modules.\nNow the unit tests covering canonicalization, traversal, symlinks, sorting, and truncation.\nTests pass. Now running typecheck and the full existing suite to catch regressions.\nImplemented the server-side folder browser. Summary of work:\n\n- Added canonical path resolution with `realpath`, absolute-path enforcement, NUL/relative rejection, typed filesystem errors, and parent derivation.\n- Added directory listing with directory-first case-insensitive sorting, 1,000-entry truncation, `.git`/`.slan` detection, symlink handling, and omission of unreadable children.\n- Registered `GET /api/fs` through `src/server/routes/index.ts` and the existing `app.ts` composition root.\n- Added unit and integration coverage through the real Fastify composition root.\n\nValidation run:\n- `npx vitest run tests/unit/projects-paths.test.ts tests/integration/fs-routes.test.ts` — 32/32 passed\n- `npx vitest run` — 91/91 passed\n- `npm run typecheck:server` — passed\n- `npm run build:server` — passed\n\nFiles created or changed:\n- `src/server/projects/paths.ts` (new)\n- `src/server/projects/browser.ts` (new)\n- `src/server/routes/fs.ts` (new)\n- `src/server/routes/index.ts` (modified)\n- `tests/unit/projects-paths.test.ts` (new)\n- `tests/integration/fs-routes.test.ts` (new)\n\n```forge-result\n{\n  \"summary\": \"Implemented PROJ-01: canonical realpath-based folder browsing with typed path errors, directory-first sorting, git/.slan detection, unreadable-child omission, truncation, and GET /api/fs mounted through the Fastify composition root. Declared tests, full suite, server typecheck, and server build pass.\",\n  \"decisions\": [\n    \"Relative paths are rejected with PATH_NOT_ABSOLUTE rather than resolved against the process working directory.\",\n    \"Unreadable child directories are omitted by probing R_OK|X_OK; dangling symlinks are omitted when their target cannot be statted.\",\n    \"Listings are capped at 1000 entries after sorting so directories still appear first and truncated is reported accurately.\",\n    \"Typed domain codes map to HTTP statuses: 422 for path validation, 400 for not-a-directory, 403 for unreadable, and 404 for missing.\"\n  ],\n  \"interfaces\": [\n    \"src/server/projects/paths.ts: FolderPathError, FOLDER_PATH_ERROR_CODES, resolveCanonicalDirectory, parentOf, folderPathErrorFromFs, FolderPathDependencies\",\n    \"src/server/projects/browser.ts: listDirectory, DirectoryListing, DirectoryEntry, DEFAULT_MAX_DIRECTORY_ENTRIES, compareDirectoryEntries\",\n    \"GET /api/fs?path=<absolute-path> -> { path, parent, entries: [{ name, path, isDirectory, isGitRepo, hasSlan }], truncated }\",\n    \"Failure envelope -> { error: { code, message, details } } with PATH_* codes\"\n  ],\n  \"tests\": [\n    \"npx vitest run tests/unit/projects-paths.test.ts tests/integration/fs-routes.test.ts: 32 passed\",\n    \"npx vitest run: 91 passed\",\n    \"npm run typecheck:server: passed\",\n    \"npm run build:server: passed\"\n  ],\n  \"unresolved\": []\n}\n```\n",
+      "artifactId": "work-proj-01-001",
+      "inputArtifactIds": [
+        "work-found-03-001",
+        "work-found-04-001",
+        "work-found-05-001"
+      ]
     },
     "PROJ-02": {
       "taskId": "PROJ-02",
@@ -495,15 +536,34 @@
     },
     "APP-FOUNDATION-2": {
       "phaseId": "APP-FOUNDATION-2",
-      "status": "running",
+      "status": "complete",
       "contractFingerprint": "{\"title\":\"Phase 2: Web Shell and Terminal Transport\",\"description\":\"```forge-task {   \\\"id\\\": \\\"FOUND-04\\\",\",\"completionPolicy\":\"strict\",\"dependencies\":[\"APP-FOUNDATION-1\"],\"requiredOutputs\":[\"src/web/main.tsx\",\"src/web/App.tsx\",\"src/web/api/client.ts\",\"src/web/components/AppLayout.tsx\",\"src/web/components/StatusRegion.tsx\",\"src/web/routes/ProjectsPage.tsx\",\"src/web/routes/ChainBuilderPage.tsx\",\"src/web/routes/RunStartPage.tsx\",\"src/web/routes/RunPage.tsx\",\"src/web/routes/NotFoundPage.tsx\",\"src/web/styles/theme.css\",\"tests/e2e/shell.spec.ts\",\"src/server/terminal/pty.ts\",\"src/server/routes/terminal.ts\",\"src/server/app.ts\",\"tests/unit/pty.test.ts\",\"tests/integration/terminal-ws.test.ts\"],\"validationCommands\":[],\"tasks\":[{\"id\":\"FOUND-04\",\"title\":\"Build the routed React shell and API client\",\"description\":\"Create the Vite entry, React router, app layout, theme, typed API client, error boundary, status region, and placeholder route components for projects, chain authoring, run start, and run view. The layout must include a skip link, header with local-only badge, main landmark, and aria-live region. The API client must decode the shared error envelope and expose typed health calls. Add tests/e2e/shell.spec.ts covering direct route loads, the skip link, the local-only notice, a raw API failure rendered as an inline error, and a not-found route. Do not implement project, chain, catalog, or run business behavior.\",\"ownerAgent\":\"frontend-engineer\",\"required\":true,\"dependencies\":[\"FOUND-03\"],\"expectedOutputs\":[\"src/web/main.tsx\",\"src/web/App.tsx\",\"src/web/api/client.ts\",\"src/web/components/AppLayout.tsx\",\"src/web/components/StatusRegion.tsx\",\"src/web/routes/ProjectsPage.tsx\",\"src/web/routes/ChainBuilderPage.tsx\",\"src/web/routes/RunStartPage.tsx\",\"src/web/routes/RunPage.tsx\",\"src/web/routes/NotFoundPage.tsx\",\"src/web/styles/theme.css\",\"tests/e2e/shell.spec.ts\"],\"validationCommands\":[\"npx playwright test tests/e2e/shell.spec.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"FOUND-FR-04: Build a React shell with routes for projects, chain authoring, run start, and run view, including a skip link, visible keyboard focus, semantic landmarks, and an aria-live status region.\"],\"acceptanceCriteria\":[\"Every route renders through src/web/App.tsx without a console error\",\"The skip link moves focus to the main landmark\",\"The local-only badge is visible on every route\",\"The aria-live status region announces an API failure\",\"The not-found route offers a keyboard-reachable path back to projects\",\"The Playwright test exercises the shell through the real server and built app\"],\"constraints\":[\"Do not add a client-side state library\",\"Do not render raw HTML from server data\",\"ARCH-05: Every server route registers through src/server/app.ts, every web route mounts through src/web/App.tsx, and every new user-facing capability must be reachable through those composition roots with a test that exercises it there.\",\"A11Y-01: Every authoring action, including adding, removing, reordering, saving, preflight, and run control, must be reachable and executable with the keyboard alone, with move-up/move-down alternatives to drag-and-drop.\",\"A11Y-02: Provide visible focus indicators, semantic labels, a skip link, logical focus order, and aria-live announcements for step transitions, preflight results, and run state.\",\"SEC-03: Render terminal bytes only through xterm.js and render skill text through escaped React text. Do not use dangerouslySetInnerHTML for harness, skill, or run content.\"],\"references\":[\"docs/features/app-foundation.md#4. UI / Interaction Design\",\"docs/features/app-foundation.md#FOUND-FR-04\",\"docs/PRD.md#ARCH-05\",\"docs/PRD.md#A11Y-01\",\"docs/PRD.md#A11Y-02\",\"docs/PRD.md#SEC-03\"]}},{\"id\":\"FOUND-05\",\"title\":\"Implement the PTY WebSocket transport\",\"description\":\"Create the server-side terminal transport with node-pty. Spawn a command from an executable plus argument array, stream output as WebSocket messages, accept input and resize messages, cap buffered output per session, and terminate the child and socket on close or error. Register the WebSocket route through src/server/app.ts and expose a typed TerminalSession interface for later runners. Add tests/unit/pty.test.ts using a short node process and tests/integration/terminal-ws.test.ts using a real WebSocket client to assert output, resize, client input, cleanup, and one-subscriber enforcement. Do not implement run orchestration or the xterm view here.\",\"ownerAgent\":\"backend-engineer\",\"required\":true,\"dependencies\":[\"FOUND-03\"],\"expectedOutputs\":[\"src/server/terminal/pty.ts\",\"src/server/routes/terminal.ts\",\"src/server/app.ts\",\"tests/unit/pty.test.ts\",\"tests/integration/terminal-ws.test.ts\"],\"validationCommands\":[\"npx vitest run tests/unit/pty.test.ts tests/integration/terminal-ws.test.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"FOUND-FR-06: Provide a server-side PTY transport that streams terminal output and accepts input and resize messages over WebSocket, permits one active subscriber per PTY, and terminates the child process and socket when the session closes.\"],\"acceptanceCriteria\":[\"The unit test observes stdout from a spawned node process through the session interface\",\"The integration test connects through the registered WebSocket route\",\"Resize and input messages reach the PTY\",\"Closing the socket terminates the child process\",\"A second subscriber is rejected without disturbing the active one\"],\"constraints\":[\"Never build a shell command string from user input\",\"Do not use the web client to spawn processes\",\"ARCH-03: The server owns all filesystem traversal, config/chain/run persistence, CLI process spawning, and PTY handling. The browser performs no shell execution and receives only typed API and WebSocket data.\",\"SEC-01: Spawn harness CLIs with an executable plus argument array and no shell string interpolation. Canonicalize project and chain paths with realpath and reject traversal outside the intended project data directory.\",\"NFR-REL-02: Close PTY processes, WebSocket subscriptions, and child processes on disconnect, error, run completion, and SIGINT/SIGTERM; never leave an orphan harness process attached to a finished run.\"],\"references\":[\"docs/PRD.md#6.4 Execution Model\",\"docs/PRD.md#6.3 Key APIs and Interfaces\",\"docs/features/app-foundation.md#FOUND-FR-06\",\"docs/PRD.md#ARCH-03\",\"docs/PRD.md#SEC-01\",\"docs/PRD.md#NFR-REL-02\"]}}]}",
-      "updatedAt": "2026-11-04T10:35:00.634Z"
+      "updatedAt": "2026-11-04T10:41:24.338Z",
+      "validationEvidence": [
+        "output exists: src/web/main.tsx",
+        "output exists: src/web/App.tsx",
+        "output exists: src/web/api/client.ts",
+        "output exists: src/web/components/AppLayout.tsx",
+        "output exists: src/web/components/StatusRegion.tsx",
+        "output exists: src/web/routes/ProjectsPage.tsx",
+        "output exists: src/web/routes/ChainBuilderPage.tsx",
+        "output exists: src/web/routes/RunStartPage.tsx",
+        "output exists: src/web/routes/RunPage.tsx",
+        "output exists: src/web/routes/NotFoundPage.tsx",
+        "output exists: src/web/styles/theme.css",
+        "output exists: tests/e2e/shell.spec.ts",
+        "output exists: src/server/terminal/pty.ts",
+        "output exists: src/server/routes/terminal.ts",
+        "output exists: src/server/app.ts",
+        "output exists: tests/unit/pty.test.ts",
+        "output exists: tests/integration/terminal-ws.test.ts"
+      ]
     },
     "PROJECT-WORKSPACE-1": {
       "phaseId": "PROJECT-WORKSPACE-1",
-      "status": "pending",
+      "status": "running",
       "contractFingerprint": "{\"title\":\"Phase 1: Filesystem and Project APIs\",\"description\":\"```forge-task {   \\\"id\\\": \\\"PROJ-01\\\",\",\"completionPolicy\":\"strict\",\"dependencies\":[\"APP-FOUNDATION-2\"],\"requiredOutputs\":[\"src/server/projects/paths.ts\",\"src/server/projects/browser.ts\",\"src/server/routes/fs.ts\",\"src/server/routes/index.ts\",\"tests/unit/projects-paths.test.ts\",\"tests/integration/fs-routes.test.ts\",\"src/server/projects/registry.ts\",\"src/server/routes/projects.ts\",\"tests/unit/project-registry.test.ts\",\"tests/integration/projects-routes.test.ts\"],\"validationCommands\":[],\"tasks\":[{\"id\":\"PROJ-01\",\"title\":\"Implement the server-side folder browser\",\"description\":\"Implement canonical path resolution and directory listing for the folder browser. Accept any readable absolute path, resolve it with realpath, reject files, non-directories, and unreadable paths with typed errors, and return the canonical path, parent, entries with name/path/isDirectory/isGitRepo/hasSlan, and a truncated flag. Sort directories before files and hide unreadable children without failing the listing. Register GET /api/fs through src/server/routes/index.ts. Add tests/unit/projects-paths.test.ts for canonicalization, traversal rejection, and symlink handling, and tests/integration/fs-routes.test.ts for listing, file rejection, and unreadable paths. Do not register projects or read file contents.\",\"ownerAgent\":\"backend-engineer\",\"required\":true,\"dependencies\":[\"FOUND-03\"],\"expectedOutputs\":[\"src/server/projects/paths.ts\",\"src/server/projects/browser.ts\",\"src/server/routes/fs.ts\",\"src/server/routes/index.ts\",\"tests/unit/projects-paths.test.ts\",\"tests/integration/fs-routes.test.ts\"],\"validationCommands\":[\"npx vitest run tests/unit/projects-paths.test.ts tests/integration/fs-routes.test.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"PROJ-FR-01: List directories for the server-side folder browser from any readable absolute path, canonicalize every requested path with realpath, return parent, entries, git status, and Slan-data presence, reject files and unreadable paths with typed errors, and never expose file contents.\",\"PROJ-FR-06: Expose project APIs for listing directories, opening or creating a project, listing recent projects, and removing a recent entry, all returning the shared error envelope.\"],\"acceptanceCriteria\":[\"Relative and non-absolute paths are rejected or resolved against the documented base, never silently accepted\",\"The returned path is canonical and matches realpath\",\"A file path returns a typed not-a-directory error\",\"An unreadable child is omitted while the listing succeeds\",\"The integration test reaches GET /api/fs through src/server/app.ts\"],\"constraints\":[\"Do not read or return file contents\",\"Do not use shell commands for listing\",\"ARCH-03: The server owns all filesystem traversal, config/chain/run persistence, CLI process spawning, and PTY handling. The browser performs no shell execution and receives only typed API and WebSocket data.\",\"SEC-01: Spawn harness CLIs with an executable plus argument array and no shell string interpolation. Canonicalize project and chain paths with realpath and reject traversal outside the intended project data directory.\",\"SEC-03: Render terminal bytes only through xterm.js and render skill text through escaped React text. Do not use dangerouslySetInnerHTML for harness, skill, or run content.\"],\"references\":[\"docs/PRD.md#6.3 Key APIs and Interfaces\",\"docs/PRD.md#8.2 Risk Acceptance\",\"docs/features/project-workspace.md#PROJ-FR-01\",\"docs/features/project-workspace.md#PROJ-FR-06\",\"docs/PRD.md#ARCH-03\",\"docs/PRD.md#SEC-01\",\"docs/PRD.md#SEC-03\"]}},{\"id\":\"PROJ-02\",\"title\":\"Register projects, recent entries, and .slan initialization\",\"description\":\"Implement the project registry. Open an existing directory by canonical path and assign a stable id derived from the path; create a new empty directory under a selected parent with an optional git init; reject existing targets and missing parents. Persist recent projects in the global config with id, canonical path, display name, and lastOpenedAt, return them newest first, and remove an entry without touching the filesystem. On first open, create <project>/.slan with a .gitignore containing runs/ when absent, preserve an existing .slan/.gitignore, and report existing chains. Register POST /api/projects, GET /api/projects/recent, and DELETE /api/projects/recent/:projectId through src/server/routes/index.ts. Add tests/unit/project-registry.test.ts and tests/integration/projects-routes.test.ts covering open, create, git init success and failure, recent ordering, removal, and idempotent .slan setup. Do not create chains or run directories here.\",\"ownerAgent\":\"backend-engineer\",\"required\":true,\"dependencies\":[\"PROJ-01\",\"FOUND-02\"],\"expectedOutputs\":[\"src/server/projects/registry.ts\",\"src/server/routes/projects.ts\",\"src/server/routes/index.ts\",\"tests/unit/project-registry.test.ts\",\"tests/integration/projects-routes.test.ts\"],\"validationCommands\":[\"npx vitest run tests/unit/project-registry.test.ts tests/integration/projects-routes.test.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"PROJ-FR-02: Register an existing directory or create a new empty directory under a selected parent, optionally run git init, reject a create target that already exists or whose parent is missing, and perform no scaffolding or template copying.\",\"PROJ-FR-03: Persist recent projects in global configuration with id, canonical path, display name, and lastOpenedAt; return newest first and allow removing an entry without deleting files.\",\"PROJ-FR-04: Create or extend <project>/.slan/ with a .gitignore containing runs/ when a project is first opened, never rewrite an existing .gitignore, never delete files, and detect existing chains.\",\"PROJ-FR-06: Expose project APIs for listing directories, opening or creating a project, listing recent projects, and removing a recent entry, all returning the shared error envelope.\"],\"acceptanceCriteria\":[\"Opening the same canonical path twice returns the same project id\",\"Creating an existing directory fails with a conflict and leaves it untouched\",\"The optional git init creates a repository only when requested and git is available\",\"Recent projects are returned newest first and removal leaves the directory intact\",\"First open creates .slan/.gitignore with runs/ and preserves an existing file\",\"All project routes are registered through src/server/routes/index.ts\"],\"constraints\":[\"Do not copy templates or scaffold application code\",\"Do not delete project files\",\"ARCH-04: Persist configuration, chains, and runs as versioned JSON files with atomic temp-file replacement. Do not introduce a database or a second persistence model in v1.\",\"PRIV-02: Removing a recent project removes only the recent-entry record. Chain deletion touches only the selected chain file inside the project's .slan/chains directory.\",\"SEC-01: Spawn harness CLIs with an executable plus argument array and no shell string interpolation. Canonicalize project and chain paths with realpath and reject traversal outside the intended project data directory.\"],\"references\":[\"docs/PRD.md#6.3 Key APIs and Interfaces\",\"docs/PRD.md#10.1 Project\",\"docs/features/project-workspace.md#PROJ-FR-02\",\"docs/features/project-workspace.md#PROJ-FR-03\",\"docs/features/project-workspace.md#PROJ-FR-04\",\"docs/features/project-workspace.md#PROJ-FR-06\",\"docs/PRD.md#ARCH-04\",\"docs/PRD.md#PRIV-02\",\"docs/PRD.md#SEC-01\"]}}]}",
-      "updatedAt": "2026-11-04T10:23:05.185Z"
+      "updatedAt": "2026-11-04T10:41:24.341Z"
     },
     "PROJECT-WORKSPACE-2": {
       "phaseId": "PROJECT-WORKSPACE-2",

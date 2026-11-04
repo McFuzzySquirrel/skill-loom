@@ -1,10 +1,10 @@
 # Project Progress
 
 ## Current State
-**Phase**: APP-FOUNDATION-2
+**Phase**: PROJECT-WORKSPACE-1
 **Status**: In Progress
 **Validation Gaps**: 4 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T10:41:23.823Z
+**Last Updated**: 2026-11-04T10:44:29.985Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -20,6 +20,8 @@
   - Files: src/web/main.tsx, src/web/App.tsx, src/web/api/client.ts, src/web/components/AppLayout.tsx, src/web/components/StatusRegion.tsx, src/web/routes/ProjectsPage.tsx, src/web/routes/ChainBuilderPage.tsx, src/web/routes/RunStartPage.tsx, src/web/routes/RunPage.tsx, src/web/routes/NotFoundPage.tsx, src/web/styles/theme.css, tests/e2e/shell.spec.ts, src/web/components/ErrorBoundary.tsx, src/web/components/ServerStatus.tsx, src/web/hooks/useHealth.ts, src/web/router.tsx
 - [x] Phase APP-FOUNDATION-2, Task FOUND-05: Implement the PTY WebSocket transport (@backend-engineer)
   - Files: src/server/terminal/pty.ts, src/server/routes/terminal.ts, src/server/app.ts, tests/unit/pty.test.ts, tests/integration/terminal-ws.test.ts, src/server/routes/index.ts, src/shared/terminal.ts
+- [x] Phase PROJECT-WORKSPACE-1, Task PROJ-01: Implement the server-side folder browser (@backend-engineer)
+  - Files: src/server/projects/paths.ts, src/server/projects/browser.ts, src/server/routes/fs.ts, src/server/routes/index.ts, tests/unit/projects-paths.test.ts, tests/integration/fs-routes.test.ts
 
 ## Current Task
 - None currently running
