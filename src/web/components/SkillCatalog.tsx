@@ -48,6 +48,7 @@ export function SkillCatalog({
   const harnessHintId = `${baseId}-harness-hint`;
   const warningsId = `${baseId}-warnings`;
   const titleId = `${baseId}-title`;
+  const bodyId = `${baseId}-body`;
   const { harness, setHarness, query, setQuery, clearSearch, state, refresh, harnessLabel } =
     useCatalog({
       projectId,
@@ -55,6 +56,7 @@ export function SkillCatalog({
       ...(api === undefined ? {} : { api }),
     });
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsTrigger = useRef<HTMLButtonElement>(null);
   const restoreSettingsFocus = useRef(false);
@@ -92,17 +94,44 @@ export function SkillCatalog({
             summary or recommendation.
           </p>
         </div>
-        <button
-          type="button"
-          ref={settingsTrigger}
-          className="button button--secondary button--small"
-          onClick={() => setSettingsOpen(true)}
-          data-testid="catalog-settings-open"
-        >
-          Manage extra skill directories
-        </button>
+        <div className="catalog__heading-actions">
+          <button
+            type="button"
+            className="button button--secondary button--small"
+            aria-expanded={!collapsed}
+            aria-controls={bodyId}
+            onClick={() => {
+              setSettingsOpen(false);
+              setCollapsed((current) => !current);
+            }}
+            data-testid="catalog-toggle"
+          >
+            <span aria-hidden="true">{collapsed ? '▸ ' : '▾ '}</span>
+            {collapsed ? 'Show catalog' : 'Hide catalog'}
+          </button>
+          {collapsed ? null : (
+            <button
+              type="button"
+              ref={settingsTrigger}
+              className="button button--secondary button--small"
+              onClick={() => setSettingsOpen(true)}
+              data-testid="catalog-settings-open"
+            >
+              Manage extra skill directories
+            </button>
+          )}
+        </div>
       </div>
 
+      {collapsed && data !== null ? (
+        <p className="catalog__summary" data-testid="catalog-collapsed-summary">
+          <span aria-hidden="true">●</span> {String(data.total)} skill
+          {data.total === 1 ? '' : 's'} in {String(data.groups.length)} source
+          {data.groups.length === 1 ? '' : 's'} · expand to search and inspect
+        </p>
+      ) : null}
+
+      <div id={bodyId} hidden={collapsed}>
       <div className="catalog__controls">
         <fieldset className="catalog__harness" aria-describedby={harnessHintId}>
           <legend className="field__label">Harness</legend>
@@ -318,6 +347,9 @@ export function SkillCatalog({
                                     'This skill is disabled by the harness, so it cannot be added as a step.',
                                 }
                               : {})}
+                            onSkillCopied={() => {
+                              refresh();
+                            }}
                             {...(api === undefined ? {} : { api })}
                           />
                         ) : null}
@@ -340,6 +372,7 @@ export function SkillCatalog({
           {...(api === undefined ? {} : { api })}
         />
       ) : null}
+      </div>
     </section>
   );
 }

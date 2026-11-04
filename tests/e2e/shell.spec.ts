@@ -7,11 +7,13 @@ interface ShellRoute {
 
 const shellRoutes: ShellRoute[] = [
   { path: '/projects', heading: 'Projects' },
+  { path: '/chains', heading: 'Global chain library' },
   // The builder now loads live catalog data. Use the unsaved-draft route so the
   // shell check does not depend on a registered chain, and fulfill the catalog
   // request with an empty isolated result below.
   { path: '/projects/demo-project/chains/new', heading: 'Chain authoring' },
   { path: '/projects/demo-project/chains/demo-chain/run', heading: 'Run start' },
+  { path: '/runs/demo-run/terminal', heading: 'Run terminal' },
   { path: '/runs/demo-run', heading: 'Run view' },
 ];
 
@@ -190,7 +192,7 @@ test.describe('Slan shell', () => {
       if (route.path.endsWith('/demo-chain/run')) {
         await mockDemoChain(page);
       }
-      if (route.path === '/runs/demo-run') {
+      if (route.path.startsWith('/runs/demo-run')) {
         await mockDemoRun(page);
       }
 
@@ -217,7 +219,7 @@ test.describe('Slan shell', () => {
       if (route.path.endsWith('/demo-chain/run')) {
         await mockDemoChain(page);
       }
-      if (route.path === '/runs/demo-run') {
+      if (route.path.startsWith('/runs/demo-run')) {
         await mockDemoRun(page);
       }
       await page.goto(route.path);

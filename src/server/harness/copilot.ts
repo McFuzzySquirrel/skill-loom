@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { CHAIN_SESSION_MODES, type ChainSessionMode } from '../chains/model.js';
 import type { HarnessId } from '../config/schema.js';
@@ -142,6 +143,14 @@ export function createCopilotAdapter(options: HarnessAdapterOptions = {}): Harne
     permissionOptInField: 'automaticPermissionOptIn',
 
     resolveExecutable,
+
+    createSessionId(): string {
+      return randomUUID();
+    },
+
+    isSessionId(value: string): boolean {
+      return typeof value === 'string' && value.trim() !== '' && !value.includes('\0');
+    },
 
     supportsSessionMode(mode: string): mode is ChainSessionMode {
       return isChainSessionMode(mode) && COPILOT_SUPPORTED_SESSION_MODES.includes(mode);

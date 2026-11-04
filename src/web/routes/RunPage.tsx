@@ -331,6 +331,18 @@ export function RunPage({ runId }: RunPageProps) {
           Skills are model-invoked context. Slan guarantees prompt order, not that the harness
           fires a named skill. Skill observation is best-effort and never blocks a step.
         </p>
+
+        {terminalId === null ? null : (
+          <p className="panel__actions">
+            <Link
+              className="button button--secondary button--small"
+              to={`/runs/${encodeURIComponent(run.id)}/terminal`}
+              data-testid="open-terminal-page"
+            >
+              Open terminal page
+            </Link>
+          </p>
+        )}
       </header>
 
       {stream.actionError !== null ? (

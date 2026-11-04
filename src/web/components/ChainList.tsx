@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ApiClientError } from '../api/client';
 import {
   chainBuilderPath,
+  chainRunPath,
   chainsApi,
   toApiClientError,
   type Chain,
@@ -14,6 +15,7 @@ import {
   useChains,
 } from '../hooks/useChains';
 import { Link } from '../router';
+import { ImportChainDialog } from './ImportChainDialog';
 import { InlineError } from './InlineError';
 import { NewChainDialog } from './NewChainDialog';
 import { useStatusAnnouncer } from './StatusRegion';
@@ -95,6 +97,7 @@ export function ChainList({ projectId, api = chainsApi }: ChainListProps) {
   const { announce } = useStatusAnnouncer();
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [busy, setBusy] = useState<BusyState | null>(null);
   const [mutationFailure, setMutationFailure] = useState<MutationFailure | null>(null);
@@ -225,20 +228,46 @@ export function ChainList({ projectId, api = chainsApi }: ChainListProps) {
             loads a named skill.
           </p>
         </div>
-        <button
-          type="button"
-          className="button"
-          ref={newChainTrigger}
-          onClick={openNewChain}
-          disabled={busy !== null}
-          data-testid="new-chain-open"
-        >
-          New chain
-        </button>
+        <div className="panel__actions chain-library__actions">
+          <button
+            type="button"
+            className="button button--secondary"
+            onClick={() => {
+              setMutationFailure(null);
+              setImportOpen(true);
+            }}
+            disabled={busy !== null}
+            data-testid="import-chain-open"
+          >
+            Import template
+          </button>
+          <button
+            type="button"
+            className="button"
+            ref={newChainTrigger}
+            onClick={openNewChain}
+            disabled={busy !== null}
+            data-testid="new-chain-open"
+          >
+            New chain
+          </button>
+        </div>
       </div>
 
       {dialogOpen ? (
         <NewChainDialog projectId={projectId} onClose={closeNewChain} />
+      ) : null}
+
+      {importOpen ? (
+        <ImportChainDialog
+          projectId={projectId}
+          onClose={() => setImportOpen(false)}
+          onImported={(chain) => {
+            setImportOpen(false);
+            setFocusChainId(chain.id);
+            void reload();
+          }}
+        />
       ) : null}
 
       {state.status === 'loading' ? (
@@ -370,6 +399,14 @@ export function ChainList({ projectId, api = chainsApi }: ChainListProps) {
                 </div>
 
                 <div className="chain-card__actions">
+                  <Link
+                    className="button button--small"
+                    to={chainRunPath(projectId, chain.id)}
+                    aria-label={`Run ${chain.name}`}
+                    data-testid="chain-run"
+                  >
+                    Run
+                  </Link>
                   <Link
                     className="button button--secondary button--small"
                     to={chainBuilderPath(projectId, chain.id)}

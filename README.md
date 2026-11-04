@@ -66,11 +66,12 @@ The live probes exercise real OpenCode and Copilot CLIs. They fail with a clear 
 
 1. Start the development app with `npm run dev` and open `http://127.0.0.1:5173`, or build and run production with `npm run build && npm start` and open `http://127.0.0.1:7373`.
 2. On the Projects screen, open an existing folder or create a new project. Registering a project records it in the recent-projects list; removing a recent entry does not delete project files.
-3. Open the project workspace and inspect the skill catalog. Choose the harness, search or expand a skill's `SKILL.md`, and optionally add extra skill directories in the settings dialog.
-4. Create a chain, add at least one step, choose the harness, give every step an instruction, declare any named inputs, and save. A saved chain is stored under `<project>/.slan/chains/`.
-5. Review the saved chain and open the run-start screen at `/projects/<projectId>/chains/<chainId>/run`. Choose supervised or automatic mode, provide required inputs, and run preflight. Preflight never makes a model call.
-6. Resolve every blocking finding and acknowledge every required warning. In this build the Start control is a preflight gate; the run record itself is created through `POST /api/projects/<projectId>/runs`.
-7. An existing run opens at `/runs/<runId>`. The run view keeps the terminal, step rail, and controls together; a run never advances because of terminal output, a timer, or a page load.
+3. Open the project workspace and expand the skill catalog (it starts collapsed). Choose the harness, search or expand a skill's `SKILL.md`, and optionally add extra skill directories in the settings dialog. A skill discovered from a personal, plugin, custom, or extra source can be copied into the project with **Copy into this project**; OpenCode copies land in `.opencode/skills/` and Copilot copies in `.github/skills/`.
+4. Create a chain, add at least one step, choose the harness, give every step an instruction, declare any named inputs, and save. A saved chain is stored under `<project>/.slan/chains/`. **Save and run** saves the chain and opens its run-start screen.
+5. On run start, choose supervised or automatic mode, provide required inputs, and run preflight. Preflight never makes a model call.
+6. Resolve every blocking finding and acknowledge every required warning, then choose **Start run**. Slan creates the run through `POST /api/projects/<projectId>/runs`, re-runs the blocking preflight on the server, and opens the dedicated terminal page at `/runs/<runId>/terminal`.
+7. The terminal page keeps xterm and the compact run controls together without scrolling past step details; **Run details** opens `/runs/<runId>` for the step rail, full controls, and recovery guidance. A run never advances because of terminal output, a timer, or a page load. A chain card's **Run** action returns to the run-start screen, and the project screen links to any active run.
+8. To reuse a recipe, choose **Save copy to library** in the builder. The global library at `/chains` stores independent snapshots; importing one into another project copies it with a new chain id.
 
 See the [operations guide](docs/OPERATIONS.md) for configuration, data locations, harness prerequisites, Copilot trust and automatic permissions, security, backup and cleanup, limitations, fork behavior, and troubleshooting.
 

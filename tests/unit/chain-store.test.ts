@@ -505,3 +505,32 @@ describe('containment', () => {
     expect(await fileExists(join(root, 'missing-project'))).toBe(false);
   });
 });
+
+describe('directory-backed chain store', () => {
+  it('creates and lists chains in an explicit directory without a project path', async () => {
+    const directory = join(root, 'config', 'chains');
+    const store = createChainStore({ chainsDirectory: directory });
+
+    expect(await store.list()).toEqual({ chains: [], warnings: [] });
+    expect(await fileExists(directory)).toBe(false);
+
+    const created = await store.create(makeChain({ id: 'template-alpha' }));
+    expect(created.id).toBe('template-alpha');
+    expect(await fileExists(join(directory, 'template-alpha.json'))).toBe(true);
+    expect((await store.list()).chains.map((chain) => chain.id)).toEqual([
+      'template-alpha',
+    ]);
+  });
+
+  it('rejects a relative or symlinked directory root', async () => {
+    const relative = createChainStore({ chainsDirectory: 'relative/chains' });
+    await expectChainError(relative.list(), CHAIN_STORE_ERROR_CODES.PROJECT_INVALID);
+
+    const outside = join(root, 'outside-root');
+    const linked = join(root, 'linked-chains');
+    await mkdir(outside);
+    await symlink(outside, linked, 'dir');
+    const store = createChainStore({ chainsDirectory: linked });
+    await expectChainError(store.list(), CHAIN_STORE_ERROR_CODES.PATH_ESCAPED);
+  });
+});

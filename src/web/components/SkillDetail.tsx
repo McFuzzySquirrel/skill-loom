@@ -4,6 +4,7 @@ import {
   catalogApi,
   toApiClientError,
   type CatalogApi,
+  type SkillCopyResult,
   type SkillDetail as SkillDetailPayload,
   type SkillEntry,
 } from '../api/catalog';
@@ -17,6 +18,8 @@ export interface SkillDetailProps {
   onAddAsStep?: (skill: SkillEntry) => void;
   /** Explains why Add as step is unavailable, for example a disabled skill. */
   addDisabledReason?: string;
+  /** Called after a non-project skill package is copied into the project. */
+  onSkillCopied?: (result: SkillCopyResult) => void;
   api?: CatalogApi;
 }
 
@@ -38,10 +41,14 @@ export function SkillDetail({
   detailId,
   onAddAsStep,
   addDisabledReason,
+  onSkillCopied,
   api = catalogApi,
 }: SkillDetailProps) {
   const [state, setState] = useState<DetailState>({ status: 'loading' });
   const [retryToken, setRetryToken] = useState(0);
+  const [copyBusy, setCopyBusy] = useState(false);
+  const [copyError, setCopyError] = useState<ApiClientError | null>(null);
+  const [copyResult, setCopyResult] = useState<SkillCopyResult | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -76,6 +83,33 @@ export function SkillDetail({
       controller.abort();
     };
   }, [api, projectId, retryToken, skill.harness, skill.id]);
+
+  const copyIntoProject = async (): Promise<void> => {
+    if (copyBusy) {
+      return;
+    }
+    setCopyBusy(true);
+    setCopyError(null);
+    setCopyResult(null);
+    try {
+      const result = await api.copySkillToProject(projectId, skill.id, {
+        harness: skill.harness,
+      });
+      setCopyResult(result);
+      onSkillCopied?.(result);
+    } catch (error) {
+      setCopyError(
+        toApiClientError(
+          error,
+          'An unexpected error prevented copying this skill into the project.',
+        ),
+      );
+    } finally {
+      setCopyBusy(false);
+    }
+  };
+
+  const canCopy = skill.source !== 'project' && skill.packagePath !== '';
 
   return (
     <div
@@ -141,6 +175,45 @@ export function SkillDetail({
             </span>
           ) : null}
         </p>
+      ) : null}
+
+      {canCopy ? (
+        <div className="skill-detail__copy" data-testid="skill-copy-section">
+          <button
+            type="button"
+            className="button button--secondary button--small"
+            onClick={() => void copyIntoProject()}
+            disabled={copyBusy}
+            aria-busy={copyBusy}
+            data-testid="skill-copy"
+          >
+            {copyBusy ? 'Copying…' : 'Copy into this project'}
+          </button>
+          <p className="field__hint">
+            Copies the whole skill package into this project so the harness discovers it as a
+            project skill. The original stays where it is.
+          </p>
+          {copyError !== null ? (
+            <InlineError
+              title="Skill could not be copied"
+              message={copyError.message}
+              code={copyError.code}
+              httpStatus={copyError.status}
+              onRetry={() => void copyIntoProject()}
+              retryLabel="Retry copy"
+            />
+          ) : null}
+          {copyResult !== null ? (
+            <p
+              className="state-note preflight-note--ok"
+              data-testid="skill-copy-result"
+            >
+              <span aria-hidden="true">✓</span> Copied to{' '}
+              <code>{copyResult.destinationPath}</code>. The refreshed catalog will show the
+              project copy.
+            </p>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

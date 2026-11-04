@@ -35,6 +35,8 @@ export interface TerminalPaneProps {
   className?: string;
   /** Reattach after a dropped socket (run terminals survive a reload). */
   reconnectOnClose?: boolean;
+  /** Hide the long helper paragraphs on the dedicated terminal page. */
+  dense?: boolean;
 }
 
 const WS_OPEN = 1;
@@ -49,6 +51,7 @@ export function TerminalPane({
   exitHint = 'Screen-reader mode is on. Press Escape to leave the terminal and return to Verify trust. Output is rendered by xterm.js only and is never inserted as HTML.',
   className,
   reconnectOnClose = false,
+  dense = false,
 }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -232,13 +235,15 @@ export function TerminalPane({
         >
           Focus terminal
         </button>
-        <p className="field__hint terminal-pane__hint">
-          Screen-reader mode, Unicode 11, fit, and web links are enabled. Escape leaves the
-          terminal and returns focus to the run controls.
-        </p>
+        {dense ? null : (
+          <p className="field__hint terminal-pane__hint">
+            Screen-reader mode, Unicode 11, fit, and web links are enabled. Escape leaves the
+            terminal and returns focus to the run controls.
+          </p>
+        )}
       </div>
       <div className="terminal-pane__screen" ref={containerRef} role="group" aria-label={label} data-testid={screenTestId} />
-      <p className="field__hint">{exitHint}</p>
+      {dense ? null : <p className="field__hint">{exitHint}</p>}
     </div>
   );
 }

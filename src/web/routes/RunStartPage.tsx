@@ -11,6 +11,7 @@ import {
   type PreflightApi,
   type PreflightReport as PreflightReportData,
 } from '../api/preflight';
+import { runsApi, type RunsApi } from '../api/runs';
 import { InlineError } from '../components/InlineError';
 import { InputsForm, validateRequiredInputs } from '../components/InputsForm';
 import { PreflightReport } from '../components/PreflightReport';
@@ -18,7 +19,7 @@ import { useStatusAnnouncer } from '../components/StatusRegion';
 import { TrustPanel } from '../components/TrustPanel';
 import { CHAIN_HARNESS_LABELS, CHAIN_SESSION_MODE_LABELS } from '../hooks/useChains';
 import { usePreflight } from '../hooks/usePreflight';
-import { Link } from '../router';
+import { Link, useRouter } from '../router';
 import type { PreflightRunMode } from '../api/preflight';
 
 /**
@@ -27,7 +28,8 @@ import type { PreflightRunMode } from '../api/preflight';
  * Opening this screen loads the chain and nothing else. Preflight runs only on
  * an explicit action; trust is started only after a confirmation; the automatic
  * permission opt-in is saved on the chain only after a second confirmation.
- * Start is a gate, not a run trigger: this screen never starts a run.
+ * Start is an explicit action: it creates the run through the server after the
+ * gate is satisfied, then navigates to the terminal-dominant run view.
  */
 
 export interface RunStartPageProps {
@@ -36,6 +38,7 @@ export interface RunStartPageProps {
   /** Test seams; the app always uses the same-origin typed clients. */
   api?: ChainsApi;
   preflightApiClient?: PreflightApi;
+  runsApiClient?: RunsApi;
 }
 
 interface ChainLoadState {
@@ -108,7 +111,9 @@ export function RunStartPage({
   chainId,
   api = chainsApi,
   preflightApiClient = preflightApi,
+  runsApiClient = runsApi,
 }: RunStartPageProps) {
+  const { navigate } = useRouter();
   const { announce } = useStatusAnnouncer();
   const startHintId = useId();
   const inputHintId = useId();
@@ -127,7 +132,9 @@ export function RunStartPage({
   const [pendingOptIn, setPendingOptIn] = useState(false);
   const [permissionBusy, setPermissionBusy] = useState(false);
   const [permissionError, setPermissionError] = useState<ApiClientError | null>(null);
-  const [startNote, setStartNote] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<ApiClientError | null>(null);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   const generation = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -213,7 +220,8 @@ export function RunStartPage({
 
   const handleRunPreflight = useCallback(async () => {
     setAttempted(true);
-    setStartNote(null);
+    setStartError(null);
+    setActiveRunId(null);
     announce('Running preflight checks. This does not start a run.');
 
     const report = await preflight.run();
@@ -282,6 +290,9 @@ export function RunStartPage({
     if (preflight.report === null) {
       return 'Run preflight to enable Start. Opening this screen never runs checks.';
     }
+    if (preflight.status === 'running') {
+      return 'Preflight is running. Wait for the report before starting the run.';
+    }
     if (!preflight.isCurrent) {
       return 'Inputs, mode, or chain settings changed after the last preflight. Run preflight again.';
     }
@@ -294,22 +305,57 @@ export function RunStartPage({
     if (preflight.missingAcknowledgements.length > 0) {
       return 'Acknowledge every required warning or finding before Start.';
     }
-    return 'Preflight passed and all required acknowledgements are recorded. Start is enabled; no run starts automatically.';
+    return 'Preflight passed and all required acknowledgements are recorded. Start creates and launches the run.';
   })();
 
   const startEnabled =
     chainState.status === 'ready' &&
     preflight.canStart &&
-    Object.keys(inputErrors).length === 0;
+    preflight.status !== 'running' &&
+    Object.keys(inputErrors).length === 0 &&
+    !starting;
 
-  const handleStart = () => {
-    if (!startEnabled) {
+  const handleStart = async (): Promise<void> => {
+    if (!startEnabled || chain === null || starting) {
       return;
     }
-    const note =
-      'Start is enabled. This screen does not start a run: run execution arrives with the run view feature (RUN-07).';
-    setStartNote(note);
-    announce(note);
+
+    setStarting(true);
+    setStartError(null);
+    setActiveRunId(null);
+    announce('Starting the run.');
+
+    try {
+      const result = await runsApiClient.createRun(projectId, {
+        chainId,
+        mode,
+        inputs: { ...values },
+        acknowledgements: [...preflight.acknowledgedKeys],
+      });
+      announce(`Run started for ${chain.name}. Opening the run terminal.`);
+      navigate(`/runs/${encodeURIComponent(result.run.id)}/terminal`);
+    } catch (caught) {
+      const apiError = toApiClientError(
+        caught,
+        'An unexpected error prevented starting this run.',
+      );
+      setStartError(apiError);
+      if (
+        apiError.code === 'RUN_ACTIVE_CONFLICT' &&
+        isRecord(apiError.details) &&
+        typeof apiError.details['runId'] === 'string'
+      ) {
+        setActiveRunId(apiError.details['runId']);
+        announce(
+          'Another run is already active. Open that run or abort it before starting this chain.',
+          'assertive',
+        );
+      } else {
+        announce(`Run could not be started: ${apiError.message}`, 'assertive');
+      }
+    } finally {
+      setStarting(false);
+    }
   };
 
   const trustCheck = preflight.report?.checks.find((check) => check.id === 'trust');
@@ -711,32 +757,46 @@ export function RunStartPage({
               <button
                 type="button"
                 className="button"
-                onClick={handleStart}
+                onClick={() => void handleStart()}
                 disabled={!startEnabled}
                 aria-describedby={startHintId}
+                aria-busy={starting}
                 data-testid="start-run"
               >
-                Start run
+                {starting ? 'Starting run…' : 'Start run'}
               </button>
             </div>
             <p className="field__hint">
-              Start is disabled until there are no hard blocks and every required warning is
-              acknowledged. A warning acknowledgement is recorded in this screen only; it never
-              starts or advances a step.
+              Start creates a run record, re-runs the blocking preflight on the server, and
+              launches the harness. Warnings must be acknowledged on this screen first.
             </p>
             {preflight.report === null ? null : (
               <p className="field__hint">
                 Preflight gate:{' '}
                 <strong data-testid="preflight-gate">
-                  {startEnabled ? 'Start allowed' : 'Start blocked'}
+                  {startEnabled || starting ? 'Start allowed' : 'Start blocked'}
                 </strong>
                 . Mode: {MODE_LABELS[mode]}.
               </p>
             )}
-            {startNote === null ? null : (
-              <p className="state-note preflight-note--ok" data-testid="start-note">
-                <span aria-hidden="true">✓</span> {startNote}
-              </p>
+            {startError === null ? null : (
+              <div data-testid="start-error">
+                <InlineError
+                  title="Run could not be started"
+                  message={startError.message}
+                  code={startError.code}
+                  httpStatus={startError.status}
+                  onRetry={() => void handleStart()}
+                  retryLabel="Retry start"
+                />
+                {activeRunId === null ? null : (
+                  <p className="panel__actions">
+                    <Link className="button" to={`/runs/${encodeURIComponent(activeRunId)}`}>
+                      Open the active run
+                    </Link>
+                  </p>
+                )}
+              </div>
             )}
           </section>
         </>

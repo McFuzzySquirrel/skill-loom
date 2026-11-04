@@ -105,6 +105,14 @@ async function gotoNewBuilder(
     page.getByRole('heading', { level: 1, name: 'Chain authoring' }),
   ).toBeVisible();
   await expect(page.getByTestId('chain-builder')).toBeVisible();
+  await expandCatalog(page);
+}
+
+async function expandCatalog(page: Page): Promise<void> {
+  const toggle = page.getByTestId('catalog-toggle');
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') {
+    await toggle.click();
+  }
   await expect(page.getByTestId('catalog-summary')).toBeVisible();
 }
 

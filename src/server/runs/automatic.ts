@@ -386,7 +386,7 @@ export class AutomaticRunner {
     this.projectPathValue = validateProjectPath(options.projectPath);
     this.spawn = options.spawn;
     this.clock = options.now ?? (() => new Date());
-    this.createSessionId = options.createSessionId;
+    this.createSessionId = options.createSessionId ?? (() => this.adapter.createSessionId());
     this.requestedTerminalId = options.terminalId ?? `slan_run_${run.id}`;
     assertTerminalId(this.requestedTerminalId);
     this.cols = positiveDimension(options.cols, AUTOMATIC_TERMINAL_COLS, 'cols');
@@ -564,12 +564,17 @@ export class AutomaticRunner {
       );
     }
 
+    const reusableSessionId = this.validRunSessionId();
+    if (this.runValue.sessionId !== null && reusableSessionId === undefined) {
+      this.runValue.sessionId = null;
+    }
+
     try {
       this.sessionPlanValue = planRunSessions({
         chain: this.runValue.chainSnapshot,
         capabilities: this.adapter,
         mode: 'automatic',
-        runSessionId: this.runValue.sessionId ?? undefined,
+        runSessionId: reusableSessionId,
         createSessionId: this.createSessionId,
       });
       this.applySessionPlan(this.sessionPlanValue);
@@ -1022,6 +1027,16 @@ export class AutomaticRunner {
       );
     }
     return planned;
+  }
+
+  /**
+   * Reuse a stored run-level session id only when the adapter accepts it.
+   * Older records may carry a bare UUID that OpenCode rejects; retrying those
+   * must start a fresh valid session instead of repeating the failure.
+   */
+  private validRunSessionId(): string | undefined {
+    const stored = this.runValue.sessionId;
+    return stored !== null && this.adapter.isSessionId(stored) ? stored : undefined;
   }
 
   private applySessionPlan(plan: RunSessionPlan): void {

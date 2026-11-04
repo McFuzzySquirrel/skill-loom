@@ -227,7 +227,7 @@ function decodeInput(value: unknown): ChainInput {
   };
 }
 
-function decodeChain(value: unknown): Chain {
+export function decodeChain(value: unknown): Chain {
   if (
     !isRecord(value) ||
     typeof value.version !== 'number' ||
@@ -395,6 +395,11 @@ function toUpdateBody(draft: ChainUpdateDraft): Record<string, unknown> {
 /** Browser route for an existing chain's builder screen. */
 export function chainBuilderPath(projectId: string, chainId: string): string {
   return `/projects/${encodeURIComponent(projectId)}/chains/${encodeURIComponent(chainId)}`;
+}
+
+/** Browser route for an existing chain's run-start screen. */
+export function chainRunPath(projectId: string, chainId: string): string {
+  return `${chainBuilderPath(projectId, chainId)}/run`;
 }
 
 export interface NewChainDraftRoute {

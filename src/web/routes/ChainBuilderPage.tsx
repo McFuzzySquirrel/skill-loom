@@ -5,6 +5,7 @@ import {
   CHAIN_HARNESSES,
   NEW_CHAIN_ID,
   chainBuilderPath,
+  chainRunPath,
   chainsApi,
   toApiClientError,
   type Chain,
@@ -12,6 +13,7 @@ import {
   type ChainStep,
   type ChainsApi,
 } from '../api/chains';
+import { globalChainsApi, type GlobalChainsApi } from '../api/globalChains';
 import { InlineError } from '../components/InlineError';
 import { InputsEditor } from '../components/InputsEditor';
 import { SkillCatalog } from '../components/SkillCatalog';
@@ -29,8 +31,9 @@ import { Link, useRouter } from '../router';
 export interface ChainBuilderPageProps {
   projectId: string;
   chainId: string;
-  /** Test seam; the app always uses the same-origin typed client. */
+  /** Test seams; the app always uses the same-origin typed clients. */
   api?: ChainsApi;
+  globalChainsApiClient?: GlobalChainsApi;
 }
 
 const UNSAVED_CHANGES_MESSAGE =
@@ -64,6 +67,7 @@ export function ChainBuilderPage({
   projectId,
   chainId,
   api = chainsApi,
+  globalChainsApiClient = globalChainsApi,
 }: ChainBuilderPageProps) {
   const { search, navigate, setNavigationGuard } = useRouter();
   const { announce } = useStatusAnnouncer();
@@ -96,6 +100,9 @@ export function ChainBuilderPage({
   const [editorFocusRequest, setEditorFocusRequest] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<ApiClientError | null>(null);
+  const [libraryBusy, setLibraryBusy] = useState(false);
+  const [libraryError, setLibraryError] = useState<ApiClientError | null>(null);
+  const [librarySavedName, setLibrarySavedName] = useState<string | null>(null);
   const [duplicateBusy, setDuplicateBusy] = useState(false);
   const [duplicateError, setDuplicateError] = useState<ApiClientError | null>(null);
   const [duplicateHarnessChoice, setDuplicateHarnessChoice] =
@@ -231,6 +238,87 @@ export function ChainBuilderPage({
       setSaving(false);
     }
   }, [announce, chainId, navigate, projectId, save, saving, state.status, validation.canSave]);
+
+  const handleSaveAndRun = useCallback(async () => {
+    if (state.status !== 'ready' || !validation.canSave || saving) {
+      return;
+    }
+
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const saved = await save();
+      announce(
+        `Saved chain ${saved.name}. Opening run start for ${String(
+          saved.steps.length,
+        )} step${saved.steps.length === 1 ? '' : 's'}.`,
+      );
+      navigate(chainRunPath(projectId, saved.id), { skipGuard: true });
+    } catch (error) {
+      const apiError = toApiClientError(
+        error,
+        'An unexpected error prevented saving this chain.',
+      );
+      setSaveError(apiError);
+      announce(`Chain could not be saved: ${apiError.message}`, 'assertive');
+    } finally {
+      setSaving(false);
+    }
+  }, [
+    announce,
+    navigate,
+    projectId,
+    save,
+    saving,
+    state.status,
+    validation.canSave,
+  ]);
+
+  const handleSaveToLibrary = useCallback(async () => {
+    if (state.status !== 'ready' || !validation.canSave || saving || libraryBusy) {
+      return;
+    }
+
+    setSaving(true);
+    setSaveError(null);
+    setLibraryError(null);
+    setLibrarySavedName(null);
+    try {
+      const saved = await save();
+      setSaving(false);
+      setLibraryBusy(true);
+      const template = await globalChainsApiClient.save({
+        projectId,
+        chainId: saved.id,
+      });
+      setLibrarySavedName(template.name);
+      announce(
+        `Saved ${saved.name} to the global chain library as ${template.name}. The project copy is unchanged.`,
+      );
+    } catch (error) {
+      const apiError = toApiClientError(
+        error,
+        'An unexpected error prevented saving this chain to the global library.',
+      );
+      setLibraryError(apiError);
+      announce(
+        `Chain could not be saved to the global library: ${apiError.message}`,
+        'assertive',
+      );
+    } finally {
+      setSaving(false);
+      setLibraryBusy(false);
+    }
+  }, [
+    announce,
+    globalChainsApiClient,
+    libraryBusy,
+    projectId,
+    save,
+    saving,
+    state.status,
+    validation.canSave,
+  ]);
 
   const handleDuplicateWithHarness = useCallback(async () => {
     if (state.status !== 'ready' || duplicateBusy) {
@@ -382,18 +470,52 @@ export function ChainBuilderPage({
           >
             <span aria-hidden="true">{isDirty ? '●' : '✓'}</span> {dirtyLabel}
           </span>
-          <button
-            type="button"
-            className="button"
-            onClick={() => void handleSave()}
-            disabled={!canSave}
-            aria-describedby="chain-save-hint"
-            data-testid="chain-save"
-          >
-            {saving ? 'Saving…' : 'Save chain'}
-          </button>
+          <div className="panel__actions builder-header__actions">
+            <button
+              type="button"
+              className="button"
+              onClick={() => void handleSave()}
+              disabled={!canSave}
+              aria-describedby="chain-save-hint"
+              data-testid="chain-save"
+            >
+              {saving ? 'Saving…' : 'Save chain'}
+            </button>
+            <button
+              type="button"
+              className="button button--secondary"
+              onClick={() => void handleSaveAndRun()}
+              disabled={!canSave}
+              data-testid="chain-save-and-run"
+            >
+              {saving ? 'Saving…' : 'Save and run'}
+            </button>
+            <button
+              type="button"
+              className="button button--secondary"
+              onClick={() => void handleSaveToLibrary()}
+              disabled={!canSave || libraryBusy}
+              data-testid="chain-save-to-library"
+            >
+              {libraryBusy ? 'Saving template…' : 'Save copy to library'}
+            </button>
+            {chainId === NEW_CHAIN_ID ? null : (
+              <Link
+                className="button button--secondary"
+                to={chainRunPath(projectId, chainId)}
+                data-testid="chain-run-from-builder"
+              >
+                Run saved chain
+              </Link>
+            )}
+          </div>
           <p className="field__hint" id="chain-save-hint">
             {saveHint}
+            {chainId === NEW_CHAIN_ID
+              ? ' Save once to open the run screen.'
+              : isDirty
+                ? ' Run uses the saved version; save first to include these edits.'
+                : ''}
           </p>
         </div>
       </header>
@@ -482,6 +604,27 @@ export function ChainBuilderPage({
           />
         </div>
       ) : null}
+
+      {libraryError !== null ? (
+        <div data-testid="chain-library-error">
+          <InlineError
+            title="Chain could not be saved to the library"
+            message={libraryError.message}
+            code={libraryError.code}
+            httpStatus={libraryError.status}
+            onRetry={() => void handleSaveToLibrary()}
+            retryLabel="Retry save"
+          />
+        </div>
+      ) : null}
+
+      {librarySavedName === null ? null : (
+        <p className="state-note preflight-note--ok" data-testid="chain-library-saved">
+          <span aria-hidden="true">✓</span> Saved to the global chain library as{' '}
+          <strong>{librarySavedName}</strong>.{' '}
+          <Link to="/chains">Open the global chain library</Link>.
+        </p>
+      )}
 
       {duplicateError !== null ? (
         <div data-testid="chain-duplicate-error">

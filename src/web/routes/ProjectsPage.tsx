@@ -10,6 +10,7 @@ import {
   type RecentProject,
 } from '../api/projects';
 import type { ApiClientError } from '../api/client';
+import { ActiveRunBanner } from '../components/ActiveRunBanner';
 import { ChainList } from '../components/ChainList';
 import { FolderBrowser } from '../components/FolderBrowser';
 import { InlineError } from '../components/InlineError';
@@ -337,6 +338,8 @@ export function ProjectPage({ projectId }: { projectId: string }) {
         This project is registered locally. Browse its chains and skill catalog below.
         Nothing leaves this machine.
       </p>
+
+      <ActiveRunBanner projectId={summary.id} />
 
       <dl className="detail-grid project-facts">
         <div>

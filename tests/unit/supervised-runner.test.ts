@@ -346,6 +346,20 @@ describe('supervised runner start', () => {
     expect(harness.ptys[0]!.lastProcess.writes).toEqual([]);
   });
 
+  it('regenerates an incompatible stored session id instead of replaying it', async () => {
+    const run = makeRun(makeChain(), {
+      sessionId: '3f2a1c0e-4b1e-4f45-9d2f-6b2a0c9d8e11',
+    });
+    const harness = makeHarness({ run });
+
+    const started = await harness.runner.start();
+    const spec = harness.ptys[0]!.lastSpec;
+
+    expect(spec.args.slice(0, 2)).toEqual(['--session', 'ses_generated_1']);
+    expect(started.sessionId).toBe('ses_generated_1');
+    expect(started.steps[0]!.sessionId).toBe('ses_generated_1');
+  });
+
   it('rejects an automatic run and an already-started runner', async () => {
     const chain = makeChain();
     const automaticRun = makeRun(chain, { mode: 'automatic' });

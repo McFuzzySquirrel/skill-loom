@@ -143,6 +143,33 @@ export interface RunView {
   recovery: RunRecoveryOptions | null;
 }
 
+/** `POST /api/projects/:projectId/runs`. */
+export interface CreateRunInput {
+  chainId: string;
+  mode: RunMode;
+  inputs: Record<string, string>;
+  acknowledgements: string[];
+}
+
+/** The `201` body returned after a run starts. */
+export interface RunStartResult {
+  run: Run;
+  terminalId: string | null;
+  actions: RunActionAvailability;
+  recovery: RunRecoveryOptions | null;
+}
+
+/** `GET /api/runs/active`. */
+export interface ActiveRunState {
+  active: boolean;
+  runId: string | null;
+  status: string | null;
+  run: Run | null;
+  terminalId: string | null;
+  actions: RunActionAvailability | null;
+  recovery: RunRecoveryOptions | null;
+}
+
 /** `POST /api/runs/:runId/actions`. */
 export interface RunActionResultView {
   run: Run;
@@ -227,7 +254,13 @@ export const RUN_ACTION_NAMES = [
 export type RunActionName = (typeof RUN_ACTION_NAMES)[number];
 
 export interface RunsApi {
+  createRun: (
+    projectId: string,
+    input: CreateRunInput,
+    options?: RunRequestOptions,
+  ) => Promise<RunStartResult>;
   getRun: (runId: string, options?: RunRequestOptions) => Promise<RunView>;
+  getActiveRun: (options?: RunRequestOptions) => Promise<ActiveRunState>;
   applyAction: (
     runId: string,
     action: RunActionName,
@@ -462,6 +495,42 @@ function decodeView(value: unknown): RunView {
   };
 }
 
+function decodeRunStartResult(value: unknown): RunStartResult {
+  if (!isRecord(value)) {
+    throw invalidResponse('run start result');
+  }
+  return {
+    run: decodeRun(value.run),
+    terminalId: decodeNullableString(value.terminalId, 'run terminal id'),
+    actions: decodeActions(value.actions),
+    recovery: decodeRecovery(value.recovery),
+  };
+}
+
+function decodeActiveRun(value: unknown): ActiveRunState {
+  if (
+    !isRecord(value) ||
+    typeof value.active !== 'boolean' ||
+    (value.runId !== null && typeof value.runId !== 'string') ||
+    (value.status !== null && typeof value.status !== 'string')
+  ) {
+    throw invalidResponse('active run');
+  }
+
+  return {
+    active: value.active,
+    runId: value.runId ?? null,
+    status: value.status ?? null,
+    run: value.run === null || value.run === undefined ? null : decodeRun(value.run),
+    terminalId: decodeNullableString(value.terminalId, 'active run terminal id'),
+    actions:
+      value.actions === null || value.actions === undefined
+        ? null
+        : decodeActions(value.actions),
+    recovery: decodeRecovery(value.recovery),
+  };
+}
+
 function decodeActionResult(value: unknown): RunActionResultView {
   if (!isRecord(value)) {
     throw invalidResponse('run action result');
@@ -549,6 +618,33 @@ function optionsFor(signal: AbortSignal | undefined): RequestJsonOptions {
 
 export function createRunsApi(fetchImpl: FetchLike = fetch): RunsApi {
   return {
+    async createRun(projectId, input, options = {}): Promise<RunStartResult> {
+      const value = await requestJson<unknown>(
+        `/api/projects/${encodeURIComponent(projectId)}/runs`,
+        {
+          method: 'POST',
+          body: {
+            chainId: input.chainId,
+            mode: input.mode,
+            inputs: input.inputs,
+            acknowledgements: input.acknowledgements,
+          },
+          ...optionsFor(options.signal),
+        },
+        fetchImpl,
+      );
+      return decodeRunStartResult(value);
+    },
+
+    async getActiveRun(options = {}): Promise<ActiveRunState> {
+      const value = await requestJson<unknown>(
+        '/api/runs/active',
+        optionsFor(options.signal),
+        fetchImpl,
+      );
+      return decodeActiveRun(value);
+    },
+
     async getRun(runId, options = {}): Promise<RunView> {
       const value = await requestJson<unknown>(
         `/api/runs/${encodeURIComponent(runId)}`,

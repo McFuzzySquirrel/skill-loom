@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -283,6 +283,90 @@ describe('GET /api/projects/:projectId/catalog', () => {
     const invalid = await getCatalog(app, 'INVALID-000000000000', 'opencode');
     expect(invalid.statusCode).toBe(422);
     expect(envelope(invalid.body).error.code).toBe('CATALOG_PROJECT_ID_INVALID');
+  });
+});
+
+describe('POST /api/projects/:projectId/catalog/skills/:skillId/copy', () => {
+  it('copies a personal OpenCode package into the project skill root', async () => {
+    const app = await buildTestApp();
+    const registered = await openProject(app);
+    const catalog = catalogOf(
+      (await getCatalog(app, registered.id, 'opencode')).body,
+    );
+    const personal = catalog.groups
+      .flatMap((group) => group.entries)
+      .find((entry) => entry.source === 'personal' && entry.name === 'shared-name');
+    expect(personal).toBeDefined();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/projects/${encodeURIComponent(registered.id)}/catalog/skills/${encodeURIComponent(
+        personal!.id,
+      )}/copy?harness=opencode`,
+    });
+    expect(response.statusCode).toBe(201);
+    const copied = response.json<{ destinationPath: string; name: string }>();
+    expect(copied.name).toBe('shared-name');
+    // The project already has a shared-name package, so the copy is suffixed.
+    expect(copied.destinationPath).toBe(
+      join(project, '.opencode', 'skills', 'shared-name-2'),
+    );
+    expect(await readFile(join(copied.destinationPath, 'SKILL.md'), 'utf8')).toContain(
+      'Personal copy',
+    );
+
+    const after = catalogOf((await getCatalog(app, registered.id, 'opencode')).body);
+    expect(after.groups.find((group) => group.source === 'project')?.count).toBe(3);
+  });
+
+  it('copies a Copilot personal skill into the documented project root', async () => {
+    const app = await buildTestApp();
+    const registered = await openProject(app);
+    const catalog = catalogOf((await getCatalog(app, registered.id, 'copilot')).body);
+    const personal = catalog.groups
+      .flatMap((group) => group.entries)
+      .find((entry) => entry.source === 'personal');
+    expect(personal).toBeDefined();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/projects/${encodeURIComponent(registered.id)}/catalog/skills/${encodeURIComponent(
+        personal!.id,
+      )}/copy?harness=copilot`,
+    });
+    expect(response.statusCode).toBe(201);
+    const copied = response.json<{ destinationPath: string }>();
+    expect(copied.destinationPath.startsWith(join(project, '.github', 'skills'))).toBe(
+      true,
+    );
+  });
+
+  it('rejects a project-source skill and an unknown skill id', async () => {
+    const app = await buildTestApp();
+    const registered = await openProject(app);
+    const catalog = catalogOf(
+      (await getCatalog(app, registered.id, 'opencode')).body,
+    );
+    const projectEntry = catalog.groups
+      .flatMap((group) => group.entries)
+      .find((entry) => entry.source === 'project');
+    expect(projectEntry).toBeDefined();
+
+    const projectCopy = await app.inject({
+      method: 'POST',
+      url: `/api/projects/${encodeURIComponent(registered.id)}/catalog/skills/${encodeURIComponent(
+        projectEntry!.id,
+      )}/copy?harness=opencode`,
+    });
+    expect(projectCopy.statusCode).toBe(409);
+    expect(isApiErrorEnvelope(projectCopy.json())).toBe(true);
+
+    const missing = await app.inject({
+      method: 'POST',
+      url: `/api/projects/${encodeURIComponent(registered.id)}/catalog/skills/missing-skill/copy?harness=opencode`,
+    });
+    expect(missing.statusCode).toBe(404);
+    expect(isApiErrorEnvelope(missing.json())).toBe(true);
   });
 });
 

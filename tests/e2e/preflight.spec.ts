@@ -65,8 +65,9 @@ async function writeSkill(
 }
 
 /**
- * A fake OpenCode executable. Its static auth probe reports a local credential
- * connection, which is the only command preflight is allowed to run here.
+ * A fake OpenCode executable. The static auth probe reports a local credential
+ * connection, and the supervised entry holds the PTY open so the Start action
+ * can navigate to a live run view.
  */
 function openCodeScript(): string {
   return `#!/usr/bin/env node
@@ -77,8 +78,8 @@ if (args[0] === 'auth' && args[1] === 'list') {
   ]));
   process.exit(0);
 }
-process.stderr.write('fake opencode: unexpected arguments: ' + args.join(' ') + '\\n');
-process.exit(0);
+process.stdout.write('FAKE_PREFLIGHT_RUN\\r\\n');
+setInterval(() => {}, 1000);
 `;
 }
 
@@ -361,10 +362,23 @@ test.describe('Run start and preflight', () => {
     await expect(page.getByTestId('preflight-gate')).toHaveText('Start allowed');
 
     await expect(start).toBeEnabled();
-    const urlBeforeStart = page.url();
     await start.click();
-    await expect(page.getByTestId('start-note')).toContainText('does not start a run');
-    expect(page.url()).toBe(urlBeforeStart);
+
+    // Start is now a real run trigger: it creates a run and opens the dedicated
+    // xterm terminal page. The fake harness holds the PTY so it stays live.
+    await expect(page).toHaveURL(/\/runs\/run-[^/]+\/terminal$/);
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Run terminal' }),
+    ).toBeVisible();
+    await expect(page.getByTestId('run-terminal-screen')).toContainText(
+      'FAKE_PREFLIGHT_RUN',
+      { timeout: 15_000 },
+    );
+    await expect(page.getByTestId('terminal-run-status')).toContainText('Awaiting user');
+
+    // Release the single active-run slot before the next test.
+    await page.getByTestId('run-control-abort').click();
+    await expect(page.getByTestId('terminal-run-status')).toContainText('Aborted');
 
     expect(consoleErrors).toEqual([]);
   });

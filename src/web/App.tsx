@@ -4,10 +4,12 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { StatusAnnouncerProvider } from './components/StatusRegion';
 import { Redirect, RouterProvider, matchRoute, useRouter } from './router';
 import { ChainBuilderPage } from './routes/ChainBuilderPage';
+import { GlobalChainsPage } from './routes/GlobalChainsPage';
 import { NotFoundPage } from './routes/NotFoundPage';
 import { ProjectPage, ProjectsPage } from './routes/ProjectsPage';
 import { RunPage } from './routes/RunPage';
 import { RunStartPage } from './routes/RunStartPage';
+import { TerminalRunPage } from './routes/TerminalRunPage';
 
 interface RouteDefinition {
   pattern: string;
@@ -20,6 +22,11 @@ const ROUTES: RouteDefinition[] = [
     pattern: '/projects',
     title: 'Projects',
     render: () => <ProjectsPage />,
+  },
+  {
+    pattern: '/chains',
+    title: 'Global chain library',
+    render: () => <GlobalChainsPage />,
   },
   {
     pattern: '/projects/:projectId',
@@ -45,6 +52,11 @@ const ROUTES: RouteDefinition[] = [
         chainId={params.chainId ?? ''}
       />
     ),
+  },
+  {
+    pattern: '/runs/:runId/terminal',
+    title: 'Run terminal',
+    render: (params) => <TerminalRunPage runId={params.runId ?? ''} />,
   },
   {
     pattern: '/runs/:runId',

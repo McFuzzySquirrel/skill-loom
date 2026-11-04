@@ -31,6 +31,7 @@ The versioned config document contains `version`, `harnessCommands`, `extraSkill
 |------|----------|-------|
 | `~/.config/slan/config.json` | Global config, harness command overrides, extra skill directories, recent projects, UI preferences. | Override the whole directory with `SLAN_CONFIG_DIR`. |
 | `~/.config/slan/active-run.json` | Single global active-run pointer used for health reporting and startup recovery. | Holds only the active run's project path, run id, and status. |
+| `~/.config/slan/chains/*.json` | Global chain templates saved with **Save copy to library**. | Independent snapshots, not live links to project chains. Importing copies one into a project with a new id. |
 | `<project>/.slan/chains/*.json` | Saved chain definitions, including steps, inputs, harness, session mode, and the automatic-permission opt-in. | Versioned JSON written atomically. Chain files can be backed up or versioned if you want to keep recipes. |
 | `<project>/.slan/runs/*.json` | Run snapshots, statuses, actions, and a bounded terminal tail per step. | At most a **200-line or 32 KiB** tail per step; never a full transcript. `.slan/runs/` is **git-ignored** by this repository's `.gitignore`. |
 | `~/.copilot/config.json` | Copilot's own persistent folder-trust configuration. | Slan only reads `trustedFolders`; it never writes this file. |
@@ -51,6 +52,8 @@ Authentication is evidence-based: preflight may inspect command output, credenti
 - OpenCode: `opencode auth login`
 - Copilot: `copilot login`, or set `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`
 
+The skill catalog starts collapsed. Expanding an entry from a non-project source exposes **Copy into this project**, which copies the whole package into `<project>/.opencode/skills/` for OpenCode or `<project>/.github/skills/` for Copilot. The copy is bounded, refuses symlinks, and never overwrites an existing package; a numeric suffix is used instead. The original personal, plugin, custom, or extra skill is left untouched.
+
 Preflight hard-blocks a missing harness executable, unauthenticated or ambiguously authenticated harness, unresolved Copilot trust, unresolved skills, missing required inputs, unsupported session modes, and a missing automatic-permission opt-in when Copilot automatic mode is selected. A dirty git tree is a warning, not a block. A non-git project skips the dirty-tree check.
 
 ## Copilot trust and automatic permissions
@@ -66,6 +69,8 @@ The trust panel can start an interactive trust session in the project directory.
 Automatic Copilot mode requires an explicit per-chain opt-in. It is off by default. When enabled, Slan passes the exact broad flags `--allow-all-paths` and `--allow-all-tools` for automatic steps and shows those flags at preflight and on the run; this grants broad filesystem and tool access inside the selected project. Revoke the opt-in on the chain to return to supervised mode. Supervised mode never passes automatic permission flags.
 
 OpenCode automatic mode does not pass broad permission flags. It advances only after observing OpenCode's terminal state sequence `OSC 7501` `state=working` followed by `state=idle`; Copilot automatic mode advances on process exit. A missing completion signal, non-zero exit, or a 30-minute per-step timeout pauses the run. Output-idle heuristics, animation quiescence, and fixed sleeps never advance a chain. At most one run can be active across the server; a second start is rejected while a run is starting, running, paused, or awaiting user input.
+
+Starting a run opens the dedicated terminal page at `/runs/<runId>/terminal`, which keeps the xterm surface and compact controls visible without scrolling. **Run details** opens `/runs/<runId>` for the step rail, full controls, and recovery guidance. Both routes request the same run snapshot and event stream; neither starts, advances, or replays a step on load.
 
 ## Security model
 
@@ -83,12 +88,13 @@ Back up the global config if you want to preserve `harnessCommands`, extra skill
 cp ~/.config/slan/config.json ~/slan-config.backup.json
 ```
 
-Back up a project's recipes by copying `<project>/.slan/chains/`. Run records under `<project>/.slan/runs/` are optional history; because they can contain terminal output, treat them as sensitive local data and keep them out of version control. This repository already ignores `.slan/runs/`.
+Back up a project's recipes by copying `<project>/.slan/chains/`, and back up reusable templates by copying `~/.config/slan/chains/`. Run records under `<project>/.slan/runs/` are optional history; because they can contain terminal output, treat them as sensitive local data and keep them out of version control. This repository already ignores `.slan/runs/`.
 
 Cleanup behavior:
 
 - **Remove a recent project:** removes only the recent-entry record. The project directory and its files are untouched.
 - **Delete a chain:** removes only that chain's file under `<project>/.slan/chains/`. The action is confirmed in the UI and cannot be undone.
+- **Remove a global template:** removes only its file under `~/.config/slan/chains/`. Imported project copies are independent and are not affected.
 - **Delete run history:** with no active run, remove individual files under `<project>/.slan/runs/`, or the directory. Do not delete `active-run.json` while a run is live; let Slan release it, or restart the server so startup recovery marks the stale run interrupted.
 - **Stop the server:** close browser sessions and let `SIGINT`/`SIGTERM` shut down PTYs, WebSocket subscribers, and child processes. Do not kill harness children manually and then resume the run.
 - **Reset all Slan state for a test profile:** use a temporary `SLAN_CONFIG_DIR` and project directory; never point test tooling at your real `~/.config/slan`.

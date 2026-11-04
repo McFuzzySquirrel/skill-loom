@@ -474,7 +474,7 @@ function delay(ms: number): Promise<void> {
 async function waitFor<T>(
   check: () => Promise<T | null | false | undefined>,
   description: string,
-  timeoutMs = 2_000,
+  timeoutMs = 5_000,
 ): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {

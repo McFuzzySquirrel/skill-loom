@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { CHAIN_SESSION_MODES, type ChainSessionMode } from '../chains/model.js';
 import type { HarnessId } from '../config/schema.js';
 import {
@@ -32,6 +33,15 @@ export const OPENCODE_DISPLAY_NAME = 'OpenCode';
 export const OPENCODE_EXECUTABLE_NAME = 'opencode';
 export const OPENCODE_INSTALL_HINT =
   'Install OpenCode 2.2.5 (https://opencode.ai) and ensure "opencode" is on PATH, or set harnessCommands.opencode in the Slan config.';
+
+/** OpenCode rejects any session id that does not start with `ses`. */
+export const OPENCODE_SESSION_ID_PREFIX = 'ses_';
+export const OPENCODE_SESSION_ID_PATTERN = /^ses_[A-Za-z0-9]+$/;
+
+/** Create an OpenCode session id for a brand-new session. */
+export function createOpenCodeSessionId(): string {
+  return `${OPENCODE_SESSION_ID_PREFIX}${randomUUID().replaceAll('-', '')}`;
+}
 
 /** OpenCode can honor all three chain session modes. */
 export const OPENCODE_SUPPORTED_SESSION_MODES: readonly ChainSessionMode[] = Object.freeze([
@@ -105,6 +115,14 @@ export function createOpenCodeAdapter(options: HarnessAdapterOptions = {}): Harn
     permissionOptInField: null,
 
     resolveExecutable,
+
+    createSessionId(): string {
+      return createOpenCodeSessionId();
+    },
+
+    isSessionId(value: string): boolean {
+      return OPENCODE_SESSION_ID_PATTERN.test(value);
+    },
 
     supportsSessionMode(mode: string): mode is ChainSessionMode {
       return isChainSessionMode(mode) && OPENCODE_SUPPORTED_SESSION_MODES.includes(mode);

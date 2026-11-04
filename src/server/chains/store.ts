@@ -154,8 +154,14 @@ export interface ChainStoreOptions {
   /**
    * Registered project directory. It is canonicalized with `realpath` before
    * any `.slan` path is derived, so a symlinked project root is handled once.
+   * Exactly one of `projectPath` and `chainsDirectory` is required.
    */
-  projectPath: string;
+  projectPath?: string;
+  /**
+   * Explicit chain directory for stores that are not tied to a project, such
+   * as the global template library under the Slan config directory.
+   */
+  chainsDirectory?: string;
   /** Canonicalization seam for deterministic traversal tests. */
   realpathPath?: RealpathPath;
   /** Write seam for failure simulation. */
@@ -178,6 +184,14 @@ export interface ChainStore {
 /** `<canonicalProject>/.slan/chains`; the input must already be canonical. */
 export function chainsDirectoryFor(projectPath: string): string {
   return join(projectPath, SLAN_DIRECTORY_NAME, CHAINS_DIRECTORY_NAME);
+}
+
+/** Global chain template directory under the Slan config directory. */
+export const GLOBAL_CHAINS_DIRECTORY_NAME = 'chains';
+
+/** `<slanConfig>/chains`; the input must already be an absolute path. */
+export function globalChainsDirectoryFor(configDirectory: string): string {
+  return join(configDirectory, GLOBAL_CHAINS_DIRECTORY_NAME);
 }
 
 /** True only for ids this store accepts as a filename segment. */
@@ -460,6 +474,10 @@ class FileChainStore implements ChainStore {
   }
 
   private async resolveRoot(create: boolean): Promise<ResolvedChainsRoot> {
+    if (this.options.chainsDirectory !== undefined) {
+      return this.resolveDirectoryRoot(this.options.chainsDirectory, create);
+    }
+
     const canonicalProject = await canonicalizeProject(
       this.options.projectPath,
       this.options.realpathPath,
@@ -508,6 +526,74 @@ class FileChainStore implements ChainStore {
     }
 
     return { projectPath: canonicalProject, chainsDirectory, exists };
+  }
+
+  /**
+   * Resolve an explicit chain directory that is not derived from a project.
+   *
+   * The directory is validated like a project chain directory: it must be an
+   * absolute path, cannot be a symlink, cannot be a file, and is canonicalized
+   * before use. Creating it is limited to `create: true` so a list or read
+   * never scaffolds the user's config directory.
+   */
+  private async resolveDirectoryRoot(
+    chainsDirectory: string,
+    create: boolean,
+  ): Promise<ResolvedChainsRoot> {
+    if (
+      typeof chainsDirectory !== 'string' ||
+      chainsDirectory.trim() === '' ||
+      chainsDirectory.includes('\0') ||
+      !isAbsolute(chainsDirectory)
+    ) {
+      throw new ChainStoreError(
+        CHAIN_STORE_ERROR_CODES.PROJECT_INVALID,
+        'An absolute chain directory is required.',
+        {
+          path: chainsDirectory,
+          reason: chainsDirectory.includes('\0') ? 'NUL_BYTE' : 'NOT_ABSOLUTE',
+        },
+      );
+    }
+
+    const state = await this.inspectEntry(chainsDirectory);
+    assertNotSymlinkOrFile(state, chainsDirectory, CHAINS_DIRECTORY_NAME);
+
+    let exists = state === 'directory';
+    if (!exists && create) {
+      try {
+        await mkdir(chainsDirectory, { recursive: true, mode: 0o700 });
+      } catch (error) {
+        throw new ChainStoreError(
+          CHAIN_STORE_ERROR_CODES.STORE_SETUP_FAILED,
+          'The chain directory could not be created.',
+          { path: chainsDirectory, reason: errnoCode(error) },
+          { cause: error },
+        );
+      }
+      exists = true;
+    }
+
+    if (exists) {
+      const canonical = await this.canonicalizeChainsDirectory(chainsDirectory);
+      if (canonical !== chainsDirectory) {
+        throw new ChainStoreError(
+          CHAIN_STORE_ERROR_CODES.PATH_ESCAPED,
+          'The chain directory resolves to a different path.',
+          {
+            path: chainsDirectory,
+            resolvedPath: canonical,
+            reason: 'SYMLINK_ESCAPE',
+          },
+        );
+      }
+    }
+
+    return {
+      projectPath: chainsDirectory,
+      chainsDirectory,
+      exists,
+    };
   }
 
   private async canonicalizeChainsDirectory(chainsDirectory: string): Promise<string> {

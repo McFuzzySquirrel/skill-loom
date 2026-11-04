@@ -183,6 +183,13 @@ export interface HarnessTrustCommand {
 export interface HarnessAdapter extends HarnessDescriptor {
   /** Resolve the executable from Slan config, then PATH, without a shell. */
   resolveExecutable(): ResolvedExecutable;
+  /**
+   * Generate a session id accepted by this harness. OpenCode requires the
+   * `ses_` prefix even for a brand-new session.
+   */
+  createSessionId(): string;
+  /** True when an existing run's stored session id can safely be reused. */
+  isSessionId(value: string): boolean;
   supportsSessionMode(mode: string): mode is ChainSessionMode;
   /** Throw a typed error before a spawn when the mode is unsupported. */
   assertSessionMode(mode: string): ChainSessionMode;

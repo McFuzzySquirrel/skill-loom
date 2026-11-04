@@ -116,13 +116,23 @@ async function openFixtureProject(
   return body.project;
 }
 
+async function expandCatalog(page: Page): Promise<void> {
+  const toggle = page.getByTestId('catalog-toggle');
+  await expect(toggle).toBeVisible();
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') {
+    await toggle.click();
+  }
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByTestId('catalog-summary')).toBeVisible();
+}
+
 async function gotoCatalog(page: Page, projectId: string): Promise<void> {
   await page.goto(`/projects/${projectId}`);
   await expect(
     page.getByRole('heading', { level: 1, name: projectName }),
   ).toBeVisible();
   await expect(page.getByTestId('skill-catalog')).toBeVisible();
-  await expect(page.getByTestId('catalog-summary')).toBeVisible();
+  await expandCatalog(page);
 }
 
 function rowFor(page: Page, name: string) {
@@ -130,6 +140,33 @@ function rowFor(page: Page, name: string) {
 }
 
 test.describe('Skill catalog', () => {
+  test('starts collapsed and expands on demand', async ({ page, request }) => {
+    const consoleErrors = collectConsoleErrors(page);
+    const project = await openFixtureProject(request);
+
+    await page.goto(`/projects/${project.id}`);
+    await expect(
+      page.getByRole('heading', { level: 1, name: projectName }),
+    ).toBeVisible();
+
+    const toggle = page.getByTestId('catalog-toggle');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(toggle).toContainText('Show catalog');
+    await expect(page.getByTestId('catalog-collapsed-summary')).toBeVisible();
+    await expect(page.getByTestId('catalog-search')).toBeHidden();
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByTestId('catalog-search')).toBeVisible();
+    await expect(page.getByTestId('catalog-summary')).toBeVisible();
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByTestId('catalog-search')).toBeHidden();
+
+    expect(consoleErrors).toEqual([]);
+  });
+
   test('groups by source, keeps warnings visible, and expands full SKILL.md text', async ({
     page,
     request,
@@ -344,6 +381,45 @@ test.describe('Skill catalog', () => {
     await expect(projectShared).toHaveCount(1);
   });
 
+  test('copies a non-project skill package into the project', async ({ page, request }) => {
+    const consoleErrors = collectConsoleErrors(page);
+    const project = await openFixtureProject(request);
+    const added = await request.post('/api/settings/extra-skill-directories', {
+      data: { path: extraDirectory },
+    });
+    expect([201, 409]).toContain(added.status());
+
+    try {
+      await gotoCatalog(page, project.id);
+      const extraRow = page.locator(
+        '[data-testid="skill-row"][data-source="slan-extra"][data-name="release-notes"]',
+      );
+      await expect(extraRow).toBeVisible();
+      await extraRow.locator('.skill-row__toggle').click();
+
+      const copy = extraRow.getByTestId('skill-copy');
+      await expect(copy).toBeVisible();
+      await copy.click();
+      await expect(extraRow.getByTestId('skill-copy-result')).toContainText(
+        '.opencode/skills/release-notes',
+      );
+
+      // The refresh picks up the new project-source entry.
+      await page.getByTestId('catalog-refresh').click();
+      await expect(
+        page.locator(
+          '[data-testid="skill-row"][data-source="project"][data-name="release-notes"]',
+        ),
+      ).toBeVisible();
+    } finally {
+      await request.delete(
+        `/api/settings/extra-skill-directories?path=${encodeURIComponent(extraDirectory)}`,
+      );
+    }
+
+    expect(consoleErrors).toEqual([]);
+  });
+
   test('shows a distinct loading state, an inline error, and a working retry', async ({
     page,
     request,
@@ -373,6 +449,7 @@ test.describe('Skill catalog', () => {
     });
 
     await page.goto(`/projects/${project.id}`);
+    await page.getByTestId('catalog-toggle').click();
     await expect(page.getByTestId('catalog-loading')).toBeVisible();
 
     const error = page.getByTestId('catalog-error').getByRole('alert');

@@ -14,6 +14,10 @@ import {
   type ChainService,
 } from '../chains/service.js';
 import {
+  createGlobalChainService,
+  type GlobalChainService,
+} from '../chains/library.js';
+import {
   CHAIN_STORE_ERROR_CODES,
   ChainStoreError,
   type ChainListResult,
@@ -56,6 +60,11 @@ const duplicatePayloadSchema = z.strictObject({
   uniqueName: z.boolean().optional(),
 });
 
+const importPayloadSchema = z.strictObject({
+  libraryChainId: z.string().min(1).max(64),
+  name: z.string().optional(),
+});
+
 const uniqueNameQuerySchema = z.object({
   uniqueName: z.enum(['true', 'false', '1', '0']).optional(),
 });
@@ -67,6 +76,8 @@ export interface ChainRoutesOptions {
   projectRegistry?: ProjectRegistry;
   /** Injected chain service. Defaults to the filesystem-backed service. */
   chainService?: ChainService;
+  /** Injected global template service used by the import route. */
+  globalChainService?: GlobalChainService;
 }
 
 interface ProjectRouteParams {
@@ -125,6 +136,11 @@ export const chainRoutes: FastifyPluginAsync<ChainRoutesOptions> = async (
     options.projectRegistry ??
     createProjectRegistry({ configStore: options.configStore });
   const service = options.chainService ?? createChainService();
+  // Keep config access lazy: merely registering routes must not read the
+  // config directory, and an injected service bypasses it entirely.
+  const globalService = (): GlobalChainService =>
+    options.globalChainService ??
+    createGlobalChainService({ configDirectory: options.configStore.getConfigDir() });
 
   app.get<{ Params: ProjectRouteParams }>(
     '/api/projects/:projectId/chains',
@@ -271,6 +287,31 @@ export const chainRoutes: FastifyPluginAsync<ChainRoutesOptions> = async (
     },
   );
 
+  app.post<{ Params: ProjectRouteParams }>(
+    '/api/projects/:projectId/chains/import',
+    async (request, reply) => {
+      const parsed = importPayloadSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return sendValidationFailure(
+          reply,
+          'The chain import request is not valid.',
+          parsed.error.issues,
+        );
+      }
+
+      try {
+        const projectPath = await resolveProjectPath(registry, request.params.projectId);
+        const source = await globalService().read(parsed.data.libraryChainId);
+        const chain = await service.importChain(projectPath, source, {
+          ...(parsed.data.name === undefined ? {} : { name: parsed.data.name }),
+        });
+        return reply.code(201).send({ chain } satisfies ChainResponse);
+      } catch (error) {
+        return sendChainFailure(reply, error);
+      }
+    },
+  );
+
   app.delete<{ Params: ChainRouteParams }>(
     '/api/projects/:projectId/chains/:chainId',
     async (request, reply) => {
@@ -292,7 +333,7 @@ export const chainRoutes: FastifyPluginAsync<ChainRoutesOptions> = async (
  * Resolve a project id to its canonical directory. The id must be in the
  * registry; the route never accepts or derives a path from the client.
  */
-async function resolveProjectPath(
+export async function resolveProjectPath(
   registry: ProjectRegistry,
   projectId: string,
 ): Promise<string> {
@@ -371,7 +412,7 @@ function updateServerFieldIssue(
   return undefined;
 }
 
-function sendChainFailure(reply: FastifyReply, error: unknown): FastifyReply {
+export function sendChainFailure(reply: FastifyReply, error: unknown): FastifyReply {
   if (error instanceof ChainValidationError) {
     return reply.code(422).send(
       createApiErrorEnvelope(API_ERROR_CODES.VALIDATION_ERROR, error.message, {

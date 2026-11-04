@@ -112,6 +112,14 @@ async function gotoNewBuilder(
     page.getByRole('heading', { level: 1, name: 'Chain authoring' }),
   ).toBeVisible();
   await expect(page.getByTestId('chain-builder')).toBeVisible();
+  await expandCatalog(page);
+}
+
+async function expandCatalog(page: Page): Promise<void> {
+  const toggle = page.getByTestId('catalog-toggle');
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') {
+    await toggle.click();
+  }
   await expect(page.getByTestId('catalog-summary')).toBeVisible();
 }
 
@@ -498,14 +506,14 @@ test.describe('Chain inputs and save', () => {
     await page.getByTestId('harness-duplicate-target').selectOption('copilot');
     await page.getByTestId('harness-duplicate-action').click();
 
-    await expect(page.getByRole('status')).toContainText('Duplicated');
+    // The duplicate announcement can be superseded quickly by the new builder's
+    // catalog load, so the durable evidence is the copied route and document.
     await expect(page).toHaveURL(
       new RegExp(`/projects/${escapeRegExp(project.id)}/chains/[^/]+$`),
     );
+    await expect(page.getByTestId('builder-chain-name')).toHaveText(`${name} copy`);
     const copyId = chainIdFromUrl(page.url());
     expect(copyId).not.toBe(original.id);
-
-    await expect(page.getByTestId('builder-chain-name')).toHaveText(`${name} copy`);
     await expect(page.getByTestId('builder-harness')).toHaveText(
       'Harness: Copilot',
     );

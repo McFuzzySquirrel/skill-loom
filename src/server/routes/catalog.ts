@@ -16,6 +16,11 @@ import {
   type ExtraDirectoryErrorCode,
 } from '../catalog/merge.js';
 import {
+  CatalogCopyError,
+  copySkillIntoProject,
+  type CatalogCopyErrorCode,
+} from '../catalog/copy.js';
+import {
   CATALOG_ERROR_CODES,
   CatalogError,
   SKILL_HARNESSES,
@@ -90,6 +95,18 @@ const STATUS_BY_CATALOG_CODE: Record<CatalogErrorCode, number> = {
 const STATUS_BY_EXTRA_CODE: Record<ExtraDirectoryErrorCode, number> = {
   EXTRA_SKILL_DIRECTORY_DUPLICATE: 409,
   EXTRA_SKILL_DIRECTORY_NOT_FOUND: 404,
+};
+
+/** HTTP status for a skill package copy failure. */
+const STATUS_BY_COPY_CODE: Record<CatalogCopyErrorCode, number> = {
+  SKILL_ALREADY_IN_PROJECT: 409,
+  SKILL_SOURCE_UNAVAILABLE: 404,
+  SKILL_SOURCE_NOT_DIRECTORY: 422,
+  SKILL_SOURCE_UNSAFE: 422,
+  SKILL_DESTINATION_UNAVAILABLE: 500,
+  SKILL_SYMLINK_UNSUPPORTED: 422,
+  SKILL_PACKAGE_TOO_LARGE: 413,
+  SKILL_COPY_FAILED: 500,
 };
 
 /** HTTP status for the folder-path failures reused by directory validation. */
@@ -217,6 +234,62 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRoutesOptions> = async (
     },
   );
 
+  app.post<{
+    Params: ProjectRouteParams & { skillId: string };
+    Querystring: { harness?: string; q?: string };
+  }>(
+    '/api/projects/:projectId/catalog/skills/:skillId/copy',
+    async (request, reply) => {
+      const parsed = catalogQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        return reply.code(422).send(
+          createApiErrorEnvelope(
+            API_ERROR_CODES.VALIDATION_ERROR,
+            'The skill copy request is not valid.',
+            { issues: toValidationIssues(parsed.error.issues) },
+          ),
+        );
+      }
+
+      try {
+        const project = await resolveRegisteredProject(registry, request.params.projectId);
+        const harness = parsed.data.harness ?? service.defaultHarness;
+        // Re-discover before copying so the source path is authoritative and
+        // never supplied by the browser.
+        const catalog = await service.getCatalog({
+          projectPath: project.canonicalPath,
+          harness,
+        });
+        const entry = catalog.groups
+          .flatMap((group) => group.entries)
+          .find((candidate) => candidate.id === request.params.skillId);
+
+        if (entry === undefined) {
+          return reply.code(404).send(
+            createApiErrorEnvelope(
+              'CATALOG_SKILL_NOT_FOUND',
+              'No catalog entry matches that skill id for the selected harness.',
+              { skillId: request.params.skillId, harness },
+            ),
+          );
+        }
+
+        const copied = await copySkillIntoProject({
+          projectPath: project.canonicalPath,
+          harness,
+          entry,
+        });
+        return reply.code(201).send({
+          ...copied,
+          harness,
+          skillId: entry.id,
+        });
+      } catch (error) {
+        return sendCatalogFailure(reply, error);
+      }
+    },
+  );
+
   app.get('/api/settings/extra-skill-directories', async (_request, reply) => {
     try {
       const extraSkillDirectories = await listExtraSkillDirectories(options.configStore);
@@ -307,6 +380,12 @@ function sendCatalogFailure(reply: FastifyReply, error: unknown): FastifyReply {
   if (error instanceof ExtraDirectoryError) {
     return reply
       .code(STATUS_BY_EXTRA_CODE[error.code] ?? 500)
+      .send(createApiErrorEnvelope(error.code, error.message, error.details));
+  }
+
+  if (error instanceof CatalogCopyError) {
+    return reply
+      .code(STATUS_BY_COPY_CODE[error.code] ?? 500)
       .send(createApiErrorEnvelope(error.code, error.message, error.details));
   }
 

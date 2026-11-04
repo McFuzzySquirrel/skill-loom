@@ -68,6 +68,11 @@ export interface DuplicateChainOptions {
   uniqueName?: boolean;
 }
 
+export interface ImportChainOptions {
+  /** Optional explicit name for the imported copy. */
+  name?: string;
+}
+
 export interface ChainService {
   list(projectPath: string): Promise<ChainListResult>;
   get(projectPath: string, chainId: string): Promise<Chain>;
@@ -82,6 +87,16 @@ export interface ChainService {
     projectPath: string,
     chainId: string,
     options?: DuplicateChainOptions,
+  ): Promise<Chain>;
+  /**
+   * Copy a validated chain from another source into a project. The imported
+   * copy always receives a new id and timestamps; name collisions are resolved
+   * with the same deterministic copy naming used by `duplicate`.
+   */
+  importChain(
+    projectPath: string,
+    source: Chain,
+    options?: ImportChainOptions,
   ): Promise<Chain>;
   remove(projectPath: string, chainId: string): Promise<void>;
 }
@@ -176,6 +191,43 @@ class ProjectChainService implements ChainService {
   ): Promise<Chain> {
     const store = this.storeFor(projectPath);
     const source = await store.read(chainId);
+    const name = await this.duplicateName(store, source, options);
+    const timestamp = this.timestamp();
+    const draft: ChainDraft = {
+      name,
+      harness: source.harness,
+      sessionMode: source.sessionMode,
+      steps: source.steps,
+      inputs: source.inputs,
+      automaticPermissionOptIn: source.automaticPermissionOptIn,
+    };
+
+    const candidate = this.buildChain(draft, this.nextId(name), timestamp, timestamp);
+
+    for (let attempt = 1; attempt <= MAX_ID_ATTEMPTS; attempt += 1) {
+      try {
+        return await store.create(candidate);
+      } catch (error) {
+        if (!isAlreadyExists(error) || attempt === MAX_ID_ATTEMPTS) {
+          throw error;
+        }
+        candidate.id = this.nextId(name);
+      }
+    }
+
+    throw new ChainServiceError(
+      CHAIN_SERVICE_ERROR_CODES.ID_GENERATION_FAILED,
+      'A unique chain id could not be generated.',
+      { attempts: MAX_ID_ATTEMPTS },
+    );
+  }
+
+  async importChain(
+    projectPath: string,
+    source: Chain,
+    options: ImportChainOptions = {},
+  ): Promise<Chain> {
+    const store = this.storeFor(projectPath);
     const name = await this.duplicateName(store, source, options);
     const timestamp = this.timestamp();
     const draft: ChainDraft = {

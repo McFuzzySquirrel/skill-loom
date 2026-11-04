@@ -785,3 +785,24 @@ describe('harness isolation', () => {
     }
   });
 });
+
+describe('session id generation', () => {
+  it('generates an OpenCode id with the required ses prefix and validates it', () => {
+    const adapter = createOpenCodeAdapter();
+    const sessionId = adapter.createSessionId();
+
+    expect(sessionId).toMatch(/^ses_[A-Za-z0-9]+$/);
+    expect(adapter.isSessionId(sessionId)).toBe(true);
+    expect(adapter.isSessionId('3f2a1c0e-4b1e-4f45-9d2f-6b2a0c9d8e11')).toBe(false);
+    expect(adapter.isSessionId('test-id')).toBe(false);
+  });
+
+  it('keeps Copilot session ids nonempty and reusable', () => {
+    const adapter = createCopilotAdapter();
+    const sessionId = adapter.createSessionId();
+
+    expect(sessionId.trim()).not.toBe('');
+    expect(adapter.isSessionId(sessionId)).toBe(true);
+    expect(adapter.isSessionId('')).toBe(false);
+  });
+});

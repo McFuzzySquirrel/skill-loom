@@ -29,6 +29,8 @@ export interface RunControlsProps {
   busyAction: RunActionName | null;
   onAction: (action: RunActionName, reason?: string) => void;
   controlBarRef: RefObject<HTMLDivElement | null>;
+  /** Hide explanatory copy for the dedicated terminal page. */
+  compact?: boolean;
 }
 
 interface ControlDefinition {
@@ -79,13 +81,15 @@ export function RunControls({
   busyAction,
   onAction,
   controlBarRef,
+  compact = false,
 }: RunControlsProps) {
   const busy = busyAction !== null;
+  const className = compact ? 'run-controls run-controls--compact' : 'run-controls';
 
   if (recovery !== null) {
     return (
       <div
-        className="run-controls"
+        className={className}
         role="group"
         aria-label="Run controls"
         tabIndex={-1}
@@ -283,7 +287,7 @@ export function RunControls({
 
   return (
     <div
-      className="run-controls"
+      className={className}
       role="group"
       aria-label="Run controls"
       tabIndex={-1}

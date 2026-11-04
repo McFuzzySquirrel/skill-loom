@@ -88,6 +88,15 @@ export interface SkillDetail {
   content: string;
 }
 
+/** Result of copying a non-project skill package into the project. */
+export interface SkillCopyResult {
+  skillId: string;
+  harness: CatalogHarness;
+  name: string;
+  source: SkillSource;
+  destinationPath: string;
+}
+
 export interface ExtraDirectories {
   extraSkillDirectories: string[];
 }
@@ -109,6 +118,11 @@ export interface CatalogApi {
     skillId: string,
     options?: Pick<CatalogListOptions, 'harness' | 'signal'>,
   ) => Promise<SkillDetail>;
+  copySkillToProject: (
+    projectId: string,
+    skillId: string,
+    options: { harness: CatalogHarness; signal?: AbortSignal },
+  ) => Promise<SkillCopyResult>;
   listExtraDirectories: (options?: { signal?: AbortSignal }) => Promise<ExtraDirectories>;
   addExtraDirectory: (
     path: string,
@@ -297,6 +311,24 @@ function decodeSkillDetail(value: unknown): SkillDetail {
   };
 }
 
+function decodeSkillCopyResult(value: unknown): SkillCopyResult {
+  if (
+    !isRecord(value) ||
+    !isNonEmptyString(value.skillId) ||
+    !isNonEmptyString(value.name) ||
+    !isNonEmptyString(value.destinationPath)
+  ) {
+    throw invalidResponse('skill copy result');
+  }
+  return {
+    skillId: value.skillId,
+    harness: decodeHarness(value.harness),
+    name: value.name,
+    source: decodeSource(value.source),
+    destinationPath: value.destinationPath,
+  };
+}
+
 function decodeDirectoryList(value: unknown): string[] {
   if (!isRecord(value) || !Array.isArray(value.extraSkillDirectories)) {
     throw invalidResponse('extra skill directories');
@@ -365,6 +397,23 @@ export function createCatalogApi(fetchImpl: FetchLike = fetch): CatalogApi {
         fetchImpl,
       );
       return decodeSkillDetail(value);
+    },
+
+    async copySkillToProject(
+      projectId,
+      skillId,
+      options,
+    ): Promise<SkillCopyResult> {
+      const search = new URLSearchParams({ harness: options.harness });
+      const value = await requestJson<unknown>(
+        `${catalogPath(projectId)}/skills/${encodeURIComponent(skillId)}/copy?${search.toString()}`,
+        {
+          method: 'POST',
+          ...optionsFor(options.signal),
+        },
+        fetchImpl,
+      );
+      return decodeSkillCopyResult(value);
     },
 
     async listExtraDirectories(
