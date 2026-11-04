@@ -2,7 +2,7 @@
 
 This guide is the operator contract for the local Skill Loom v1 application. It covers configuration, on-disk data, harness prerequisites, Copilot trust and automatic permissions, the security model, backup and cleanup, known limitations, fork handoff behavior, and troubleshooting.
 
-Read [README.md](../README.md) first for install, development, build, start, and test commands.
+Read [README.md](../README.md) first for install, development, build, start, and test commands. For task-oriented guidance, see the [user guide](user-guide.md) and [administrator guide](admin-guide.md). The durable decisions behind this contract are in the [ADR index](adr/README.md), and release validation is in [the 0.1.0 release notes](releases/0.1.0.md).
 
 ## Configuration
 
@@ -37,9 +37,9 @@ npx --yes --package=./skill-loom-cli-0.1.0.tgz skill-loom
 
 The CLI supports `--help`, `--version`, `--no-open`, `--port <number>`, and `--config-dir <path>`. It starts the same loopback-only production server as `npm start`, prints the resolved config directory and URL, and opens the default browser only when stdout is a TTY and `CI` is unset. `--no-open` disables that behavior entirely.
 
-`--port` sets `LOOM_PORT`; `--config-dir` sets `LOOM_CONFIG_DIR`. Environment variables remain authoritative when a flag is omitted. The package contains only the compiled server, built web UI, compiled package metadata, docs, and manifest; source, tests, and build scripts are excluded. Installing the package still builds the native `node-pty` module, so the Python/make/C++ toolchain is required.
+`--port` sets `LOOM_PORT`; `--config-dir` sets `LOOM_CONFIG_DIR`. Environment variables remain authoritative when a flag is omitted. The package contains only the compiled server, built web UI, compiled package metadata, `docs/OPERATIONS.md`, and the manifest; source, tests, build scripts, and the other documentation files are excluded. Installing the package still builds the native `node-pty` module, so the Python/make/C++ toolchain is required.
 
-Before publishing, flip `"private"` to `false`, choose and add the license and repository metadata, verify the package name is still available, run `npm run test:package`, and publish with `npm publish`. Once published, the invocation is `npx skill-loom-cli`.
+Before publishing, flip `"private"` to `false`, add repository metadata, verify the package name is still available, run `npm run test:package`, and publish with `npm publish`. Once published, the invocation is `npx skill-loom-cli`.
 
 ## Data locations
 
@@ -84,7 +84,9 @@ The trust panel can start an interactive trust session in the project directory.
 
 Automatic Copilot mode requires an explicit per-chain opt-in. It is off by default. When enabled, Skill Loom passes the exact broad flags `--allow-all-paths` and `--allow-all-tools` for automatic steps and shows those flags at preflight and on the run; this grants broad filesystem and tool access inside the selected project. Revoke the opt-in on the chain to return to supervised mode. Supervised mode never passes automatic permission flags.
 
-OpenCode automatic mode does not pass broad permission flags. It advances only after observing OpenCode's terminal state sequence `OSC 7501` `state=working` followed by `state=idle`; Copilot automatic mode advances on process exit. A missing completion signal, non-zero exit, or a 30-minute per-step timeout pauses the run. Output-idle heuristics, animation quiescence, and fixed sleeps never advance a chain. At most one run can be active across the server; a second start is rejected while a run is starting, running, paused, or awaiting user input.
+OpenCode automatic mode does not pass broad permission flags. Its intended advancement signal is OpenCode's terminal state sequence `OSC 7501` `state=working` followed by `state=idle`; Copilot automatic mode advances on process exit. A missing completion signal, non-zero exit, or a 30-minute per-step timeout pauses the run. Output-idle heuristics, animation quiescence, and fixed sleeps never advance a chain. At most one run can be active across the server; a second start is rejected while a run is starting, running, paused, or awaiting user input.
+
+> **Live-verification gap:** the live execution evidence records that OpenCode 2.2.5 emitted colon-separated OSC parameters while the product parser expects semicolon-separated parameters, and that live OpenCode emitted `clear` between `working` and `idle`. The probe's own parser recognized the signal; the product parser did not. Do not rely on automatic OpenCode chains until both issues are fixed and the live probe is rerun. See [Known live-verification gaps](#known-live-verification-gaps).
 
 Starting a run opens the dedicated terminal page at `/runs/<runId>/terminal`, which keeps the xterm surface and compact controls visible without scrolling. **Run details** opens `/runs/<runId>` for the step rail, full controls, and recovery guidance. Both routes request the same run snapshot and event stream; neither starts, advances, or replays a step on load.
 
@@ -132,6 +134,16 @@ A chain selects one session mode:
 OpenCode exposes a native `--fork` only on its headless `run` surface. Supervised interactive OpenCode fork and every Copilot fork use a deterministic **handoff** note instead; the note is explicitly labelled **not a native session fork**. It starts a new session seeded with the previous step's position, label, skill name, instruction, recorded status, and bounded terminal tail. The note is capped so no full transcript enters the prompt. Preflight states which mechanism applies for the selected harness and mode.
 
 A handoff is not a byte-for-byte copy of the prior harness session. Treat it as a deterministic summary that lets the next step continue with useful context.
+
+## Known live-verification gaps
+
+These are current gaps between the intended contract and what was observed with the verified CLIs. They are not shipped claims.
+
+- **Automatic OpenCode advancement:** `docs/evidence/live-execution.json` records `OSC7501_PRODUCT_PARSER_MISMATCH` and `OSC7501_CLEAR_BEFORE_IDLE`. OpenCode 2.2.5 emitted colon-separated `OSC 7501` parameters while the product parser splits on `;`, and emitted `clear` between `working` and `idle`. The probe's own parser recognized the sequence; the product parser did not. Supervised OpenCode runs are unaffected by this specific mismatch, but automatic OpenCode advancement is not proven end-to-end.
+- **Copilot project skill copy:** Skill Loom copies into `<project>/.github/skills/`, while the live Copilot discovery probe used `<project>/.agents/skills/`. Confirm the copied skill appears in Copilot's catalog after refresh.
+- **Health active-run field:** `GET /api/health` reports an inactive `activeRun` placeholder in the production composition. Use `GET /api/runs/active` or the UI active-run banner for live run state.
+- **Platform coverage:** the recorded live probes ran on Linux ARM64 with OpenCode 2.2.5 and Copilot CLI 1.0.105. Other platforms and CLI versions are unverified.
+- **Package release:** version `0.1.0` is declared in `package.json`, but the package is private and has no Git release tag or npm publication.
 
 ## Troubleshooting
 

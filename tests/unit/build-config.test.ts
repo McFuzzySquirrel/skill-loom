@@ -14,6 +14,7 @@ interface PackageJson {
   name?: string;
   version?: string;
   private?: boolean;
+  license?: string;
   type?: string;
   engines?: Record<string, string>;
   bin?: Record<string, string>;
@@ -109,6 +110,7 @@ describe('package contract', () => {
   it('declares the publishable CLI name, bin, and package file list', () => {
     expect(pkg.name).toBe('skill-loom-cli');
     expect(pkg.version).toBe('0.1.0');
+    expect(pkg.license).toBe('MIT');
     expect(pkg.private).toBe(true);
     expect(pkg.bin).toEqual({ 'skill-loom': 'dist/src/server/cli.js' });
     expect(pkg.files).toEqual([
