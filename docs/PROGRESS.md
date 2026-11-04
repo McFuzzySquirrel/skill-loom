@@ -3,8 +3,8 @@
 ## Current State
 **Phase**: CHAIN-AUTHORING-2
 **Status**: In Progress
-**Validation Gaps**: 11 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T11:42:00.155Z
+**Validation Gaps**: 13 unverified check(s) - see "Validation Gaps"
+**Last Updated**: 2026-11-04T11:53:50.894Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -44,6 +44,8 @@
   - Files: src/server/routes/chains.ts, src/server/routes/index.ts, tests/integration/chains-routes.test.ts, src/server/app.ts, src/server/chains/service.ts
 - [x] Phase CHAIN-AUTHORING-2, Task CHAIN-04: Build the project chain library (@frontend-engineer)
   - Files: src/web/components/ChainList.tsx, src/web/components/NewChainDialog.tsx, src/web/api/chains.ts, src/web/routes/ProjectsPage.tsx, tests/e2e/chain-library.spec.ts, src/web/styles/theme.css, src/web/hooks/useChains.ts
+- [x] Phase CHAIN-AUTHORING-2, Task CHAIN-05: Build the chain step editor and reordering (@frontend-engineer)
+  - Files: src/web/routes/ChainBuilderPage.tsx, src/web/components/StepList.tsx, src/web/components/StepEditor.tsx, src/web/hooks/useChainDraft.ts, tests/e2e/chain-builder.spec.ts, src/web/components/SkillCatalog.tsx, src/web/styles/theme.css, tests/e2e/shell.spec.ts
 
 ## Current Task
 - None currently running
@@ -75,6 +77,8 @@
 - Task CHAIN-03: npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.
 - Task CHAIN-04: npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.
 - Task CHAIN-04: Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed; automated keyboard coverage passed.
+- Task CHAIN-05: npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.
+- Task CHAIN-05: Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed; automated keyboard and focus coverage passed.
 
 ## Notes
 - Workflow engine run 25930d7e-150c-4ea9-a081-47fcf1941eb6

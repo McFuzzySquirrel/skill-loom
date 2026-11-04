@@ -13,6 +13,11 @@ export interface SkillCatalogProps {
   context?: 'project' | 'builder';
   initialHarness?: CatalogHarness;
   onAddAsStep?: (skill: SkillEntry) => void;
+  /**
+   * Reports every discovered entry after a successful load so a sibling editor
+   * can offer the same skill names without issuing a second catalog request.
+   */
+  onCatalogChange?: (entries: SkillEntry[]) => void;
   api?: CatalogApi;
 }
 
@@ -35,6 +40,7 @@ export function SkillCatalog({
   context = 'project',
   initialHarness = 'opencode',
   onAddAsStep,
+  onCatalogChange,
   api,
 }: SkillCatalogProps) {
   const baseId = useId();
@@ -66,6 +72,13 @@ export function SkillCatalog({
   };
 
   const data = state.data;
+
+  useEffect(() => {
+    if (onCatalogChange === undefined || state.status !== 'ready' || data === null) {
+      return;
+    }
+    onCatalogChange(data.groups.flatMap((group) => group.entries));
+  }, [data, onCatalogChange, state.status]);
 
   return (
     <section className="catalog" aria-labelledby={titleId} data-testid="skill-catalog">

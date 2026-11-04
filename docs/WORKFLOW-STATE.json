@@ -1,7 +1,7 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T11:42:00.152Z",
+  "lastUpdatedAt": "2026-11-04T11:53:50.891Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
@@ -843,10 +843,49 @@
     },
     "CHAIN-05": {
       "taskId": "CHAIN-05",
-      "status": "pending",
+      "status": "complete",
       "ownerAgent": "frontend-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 1,
+      "outputFiles": [
+        "src/web/routes/ChainBuilderPage.tsx",
+        "src/web/components/StepList.tsx",
+        "src/web/components/StepEditor.tsx",
+        "src/web/hooks/useChainDraft.ts",
+        "tests/e2e/chain-builder.spec.ts",
+        "src/web/components/SkillCatalog.tsx",
+        "src/web/styles/theme.css",
+        "tests/e2e/shell.spec.ts"
+      ],
+      "startedAt": "2026-11-04T11:42:00.845Z",
+      "usage": {
+        "source": "unavailable",
+        "note": "opencode usage unavailable: Unterminated string in JSON at position 474883 (line 1802 column 53)"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/CHAIN-05.2026-11-04T11-53-50-884Z.attempt-1.result.json",
+          "usage": {
+            "source": "unavailable",
+            "note": "opencode usage unavailable: Unterminated string in JSON at position 474883 (line 1802 column 53)"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T11:53:50.888Z",
+      "agentOutput": "I'll start by reading the execution file and understanding the task scope.\nNow I have a clear picture. Let me implement the draft hook first.\nNow install dependencies and typecheck.\nThe builder now loads live data, so the shell smoke test's unregistered demo chain triggers a 404 resource log. I'll update the shell test to use a valid unsaved builder route with an isolated empty-catalog response.\nImplemented the chain builder route with catalog integration, ordered step list, step editor, pointer drag plus keyboard reordering, validation, and browser coverage.\n\n**Files created**\n- `src/web/routes/ChainBuilderPage.tsx`\n- `src/web/components/StepList.tsx`\n- `src/web/components/StepEditor.tsx`\n- `src/web/hooks/useChainDraft.ts`\n- `tests/e2e/chain-builder.spec.ts`\n\n**Files changed**\n- `src/web/components/SkillCatalog.tsx` — additive `onCatalogChange` callback so the step editor reuses loaded catalog entries.\n- `src/web/styles/theme.css` — builder layout, step rows, editor, and responsive styles.\n- `tests/e2e/shell.spec.ts` — builder shell route now uses the unsaved-draft path with an isolated empty catalog response, since the real builder loads live catalog data.\n\n**Validation run**\n- `npx playwright test tests/e2e/chain-builder.spec.ts` — 5 passed\n- `npx playwright test` — 34 passed\n- `npm run typecheck` — passed\n- `npm test` — 249 passed\n- `npm run build` — passed\n\n```forge-result\n{\"summary\":\"Built the chain builder route with catalog-backed step creation, ordered step list, step editor, native pointer drag and keyboard Move up/Move down reordering, inline empty-instruction validation that blocks save, and real-API Playwright coverage through src/web/App.tsx. Updated the shell smoke route for the builder's live catalog load.\",\"decisions\":[\"Draft state is owned by useChainDraft; the reserved 'new' chain id reads name, harness, and sessionMode from the query and never writes a chain file.\",\"Every added step receives a stable local id (step-<uuid>), while existing saved steps keep their server ids across edits and reorders.\",\"Reordering uses native HTML drag events with no new dependency; Move up/Move down are the keyboard path and focus is restored to the moved row by step id.\",\"Empty instructions always render an inline error with aria-invalid and disable Save; Save currently reports validation only because CHAIN-06 owns persistence.\",\"StepEditor skill options come from the existing SkillCatalog load through an additive onCatalogChange callback, avoiding a second catalog request.\",\"Add as step moves focus to the new instruction field so the keyboard user lands where required work is needed.\",\"The shell spec now exercises /projects/demo-project/chains/new with a fulfilled empty catalog because the builder legitimately fetches live data and an unregistered project would only add an artificial 404 console entry.\"],\"interfaces\":[\"src/web/hooks/useChainDraft.ts: useChainDraft, ChainDraftDocument, ChainDraftState, ChainDraftValidation, StepInstructionIssue, parseNewChainDraft, collectStepInstructionIssues, moveStepToIndex, createLocalStepId, stepDisplayName\",\"src/web/components/StepList.tsx: StepList, StepListProps with stable step ids, selectedStepId, invalidStepIds, onSelect, onMove, onRemove, onReorder\",\"src/web/components/StepEditor.tsx: StepEditor, StepEditorProps with step, position, totalSteps, skillOptions, focusRequest, onChange\",\"src/web/components/SkillCatalog.tsx: SkillCatalogProps.onCatalogChange(entries: SkillEntry[])\",\"src/web/routes/ChainBuilderPage.tsx: ChainBuilderPage now renders the meta panel, catalog, ordered step list, and step editor and hosts Save validation\"],\"tests\":[\"npx playwright test tests/e2e/chain-builder.spec.ts: exit 0, 5 passed\",\"npx playwright test: exit 0, 34 passed\",\"npm run typecheck: exit 0\",\"npm test: exit 0, 249 passed\",\"npm run build: exit 0\"],\"unresolved\":[],\"validationLimitations\":[\"npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.\",\"Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed; automated keyboard and focus coverage passed.\"]}\n```\n",
+      "validationLimitations": [
+        "npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.",
+        "Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed; automated keyboard and focus coverage passed."
+      ],
+      "artifactId": "work-chain-05-001",
+      "inputArtifactIds": [
+        "work-chain-04-001",
+        "work-cat-04-001",
+        "work-chain-01-001",
+        "work-chain-02-001",
+        "work-chain-03-001"
+      ]
     },
     "CHAIN-06": {
       "taskId": "CHAIN-06",

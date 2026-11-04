@@ -7,10 +7,44 @@ interface ShellRoute {
 
 const shellRoutes: ShellRoute[] = [
   { path: '/projects', heading: 'Projects' },
-  { path: '/projects/demo-project/chains/demo-chain', heading: 'Chain authoring' },
+  // The builder now loads live catalog data. Use the unsaved-draft route so the
+  // shell check does not depend on a registered chain, and fulfill the catalog
+  // request with an empty isolated result below.
+  { path: '/projects/demo-project/chains/new', heading: 'Chain authoring' },
   { path: '/projects/demo-project/chains/demo-chain/run', heading: 'Run start' },
   { path: '/runs/demo-run', heading: 'Run view' },
 ];
+
+const EMPTY_CATALOG = {
+  harness: 'opencode',
+  query: '',
+  total: 0,
+  counts: {
+    total: 0,
+    bySource: {
+      project: 0,
+      personal: 0,
+      custom: 0,
+      plugin: 0,
+      builtin: 0,
+      'slan-extra': 0,
+    },
+  },
+  groups: [],
+  warnings: [],
+  elapsedMs: 1,
+};
+
+/** Keep the shell smoke route independent of a real registered project. */
+async function mockEmptyCatalog(page: Page): Promise<void> {
+  await page.route(/\/api\/projects\/demo-project\/catalog(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(EMPTY_CATALOG),
+    });
+  });
+}
 
 /** Collect browser console errors and uncaught exceptions for a page. */
 function collectConsoleErrors(page: Page): string[] {
@@ -40,6 +74,10 @@ test.describe('Slan shell', () => {
     test(`renders ${route.path} directly without console errors`, async ({ page }) => {
       const consoleErrors = collectConsoleErrors(page);
 
+      if (route.path.includes('/chains/new')) {
+        await mockEmptyCatalog(page);
+      }
+
       await page.goto(route.path);
 
       await expect(page).toHaveURL(new RegExp(`${escapeRegExp(route.path)}$`));
@@ -57,6 +95,9 @@ test.describe('Slan shell', () => {
 
   for (const route of skipLinkRoutes) {
     test(`the skip link moves focus to the main landmark on ${route.path}`, async ({ page }) => {
+      if (route.path.includes('/chains/new')) {
+        await mockEmptyCatalog(page);
+      }
       await page.goto(route.path);
       await expect(page.getByRole('heading', { level: 1, name: route.heading })).toBeVisible();
       await expect(page.getByText(/Server connected · v/)).toBeVisible();
