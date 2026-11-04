@@ -1287,3 +1287,161 @@ main:focus {
     padding: var(--space-4) var(--space-3);
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Project chain library (CHAIN-04)
+ * ------------------------------------------------------------------------ */
+
+.chain-library {
+  margin: var(--space-4) 0;
+}
+
+.chain-library__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.chain-library__intro {
+  min-width: 0;
+}
+
+.chain-library__title {
+  margin-top: 0;
+}
+
+.chain-library__intro .field__hint {
+  max-width: 70ch;
+  margin-top: 0;
+}
+
+.chain-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border);
+}
+
+.chain-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2) var(--space-4);
+  align-items: start;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.chain-card:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.chain-card__identity {
+  min-width: 0;
+}
+
+.chain-card__name {
+  margin: 0;
+  font-size: 1.12rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.chain-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.4rem 0;
+}
+
+.chain-card__meta {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.chain-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.chain-card__confirm {
+  grid-column: 1 / -1;
+}
+
+.chain-warnings {
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  border: 1px solid var(--warning-border);
+  border-left-width: 6px;
+  border-radius: var(--radius);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.chain-warnings__title {
+  margin: 0 0 var(--space-2);
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.chain-warnings__list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.chain-warnings__item + .chain-warnings__item {
+  margin-top: var(--space-2);
+}
+
+.chain-warnings__message {
+  margin: 0 0 0.2rem;
+  font-weight: 600;
+}
+
+.chain-warnings__meta {
+  margin: 0 0 0.2rem;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.new-chain {
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  border: 1px solid var(--accent);
+  border-left-width: 6px;
+  border-radius: var(--radius);
+  background: #0c1219;
+}
+
+.new-chain__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.new-chain__title {
+  margin: 0 0 var(--space-2);
+  font-size: 1.1rem;
+}
+
+.new-chain__harness {
+  margin: 0 0 var(--space-3);
+}
+
+@media (max-width: 720px) {
+  .chain-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .chain-card__actions {
+    justify-content: flex-start;
+  }
+}

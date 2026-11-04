@@ -1,10 +1,10 @@
 # Project Progress
 
 ## Current State
-**Phase**: CHAIN-AUTHORING-1
+**Phase**: CHAIN-AUTHORING-2
 **Status**: In Progress
-**Validation Gaps**: 9 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T11:32:52.297Z
+**Validation Gaps**: 11 unverified check(s) - see "Validation Gaps"
+**Last Updated**: 2026-11-04T11:42:00.155Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -42,6 +42,8 @@
   - Files: src/server/chains/store.ts, tests/unit/chain-store.test.ts
 - [x] Phase CHAIN-AUTHORING-1, Task CHAIN-03: Expose chain CRUD and duplicate endpoints (@backend-engineer)
   - Files: src/server/routes/chains.ts, src/server/routes/index.ts, tests/integration/chains-routes.test.ts, src/server/app.ts, src/server/chains/service.ts
+- [x] Phase CHAIN-AUTHORING-2, Task CHAIN-04: Build the project chain library (@frontend-engineer)
+  - Files: src/web/components/ChainList.tsx, src/web/components/NewChainDialog.tsx, src/web/api/chains.ts, src/web/routes/ProjectsPage.tsx, tests/e2e/chain-library.spec.ts, src/web/styles/theme.css, src/web/hooks/useChains.ts
 
 ## Current Task
 - None currently running
@@ -71,6 +73,8 @@
 - Task CHAIN-01: npm ci was required in the sandbox worktree because node_modules was absent; no dependency versions or lockfile content changed.
 - Task CHAIN-02: npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.
 - Task CHAIN-03: npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.
+- Task CHAIN-04: npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.
+- Task CHAIN-04: Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed; automated keyboard coverage passed.
 
 ## Notes
 - Workflow engine run 25930d7e-150c-4ea9-a081-47fcf1941eb6

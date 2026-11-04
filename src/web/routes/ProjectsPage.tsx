@@ -10,6 +10,7 @@ import {
   type RecentProject,
 } from '../api/projects';
 import type { ApiClientError } from '../api/client';
+import { ChainList } from '../components/ChainList';
 import { FolderBrowser } from '../components/FolderBrowser';
 import { InlineError } from '../components/InlineError';
 import { NewProjectForm } from '../components/NewProjectForm';
@@ -333,8 +334,8 @@ export function ProjectPage({ projectId }: { projectId: string }) {
         {summary.displayName}
       </h1>
       <p className="lede">
-        This project is registered locally. Browse its skill catalog below; chain
-        authoring arrives in a later screen.
+        This project is registered locally. Browse its chains and skill catalog below.
+        Nothing leaves this machine.
       </p>
 
       <dl className="detail-grid project-facts">
@@ -403,20 +404,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
         </div>
       </dl>
 
-      <div className="placeholder-grid">
-        <section
-          className="placeholder"
-          aria-labelledby="project-chains-placeholder"
-        >
-          <h2 className="section-title" id="project-chains-placeholder">
-            Chain library
-          </h2>
-          <p>
-            The chain library placeholder. Creating, duplicating, and deleting chains
-            arrives with chain authoring.
-          </p>
-        </section>
-      </div>
+      <ChainList projectId={summary.id} />
 
       <SkillCatalog projectId={summary.id} context="project" />
 
