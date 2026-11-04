@@ -1,7 +1,7 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T10:40:06.341Z",
+  "lastUpdatedAt": "2026-11-04T10:41:23.821Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
@@ -213,11 +213,55 @@
     },
     "FOUND-05": {
       "taskId": "FOUND-05",
-      "status": "running",
+      "status": "complete",
       "ownerAgent": "backend-engineer",
       "attempt": 1,
-      "outputFiles": [],
-      "startedAt": "2026-11-04T10:35:00.765Z"
+      "outputFiles": [
+        "src/server/terminal/pty.ts",
+        "src/server/routes/terminal.ts",
+        "src/server/app.ts",
+        "tests/unit/pty.test.ts",
+        "tests/integration/terminal-ws.test.ts",
+        "src/server/routes/index.ts",
+        "src/shared/terminal.ts"
+      ],
+      "startedAt": "2026-11-04T10:35:00.765Z",
+      "usage": {
+        "inputTokens": 64379,
+        "outputTokens": 21317,
+        "reasoningTokens": 21380,
+        "cacheReadTokens": 3852288,
+        "cacheWriteTokens": 0,
+        "costUsd": 0.046831913999999995,
+        "source": "harness"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/FOUND-05.2026-11-04T10-41-23-812Z.attempt-1.result.json",
+          "usage": {
+            "inputTokens": 64379,
+            "outputTokens": 21317,
+            "reasoningTokens": 21380,
+            "cacheReadTokens": 3852288,
+            "cacheWriteTokens": 0,
+            "costUsd": 0.046831913999999995,
+            "source": "harness"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T10:41:23.816Z",
+      "agentOutput": "Implemented the server-side PTY WebSocket transport and verified it end to end.\n\n## What changed\n\n**Created**\n- `src/server/terminal/pty.ts` — PTY session abstraction, executable-plus-args spawning, bounded output tail, single-subscriber manager, session cleanup and shutdown.\n- `src/server/routes/terminal.ts` — registered `WS /api/terminal/:sessionId` route with typed JSON input/resize handling and structured rejection frames.\n- `src/shared/terminal.ts` — typed client/server WebSocket protocol and error codes.\n- `tests/unit/pty.test.ts` — output streaming, input, resize, tail caps, kill/exit, invalid specs, and buffer limits.\n- `tests/integration/terminal-ws.test.ts` — real WebSocket client through the composition root covering output, input, resize, second-subscriber rejection, socket-close child termination, app-close cleanup, and unknown sessions.\n\n**Modified**\n- `src/server/app.ts` — registers `@fastify/websocket`, owns a `TerminalManager`, exposes it through the composition root, and kills PTYs on app close.\n- `src/server/routes/index.ts` — mounts the terminal route through the central registration point.\n\n## Verification\n\n- `npx vitest run tests/unit/pty.test.ts tests/integration/terminal-ws.test.ts` → 13 passed\n- `npm test` → 59 passed\n- `npm run typecheck` → passed\n- `npm run build:server` → passed\n\n```forge-result\n{\n  \"summary\": \"Implemented the server-owned PTY WebSocket transport with executable-plus-argument spawning, typed output/input/resize protocol, single-subscriber enforcement, bounded 200-line/32 KiB tail buffering, and child/socket cleanup on disconnect, error, app close, and shutdown. Registered the route through the Fastify composition root and verified it with unit and real-WebSocket integration tests.\",\n  \"decisions\": [\n    \"The WebSocket client can only attach to a server-created session id; it cannot supply an executable, shell command, or filesystem path.\",\n    \"Sessions are created through TerminalManager for later run runners, while the route only attaches, writes input, and resizes.\",\n    \"The manager rejects a second subscriber before registering listeners, so the active subscriber is never disturbed.\",\n    \"Output is forwarded as typed JSON messages and retained in a per-session tail capped at 200 lines or 32 KiB at append time.\",\n    \"Socket close or error detaches and terminates the child by default; app onClose shuts down every remaining PTY with SIGHUP followed by bounded SIGKILL escalation.\"\n  ],\n  \"interfaces\": [\n    \"src/server/terminal/pty.ts: TerminalSession, TerminalSpawnSpec, TerminalExit, TerminalSubscriber, TerminalAttachment, TerminalManager, createTerminalSession, createTerminalManager, TerminalOutputBuffer, trimTerminalOutput\",\n    \"TerminalSession: id, pid, cols, rows, write, resize, onData, onExit, getBufferedOutput, getExit, isRunning, kill\",\n    \"src/shared/terminal.ts: TerminalServerMessage (ready/output/exit/error), TerminalClientMessage (input/resize), TERMINAL_ERROR_CODES\",\n    \"WS /api/terminal/:sessionId: attaches to an existing server-created PTY session\",\n    \"GET /api/health remains reachable through the same composition root\"\n  ],\n  \"tests\": [\n    \"npx vitest run tests/unit/pty.test.ts tests/integration/terminal-ws.test.ts: exit 0, 13 tests passed\",\n    \"npm test: exit 0, 59 tests passed\",\n    \"npm run typecheck: exit 0\",\n    \"npm run build:server: exit 0\"\n  ],\n  \"validationLimitations\": [\n    \"The full npm run build (web plus server) was not run because src/web is owned by FOUND-04 and does not exist yet; npm run build:server passed.\"\n  ],\n  \"unresolved\": []\n}\n```\n",
+      "validationLimitations": [
+        "The full npm run build (web plus server) was not run because src/web is owned by FOUND-04 and does not exist yet; npm run build:server passed."
+      ],
+      "artifactId": "work-found-05-001",
+      "inputArtifactIds": [
+        "work-found-03-001",
+        "work-found-01-001",
+        "work-found-02-001"
+      ]
     },
     "PROJ-01": {
       "taskId": "PROJ-01",

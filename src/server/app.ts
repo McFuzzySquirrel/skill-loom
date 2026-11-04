@@ -3,6 +3,7 @@ import { isIP } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fastifyStatic from '@fastify/static';
+import fastifyWebsocket from '@fastify/websocket';
 import Fastify, {
   type FastifyError,
   type FastifyInstance,
@@ -16,6 +17,10 @@ import {
 } from '../shared/api.js';
 import { createConfigStore, type ConfigStore } from './config/store.js';
 import { routes } from './routes/index.js';
+import {
+  createTerminalManager,
+  type TerminalManager,
+} from './terminal/pty.js';
 
 /** Loopback-only defaults. SEC-04/ARCH-01 make these non-negotiable. */
 export const DEFAULT_HOST = '127.0.0.1';
@@ -85,6 +90,8 @@ export interface BuildAppOptions {
   webRoot?: string;
   /** Run-state seam consumed by the health endpoint. */
   getActiveRun?: () => ActiveRunSummary;
+  /** Injected PTY registry. Defaults to a fresh manager owned by this app. */
+  terminalManager?: TerminalManager;
 }
 
 /** Strip IPv6 brackets and compare case-insensitively. */
@@ -213,8 +220,19 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     logger: options.logger ?? false,
   });
 
+  const terminalManager = options.terminalManager ?? createTerminalManager();
+
   app.decorate('slanSettings', { host, port });
   app.decorate('slanVersion', options.version ?? SLAN_VERSION);
+  app.decorate('slanTerminalManager', terminalManager);
+
+  await app.register(fastifyWebsocket);
+
+  // Fastify closes listener sockets and WebSocket upgrades before this hook.
+  // Terminating every PTY here covers graceful SIGINT/SIGTERM shutdown too.
+  app.addHook('onClose', async () => {
+    await terminalManager.shutdown();
+  });
 
   let staticEnabled = false;
   if (options.serveStatic ?? true) {
@@ -294,6 +312,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     configStore: options.configStore ?? createConfigStore({ env }),
     version: options.version ?? SLAN_VERSION,
     port,
+    terminalManager,
     ...(options.getActiveRun === undefined ? {} : { getActiveRun: options.getActiveRun }),
   });
 
@@ -304,5 +323,6 @@ declare module 'fastify' {
   interface FastifyInstance {
     slanSettings: ServerSettings;
     slanVersion: string;
+    slanTerminalManager: TerminalManager;
   }
 }

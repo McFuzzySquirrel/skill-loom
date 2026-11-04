@@ -3,8 +3,8 @@
 ## Current State
 **Phase**: APP-FOUNDATION-2
 **Status**: In Progress
-**Validation Gaps**: 3 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T10:40:06.343Z
+**Validation Gaps**: 4 unverified check(s) - see "Validation Gaps"
+**Last Updated**: 2026-11-04T10:41:23.823Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -18,13 +18,13 @@
   - Files: src/server/app.ts, src/server/index.ts, src/server/routes/index.ts, src/server/routes/health.ts, src/shared/api.ts, tests/integration/server.test.ts
 - [x] Phase APP-FOUNDATION-2, Task FOUND-04: Build the routed React shell and API client (@frontend-engineer)
   - Files: src/web/main.tsx, src/web/App.tsx, src/web/api/client.ts, src/web/components/AppLayout.tsx, src/web/components/StatusRegion.tsx, src/web/routes/ProjectsPage.tsx, src/web/routes/ChainBuilderPage.tsx, src/web/routes/RunStartPage.tsx, src/web/routes/RunPage.tsx, src/web/routes/NotFoundPage.tsx, src/web/styles/theme.css, tests/e2e/shell.spec.ts, src/web/components/ErrorBoundary.tsx, src/web/components/ServerStatus.tsx, src/web/hooks/useHealth.ts, src/web/router.tsx
+- [x] Phase APP-FOUNDATION-2, Task FOUND-05: Implement the PTY WebSocket transport (@backend-engineer)
+  - Files: src/server/terminal/pty.ts, src/server/routes/terminal.ts, src/server/app.ts, tests/unit/pty.test.ts, tests/integration/terminal-ws.test.ts, src/server/routes/index.ts, src/shared/terminal.ts
 
 ## Current Task
-- [ ] Phase APP-FOUNDATION-2, Task FOUND-05: Implement the PTY WebSocket transport (@backend-engineer)
-  - Status: In progress
+- None currently running
 
 ## Remaining
-- [ ] Phase APP-FOUNDATION-2: Phase 2: Web Shell and Terminal Transport
 - [ ] Phase PROJECT-WORKSPACE-1: Phase 1: Filesystem and Project APIs
 - [ ] Phase PROJECT-WORKSPACE-2: Phase 2: Project Screen
 - [ ] Phase SKILL-CATALOG-1: Phase 1: Discovery and Catalog API
@@ -48,6 +48,7 @@
 - Task FOUND-01: Full npm run build, npm start, and npm run test:e2e could not succeed yet because src/web/main.tsx and src/server/index.ts are owned by FOUND-04 and FOUND-03 respectively; these are not FOUND-01 acceptance checks.
 - Task FOUND-01: npm run check and the live-probe commands reference scripts created by ACC-01, CAT-05, and RUN-08 and were not run.
 - Task FOUND-03: Full npm run build was not run because the Vite web entry (src/web) belongs to FOUND-04 and does not exist yet. Production static serving and SPA fallback were verified with a fixture web root through the real composition root.
+- Task FOUND-05: The full npm run build (web plus server) was not run because src/web is owned by FOUND-04 and does not exist yet; npm run build:server passed.
 
 ## Notes
 - Workflow engine run 25930d7e-150c-4ea9-a081-47fcf1941eb6
