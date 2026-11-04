@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "stage": "skills",
+  "generatedAt": "2026-11-04T10:20:55.938Z",
+  "command": "npm run forge-skill-review -- --files .opencode/skills/atomic-json-persistence/SKILL.md .opencode/skills/harness-adapter-contract/SKILL.md .opencode/skills/pty-run-lifecycle/SKILL.md .opencode/skills/live-harness-verification/SKILL.md .opencode/skills/playwright-harness-fixtures/SKILL.md .opencode/skills/accessible-react-workflows/SKILL.md --provider stdout --min-score 2 --fail-below --min-axis 2 --fail-axis-below --fail-structural",
+  "provider": "stdout",
+  "thresholds": {
+    "minScore": 2,
+    "minAxis": 2,
+    "failBelow": true,
+    "failAxisBelow": true,
+    "failStructural": true
+  },
+  "exitCode": 0,
+  "skills": [
+    {
+      "name": "atomic-json-persistence",
+      "path": ".opencode/skills/atomic-json-persistence/SKILL.md",
+      "overall": 3,
+      "axes": {
+        "contextEconomy": 3,
+        "gotchasCoverage": 3,
+        "proceduralClarity": 3,
+        "progressiveDisclosure": 3,
+        "calibration": 3,
+        "validation": 3
+      },
+      "reviewerStyleProxy": 3,
+      "structuralIssues": []
+    },
+    {
+      "name": "harness-adapter-contract",
+      "path": ".opencode/skills/harness-adapter-contract/SKILL.md",
+      "overall": 3,
+      "axes": {
+        "contextEconomy": 3,
+        "gotchasCoverage": 3,
+        "proceduralClarity": 3,
+        "progressiveDisclosure": 3,
+        "calibration": 3,
+        "validation": 3
+      },
+      "reviewerStyleProxy": 3,
+      "structuralIssues": []
+    },
+    {
+      "name": "pty-run-lifecycle",
+      "path": ".opencode/skills/pty-run-lifecycle/SKILL.md",
+      "overall": 3,
+      "axes": {
+        "contextEconomy": 3,
+        "gotchasCoverage": 3,
+        "proceduralClarity": 3,
+        "progressiveDisclosure": 3,
+        "calibration": 3,
+        "validation": 3
+      },
+      "reviewerStyleProxy": 3,
+      "structuralIssues": []
+    },
+    {
+      "name": "live-harness-verification",
+      "path": ".opencode/skills/live-harness-verification/SKILL.md",
+      "overall": 3,
+      "axes": {
+        "contextEconomy": 3,
+        "gotchasCoverage": 3,
+        "proceduralClarity": 3,
+        "progressiveDisclosure": 3,
+        "calibration": 3,
+        "validation": 3
+      },
+      "reviewerStyleProxy": 3,
+      "structuralIssues": []
+    },
+    {
+      "name": "playwright-harness-fixtures",
+      "path": ".opencode/skills/playwright-harness-fixtures/SKILL.md",
+      "overall": 3,
+      "axes": {
+        "contextEconomy": 3,
+        "gotchasCoverage": 3,
+        "proceduralClarity": 3,
+        "progressiveDisclosure": 3,
+        "calibration": 3,
+        "validation": 3
+      },
+      "reviewerStyleProxy": 3,
+      "structuralIssues": []
+    },
+    {
+      "name": "accessible-react-workflows",
+      "path": ".opencode/skills/accessible-react-workflows/SKILL.md",
+      "overall": 3,
+      "axes": {
+        "contextEconomy": 3,
+        "gotchasCoverage": 3,
+        "proceduralClarity": 3,
+        "progressiveDisclosure": 3,
+        "calibration": 3,
+        "validation": 3
+      },
+      "reviewerStyleProxy": 2,
+      "structuralIssues": []
+    }
+  ],
+  "omitted": [
+    {
+      "name": "docs-check-gate",
+      "reason": "Single documentation task with its own check script; no repeated project process."
+    },
+    {
+      "name": "human-acceptance-evidence",
+      "reason": "Human-owned acceptance judgments; an agent skill would invite fabricated approval."
+    }
+  ],
+  "reused": [],
+  "mode": "headless",
+  "heuristicReview": {
+    "status": "passed",
+    "note": "Deterministic rubric proxy; not a human judgment."
+  },
+  "behavioralEvidence": {
+    "status": "not-run",
+    "reason": "No application source exists at the authoring stage; unit, browser, and live probes run during implementation."
+  },
+  "outputs": [
+    ".opencode/skills/atomic-json-persistence/SKILL.md",
+    ".opencode/skills/harness-adapter-contract/SKILL.md",
+    ".opencode/skills/pty-run-lifecycle/SKILL.md",
+    ".opencode/skills/live-harness-verification/SKILL.md",
+    ".opencode/skills/playwright-harness-fixtures/SKILL.md",
+    ".opencode/skills/accessible-react-workflows/SKILL.md"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "backend-engineer": {
+    "primary": "deepseek/deepseek-flash"
+  },
+  "frontend-engineer": {
+    "primary": "deepseek/deepseek-flash"
+  },
+  "integration-engineer": {
+    "primary": "deepseek/deepseek-flash"
+  },
+  "platform-engineer": {
+    "primary": "deepseek/deepseek-flash"
+  }
+}
