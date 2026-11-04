@@ -32,7 +32,7 @@ The skill catalog exists to support chain authoring. It is not the product on it
 - **Skill** — a `SKILL.md` package exposed by a harness (project, personal, plugin, custom, or builtin source).
 - **Step** — one skill reference plus a required free-text instruction and an optional label. The instruction says what to do with the skill; a skill alone is just "load this and figure it out," which is the unreliable behavior Slan exists to remove.
 - **Chain** — an ordered list of steps bound to one harness, with a name and optional inputs.
-- **Run** — one execution of a chain in one PTY-backed continuous session, with per-step status.
+- **Run** — one execution of a chain against a project, in supervised (one PTY-backed session) or automatic (harness-signaled) mode, with per-step status.
 - **Project** — the working directory a chain runs against, selected or created before a run.
 
 ## How a run works
@@ -40,10 +40,10 @@ The skill catalog exists to support chain authoring. It is not the product on it
 1. Select an existing project folder or create an empty one (optional `git init`), using a server-side folder browser with a recent-projects list. No scaffolding or templates.
 2. Pick the harness for the chain (OpenCode or Copilot). A chain is bound to one harness; steps are stored by skill name so the recipe stays portable, and missing skills are flagged when re-run elsewhere.
 3. Author the chain: browse the catalog, inspect a skill, add it as a step, write the instruction, and reorder steps.
-4. Preflight before step 1: resolve every skill name against the chosen harness, confirm the CLI exists and is authenticated. Unresolved skills or a missing/unauthenticated CLI hard-block the run; a dirty git tree warns but does not block.
-5. Run. Each step starts the real interactive CLI in a PTY, seeded with the step prompt (`opencode --prompt "<prompt>"`, `copilot -i "<prompt>"`), so the live TUI is visible and the user can approve, interrupt, or take over. The same terminal is reused for the whole run.
+4. Preflight before step 1: resolve every skill name against the chosen harness, confirm the CLI exists and is authenticated, and resolve Copilot's folder trust. Unresolved skills or a missing/unauthenticated CLI hard-block the run; a dirty git tree warns but does not block.
+5. Choose an execution mode. **Supervised** (portable default, both harnesses): each step runs the real interactive CLI in a PTY seeded with the step prompt (`opencode --prompt "<prompt>"`, `copilot -i "<prompt>"`), the live TUI is visible, and the same terminal is reused for the run. **Automatic** (harness-specific): OpenCode advances when the CLI reports `state=idle`; Copilot runs one headless process per step with a shared session ID and advances on process exit.
 6. Steps share **one continuous session** by default, so later steps see earlier work. Fresh-per-step and fork-from-previous are chain settings.
-7. Advance with an explicit **Next** control. On a failed step or non-zero exit, pause the chain and offer retry, skip, or abort. Never continue silently.
+7. On a failed step or non-zero exit, pause the chain and offer retry, skip, or abort. In supervised mode the user presses **Next**; in automatic mode the harness completion signal or process exit advances. Never continue through a failure or an ambiguous state.
 8. Persist a small run record so the run can be resumed or retried after a reload or crash.
 
 ## Settled decisions
@@ -67,10 +67,14 @@ The skill catalog exists to support chain authoring. It is not the product on it
 
 ### Execution
 
-- Interactive PTY-hosted CLI is the primary mode. Headless per-step execution is a possible later "auto-run" mode, not the v1 path.
-- One PTY per run, reused across steps. One active run at a time; concurrent runs in the same repo are a data-loss risk and belong with a deliberate worktree feature later.
-- Manual Next is the default. Auto-advance on terminal idle is deferred: an agent asking a clarifying question looks idle, and auto-submitting through it corrupts the run.
-- Full unattended chain execution is a **known limitation**, not a missing toggle.
+- Two execution modes, implemented as **per-harness adapters** rather than one uniform loop:
+  - **Supervised** (portable default): interactive PTY-hosted CLI, one terminal per run, manual Next.
+  - **Automatic**: OpenCode advances on its terminal state signal; Copilot runs one headless process per step sharing a session and advances on process exit.
+- OpenCode emits machine-readable TUI state over the terminal stream: `OSC 7501;state=working|idle|clear`, plus the session ID (`id=ses_...`). `state=idle` is a real turn-completion signal, not an idle heuristic.
+- Copilot emits no comparable state. Its TUI animation makes output-idle detection fire both prematurely and late, so output-idle heuristics are a non-goal for both harnesses.
+- Copilot shows a folder-trust dialog on the first interactive run in a folder. Preflight must resolve trust before step 1; a prompt queued while the dialog is open can be swallowed.
+- Automatic chaining broadens permission scope: headless Copilot required `--allow-all-paths` and pre-approved tools. Surface this at preflight rather than silently defaulting to broad permissions.
+- One active run at a time; concurrent runs in the same repo are a data-loss risk and belong with a deliberate worktree feature later. Supervised runs reuse one PTY; automatic Copilot runs are per-step processes sharing a session.
 - Persist run metadata (chain, harness, session ID, per-step status, timestamps) under `.slan/runs/` for resume and retry. Do not capture or replay full transcripts.
 
 ### Delivery
@@ -88,7 +92,7 @@ The skill catalog exists to support chain authoring. It is not the product on it
 - Full transcript capture, replay, or a logging database.
 - AI-generated skill summaries.
 - A chain template marketplace.
-- Unattended auto-advanced execution.
+- Idle-heuristic auto-advance, or any automatic advancement not backed by a harness state signal or a process exit.
 - Generating PRDs, agent teams, or builds from inside Slan.
 
 ## Success signals
@@ -100,19 +104,33 @@ The skill catalog exists to support chain authoring. It is not the product on it
 ## Constraints and risks
 
 - Skills are model-invoked context, not callable commands. Neither CLI exposes a `skill run`, so deterministic order means deterministic *prompt order*, not guaranteed skill firing. This is the central limitation and must be stated in the UI.
-- Interactive TUI behavior differs between harnesses; prompt seeding and session continuation are the stable integration points, not keystroke scripting.
-- Session continuation must use `--session` / `--continue` (OpenCode) and `--resume` / `--continue` / `--session-id` (Copilot). Any harness change can break these flags.
+- Interactive TUI behavior differs between harnesses; prompt seeding and session continuation are the stable integration points, not keystroke scripting. OpenCode's state stream is a bonus integration point; Copilot has no equivalent.
+- Session continuation must use `--session` / `--continue` (OpenCode) and `--resume` / `--continue` / `--session-id` (Copilot). Copilot rejects `--session-id` together with `--trust-folder`, so trust and session handling must be sequenced. Any harness change can break these flags.
 - Skill name collisions across sources and harnesses need a visible source badge rather than silent deduplication.
 - Preflight exists because discovering a missing skill at step 3 destroys the context the chain was built to preserve.
+
+## Evidence from the execution spike (2026-11-04)
+
+A PTY-driven spike against OpenCode 2.2.5 and Copilot CLI 1.0.105 established:
+
+- A seeded prompt submits in both interactive TUIs: `opencode --prompt "<text>" <dir>` and `copilot -i "<text>"`.
+- A prompted named skill actually loads in both harnesses. A throwaway `spike-skill` returned its token (`PINEAPPLE`) in each; Copilot logged `● skill(spike-skill)`.
+- OpenCode exposes `OSC 7501;state=working|idle|clear` with `id=ses_...`; Copilot exposes no semantic state.
+- Cross-process session resume works in both: OpenCode `run --session ses_...`, Copilot `-p ... --session-id <uuid>`. A token remembered in the first process was recalled in the second.
+- Copilot's first interactive run blocks on a folder-trust dialog; `trustedFolders` is not settable through `copilot config`, and `--trust-folder` is prompt-mode only and conflicts with `--session-id`.
+- Headless Copilot chaining required `--allow-all-paths --allow-all-tools`.
+- OpenCode auto-approved both a file write and a shell command in the test environment, so approval-prompt behavior was not exercised.
 
 ## Open Questions
 
 - **Visual feel and screen layout.** Whether the builder is a sidebar, a list, or a canvas, and how much chrome the terminal gets, cannot be settled in text. Settle it with a throwaway static mock of the three-screen flow (project → chain builder → run) before implementation.
-- **Auto-advance.** Whether idle-based advancement ever becomes safe enough to ship depends on a spike against real harness output, including permission prompts and clarifying questions. Leave it out until that evidence exists.
+- **Approval prompts.** OpenCode auto-approved writes and shell in the spike, and Copilot's manual-approval UI was not exercised. Whether an approval prompt keeps OpenCode at `state=working` (safe for auto-advance) and how to detect one in Copilot's TUI are still unknown. Supervised mode makes this non-blocking.
+- **Verifying skill firing.** Both harnesses complied in the spike, but neither guarantees it. Copilot logs `skill(...)`; OpenCode does not visibly. Whether Slan should warn on "skill not observed" needs evidence from more runs.
 - **Packaging.** Electron or Tauri may be worthwhile once the workflow is proven; no decision is needed to start.
 - **Cross-repo chains.** Project-local storage makes recipes repo-specific by design. If chains should follow the user across projects, that needs a global library decision later.
 
 ---
 
 > Sharpened through a grilling session on 2026-11-04; decisions above were accepted by the project owner.
+> Execution-model spike run 2026-11-04 (OpenCode 2.2.5, Copilot CLI 1.0.105); evidence recorded above.
 > Next step: `@workspace /forge-build-prd Use docs/IDEA.md as the project idea`.
