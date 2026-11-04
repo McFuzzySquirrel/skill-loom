@@ -1,12 +1,12 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T14:08:17.310Z",
+  "lastUpdatedAt": "2026-11-04T15:06:02.566Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
   "status": "running",
-  "currentPhase": "RUN-EXECUTION-4",
+  "currentPhase": "RUN-EXECUTION-5",
   "tasks": {
     "FOUND-01": {
       "taskId": "FOUND-01",
@@ -1449,10 +1449,64 @@
     },
     "RUN-08": {
       "taskId": "RUN-08",
-      "status": "pending",
+      "status": "complete",
       "ownerAgent": "integration-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 2,
+      "outputFiles": [
+        "scripts/live-execution.ts",
+        "docs/evidence/live-execution.json"
+      ],
+      "startedAt": "2026-11-04T14:53:23.721Z",
+      "usage": {
+        "inputTokens": 238689,
+        "outputTokens": 59542,
+        "cacheReadTokens": 19439744,
+        "cacheWriteTokens": 0,
+        "reasoningTokens": 80676,
+        "costUsd": 0.17825338200000004,
+        "source": "harness"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "failed",
+          "reason": "timed out after 2700000ms",
+          "resultPath": "docs/artifacts/RUN-08.2026-11-04T14-53-18-703Z.attempt-1.result.json",
+          "usage": {
+            "inputTokens": 167329,
+            "outputTokens": 49335,
+            "reasoningTokens": 63707,
+            "cacheReadTokens": 15496704,
+            "cacheWriteTokens": 0,
+            "costUsd": 0.13941466200000005,
+            "source": "harness"
+          }
+        },
+        {
+          "attempt": 2,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/RUN-08.2026-11-04T15-06-02-554Z.attempt-2.result.json",
+          "usage": {
+            "inputTokens": 71360,
+            "outputTokens": 10207,
+            "reasoningTokens": 16969,
+            "cacheReadTokens": 3943040,
+            "cacheWriteTokens": 0,
+            "costUsd": 0.03883872,
+            "source": "harness"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T15:06:02.560Z",
+      "agentOutput": "I'll start by reading the execution file to understand the task scope.\nImplemented and validated RUN-08.\n\n## What was done\n\nCreated `scripts/live-execution.ts` and ran it against the installed CLIs:\n\n- Builds a disposable project under `~/.cache/slan/` with probe skills in `.opencode/skills/slan-live-probe` and `.agents/skills/slan-live-probe`, both returning `PINEAPPLE`.\n- OpenCode 2.2.5: interactive PTY run with a generated `ses_` session, seeded prompt, token assertion, OSC 7501 working→idle assertion, then a second process with the same session for token recall.\n- Copilot CLI 1.0.105: isolated `COPILOT_HOME`, trust resolution, headless prompt with `--allow-all-paths --allow-all-tools`, token assertion, then a second process with the same UUID session for recall.\n- Records versions, session ids, timings, state-signal evidence, per-check results, and cleanup status in `docs/evidence/live-execution.json`.\n- Removes the temporary project, probe skills, PTY sessions, and OpenCode probe session on completion and interrupt.\n\n## Validation\n\n| Command | Result |\n|---|---|\n| `npm run test:live:execution` | **exit 0** — all 12 checks passed, live OpenCode and Copilot tokens returned and recalled |\n| `npm run typecheck:server` | exit 0 |\n| `npx vitest run tests/unit/build-config.test.ts` | 15/15 passed |\n\n## Files created or changed\n\n- `scripts/live-execution.ts` — created\n- `docs/evidence/live-execution.json` — generated from the live run\n\n`docs/EXECUTION-AUDIT.jsonl` and `docs/WORKFLOW-STATE.json` were already modified before this task and were left untouched.\n\n## Notes / reported defects\n\nLive OpenCode emits colon-separated OSC 7501 parameters (`state=working:app=opencode`). The product parser splits on `;`, so it recognized 0 live events; the probe's equivalent buffered parser proves the working→idle order without weakening the assertion. Additionally, the product state machine resets `working` on `clear`, which live OpenCode emits between working and idle. Both are recorded as warnings for the backend engineer; no product code was patched under this task.\n\n```forge-result\n{\"summary\":\"Created scripts/live-execution.ts and verified live RUN-FR-13 behavior: OpenCode 2.2.5 and Copilot CLI 1.0.105 both returned and recalled PINEAPPLE across separate processes using the same session, OpenCode emitted working then idle, evidence was written to docs/evidence/live-execution.json, and cleanup removed the temporary project and probe sessions. npm run test:live:execution, typecheck, and the focused build-config tests all passed.\",\"decisions\":[\"OpenCode 2.2.5 reads model configuration from the disposable project's opencode.json; the probe writes only inside the temporary project and does not rely on the unsupported OPENCODE_CONFIG variable.\",\"The probe removes both probe-skill copies before the OpenCode recall and recreates the Copilot skill before its seed, so recall proves session memory rather than an on-disk re-read.\",\"Copilot trust is resolved inside an isolated COPILOT_HOME before the headless seed; broad permissions are used only inside the disposable project.\",\"The probe asserts OSC 7501 working-before-idle with an equivalent buffered parser and reports the product parser mismatch instead of weakening the assertion or patching product code.\"],\"interfaces\":[\"scripts/live-execution.ts: live execution probe entry point exposed through npm run test:live:execution\",\"docs/evidence/live-execution.json: versioned evidence with prerequisites, auth, isolation, harness results, per-check status, warnings, and cleanup\"],\"tests\":[\"npm run test:live:execution: exit 0 (live OpenCode and Copilot probe passed)\",\"npm run typecheck:server: exit 0\",\"npx vitest run tests/unit/build-config.test.ts: 15 passed\"],\"warnings\":[\"OSC7501_PRODUCT_PARSER_MISMATCH: live OpenCode emitted colon-separated OSC 7501 parameters while the product parser splits on semicolons, so it recognized zero events; reported to the backend owner.\",\"OSC7501_CLEAR_BEFORE_IDLE: live OpenCode emitted clear between working and idle and the product Osc7501StateMachine resets its working observation on clear; reported to the backend owner.\"],\"validationLimitations\":[\"Human ACC-02/ACC-03 review remains human-owned; this task supplies live evidence only and does not approve it.\"],\"unresolved\":[]}\n```\n",
+      "validationLimitations": [
+        "Human ACC-02/ACC-03 review remains human-owned; this task supplies live evidence only and does not approve it."
+      ],
+      "artifactId": "work-run-08-001",
+      "inputArtifactIds": [
+        "work-run-06-001",
+        "work-run-07-001"
+      ]
     },
     "ACC-01": {
       "taskId": "ACC-01",
@@ -1711,15 +1765,24 @@
     },
     "RUN-EXECUTION-4": {
       "phaseId": "RUN-EXECUTION-4",
-      "status": "running",
+      "status": "complete",
       "contractFingerprint": "{\"title\":\"Phase 4: Run View\",\"description\":\"```forge-task {   \\\"id\\\": \\\"RUN-07\\\",\",\"completionPolicy\":\"strict\",\"dependencies\":[\"RUN-EXECUTION-3\"],\"requiredOutputs\":[\"src/web/routes/RunPage.tsx\",\"src/web/components/TerminalPane.tsx\",\"src/web/components/StepRail.tsx\",\"src/web/components/RunControls.tsx\",\"src/web/hooks/useRunStream.ts\",\"src/web/api/runs.ts\",\"tests/e2e/run.spec.ts\"],\"validationCommands\":[],\"tasks\":[{\"id\":\"RUN-07\",\"title\":\"Build the terminal-dominant run view\",\"description\":\"Replace the run placeholder with the real run view. Implement xterm.js with fit, web-links, unicode11, and screen-reader mode, a step rail with text status, a header with run metadata, and mode-specific controls: Next/Retry/Skip/Abort for supervised; Pause/Resume/Run next/Abort for automatic. Handle terminal resize, focus-in/out, reconnect after reload, full-snapshot plus delta events, and interrupted recovery actions. Announce step transitions through aria-live. Add tests/e2e/run.spec.ts using a fake harness executable that emits OSC working/idle for automatic mode and waits for supervised Done; cover terminal output, step transitions, controls, failure pause, reconnect snapshot, recovery actions, and keyboard focus. Do not implement run creation or preflight.\",\"ownerAgent\":\"frontend-engineer\",\"required\":true,\"dependencies\":[\"RUN-06\",\"PRE-04\"],\"expectedOutputs\":[\"src/web/routes/RunPage.tsx\",\"src/web/components/TerminalPane.tsx\",\"src/web/components/StepRail.tsx\",\"src/web/components/RunControls.tsx\",\"src/web/hooks/useRunStream.ts\",\"src/web/api/runs.ts\",\"tests/e2e/run.spec.ts\"],\"validationCommands\":[\"npx playwright test tests/e2e/run.spec.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"RUN-FR-12: Provide a terminal-dominant run view with xterm.js, a step rail, status text not conveyed by color alone, keyboard-operable controls, and aria-live announcements for step transitions.\"],\"acceptanceCriteria\":[\"Terminal output is rendered through xterm.js and never as HTML\",\"The step rail shows text status not conveyed by color alone\",\"Supervised and automatic controls appear only where valid\",\"A failure pauses the chain and offers Retry, Skip, and Abort\",\"Reloading reconnects to a live session or shows interrupted recovery\",\"Screen-reader mode is enabled and focus can enter and leave the terminal\",\"The Playwright test drives the view through src/web/App.tsx\"],\"constraints\":[\"Do not auto-start a step after reload\",\"Do not hide the terminal behind a modal\",\"A11Y-01: Every authoring action, including adding, removing, reordering, saving, preflight, and run control, must be reachable and executable with the keyboard alone, with move-up/move-down alternatives to drag-and-drop.\",\"A11Y-03: Status must be readable as text or icon plus text; color must not be the only differentiator for pending, running, done, failed, skipped, or interrupted.\",\"A11Y-04: Enable xterm.js screen-reader mode, expose a labeled terminal region, and provide a keyboard method to move focus into and out of the terminal without trapping it.\",\"SEC-03: Render terminal bytes only through xterm.js and render skill text through escaped React text. Do not use dangerouslySetInnerHTML for harness, skill, or run content.\"],\"references\":[\"docs/features/run-execution.md#4. UI / Interaction Design\",\"docs/PRD.md#10.5 Run\",\"docs/features/run-execution.md#RUN-FR-12\",\"docs/PRD.md#A11Y-01\",\"docs/PRD.md#A11Y-03\",\"docs/PRD.md#A11Y-04\",\"docs/PRD.md#SEC-03\"]}}]}",
-      "updatedAt": "2026-11-04T13:49:59.942Z"
+      "updatedAt": "2026-11-04T14:08:17.842Z",
+      "validationEvidence": [
+        "output exists: src/web/routes/RunPage.tsx",
+        "output exists: src/web/components/TerminalPane.tsx",
+        "output exists: src/web/components/StepRail.tsx",
+        "output exists: src/web/components/RunControls.tsx",
+        "output exists: src/web/hooks/useRunStream.ts",
+        "output exists: src/web/api/runs.ts",
+        "output exists: tests/e2e/run.spec.ts"
+      ]
     },
     "RUN-EXECUTION-5": {
       "phaseId": "RUN-EXECUTION-5",
-      "status": "pending",
+      "status": "running",
       "contractFingerprint": "{\"title\":\"Phase 5: Live Harness Verification\",\"description\":\"```forge-task {   \\\"id\\\": \\\"RUN-08\\\",\",\"completionPolicy\":\"strict\",\"dependencies\":[\"RUN-EXECUTION-4\"],\"requiredOutputs\":[\"scripts/live-execution.ts\",\"docs/evidence/live-execution.json\"],\"validationCommands\":[],\"tasks\":[{\"id\":\"RUN-08\",\"title\":\"Verify live execution against OpenCode and Copilot\",\"description\":\"Create scripts/live-execution.ts. Build a temporary project under the user's cache directory with a probe skill under .opencode/skills/slan-live-probe and .agents/skills/slan-live-probe; the skill returns the token PINEAPPLE. For OpenCode, spawn interactive OpenCode 2.2.5 in a PTY with a generated ses_ session and a seeded prompt, assert the token, assert OSC 7501 working and idle, then spawn a second process with the same session and assert the token is recalled. For Copilot CLI 1.0.105, run a headless prompt with a generated UUID session id and broad flags in the temporary project, assert the token, then run a second process with the same session id and assert recall. Record versions, session ids, timings, state-signal evidence, observation results, and cleanup status in docs/evidence/live-execution.json. Fail with a non-zero exit when a CLI is missing, unauthenticated, untrusted, or a probe fails. Remove the temporary project and never persist a transcript.\",\"ownerAgent\":\"integration-engineer\",\"required\":true,\"dependencies\":[\"RUN-06\"],\"expectedOutputs\":[\"scripts/live-execution.ts\",\"docs/evidence/live-execution.json\"],\"validationCommands\":[\"npm run test:live:execution\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"RUN-FR-13: Verify live execution against OpenCode 2.2.5 and Copilot CLI 1.0.105: seeded prompt, skill token recall, cross-process session continuation, OpenCode idle signal, and Copilot headless session behavior; record evidence and fail on missing prerequisites.\"],\"acceptanceCriteria\":[\"OpenCode returns PINEAPPLE from the probe skill and emits working then idle\",\"A second OpenCode process recalls PINEAPPLE using the same session\",\"Copilot returns PINEAPPLE from the probe skill in headless mode\",\"A second Copilot process recalls PINEAPPLE using the same session id\",\"Missing CLI, auth, or trust prerequisites fail the script with actionable output\",\"The evidence file records versions, session ids, timings, and pass/fail per check\",\"The temporary project is removed and no transcript is written\"],\"constraints\":[\"Do not copy or log credentials\",\"Do not leave temporary skills behind\",\"Do not use output-idle to advance\",\"SEC-02: Never read credential values, copy tokens, or log environment secrets. Authentication checks may inspect command output, credential-file presence, and environment-variable presence, but must redact values.\",\"PRIV-01: Persist configuration in the Slan config directory, chains and runs under the project .slan directory, and at most a 200-line or 32 KiB terminal tail per step. Never persist full transcripts.\",\"EXEC-02: Automatic advancement is allowed only on OpenCode OSC 7501 state=idle after state=working, or on Copilot process exit. Output-idle heuristics, animation quiescence, and fixed sleeps must not advance a chain.\",\"NFR-COMPAT-01: All harness-specific commands, flags, discovery formats, state parsing, and trust behavior live behind the adapter contract; route and UI code must not branch on harness names.\"],\"references\":[\"docs/PRD.md#5. Research Findings\",\"docs/PRD.md#12.2 Risks\",\"docs/features/run-execution.md#RUN-FR-13\",\"docs/PRD.md#SEC-02\",\"docs/PRD.md#PRIV-01\",\"docs/PRD.md#EXEC-02\",\"docs/PRD.md#NFR-COMPAT-01\"]}}]}",
-      "updatedAt": "2026-11-04T10:23:05.185Z"
+      "updatedAt": "2026-11-04T14:08:17.847Z"
     },
     "V1-ACCEPTANCE-1": {
       "phaseId": "V1-ACCEPTANCE-1",

@@ -1,0 +1,412 @@
+{
+  "version": 1,
+  "taskId": "RUN-08",
+  "generatedAt": "2026-11-04T15:06:02.515Z",
+  "node": "v26.13.0",
+  "platform": "linux-arm64",
+  "slanVersion": "0.1.0",
+  "durationMs": 35028,
+  "result": "passed",
+  "isolation": {
+    "temporaryRoot": "<temporary-root>",
+    "cacheRootMode": "home-cache",
+    "copilotHomeMode": "isolated",
+    "slanConfigDirMode": "isolated",
+    "environmentVariablesSet": [
+      "COPILOT_HOME",
+      "SLAN_CONFIG_DIR",
+      "PWD",
+      "OLDPWD",
+      "COPILOT_AUTO_UPDATE",
+      "OPENCODE_LOG_LEVEL"
+    ],
+    "sanitizedEnvironmentVariables": [
+      "OPENCODE",
+      "OPENCODE_SESSION_ID",
+      "OPENCODE_TERMINAL",
+      "OPENCODE_CONFIG",
+      "OPENCODE_CONFIG_CONTENT",
+      "OPENCODE_CONFIG_DIR",
+      "OPENCODE_WORKTREE_PATH",
+      "OPENCODE_DB",
+      "COPILOT_ALLOW_ALL",
+      "COPILOT_MODEL"
+    ]
+  },
+  "prerequisites": {
+    "opencode": {
+      "executable": "opencode",
+      "command": "opencode --version",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 231,
+      "version": "2.2.5",
+      "expectedVersion": "2.2.5",
+      "versionMatches": true,
+      "available": true
+    },
+    "copilot": {
+      "executable": "copilot",
+      "command": "copilot --version",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 182,
+      "version": "1.0.105",
+      "expectedVersion": "1.0.105",
+      "versionMatches": true,
+      "available": true
+    }
+  },
+  "auth": {
+    "opencode": {
+      "harness": "opencode",
+      "state": "authenticated",
+      "reason": "CLI_CREDENTIALS",
+      "loginHint": "Run \"opencode auth login\" in a terminal, then re-run preflight.",
+      "evidence": [
+        {
+          "kind": "environment",
+          "name": "OPENCODE_API_KEY",
+          "present": false
+        },
+        {
+          "kind": "environment",
+          "name": "ANTHROPIC_API_KEY",
+          "present": false
+        },
+        {
+          "kind": "environment",
+          "name": "OPENAI_API_KEY",
+          "present": false
+        },
+        {
+          "kind": "environment",
+          "name": "DEEPSEEK_API_KEY",
+          "present": false
+        },
+        {
+          "kind": "environment",
+          "name": "GOOGLE_GENERATIVE_AI_API_KEY",
+          "present": false
+        },
+        {
+          "kind": "environment",
+          "name": "OPENROUTER_API_KEY",
+          "present": false
+        },
+        {
+          "kind": "command",
+          "command": "~/.opencode/bin/opencode auth list --format json",
+          "description": "opencode auth list --format json",
+          "exitCode": 0,
+          "timedOut": false,
+          "state": "authenticated",
+          "reason": "CLI_CREDENTIALS"
+        }
+      ]
+    },
+    "copilot": {
+      "harness": "copilot",
+      "state": "unknown",
+      "reason": "NO_EVIDENCE",
+      "loginHint": "Run \"copilot login\" in a terminal, or set COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN, then re-run preflight.",
+      "evidence": [
+        {
+          "kind": "environment",
+          "name": "COPILOT_GITHUB_TOKEN",
+          "present": false
+        },
+        {
+          "kind": "environment",
+          "name": "GH_TOKEN",
+          "present": false
+        },
+        {
+          "kind": "environment",
+          "name": "GITHUB_TOKEN",
+          "present": false
+        }
+      ]
+    }
+  },
+  "harnesses": {
+    "opencode": {
+      "harness": "opencode",
+      "version": "2.2.5",
+      "expectedVersion": "2.2.5",
+      "versionMatches": true,
+      "sessionId": "ses_cCGRZddKE7xmIZL4pu9BJgiilL",
+      "sessionMode": "shared",
+      "model": "deepseek/deepseek-flash",
+      "modelSource": "authenticated-provider",
+      "command": {
+        "executable": "opencode",
+        "args": [
+          "--session",
+          "ses_cCGRZddKE7xmIZL4pu9BJgiilL",
+          "--prompt",
+          "<probe-prompt>",
+          "<temporary-project>"
+        ],
+        "cwd": "<temporary-project>"
+      },
+      "seededPrompt": {
+        "passed": true,
+        "tokenObserved": true,
+        "durationMs": 5671,
+        "exitCode": 130,
+        "timedOut": false,
+        "forcedKill": true,
+        "skillAvailable": true
+      },
+      "signal": {
+        "working": true,
+        "idle": true,
+        "clear": true,
+        "workingBeforeIdle": true,
+        "workingEventCount": 6,
+        "idleEventCount": 2,
+        "clearEventCount": 1,
+        "sequence": [
+          "idle",
+          "working",
+          "clear",
+          "idle"
+        ],
+        "sessionIdFromSignal": "ses_cCGRZddKE7xmIZL4pu9BJgiilL",
+        "firstWorkingAtMs": 2322,
+        "firstIdleAfterWorkingAtMs": 5239,
+        "paramFormat": "colon",
+        "productParser": {
+          "eventCount": 0,
+          "recognized": false
+        },
+        "productStateMachine": {
+          "sawWorking": false,
+          "completed": false,
+          "state": "unknown"
+        }
+      },
+      "recall": {
+        "passed": true,
+        "tokenObserved": true,
+        "durationMs": 2727,
+        "exitCode": 130,
+        "timedOut": false,
+        "forcedKill": true,
+        "probeSkillPresent": false
+      },
+      "cleanup": {
+        "sessionsCreated": [
+          "ses_cCGRZddKE7xmIZL4pu9BJgiilL"
+        ],
+        "sessionsDeleted": true,
+        "sessionsStillPresent": []
+      }
+    },
+    "copilot": {
+      "harness": "copilot",
+      "version": "1.0.105",
+      "expectedVersion": "1.0.105",
+      "versionMatches": true,
+      "sessionId": "70f221c7-f681-4930-bc17-22364d92a1b9",
+      "copilotHomeMode": "isolated",
+      "trust": {
+        "resolved": true,
+        "state": "trusted",
+        "reason": "FOLDER_TRUSTED",
+        "mechanism": "dialog",
+        "durationMs": 4266,
+        "configPath": "<temporary-root>/copilot-home/config.json",
+        "manualFallback": "copilot -C <temporary-project>",
+        "sentSelectionKeys": true,
+        "outputClassified": "trust-dialog"
+      },
+      "seededPrompt": {
+        "passed": true,
+        "tokenObserved": true,
+        "durationMs": 10867,
+        "exitCode": 0,
+        "timedOut": false,
+        "forcedKill": false,
+        "skillAvailable": true,
+        "skillObserved": true,
+        "skillObservation": "observed",
+        "broadPermissions": [
+          "--allow-all-paths",
+          "--allow-all-tools"
+        ]
+      },
+      "recall": {
+        "passed": true,
+        "tokenObserved": true,
+        "durationMs": 8820,
+        "exitCode": 0,
+        "timedOut": false,
+        "forcedKill": false,
+        "probeSkillPresent": false
+      },
+      "command": {
+        "executable": "copilot",
+        "args": [
+          "-p",
+          "<probe-prompt>",
+          "--session-id",
+          "70f221c7-f681-4930-bc17-22364d92a1b9",
+          "--allow-all-paths",
+          "--allow-all-tools",
+          "-C",
+          "<temporary-project>"
+        ],
+        "cwd": "<temporary-project>"
+      }
+    }
+  },
+  "checks": [
+    {
+      "id": "prereq.opencode",
+      "harness": "opencode",
+      "description": "Confirm the opencode CLI is installed and reports a version.",
+      "expected": "opencode --version exits 0 and prints a semantic version.",
+      "observed": "opencode --version exited 0 and reported 2.2.5.",
+      "status": "passed",
+      "passed": true,
+      "durationMs": 231
+    },
+    {
+      "id": "prereq.copilot",
+      "harness": "copilot",
+      "description": "Confirm the copilot CLI is installed and reports a version.",
+      "expected": "copilot --version exits 0 and prints a semantic version.",
+      "observed": "copilot --version exited 0 and reported 1.0.105.",
+      "status": "passed",
+      "passed": true,
+      "durationMs": 182
+    },
+    {
+      "id": "auth.opencode",
+      "harness": "opencode",
+      "description": "Confirm opencode has local authentication evidence.",
+      "expected": "Positive local authentication evidence without reading credential values.",
+      "observed": "Authentication evidence: CLI_CREDENTIALS.",
+      "status": "passed",
+      "passed": true
+    },
+    {
+      "id": "auth.copilot",
+      "harness": "copilot",
+      "description": "Confirm copilot has local authentication evidence.",
+      "expected": "Positive local authentication evidence without reading credential values.",
+      "observed": "No static authentication evidence was available (NO_EVIDENCE); the live copilot probe determines whether authentication works.",
+      "status": "not-applicable",
+      "passed": true
+    },
+    {
+      "id": "opencode.seed",
+      "harness": "opencode",
+      "description": "Run a seeded interactive OpenCode prompt in a PTY and return the probe token.",
+      "expected": "The slan-live-probe skill returns the probe token.",
+      "observed": "The seeded prompt returned the probe token after 5671 ms.",
+      "status": "passed",
+      "passed": true,
+      "durationMs": 5671
+    },
+    {
+      "id": "opencode.signal",
+      "harness": "opencode",
+      "description": "Observe OpenCode OSC 7501 working followed by idle.",
+      "expected": "At least one state=working event precedes a later state=idle event.",
+      "observed": "Observed 6 working, 2 idle, and 1 clear event(s); sequence idle -> working -> clear -> idle.",
+      "status": "passed",
+      "passed": true,
+      "durationMs": 5671
+    },
+    {
+      "id": "opencode.recall",
+      "harness": "opencode",
+      "description": "Recall the probe token in a second OpenCode process using the same session id.",
+      "expected": "The same ses_ session returns the probe token after the probe skill is removed.",
+      "observed": "The second process recalled the token after 2727 ms; probe skill present during recall=false.",
+      "status": "passed",
+      "passed": true,
+      "durationMs": 2727
+    },
+    {
+      "id": "copilot.trust",
+      "harness": "copilot",
+      "description": "Resolve Copilot folder trust before running a seeded prompt.",
+      "expected": "The temporary project is recorded as a trusted folder.",
+      "observed": "Trust resolved via dialog (FOLDER_TRUSTED) after 4266 ms; selection keys sent=true.",
+      "status": "passed",
+      "passed": true,
+      "durationMs": 4266
+    },
+    {
+      "id": "copilot.seed",
+      "harness": "copilot",
+      "description": "Run a headless Copilot prompt and return the probe token.",
+      "expected": "Exit 0 and the slan-live-probe skill returns the probe token.",
+      "observed": "The headless prompt returned the probe token after 10867 ms; skill line observed=true.",
+      "status": "passed",
+      "passed": true,
+      "durationMs": 10867
+    },
+    {
+      "id": "copilot.recall",
+      "harness": "copilot",
+      "description": "Recall the probe token in a second Copilot process using the same UUID session id.",
+      "expected": "The same UUID session returns the probe token after the probe skill is removed.",
+      "observed": "The second process recalled the token after 8820 ms; probe skill present during recall=false.",
+      "status": "passed",
+      "passed": true,
+      "durationMs": 8820
+    },
+    {
+      "id": "cleanup.temporary-root",
+      "harness": "environment",
+      "description": "Remove the temporary project, probe skills, PTY sessions, and child processes.",
+      "expected": "The temporary root no longer exists and no tracked child process or PTY remains.",
+      "observed": "Temporary root removed; 0 child process(es) and 0 PTY session(s) remaining.",
+      "status": "passed",
+      "passed": true
+    },
+    {
+      "id": "cleanup.opencode-session",
+      "harness": "opencode",
+      "description": "Delete the OpenCode session created by the probe.",
+      "expected": "No probe session remains in the OpenCode session store.",
+      "observed": "1 probe session(s) verified absent after deletion.",
+      "status": "passed",
+      "passed": true
+    }
+  ],
+  "warnings": [
+    {
+      "code": "OSC7501_PRODUCT_PARSER_MISMATCH",
+      "harness": "opencode",
+      "message": "Live OpenCode 2.2.5 emitted colon-separated OSC 7501 parameters (state=working:app=opencode). The product parser splits on \";\" and recognized 0 event(s), while the probe's equivalent buffered parser recognized the signal. Report this contract mismatch to the backend engineer."
+    },
+    {
+      "code": "OSC7501_CLEAR_BEFORE_IDLE",
+      "harness": "opencode",
+      "message": "Live OpenCode emitted clear between working and idle. The product Osc7501StateMachine resets its working observation on clear, so this live order would still fail to advance after the parameter-separator defect is fixed. The probe asserts the CLI order (working before idle) without weakening the no-idle-only rule. Report this contract mismatch to the backend engineer."
+    }
+  ],
+  "cleanup": {
+    "attempted": true,
+    "temporaryRootRemoved": true,
+    "temporaryRoot": null,
+    "processesRemaining": 0,
+    "ptySessionsRemaining": 0,
+    "opencodeSessions": [
+      {
+        "sessionId": "ses_cCGRZddKE7xmIZL4pu9BJgiilL",
+        "existed": true,
+        "deleted": true,
+        "verifiedAbsent": true
+      }
+    ],
+    "opencodeSessionCleanupPassed": true
+  },
+  "limitations": []
+}
