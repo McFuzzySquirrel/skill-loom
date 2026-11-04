@@ -1,12 +1,12 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T15:06:02.566Z",
+  "lastUpdatedAt": "2026-11-04T15:09:52.946Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
   "status": "running",
-  "currentPhase": "RUN-EXECUTION-5",
+  "currentPhase": "V1-ACCEPTANCE-1",
   "tasks": {
     "FOUND-01": {
       "taskId": "FOUND-01",
@@ -1510,10 +1510,60 @@
     },
     "ACC-01": {
       "taskId": "ACC-01",
-      "status": "pending",
+      "status": "complete",
       "ownerAgent": "platform-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 1,
+      "outputFiles": [
+        "README.md",
+        "docs/OPERATIONS.md",
+        "scripts/check-docs.mjs",
+        "tests/unit/docs.test.ts"
+      ],
+      "startedAt": "2026-11-04T15:06:03.210Z",
+      "usage": {
+        "inputTokens": 73173,
+        "outputTokens": 14342,
+        "reasoningTokens": 15190,
+        "cacheReadTokens": 2428672,
+        "cacheWriteTokens": 0,
+        "costUsd": 0.035981166,
+        "source": "harness"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/ACC-01.2026-11-04T15-09-52-935Z.attempt-1.result.json",
+          "usage": {
+            "inputTokens": 73173,
+            "outputTokens": 14342,
+            "reasoningTokens": 15190,
+            "cacheReadTokens": 2428672,
+            "cacheWriteTokens": 0,
+            "costUsd": 0.035981166,
+            "source": "harness"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T15:09:52.941Z",
+      "agentOutput": "Implemented the operator documentation and documentation gate.\n\nValidation run:\n- `node scripts/check-docs.mjs` — exit 0\n- `npx vitest run tests/unit/docs.test.ts` — 5 tests passed\n- `npm run check` — exit 0\n- `npm run typecheck` — server and web passed\n- `npx vitest run tests/unit/build-config.test.ts` — 15 tests passed\n- `node --check scripts/check-docs.mjs` and `git diff --check` — clean\n\nFiles created or changed:\n- `README.md` — rewrote with install, development, build/start, command contract, first-run flow, security posture, and operations link.\n- `docs/OPERATIONS.md` — added configuration, data locations, harness prerequisites, trust and automatic permissions, security, backup/cleanup, skill limitation, fork handoff, and troubleshooting.\n- `scripts/check-docs.mjs` — added executable documentation gate for required headings, commands, safety statements, and package scripts.\n- `tests/unit/docs.test.ts` — added tests that invoke the same check script against the repository and failing fixtures.\n\n```forge-result\n{\"summary\":\"Wrote README.md and docs/OPERATIONS.md, added scripts/check-docs.mjs and tests/unit/docs.test.ts, and verified the documentation gate, docs tests, typecheck, and build-config contract.\",\"decisions\":[\"The documentation check reads README.md, docs/OPERATIONS.md, and package.json so documented commands cannot drift from the script contract.\",\"tests/unit/docs.test.ts spawns scripts/check-docs.mjs instead of duplicating its rules, so the CLI and test use exactly the same gate.\",\"README documents the existing run API and run view while explicitly stating that the current Start control is a preflight gate rather than claiming unimplemented UI wiring.\"],\"interfaces\":[\"scripts/check-docs.mjs: checkDocs(root), required heading/command/statement constants, and --root <directory> for isolated verification\",\"tests/unit/docs.test.ts: repository and negative-fixture coverage for the same documentation gate\",\"README.md and docs/OPERATIONS.md: operator contract for ACC-FR-01\"],\"tests\":[\"node scripts/check-docs.mjs: exit 0\",\"npx vitest run tests/unit/docs.test.ts: 5 tests passed\",\"npm run check: exit 0\",\"npm run typecheck: exit 0\",\"npx vitest run tests/unit/build-config.test.ts: 15 tests passed\"],\"unresolved\":[],\"warnings\":[\"The current web Start control remains a preflight gate and does not create a run; the docs describe the existing POST run API instead of inventing UI behavior. Wiring the control is outside ACC-01 scope.\",\"npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.\"],\"validationLimitations\":[\"Human acceptance reviews ACC-02 and ACC-03 remain human-owned and were not performed.\",\"Playwright and live harness probes were not rerun because ACC-01 changed only documentation and documentation-check files.\"]}\n```\n",
+      "validationLimitations": [
+        "Human acceptance reviews ACC-02 and ACC-03 remain human-owned and were not performed.",
+        "Playwright and live harness probes were not rerun because ACC-01 changed only documentation and documentation-check files."
+      ],
+      "artifactId": "work-acc-01-001",
+      "inputArtifactIds": [
+        "work-run-08-001",
+        "work-pre-04-001",
+        "work-chain-06-001",
+        "work-proj-03-001",
+        "work-cat-04-001",
+        "work-found-04-001",
+        "work-found-05-001",
+        "work-cat-05-001",
+        "work-chain-04-001",
+        "work-chain-05-001"
+      ]
     },
     "ACC-02": {
       "taskId": "ACC-02",
@@ -1780,15 +1830,19 @@
     },
     "RUN-EXECUTION-5": {
       "phaseId": "RUN-EXECUTION-5",
-      "status": "running",
+      "status": "complete",
       "contractFingerprint": "{\"title\":\"Phase 5: Live Harness Verification\",\"description\":\"```forge-task {   \\\"id\\\": \\\"RUN-08\\\",\",\"completionPolicy\":\"strict\",\"dependencies\":[\"RUN-EXECUTION-4\"],\"requiredOutputs\":[\"scripts/live-execution.ts\",\"docs/evidence/live-execution.json\"],\"validationCommands\":[],\"tasks\":[{\"id\":\"RUN-08\",\"title\":\"Verify live execution against OpenCode and Copilot\",\"description\":\"Create scripts/live-execution.ts. Build a temporary project under the user's cache directory with a probe skill under .opencode/skills/slan-live-probe and .agents/skills/slan-live-probe; the skill returns the token PINEAPPLE. For OpenCode, spawn interactive OpenCode 2.2.5 in a PTY with a generated ses_ session and a seeded prompt, assert the token, assert OSC 7501 working and idle, then spawn a second process with the same session and assert the token is recalled. For Copilot CLI 1.0.105, run a headless prompt with a generated UUID session id and broad flags in the temporary project, assert the token, then run a second process with the same session id and assert recall. Record versions, session ids, timings, state-signal evidence, observation results, and cleanup status in docs/evidence/live-execution.json. Fail with a non-zero exit when a CLI is missing, unauthenticated, untrusted, or a probe fails. Remove the temporary project and never persist a transcript.\",\"ownerAgent\":\"integration-engineer\",\"required\":true,\"dependencies\":[\"RUN-06\"],\"expectedOutputs\":[\"scripts/live-execution.ts\",\"docs/evidence/live-execution.json\"],\"validationCommands\":[\"npm run test:live:execution\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"RUN-FR-13: Verify live execution against OpenCode 2.2.5 and Copilot CLI 1.0.105: seeded prompt, skill token recall, cross-process session continuation, OpenCode idle signal, and Copilot headless session behavior; record evidence and fail on missing prerequisites.\"],\"acceptanceCriteria\":[\"OpenCode returns PINEAPPLE from the probe skill and emits working then idle\",\"A second OpenCode process recalls PINEAPPLE using the same session\",\"Copilot returns PINEAPPLE from the probe skill in headless mode\",\"A second Copilot process recalls PINEAPPLE using the same session id\",\"Missing CLI, auth, or trust prerequisites fail the script with actionable output\",\"The evidence file records versions, session ids, timings, and pass/fail per check\",\"The temporary project is removed and no transcript is written\"],\"constraints\":[\"Do not copy or log credentials\",\"Do not leave temporary skills behind\",\"Do not use output-idle to advance\",\"SEC-02: Never read credential values, copy tokens, or log environment secrets. Authentication checks may inspect command output, credential-file presence, and environment-variable presence, but must redact values.\",\"PRIV-01: Persist configuration in the Slan config directory, chains and runs under the project .slan directory, and at most a 200-line or 32 KiB terminal tail per step. Never persist full transcripts.\",\"EXEC-02: Automatic advancement is allowed only on OpenCode OSC 7501 state=idle after state=working, or on Copilot process exit. Output-idle heuristics, animation quiescence, and fixed sleeps must not advance a chain.\",\"NFR-COMPAT-01: All harness-specific commands, flags, discovery formats, state parsing, and trust behavior live behind the adapter contract; route and UI code must not branch on harness names.\"],\"references\":[\"docs/PRD.md#5. Research Findings\",\"docs/PRD.md#12.2 Risks\",\"docs/features/run-execution.md#RUN-FR-13\",\"docs/PRD.md#SEC-02\",\"docs/PRD.md#PRIV-01\",\"docs/PRD.md#EXEC-02\",\"docs/PRD.md#NFR-COMPAT-01\"]}}]}",
-      "updatedAt": "2026-11-04T14:08:17.847Z"
+      "updatedAt": "2026-11-04T15:06:03.071Z",
+      "validationEvidence": [
+        "output exists: scripts/live-execution.ts",
+        "output exists: docs/evidence/live-execution.json"
+      ]
     },
     "V1-ACCEPTANCE-1": {
       "phaseId": "V1-ACCEPTANCE-1",
-      "status": "pending",
+      "status": "running",
       "contractFingerprint": "{\"title\":\"Phase 1: Operator Documentation\",\"description\":\"```forge-task {   \\\"id\\\": \\\"ACC-01\\\",\",\"completionPolicy\":\"strict\",\"dependencies\":[\"APP-FOUNDATION-2\",\"PROJECT-WORKSPACE-2\",\"SKILL-CATALOG-2\",\"CHAIN-AUTHORING-2\",\"RUN-PREFLIGHT-2\",\"RUN-EXECUTION-5\"],\"requiredOutputs\":[\"README.md\",\"docs/OPERATIONS.md\",\"scripts/check-docs.mjs\",\"tests/unit/docs.test.ts\"],\"validationCommands\":[],\"tasks\":[{\"id\":\"ACC-01\",\"title\":\"Write the operator documentation and docs check\",\"description\":\"Write README.md and docs/OPERATIONS.md for the finished v1. README covers the product purpose, install and run commands, required Node and harness versions, first-run flow, and links to the operations guide. OPERATIONS covers configuration and SLAN_CONFIG_DIR, data locations (.slan/chains, .slan/runs, ~/.config/slan), harness authentication prerequisites, Copilot trust and automatic permissions, the loopback-only security model, backup and cleanup, the skill-firing limitation, fork handoff behavior, and troubleshooting for missing CLI, auth, trust, node-pty build, dirty tree, and interrupted run. Add scripts/check-docs.mjs that asserts required headings and npm commands, and tests/unit/docs.test.ts that runs the same checks. Do not invent passing test results or claim features that are not implemented.\",\"ownerAgent\":\"platform-engineer\",\"required\":true,\"dependencies\":[\"RUN-08\",\"PRE-04\",\"CHAIN-06\",\"PROJ-03\",\"CAT-04\"],\"expectedOutputs\":[\"README.md\",\"docs/OPERATIONS.md\",\"scripts/check-docs.mjs\",\"tests/unit/docs.test.ts\"],\"validationCommands\":[\"node scripts/check-docs.mjs\",\"npx vitest run tests/unit/docs.test.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"ACC-FR-01: Document installation, harness prerequisites, configuration, data locations, the security model, automatic-mode permissions, and known limitations in README.md and docs/OPERATIONS.md, with a check script that verifies required sections and commands.\"],\"acceptanceCriteria\":[\"README documents install, dev, build, start, typecheck, unit, e2e, and live-probe commands\",\"OPERATIONS documents config, data locations, harness prerequisites, trust, automatic permissions, security, cleanup, and troubleshooting\",\"The docs state that skills are model-invoked and order is prompt order, not guaranteed firing\",\"The docs state that the server is loopback-only with no authentication\",\"The docs state that run records keep only a bounded tail and that runs/ is git-ignored\",\"The check script fails when a required heading or command is missing\"],\"constraints\":[\"Do not document unimplemented features\",\"Do not include real credentials or tokens in examples\",\"ARCH-01: Slan is a single-user local application. The server binds only to 127.0.0.1, refuses non-loopback addresses, has no authentication in v1, and must never be exposed to a network or remote host.\",\"EXEC-01: Skills are model-invoked context, not callable commands. Slan guarantees deterministic prompt order only; the UI must state that a harness may decline to load a named skill.\",\"PRIV-01: Persist configuration in the Slan config directory, chains and runs under the project .slan directory, and at most a 200-line or 32 KiB terminal tail per step. Never persist full transcripts.\",\"NFR-MAINT-01: A clean checkout must support documented install, development, build, start, typecheck, unit/integration, e2e, and live-probe commands without undocumented global tooling.\"],\"references\":[\"docs/PRD.md#1. Overview\",\"docs/PRD.md#12.2 Risks\",\"docs/features/v1-acceptance.md#ACC-FR-01\",\"docs/PRD.md#ARCH-01\",\"docs/PRD.md#EXEC-01\",\"docs/PRD.md#PRIV-01\",\"docs/PRD.md#NFR-MAINT-01\"]}}]}",
-      "updatedAt": "2026-11-04T10:23:05.185Z"
+      "updatedAt": "2026-11-04T15:06:03.077Z"
     },
     "V1-ACCEPTANCE-2": {
       "phaseId": "V1-ACCEPTANCE-2",

@@ -1,10 +1,10 @@
 # Project Progress
 
 ## Current State
-**Phase**: RUN-EXECUTION-5
+**Phase**: V1-ACCEPTANCE-1
 **Status**: In Progress
-**Validation Gaps**: 31 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T15:06:02.569Z
+**Validation Gaps**: 33 unverified check(s) - see "Validation Gaps"
+**Last Updated**: 2026-11-04T15:09:52.950Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -72,12 +72,13 @@
   - Files: src/web/routes/RunPage.tsx, src/web/components/TerminalPane.tsx, src/web/components/StepRail.tsx, src/web/components/RunControls.tsx, src/web/hooks/useRunStream.ts, src/web/api/runs.ts, tests/e2e/run.spec.ts, src/server/routes/terminal.ts, src/web/styles/theme.css, tests/e2e/shell.spec.ts
 - [x] Phase RUN-EXECUTION-5, Task RUN-08: Verify live execution against OpenCode and Copilot (@integration-engineer)
   - Files: scripts/live-execution.ts, docs/evidence/live-execution.json
+- [x] Phase V1-ACCEPTANCE-1, Task ACC-01: Write the operator documentation and docs check (@platform-engineer)
+  - Files: README.md, docs/OPERATIONS.md, scripts/check-docs.mjs, tests/unit/docs.test.ts
 
 ## Current Task
 - None currently running
 
 ## Remaining
-- [ ] Phase V1-ACCEPTANCE-1: Phase 1: Operator Documentation
 - [ ] Phase V1-ACCEPTANCE-2: Phase 2: Human Acceptance Reviews
 
 ## Blockers
@@ -115,6 +116,8 @@
 - Task RUN-07: Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed.
 - Task RUN-07: Live harness verification remains RUN-08 and was not performed here.
 - Task RUN-08: Human ACC-02/ACC-03 review remains human-owned; this task supplies live evidence only and does not approve it.
+- Task ACC-01: Human acceptance reviews ACC-02 and ACC-03 remain human-owned and were not performed.
+- Task ACC-01: Playwright and live harness probes were not rerun because ACC-01 changed only documentation and documentation-check files.
 
 ## Notes
 - Workflow engine run 25930d7e-150c-4ea9-a081-47fcf1941eb6
