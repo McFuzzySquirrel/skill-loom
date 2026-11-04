@@ -125,7 +125,7 @@ const STATUS_BY_FOLDER_CODE: Record<FolderPathErrorCode, number> = {
  * The catalog route accepts a project id and never a filesystem path. It maps
  * the id to a registered canonical project directory, delegates discovery and
  * merge to the catalog service, and translates typed failures into the shared
- * error envelope. Settings mutations are global Slan configuration, never
+ * error envelope. Settings mutations are global Skill Loom configuration, never
  * project data.
  */
 export const catalogRoutes: FastifyPluginAsync<CatalogRoutesOptions> = async (

@@ -16,7 +16,7 @@ let root: string;
 let restoreModePaths: string[];
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'slan-projects-paths-'));
+  root = await mkdtemp(join(tmpdir(), 'loom-projects-paths-'));
   restoreModePaths = [];
 });
 
@@ -204,13 +204,13 @@ describe('symlink handling', () => {
 });
 
 describe('directory listing', () => {
-  it('sorts directories before files, case-insensitively, and detects git and .slan', async () => {
+  it('sorts directories before files, case-insensitively, and detects git and .loom', async () => {
     const project = join(root, 'project');
     await mkdir(join(project, 'beta'), { recursive: true });
     await mkdir(join(project, 'Alpha'), { recursive: true });
     await mkdir(join(project, '.hidden'), { recursive: true });
     await mkdir(join(project, 'beta', '.git'), { recursive: true });
-    await mkdir(join(project, 'Alpha', '.slan'), { recursive: true });
+    await mkdir(join(project, 'Alpha', '.loom'), { recursive: true });
     await writeFile(join(project, 'b.txt'), 'b', 'utf8');
     await writeFile(join(project, 'A.txt'), 'a', 'utf8');
 
@@ -231,18 +231,18 @@ describe('directory listing', () => {
     expect(alpha).toMatchObject({
       isDirectory: true,
       isGitRepo: false,
-      hasSlan: true,
+      hasLoom: true,
       path: join(listing.path, 'Alpha'),
     });
 
     const beta = listing.entries.find((entry) => entry.name === 'beta');
-    expect(beta).toMatchObject({ isDirectory: true, isGitRepo: true, hasSlan: false });
+    expect(beta).toMatchObject({ isDirectory: true, isGitRepo: true, hasLoom: false });
 
     const file = listing.entries.find((entry) => entry.name === 'A.txt');
     expect(file).toMatchObject({
       isDirectory: false,
       isGitRepo: false,
-      hasSlan: false,
+      hasLoom: false,
       path: join(listing.path, 'A.txt'),
     });
   });

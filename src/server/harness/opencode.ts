@@ -32,7 +32,7 @@ export const OPENCODE_HARNESS = 'opencode' satisfies HarnessId;
 export const OPENCODE_DISPLAY_NAME = 'OpenCode';
 export const OPENCODE_EXECUTABLE_NAME = 'opencode';
 export const OPENCODE_INSTALL_HINT =
-  'Install OpenCode 2.2.5 (https://opencode.ai) and ensure "opencode" is on PATH, or set harnessCommands.opencode in the Slan config.';
+  'Install OpenCode 2.2.5 (https://opencode.ai) and ensure "opencode" is on PATH, or set harnessCommands.opencode in the Skill Loom config.';
 
 /** OpenCode rejects any session id that does not start with `ses`. */
 export const OPENCODE_SESSION_ID_PREFIX = 'ses_';
@@ -63,8 +63,8 @@ const DISCOVERY = Object.freeze({
     Object.freeze({ source: 'project' as const, location: '<project>/.opencode/skills' }),
     Object.freeze({ source: 'personal' as const, location: '~/.config/opencode/skills' }),
     Object.freeze({
-      source: 'slan-extra' as const,
-      location: '<slan-config>/extraSkillDirectories',
+      source: 'loom-extra' as const,
+      location: '<loom-config>/extraSkillDirectories',
     }),
   ]),
   command: null,

@@ -6,4 +6,6 @@ coverage/
 test-results/
 playwright-report/
 blob-report/
-.slan/runs/
+.archify/
+*.tgz
+.loom/runs/

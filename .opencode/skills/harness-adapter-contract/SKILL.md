@@ -1,6 +1,6 @@
 ---
 name: harness-adapter-contract
-description: "Slan harness adapter contract and OpenCode 2.2.5 / Copilot CLI 1.0.105 descriptors covering executable resolution, discovery, session and fork flags, trust behavior, permission scope, and advancement signals."
+description: "Skill Loom harness adapter contract and OpenCode 2.2.5 / Copilot CLI 1.0.105 descriptors covering executable resolution, discovery, session and fork flags, trust behavior, permission scope, and advancement signals."
 ---
 
 # Skill: Harness Adapter Contract
@@ -17,7 +17,7 @@ Load `references/copilot-adapter.md` when implementing Copilot discovery, trust,
 
 ### Step 1: Resolve the executable without a shell
 
-Read the configured override for the harness from Slan config first, then walk `PATH`. Validate with `access(candidate, fs.constants.X_OK)` and return the absolute path:
+Read the configured override for the harness from Skill Loom config first, then walk `PATH`. Validate with `access(candidate, fs.constants.X_OK)` and return the absolute path:
 
 ```ts
 function resolveExecutable(name: string, override?: string): string {
@@ -53,7 +53,7 @@ If a capability is unknown, then report it as unsupported and block preflight; d
 
 ### Step 3: Map discovery to the descriptor
 
-For OpenCode, scan the project `.opencode/skills`, the personal `~/.config/opencode/skills`, and each Slan-configured extra directory. For Copilot, invoke `copilot skill list --json` in the project directory with a bounded timeout. In both cases:
+For OpenCode, scan the project `.opencode/skills`, the personal `~/.config/opencode/skills`, and each Loom-configured extra directory. For Copilot, invoke `copilot skill list --json` in the project directory with a bounded timeout. In both cases:
 
 - Preserve the source label and canonical path.
 - Return duplicates instead of deduplicating by name.
@@ -132,7 +132,7 @@ If the installed version differs from 2.2.5 or 1.0.105, then run the live probes
 - **Copilot has no native fork at all.** Report `fork` as a handoff note built from the previous step's label, skill, instruction, status, and bounded tail.
 - **Shell-free resolution.** `execSync("which …")` breaks when `PATH` contains spaces and shells out needlessly. Walk `PATH` and check `X_OK`.
 - **Discovery failure is not an empty catalog.** A missing executable, timeout, or invalid JSON must surface a warning and an error state so the user does not mistake a broken CLI for "no skills installed".
-- **Trust config is read-only to Slan.** Detect `trustedFolders` in `~/.copilot/config.json`; never write it. A prompt queued during the trust dialog can be swallowed.
+- **Trust config is read-only to Skill Loom.** Detect `trustedFolders` in `~/.copilot/config.json`; never write it. A prompt queued during the trust dialog can be swallowed.
 - **Broad permissions are opt-in only.** `--allow-all-paths --allow-all-tools` never appear without a per-chain opt-in and must be shown verbatim at preflight and run start.
 - **OpenCode skill firing is not observable.** Interactive OpenCode exposes no `skill(name)` equivalent; record `not-observable` rather than inventing a match.
 

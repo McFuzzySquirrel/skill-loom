@@ -45,7 +45,7 @@ export const DEFAULT_HOST = '127.0.0.1';
 export const DEFAULT_PORT = 7373;
 
 /** Server version reported by the health endpoint. */
-export const SLAN_VERSION: string = packageManifest.version;
+export const LOOM_VERSION: string = packageManifest.version;
 
 export type ServerConfigErrorCode = 'HOST_NOT_LOOPBACK' | 'INVALID_PORT';
 
@@ -70,7 +70,7 @@ export class NonLoopbackHostError extends ServerConfigError {
   constructor(host: string) {
     super(
       'HOST_NOT_LOOPBACK',
-      `Refusing to bind Slan to non-loopback host "${host}". Slan is local-only.`,
+      `Refusing to bind Skill Loom to non-loopback host "${host}". Skill Loom is local-only.`,
       { host },
     );
   }
@@ -78,7 +78,7 @@ export class NonLoopbackHostError extends ServerConfigError {
 
 export class InvalidPortError extends ServerConfigError {
   constructor(value: unknown) {
-    super('INVALID_PORT', `Invalid Slan port "${String(value)}". Use an integer from 1 to 65535.`, {
+    super('INVALID_PORT', `Invalid Skill Loom port "${String(value)}". Use an integer from 1 to 65535.`, {
       value: typeof value === 'string' || typeof value === 'number' ? value : String(value),
     });
   }
@@ -90,9 +90,9 @@ export interface ServerSettings {
 }
 
 export interface BuildAppOptions {
-  /** Loopback host. Defaults to `SLAN_HOST` or `127.0.0.1`. */
+  /** Loopback host. Defaults to `LOOM_HOST` or `127.0.0.1`. */
   host?: string;
-  /** TCP port. Defaults to `SLAN_PORT` or 7373. */
+  /** TCP port. Defaults to `LOOM_PORT` or 7373. */
   port?: number;
   /** Environment seam for tests. Defaults to `process.env`. */
   env?: NodeJS.ProcessEnv;
@@ -201,12 +201,12 @@ export function assertValidPort(port: number): number {
 
 /** Resolve and validate process settings from the environment. */
 export function resolveServerSettings(env: NodeJS.ProcessEnv = process.env): ServerSettings {
-  const host = assertLoopbackHost(env.SLAN_HOST ?? DEFAULT_HOST);
+  const host = assertLoopbackHost(env.LOOM_HOST ?? DEFAULT_HOST);
   return { host, port: resolvePort(env) };
 }
 
 function resolvePort(env: NodeJS.ProcessEnv): number {
-  const rawPort = env.SLAN_PORT?.trim();
+  const rawPort = env.LOOM_PORT?.trim();
   return rawPort === undefined || rawPort === '' ? DEFAULT_PORT : parsePort(rawPort);
 }
 
@@ -223,7 +223,7 @@ function parsePort(rawPort: string): number {
  * and a start from the repository root.
  */
 function resolveWebRoot(env: NodeJS.ProcessEnv): string {
-  const override = env.SLAN_WEB_ROOT?.trim();
+  const override = env.LOOM_WEB_ROOT?.trim();
   if (override !== undefined && override !== '') {
     return resolve(override);
   }
@@ -271,7 +271,7 @@ function statusToCode(statusCode: number): string {
  */
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const env = options.env ?? process.env;
-  const host = assertLoopbackHost(options.host ?? env.SLAN_HOST ?? DEFAULT_HOST);
+  const host = assertLoopbackHost(options.host ?? env.LOOM_HOST ?? DEFAULT_HOST);
   const port = assertValidPort(options.port ?? resolvePort(env));
 
   const app = Fastify({
@@ -280,9 +280,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   const terminalManager = options.terminalManager ?? createTerminalManager();
 
-  app.decorate('slanSettings', { host, port });
-  app.decorate('slanVersion', options.version ?? SLAN_VERSION);
-  app.decorate('slanTerminalManager', terminalManager);
+  app.decorate('loomSettings', { host, port });
+  app.decorate('loomVersion', options.version ?? LOOM_VERSION);
+  app.decorate('loomTerminalManager', terminalManager);
 
   await app.register(fastifyWebsocket);
 
@@ -368,7 +368,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   await app.register(routes, {
     configStore: options.configStore ?? createConfigStore({ env }),
-    version: options.version ?? SLAN_VERSION,
+    version: options.version ?? LOOM_VERSION,
     port,
     terminalManager,
     ...(options.getActiveRun === undefined ? {} : { getActiveRun: options.getActiveRun }),
@@ -427,8 +427,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
 declare module 'fastify' {
   interface FastifyInstance {
-    slanSettings: ServerSettings;
-    slanVersion: string;
-    slanTerminalManager: TerminalManager;
+    loomSettings: ServerSettings;
+    loomVersion: string;
+    loomTerminalManager: TerminalManager;
   }
 }

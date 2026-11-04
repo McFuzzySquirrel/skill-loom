@@ -26,7 +26,7 @@ import {
 
 export const COPILOT_HARNESS = 'copilot' as const;
 
-/** Default executable name. Slan config can override it through `executable`. */
+/** Default executable name. Skill Loom config can override it through `executable`. */
 export const COPILOT_EXECUTABLE = 'copilot';
 
 /** Exact argument array for discovery. Never joined into a shell string. */
@@ -95,7 +95,7 @@ export type CopilotCommandRunner = (
 export interface CopilotScanOptions {
   /** Absolute project directory. It also becomes the child process cwd. */
   projectPath: string;
-  /** Executable override from Slan config. Defaults to `copilot`. */
+  /** Executable override from Skill Loom config. Defaults to `copilot`. */
   executable?: string;
   /** Command timeout. Defaults to `DEFAULT_COPILOT_TIMEOUT_MS`. */
   timeoutMs?: number;

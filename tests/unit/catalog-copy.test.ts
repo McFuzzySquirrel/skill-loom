@@ -15,7 +15,7 @@ let projectPath: string;
 let sourcePath: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'slan-catalog-copy-'));
+  root = await mkdtemp(join(tmpdir(), 'loom-catalog-copy-'));
   projectPath = join(root, 'project');
   sourcePath = join(root, 'personal-skills', 'release-notes');
   await mkdir(projectPath, { recursive: true });

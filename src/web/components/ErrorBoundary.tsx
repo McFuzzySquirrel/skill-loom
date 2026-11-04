@@ -22,7 +22,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
     // The message is already visible to the user; this only aids local debugging.
-    console.error('Slan UI error', error, info.componentStack);
+    console.error('Skill Loom UI error', error, info.componentStack);
   }
 
   private readonly handleRetry = () => {

@@ -138,9 +138,9 @@ interface ProjectSummary {
   lastOpenedAt: string;
   isGitRepo: boolean;
   gitInitialized: boolean;
-  slanPresent: boolean;
-  slanDirectory: string | null;
-  slanGitignoreCreated: boolean;
+  loomPresent: boolean;
+  loomDirectory: string | null;
+  loomGitignoreCreated: boolean;
   chainCount: number;
   /** False when the count was not returned by the server on this view. */
   chainCountKnown: boolean;
@@ -160,10 +160,10 @@ function summaryFromRegistration(project: ProjectRegistration): ProjectSummary {
     lastOpenedAt: project.lastOpenedAt,
     isGitRepo: project.isGitRepo,
     gitInitialized: project.gitInitialized,
-    slanPresent: true,
-    slanDirectory: project.slan.directory,
-    slanGitignoreCreated: project.slan.gitignoreCreated,
-    chainCount: project.slan.chainCount,
+    loomPresent: true,
+    loomDirectory: project.loom.directory,
+    loomGitignoreCreated: project.loom.gitignoreCreated,
+    chainCount: project.loom.chainCount,
     chainCountKnown: true,
   };
 }
@@ -173,8 +173,8 @@ function summaryFromListing(
   listing: DirectoryListing,
 ): ProjectSummary {
   const gitEntry = listing.entries.find((entry) => entry.name === '.git');
-  const slanEntry = listing.entries.find(
-    (entry) => entry.name === '.slan' && entry.isDirectory,
+  const loomEntry = listing.entries.find(
+    (entry) => entry.name === '.loom' && entry.isDirectory,
   );
 
   return {
@@ -184,9 +184,9 @@ function summaryFromListing(
     lastOpenedAt: project.lastOpenedAt,
     isGitRepo: gitEntry !== undefined,
     gitInitialized: false,
-    slanPresent: slanEntry !== undefined,
-    slanDirectory: slanEntry?.path ?? null,
-    slanGitignoreCreated: false,
+    loomPresent: loomEntry !== undefined,
+    loomDirectory: loomEntry?.path ?? null,
+    loomGitignoreCreated: false,
     chainCount: 0,
     chainCountKnown: false,
   };
@@ -369,28 +369,28 @@ export function ProjectPage({ projectId }: { projectId: string }) {
           </dd>
         </div>
         <div>
-          <dt>.slan</dt>
+          <dt>.loom</dt>
           <dd>
-            {summary.slanPresent ? (
-              <span className="status-tag status-tag--ok" data-testid="project-slan-state">
+            {summary.loomPresent ? (
+              <span className="status-tag status-tag--ok" data-testid="project-loom-state">
                 <span aria-hidden="true">✓</span> Initialized
               </span>
             ) : (
               <span
                 className="status-tag status-tag--warning"
-                data-testid="project-slan-state"
+                data-testid="project-loom-state"
               >
                 <span aria-hidden="true">○</span> Not detected
               </span>
             )}
-            {summary.slanDirectory !== null ? (
+            {summary.loomDirectory !== null ? (
               <p className="field__hint">
-                <code data-testid="project-slan-directory">{summary.slanDirectory}</code>
+                <code data-testid="project-loom-directory">{summary.loomDirectory}</code>
               </p>
             ) : null}
-            {summary.slanGitignoreCreated ? (
+            {summary.loomGitignoreCreated ? (
               <p className="field__hint">
-                Created <code>.slan/.gitignore</code> with <code>runs/</code>.
+                Created <code>.loom/.gitignore</code> with <code>runs/</code>.
               </p>
             ) : null}
           </dd>

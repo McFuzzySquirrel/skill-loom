@@ -25,7 +25,7 @@ let root: string;
 let project: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'slan-catalog-copilot-'));
+  root = await mkdtemp(join(tmpdir(), 'loom-catalog-copilot-'));
   project = join(root, 'project');
   await mkdir(project, { recursive: true });
 });

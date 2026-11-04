@@ -5,7 +5,7 @@ import './styles/theme.css';
 
 const container = document.getElementById('root');
 if (container === null) {
-  throw new Error('Slan could not start: the #root element is missing from index.html.');
+  throw new Error('Skill Loom could not start: the #root element is missing from index.html.');
 }
 
 createRoot(container).render(

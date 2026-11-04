@@ -13,9 +13,9 @@ $ROOT/
 │   └── fake-copilot
 └── projects/
     ├── project-alpha/
-    │   ├── .opencode/skills/slan-e2e-alpha/SKILL.md
-    │   ├── .agents/skills/slan-e2e-alpha/SKILL.md
-    │   └── .slan/
+    │   ├── .opencode/skills/loom-e2e-alpha/SKILL.md
+    │   ├── .agents/skills/loom-e2e-alpha/SKILL.md
+    │   └── .loom/
     └── project-bravo/
 ```
 
@@ -28,10 +28,10 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 export default async function globalSetup() {
-  const root = await mkdtemp(join(tmpdir(), "slan-e2e-"));
-  process.env.SLAN_E2E_ROOT = root;
-  process.env.SLAN_CONFIG_DIR = join(root, "config");
-  await mkdir(process.env.SLAN_CONFIG_DIR, { recursive: true });
+  const root = await mkdtemp(join(tmpdir(), "loom-e2e-"));
+  process.env.LOOM_E2E_ROOT = root;
+  process.env.LOOM_CONFIG_DIR = join(root, "config");
+  await mkdir(process.env.LOOM_CONFIG_DIR, { recursive: true });
   await mkdir(join(root, "bin"), { recursive: true });
   await writeFile(join(root, "config", "config.json"), JSON.stringify({
     version: 1,
@@ -48,7 +48,7 @@ export default async function globalSetup() {
 }
 ```
 
-`globalTeardown` reads `SLAN_E2E_ROOT` and removes it. Register cleanup even when setup fails partway.
+`globalTeardown` reads `LOOM_E2E_ROOT` and removes it. Register cleanup even when setup fails partway.
 
 ## Config rules
 
@@ -63,7 +63,7 @@ export default async function globalSetup() {
 - Probe skill `name` equals its parent directory.
 - Include a duplicate-name package only when testing collision badges.
 - Include a malformed package only when testing warnings.
-- Do not pre-create `.slan/runs` unless the spec tests recovery.
+- Do not pre-create `.loom/runs` unless the spec tests recovery.
 
 ## Cleanup rules
 

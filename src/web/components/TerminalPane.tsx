@@ -193,7 +193,21 @@ export function TerminalPane({
     };
     terminal.attachCustomKeyEventHandler(keyHandler);
 
-    const resizeObserver = new ResizeObserver(() => {
+    // Only re-fit when the observed size actually changes. Repeated no-op
+    // notifications would otherwise re-send resize messages and, on a
+    // content-sized container, feed xterm's row count back into its height.
+    let lastWidth = 0;
+    let lastHeight = 0;
+    const resizeObserver = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (rect === undefined) {
+        return;
+      }
+      if (rect.width === lastWidth && rect.height === lastHeight) {
+        return;
+      }
+      lastWidth = rect.width;
+      lastHeight = rect.height;
       fit();
     });
     resizeObserver.observe(container);

@@ -14,7 +14,7 @@ let configDirectory: string;
 let apps: FastifyInstance[];
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'slan-global-chains-'));
+  root = await mkdtemp(join(tmpdir(), 'loom-global-chains-'));
   configDirectory = join(root, 'config');
   apps = [];
 });
@@ -31,7 +31,7 @@ async function buildTestApp(): Promise<FastifyInstance> {
     env: {},
     serveStatic: false,
     configStore: createConfigStore({
-      env: { SLAN_CONFIG_DIR: configDirectory },
+      env: { LOOM_CONFIG_DIR: configDirectory },
       homeDirectory: () => join(root, 'home'),
     }),
   });

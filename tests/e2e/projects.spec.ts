@@ -7,7 +7,7 @@ import { join } from 'node:path';
 /**
  * Browser coverage for PROJ-03.
  *
- * The Playwright config supplies an isolated SLAN_CONFIG_DIR and HOME, and this
+ * The Playwright config supplies an isolated LOOM_CONFIG_DIR and HOME, and this
  * spec builds every project fixture under its own temporary root. No test here
  * reads or writes the developer's real configuration or skills.
  */
@@ -27,7 +27,7 @@ function uniqueName(base: string): string {
 }
 
 test.beforeAll(async () => {
-  fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'slan-projects-e2e-')));
+  fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'loom-projects-e2e-')));
 
   existingRepo = join(fixtureRoot, 'existing-repo');
   existingPlain = join(fixtureRoot, 'existing-plain');
@@ -149,13 +149,13 @@ test.describe('Project selection screen', () => {
     ).toBeVisible();
     await expect(page.getByTestId('project-canonical-path')).toHaveText(existingRepo);
     await expect(page.getByText('Repository initialized')).toBeVisible();
-    await expect(page.getByTestId('project-slan-state')).toContainText('Initialized');
-    await expect(page.getByTestId('project-slan-directory')).toHaveText(
-      join(existingRepo, '.slan'),
+    await expect(page.getByTestId('project-loom-state')).toContainText('Initialized');
+    await expect(page.getByTestId('project-loom-directory')).toHaveText(
+      join(existingRepo, '.loom'),
     );
 
-    expect(existsSync(join(existingRepo, '.slan', '.gitignore'))).toBe(true);
-    const gitignore = await readFile(join(existingRepo, '.slan', '.gitignore'), 'utf8');
+    expect(existsSync(join(existingRepo, '.loom', '.gitignore'))).toBe(true);
+    const gitignore = await readFile(join(existingRepo, '.loom', '.gitignore'), 'utf8');
     expect(gitignore).toBe('runs/\n');
 
     // A reload reconstructs the same facts without replaying the registration.
@@ -167,7 +167,7 @@ test.describe('Project selection screen', () => {
     await expect(page.getByTestId('project-git-state')).toContainText(
       'Repository initialized',
     );
-    await expect(page.getByTestId('project-slan-state')).toContainText('Initialized');
+    await expect(page.getByTestId('project-loom-state')).toContainText('Initialized');
 
     // The same project reopens through the recent-projects column.
     await page.getByRole('link', { name: 'Open another project' }).click();
@@ -209,10 +209,10 @@ test.describe('Project selection screen', () => {
     await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
     await expect(page.getByTestId('project-canonical-path')).toHaveText(target);
     await expect(page.getByText('Repository initialized')).toBeVisible();
-    await expect(page.getByTestId('project-slan-state')).toContainText('Initialized');
+    await expect(page.getByTestId('project-loom-state')).toContainText('Initialized');
 
     expect(existsSync(join(target, '.git'))).toBe(true);
-    expect(existsSync(join(target, '.slan', '.gitignore'))).toBe(true);
+    expect(existsSync(join(target, '.loom', '.gitignore'))).toBe(true);
   });
 
   test('creates a project without git init and opens it', async ({ page }) => {
@@ -230,10 +230,10 @@ test.describe('Project selection screen', () => {
     await expect(page).toHaveURL(/\/projects\/[^/]+$/);
     await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
     await expect(page.getByText('Not a git repository')).toBeVisible();
-    await expect(page.getByTestId('project-slan-state')).toContainText('Initialized');
+    await expect(page.getByTestId('project-loom-state')).toContainText('Initialized');
 
     expect(existsSync(join(target, '.git'))).toBe(false);
-    expect(existsSync(join(target, '.slan'))).toBe(true);
+    expect(existsSync(join(target, '.loom'))).toBe(true);
   });
 
   test('shows loading, empty, and server-error states distinctly', async ({ page }) => {

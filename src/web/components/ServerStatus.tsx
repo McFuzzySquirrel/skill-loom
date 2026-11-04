@@ -20,7 +20,7 @@ export function ServerStatus() {
     }
     if (state.status === 'ready' && hadError.current) {
       hadError.current = false;
-      announce(`Server connection restored. Slan ${state.data.version} is responding.`);
+      announce(`Server connection restored. Skill Loom ${state.data.version} is responding.`);
     }
   }, [announce, state]);
 

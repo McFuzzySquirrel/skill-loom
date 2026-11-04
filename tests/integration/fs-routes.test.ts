@@ -16,13 +16,13 @@ let restoreModePaths: string[];
 const unprivilegedIt = process.getuid?.() === 0 ? it.skip : it;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'slan-fs-routes-'));
+  root = await mkdtemp(join(tmpdir(), 'loom-fs-routes-'));
   project = join(root, 'project');
   restoreModePaths = [];
 
   await mkdir(join(project, 'Alpha'), { recursive: true });
   await mkdir(join(project, 'Alpha', '.git'), { recursive: true });
-  await mkdir(join(project, 'Alpha', '.slan'), { recursive: true });
+  await mkdir(join(project, 'Alpha', '.loom'), { recursive: true });
   await mkdir(join(project, 'beta'), { recursive: true });
   await writeFile(join(project, 'A.txt'), 'first file\n', 'utf8');
   await writeFile(join(project, 'b.txt'), 'second file\n', 'utf8');
@@ -31,7 +31,7 @@ beforeEach(async () => {
     env: {},
     serveStatic: false,
     configStore: createConfigStore({
-      env: { SLAN_CONFIG_DIR: join(root, 'config') },
+      env: { LOOM_CONFIG_DIR: join(root, 'config') },
       homeDirectory: () => join(root, 'home'),
     }),
   });
@@ -87,19 +87,19 @@ describe('GET /api/fs through the composition root', () => {
       path: join(listing.path, 'Alpha'),
       isDirectory: true,
       isGitRepo: true,
-      hasSlan: true,
+      hasLoom: true,
     });
     expect(listing.entries[1]).toMatchObject({
       name: 'beta',
       isDirectory: true,
       isGitRepo: false,
-      hasSlan: false,
+      hasLoom: false,
     });
     expect(listing.entries[2]).toMatchObject({
       name: 'A.txt',
       isDirectory: false,
       isGitRepo: false,
-      hasSlan: false,
+      hasLoom: false,
     });
   });
 

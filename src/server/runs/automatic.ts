@@ -242,7 +242,7 @@ export interface AutomaticRunnerOptions {
   readonly now?: (() => Date) | undefined;
   /** Session id seam used by fresh and fork plans. */
   readonly createSessionId?: (() => string) | undefined;
-  /** Stable run terminal id. Defaults to `slan_run_<runId>`. */
+  /** Stable run terminal id. Defaults to `loom_run_<runId>`. */
   readonly terminalId?: string | undefined;
   readonly cols?: number | undefined;
   readonly rows?: number | undefined;
@@ -387,7 +387,7 @@ export class AutomaticRunner {
     this.spawn = options.spawn;
     this.clock = options.now ?? (() => new Date());
     this.createSessionId = options.createSessionId ?? (() => this.adapter.createSessionId());
-    this.requestedTerminalId = options.terminalId ?? `slan_run_${run.id}`;
+    this.requestedTerminalId = options.terminalId ?? `loom_run_${run.id}`;
     assertTerminalId(this.requestedTerminalId);
     this.cols = positiveDimension(options.cols, AUTOMATIC_TERMINAL_COLS, 'cols');
     this.rows = positiveDimension(options.rows, AUTOMATIC_TERMINAL_ROWS, 'rows');

@@ -465,7 +465,7 @@ export function RunStartPage({
               </div>
             </dl>
             <p className="field__hint">
-              Skills are model-invoked context. Slan guarantees prompt order, not that the harness
+              Skills are model-invoked context. Skill Loom guarantees prompt order, not that the harness
               fires a named skill.
             </p>
           </section>

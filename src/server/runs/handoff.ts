@@ -7,7 +7,7 @@ import {
 /**
  * Deterministic handoff notes.
  *
- * A handoff note is *not* a native session fork. Slan starts a fresh session
+ * A handoff note is *not* a native session fork. Skill Loom starts a fresh session
  * and seeds it with a bounded summary of the previous step: its position,
  * label, skill, instruction, recorded status, and the bounded terminal tail.
  * The note contains no timestamps, ids from the environment, or randomness, so

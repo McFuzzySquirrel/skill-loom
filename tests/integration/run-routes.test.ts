@@ -46,7 +46,7 @@ import {
 
 const CREATED_AT = '2026-11-04T12:00:00.000Z';
 const RUN_ID_PATTERN = /^run-test-\d+$/;
-const TERMINAL_ID_PREFIX = 'slan_run_';
+const TERMINAL_ID_PREFIX = 'loom_run_';
 const OSC_WORKING = '\x1b]7501;state=working\x07';
 const OSC_IDLE = '\x1b]7501;state=idle\x07';
 
@@ -302,7 +302,7 @@ interface AppHarness {
 async function buildTestApp(options: { extraEnv?: NodeJS.ProcessEnv } = {}): Promise<AppHarness> {
   const runner = createRunner();
   const configStore = createConfigStore({
-    env: { SLAN_CONFIG_DIR: configDirectory },
+    env: { LOOM_CONFIG_DIR: configDirectory },
     homeDirectory: () => home,
   });
   const app = await buildApp({
@@ -606,7 +606,7 @@ function eventsUrl(baseUrl: string, runId: string): string {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'slan-run-routes-'));
+  root = await mkdtemp(join(tmpdir(), 'loom-run-routes-'));
   configDirectory = join(root, 'config');
   home = join(root, 'home');
   fakeBin = join(root, 'bin');
@@ -950,7 +950,10 @@ describe('GET /api/runs and POST /api/runs/:runId/actions', () => {
     expect(completed.steps.map((step) => step.status)).toEqual(['done', 'done']);
     expect(completed.steps.every((step) => step.reason === 'COMPLETION_SIGNAL')).toBe(true);
     expect(terminal.closed).toContain(terminalIdFor(run.id));
-    expect(terminal.sessions.has(terminalIdFor(run.id))).toBe(false);
+    await waitFor(
+      async () => (terminal.sessions.has(terminalIdFor(run.id)) ? null : true),
+      'the automatic run terminal to be removed',
+    );
 
     const active = (await getActiveRun(harness.app)).body as RunActiveState;
     expect(active.active).toBe(false);

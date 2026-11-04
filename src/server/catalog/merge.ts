@@ -44,7 +44,7 @@ export const CATALOG_PERF_BUDGET_MS = 3_000;
 /** One harness adapter, registered without the route knowing the harness name. */
 export interface CatalogAdapter {
   harness: SkillHarness;
-  /** True when Slan-configured extra directories belong in this harness catalog. */
+  /** True when Loom-configured extra directories belong in this harness catalog. */
   usesExtraDirectories: boolean;
   discover(request: CatalogDiscoveryRequest): Promise<SkillDiscoveryResult>;
 }

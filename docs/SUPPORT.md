@@ -11,7 +11,7 @@ requirements and execution tooling have been retired.
 | backend-engineer | `src/server/**`, `src/shared/**`, `tests/unit/**`, `tests/integration/**` | server routes, config, persistence, catalog, preflight, PTY, runs |
 | frontend-engineer | `src/web/**`, `tests/e2e/**` | UI, accessibility, keyboard, browser tests |
 | integration-engineer | `scripts/live-discovery.ts`, `scripts/live-execution.ts`, `docs/evidence/**` | real OpenCode and Copilot CLI behaviour |
-| platform-engineer | `package.json`, `tsconfig*.json`, `vite.config.ts`, `vitest.config.ts`, `playwright.config.ts`, `scripts/check-docs.mjs`, `README.md`, `docs/OPERATIONS.md` | build, tooling, dependency pins, docs gate |
+| platform-engineer | `package.json`, `tsconfig*.json`, `vite.config.ts`, `vitest.config.ts`, `playwright.config.ts`, `scripts/check-docs.mjs`, `README.md`, `CHANGELOG.md`, `docs/OPERATIONS.md`, `docs/user-guide.md`, `docs/admin-guide.md`, `docs/adr/**`, `docs/releases/**` | build, tooling, dependency pins, docs gate |
 
 ## Ownership
 
@@ -27,6 +27,7 @@ requirements and execution tooling have been retired.
 | `scripts/live-execution.ts` | integration-engineer | `npm run test:live:execution` |
 | `scripts/check-docs.mjs` | platform-engineer | `npm run check` |
 | `README.md`, `docs/OPERATIONS.md` | platform-engineer | `npm run check` |
+| `CHANGELOG.md`, `docs/user-guide.md`, `docs/admin-guide.md`, `docs/adr/**`, `docs/releases/**` | platform-engineer | review plus `npm run check` for the README and operations contract |
 | build and test configuration | platform-engineer | `npm run typecheck` |
 
 ## Intake

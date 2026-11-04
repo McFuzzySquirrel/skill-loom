@@ -1,11 +1,11 @@
 ---
 name: playwright-harness-fixtures
-description: "Playwright fixture procedure for isolated Slan configuration, temporary projects and skill packages, and fake harness executables that emit OSC working-to-idle or hold for supervised confirmation."
+description: "Playwright fixture procedure for isolated Skill Loom configuration, temporary projects and skill packages, and fake harness executables that emit OSC working-to-idle or hold for supervised confirmation."
 ---
 
 # Skill: Playwright Harness Fixtures
 
-Use when writing or repairing Slan browser tests that touch catalog discovery, preflight, chain authoring, or run execution. Every test must run against a temporary project and an isolated `SLAN_CONFIG_DIR`, with a fake harness executable whose signals are accurate enough to catch real advancement bugs.
+Use when writing or repairing Skill Loom browser tests that touch catalog discovery, preflight, chain authoring, or run execution. Every test must run against a temporary project and an isolated `LOOM_CONFIG_DIR`, with a fake harness executable whose signals are accurate enough to catch real advancement bugs.
 
 Load `references/fixture-layout.md` when creating the global setup, temp directories, config file, and skill packages.
 Load `references/fake-harness.md` when writing the fake OpenCode/Copilot executable.
@@ -20,9 +20,9 @@ Load `references/spec-patterns.md` when writing a spec for catalog, preflight, s
 Create a root under the OS temp directory in Playwright global setup and export it to the app and tests:
 
 ```ts
-const root = await mkdtemp(join(tmpdir(), "slan-e2e-"));
-process.env.SLAN_E2E_ROOT = root;
-process.env.SLAN_CONFIG_DIR = join(root, "config");
+const root = await mkdtemp(join(tmpdir(), "loom-e2e-"));
+process.env.LOOM_E2E_ROOT = root;
+process.env.LOOM_CONFIG_DIR = join(root, "config");
 ```
 
 Playwright's `webServer` inherits the environment. Set `reuseExistingServer: false` so a developer's running server cannot answer the test. If tests run in parallel, then give each test its own project directory under the root; the server config remains shared.
@@ -37,8 +37,8 @@ Write the global config before the app starts so discovery and preflight resolve
 {
   "version": 1,
   "harnessCommands": {
-    "opencode": "/tmp/slan-e2e-XXXX/bin/fake-opencode",
-    "copilot": "/tmp/slan-e2e-XXXX/bin/fake-copilot"
+    "opencode": "/tmp/loom-e2e-XXXX/bin/fake-opencode",
+    "copilot": "/tmp/loom-e2e-XXXX/bin/fake-copilot"
   },
   "extraSkillDirectories": [],
   "recentProjects": [],
@@ -55,11 +55,11 @@ Use absolute paths. If the app resolves from `PATH` instead, then prepend the fa
 Create real `SKILL.md` packages in the temporary project:
 
 ```text
-$ROOT/project-alpha/.opencode/skills/slan-e2e-alpha/SKILL.md
-$ROOT/project-alpha/.agents/skills/slan-e2e-alpha/SKILL.md
+$ROOT/project-alpha/.opencode/skills/loom-e2e-alpha/SKILL.md
+$ROOT/project-alpha/.agents/skills/loom-e2e-alpha/SKILL.md
 ```
 
-Frontmatter `name` must equal the parent directory. Add a second package with a duplicate name under a different source when testing duplicate badges, and a deliberately malformed package when testing warnings. Include a `.slan/chains` fixture only when the spec needs a pre-saved chain.
+Frontmatter `name` must equal the parent directory. Add a second package with a duplicate name under a different source when testing duplicate badges, and a deliberately malformed package when testing warnings. Include a `.loom/chains` fixture only when the spec needs a pre-saved chain.
 
 **Output:** a project whose catalog is deterministic and whose warnings are intentional.
 
@@ -69,7 +69,7 @@ Create an executable Node script with a shebang, `chmod 0o755`, and modes select
 
 ```js
 #!/usr/bin/env node
-const mode = process.env.SLAN_FAKE_MODE ?? "auto";
+const mode = process.env.LOOM_FAKE_MODE ?? "auto";
 process.stdout.write(`prompt: ${process.argv.slice(2).join(" ")}\r\n`);
 if (mode === "fail") process.exit(1);
 if (mode === "supervised") { setInterval(() => {}, 1 << 30); }
@@ -96,8 +96,8 @@ webServer: {
   url: "http://127.0.0.1:7373/api/health",
   reuseExistingServer: false,
   env: {
-    SLAN_CONFIG_DIR: process.env.SLAN_CONFIG_DIR!,
-    SLAN_PORT: "7373",
+    LOOM_CONFIG_DIR: process.env.LOOM_CONFIG_DIR!,
+    LOOM_PORT: "7373",
   },
 }
 ```
@@ -143,7 +143,7 @@ Run the focused spec twice to catch leaked state. If the second run fails, then 
 
 After completing the process, verify:
 
-- [ ] The app starts with `SLAN_CONFIG_DIR` under a temporary root and `reuseExistingServer: false`.
+- [ ] The app starts with `LOOM_CONFIG_DIR` under a temporary root and `reuseExistingServer: false`.
 - [ ] The config points at absolute fake harness paths and `GET /api/health` reports the isolated config directory.
 - [ ] Probe skills have frontmatter `name` matching their parent directory; a malformed package produces a visible warning without hiding valid entries.
 - [ ] The fake harness is executable, writes raw OSC, and stays alive in supervised mode.
@@ -151,6 +151,6 @@ After completing the process, verify:
 - [ ] A failure spec shows Retry, Skip, and Abort and does not auto-retry.
 - [ ] The temporary root and all fake processes are removed after success and after failure.
 - [ ] `npx playwright test tests/e2e/<spec>.spec.ts` passes twice from a clean temp root.
-- [ ] Run the self-check `rg -n "snapshotDir|test-results|SLAN_CONFIG_DIR" playwright.config.ts tests/e2e` and confirm no test points at the real config or a user project.
+- [ ] Run the self-check `rg -n "snapshotDir|test-results|LOOM_CONFIG_DIR" playwright.config.ts tests/e2e` and confirm no test points at the real config or a user project.
 
 If a spec passes only on the first run, find the leaked state before adding a retry. If the fake harness is reported missing, check the config path and the execute bit before changing the app.

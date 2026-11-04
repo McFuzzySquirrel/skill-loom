@@ -223,8 +223,8 @@ export function ChainList({ projectId, api = chainsApi }: ChainListProps) {
             Chains
           </h2>
           <p className="field__hint">
-            Chains are saved as project-local JSON inside <code>.slan/chains</code>. Skills
-            are model-invoked context: Slan guarantees prompt order, not that a harness
+            Chains are saved as project-local JSON inside <code>.loom/chains</code>. Skills
+            are model-invoked context: Skill Loom guarantees prompt order, not that a harness
             loads a named skill.
           </p>
         </div>
@@ -450,7 +450,7 @@ export function ChainList({ projectId, api = chainsApi }: ChainListProps) {
                     <p>
                       Delete <strong>{chain.name}</strong>? This removes only{' '}
                       <code>
-                        .slan/chains/{chain.id}.json
+                        .loom/chains/{chain.id}.json
                       </code>{' '}
                       and cannot be undone. Other chains and project files are not
                       affected.

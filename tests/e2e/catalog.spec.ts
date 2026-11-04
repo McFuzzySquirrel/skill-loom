@@ -6,7 +6,7 @@ import { join } from 'node:path';
 /**
  * Browser coverage for CAT-04 (skill catalog).
  *
- * Playwright supplies an isolated SLAN_CONFIG_DIR and HOME, and this spec keeps
+ * Playwright supplies an isolated LOOM_CONFIG_DIR and HOME, and this spec keeps
  * every project and extra-directory fixture under its own temporary root. The
  * catalog is driven through src/web/App.tsx and the real server API; only the
  * failure test intercepts a request to force the error state.
@@ -36,7 +36,7 @@ async function writeSkill(
 }
 
 test.beforeAll(async () => {
-  fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'slan-catalog-e2e-')));
+  fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'loom-catalog-e2e-')));
   projectPath = join(fixtureRoot, projectName);
   extraDirectory = join(fixtureRoot, 'extra-skills');
   brokenSkillPath = join(projectPath, '.opencode', 'skills', 'broken');
@@ -46,7 +46,7 @@ test.beforeAll(async () => {
     join(projectPath, '.opencode', 'skills', 'deploy'),
     'deploy',
     'Ships releases to production',
-    'Deploy instructions\n<em>literal tag</em>\n<script>window.__slan_evil = true</script>',
+    'Deploy instructions\n<em>literal tag</em>\n<script>window.__loom_evil = true</script>',
   );
   await writeSkill(
     join(projectPath, '.opencode', 'skills', 'shared-name'),
@@ -205,9 +205,9 @@ test.describe('Skill catalog', () => {
     await expect(detail).toBeVisible();
     await expect(detail).toContainText('Deploy instructions');
     await expect(detail).toContainText('<em>literal tag</em>');
-    await expect(detail).toContainText('<script>window.__slan_evil = true</script>');
+    await expect(detail).toContainText('<script>window.__loom_evil = true</script>');
     await expect(detail.locator('script')).toHaveCount(0);
-    expect(await page.evaluate(() => '__slan_evil' in window)).toBe(false);
+    expect(await page.evaluate(() => '__loom_evil' in window)).toBe(false);
 
     // Collapsing removes the detail region and restores the button state.
     await toggle.click();
@@ -283,7 +283,7 @@ test.describe('Skill catalog', () => {
     const project = await openFixtureProject(request);
 
     // A previous interrupted run of this spec may have left the directory
-    // configured. Removal only touches Slan config, never the fixture files.
+    // configured. Removal only touches Skill Loom config, never the fixture files.
     await request.delete(
       `/api/settings/extra-skill-directories?path=${encodeURIComponent(extraDirectory)}`,
     );
@@ -297,7 +297,7 @@ test.describe('Skill catalog', () => {
     await expect(
       dialog.getByRole('heading', { name: 'Extra skill directories' }),
     ).toBeFocused();
-    await expect(dialog).toContainText('Changes are global to Slan');
+    await expect(dialog).toContainText('Changes are global to Skill Loom');
 
     const input = dialog.getByTestId('extra-directory-input');
     await input.fill('relative/skills');
@@ -328,17 +328,17 @@ test.describe('Skill catalog', () => {
     // Refresh control must also show the change.
     await page.getByTestId('catalog-refresh').click();
     const extraGroup = page.locator(
-      '[data-testid="catalog-group"][data-source="slan-extra"]',
+      '[data-testid="catalog-group"][data-source="loom-extra"]',
     );
     await expect(extraGroup).toBeVisible();
-    await expect(extraGroup.getByText('Slan extra', { exact: true }).first()).toBeVisible();
+    await expect(extraGroup.getByText('Loom extra', { exact: true }).first()).toBeVisible();
     await expect(rowFor(page, 'release-notes')).toBeVisible();
 
     const projectShared = page.locator(
       '[data-testid="skill-row"][data-source="project"][data-name="shared-name"]',
     );
     const extraShared = page.locator(
-      '[data-testid="skill-row"][data-source="slan-extra"][data-name="shared-name"]',
+      '[data-testid="skill-row"][data-source="loom-extra"][data-name="shared-name"]',
     );
     await expect(projectShared).toHaveCount(1);
     await expect(extraShared).toHaveCount(1);
@@ -392,7 +392,7 @@ test.describe('Skill catalog', () => {
     try {
       await gotoCatalog(page, project.id);
       const extraRow = page.locator(
-        '[data-testid="skill-row"][data-source="slan-extra"][data-name="release-notes"]',
+        '[data-testid="skill-row"][data-source="loom-extra"][data-name="release-notes"]',
       );
       await expect(extraRow).toBeVisible();
       await extraRow.locator('.skill-row__toggle').click();

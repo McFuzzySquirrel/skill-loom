@@ -165,7 +165,7 @@ function isNonEmptyString(value: unknown): value is string {
 
 function invalidResponse(what: string): ApiClientError {
   return new ApiClientError(
-    `The Slan server returned an unexpected ${what} response.`,
+    `The Skill Loom server returned an unexpected ${what} response.`,
     { code: 'INVALID_RESPONSE', status: 200 },
   );
 }
@@ -411,7 +411,7 @@ export interface NewChainDraftRoute {
 /**
  * Browser route that opens the builder on an unsaved draft. The builder owns
  * persistence so an abandoned New Chain dialog never leaves an empty document
- * in the project's `.slan/chains` directory.
+ * in the project's `.loom/chains` directory.
  */
 export function newChainBuilderPath(
   projectId: string,

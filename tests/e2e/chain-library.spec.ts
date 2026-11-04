@@ -13,9 +13,9 @@ import { join } from 'node:path';
 /**
  * Browser coverage for CHAIN-04 (project chain library).
  *
- * Playwright supplies an isolated SLAN_CONFIG_DIR and HOME. Every project,
+ * Playwright supplies an isolated LOOM_CONFIG_DIR and HOME. Every project,
  * chain document, and corrupt fixture used here lives under this spec's own
- * temporary root, so no test reads or writes the developer's real Slan config
+ * temporary root, so no test reads or writes the developer's real Skill Loom config
  * or skills. The library is driven through src/web/App.tsx and the real API.
  */
 
@@ -131,7 +131,7 @@ async function tabToFocused(page: Page, target: Locator, description: string): P
 }
 
 test.beforeAll(async () => {
-  fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'slan-chain-library-e2e-')));
+  fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'loom-chain-library-e2e-')));
 });
 
 test.afterAll(async () => {
@@ -184,7 +184,7 @@ test.describe('Project chain library', () => {
 
     // A New Chain draft is editor state, not a chain file. Nothing is written
     // into the project's chains directory until the builder saves.
-    const chainsDirectory = join(projectPath, '.slan', 'chains');
+    const chainsDirectory = join(projectPath, '.loom', 'chains');
     if (existsSync(chainsDirectory)) {
       expect(await readdir(chainsDirectory)).toEqual([]);
     }
@@ -220,7 +220,7 @@ test.describe('Project chain library', () => {
     // A corrupt sibling file must surface as a warning without hiding either
     // valid chain. This writes a fixture file directly, never through the UI.
     await writeFile(
-      join(projectPath, '.slan', 'chains', 'corrupt-chain.json'),
+      join(projectPath, '.loom', 'chains', 'corrupt-chain.json'),
       '{"version": 1, "id": "corrupt-chain", "name": ',
       'utf8',
     );
@@ -343,7 +343,7 @@ test.describe('Project chain library', () => {
 
     const remaining = await listChains(request, project.id);
     expect(remaining.chains.map((chain) => chain.id)).toEqual([original.id]);
-    expect(await readdir(join(projectPath, '.slan', 'chains'))).toEqual([
+    expect(await readdir(join(projectPath, '.loom', 'chains'))).toEqual([
       `${original.id}.json`,
     ]);
   });

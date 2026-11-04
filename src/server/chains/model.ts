@@ -4,7 +4,7 @@ import { HARNESS_IDS, HarnessIdSchema, type HarnessId } from '../config/schema.j
 /**
  * Current on-disk chain version.
  *
- * Chains are stored as versioned JSON so a later Slan can migrate an older
+ * Chains are stored as versioned JSON so a later Skill Loom can migrate an older
  * document deliberately instead of guessing at its shape. An unversioned
  * document is the pre-versioning draft format and is migrated by stamping the
  * current version; any other version is rejected rather than reinterpreted.

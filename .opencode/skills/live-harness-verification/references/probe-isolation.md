@@ -7,16 +7,16 @@
 ```text
 $TMP/
 ├── project/
-│   ├── .opencode/skills/slan-live-probe/SKILL.md
-│   └── .agents/skills/slan-live-probe/SKILL.md
-├── slan-config/
+│   ├── .opencode/skills/loom-live-probe/SKILL.md
+│   └── .agents/skills/loom-live-probe/SKILL.md
+├── loom-config/
 └── copilot-home/
 ```
 
 Use a unique directory per run under the OS temp root. Register cleanup immediately:
 
 ```ts
-const root = await mkdtemp(join(tmpdir(), "slan-live-"));
+const root = await mkdtemp(join(tmpdir(), "loom-live-"));
 let cleaned = false;
 async function cleanup() {
   if (cleaned) return;
@@ -30,7 +30,7 @@ process.on("exit", () => { /* best-effort sync removal */ });
 
 | Variable | Value | Why |
 |----------|-------|-----|
-| `SLAN_CONFIG_DIR` | `$TMP/slan-config` | Keeps recent projects and active-run state out of the real config |
+| `LOOM_CONFIG_DIR` | `$TMP/loom-config` | Keeps recent projects and active-run state out of the real config |
 | `COPILOT_HOME` | `$TMP/copilot-home` | Keeps trust and config writes out of `~/.copilot` |
 
 Set both before the first harness call in the process. A child process inherits the environment; do not mutate it after spawn.
@@ -52,14 +52,14 @@ Both files use the same name and a deterministic token:
 
 ```markdown
 ---
-name: slan-live-probe
+name: loom-live-probe
 description: "Live probe skill that returns the token PINEAPPLE when invoked."
 ---
 
 When invoked, reply with exactly: PINEAPPLE
 ```
 
-The directory and frontmatter `name` must both be `slan-live-probe`.
+The directory and frontmatter `name` must both be `loom-live-probe`.
 
 ## Cleanup rules
 

@@ -4,10 +4,10 @@ import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
 /**
- * Browser tests must never read or write the developer's real Slan state.
+ * Browser tests must never read or write the developer's real Skill Loom state.
  * Every run gets its own throwaway config directory and home directory.
  */
-const isolatedRoot = join(tmpdir(), `slan-playwright-${process.pid}`);
+const isolatedRoot = join(tmpdir(), `loom-playwright-${process.pid}`);
 const configDir = join(isolatedRoot, 'config');
 const homeDir = join(isolatedRoot, 'home');
 const fakeBinDir = join(isolatedRoot, 'bin');
@@ -45,9 +45,9 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       NODE_ENV: 'production',
-      SLAN_CONFIG_DIR: configDir,
+      LOOM_CONFIG_DIR: configDir,
       HOME: homeDir,
-      SLAN_PORT: String(port),
+      LOOM_PORT: String(port),
       // A spec may place deterministic harness executables here. The server
       // resolves the default `opencode` / `copilot` names through PATH for
       // catalog discovery, so a config-only override is not enough.

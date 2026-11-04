@@ -15,7 +15,7 @@ import {
   atomicWriteJson as writeJsonAtomically,
   type AtomicWriteDependencies,
 } from '../config/store.js';
-import { SLAN_DIRECTORY_NAME } from '../projects/registry.js';
+import { LOOM_DIRECTORY_NAME } from '../projects/registry.js';
 import {
   ChainError,
   ChainUnsupportedVersionError,
@@ -153,13 +153,13 @@ export type RealpathPath = (path: string) => Promise<string>;
 export interface ChainStoreOptions {
   /**
    * Registered project directory. It is canonicalized with `realpath` before
-   * any `.slan` path is derived, so a symlinked project root is handled once.
+   * any `.loom` path is derived, so a symlinked project root is handled once.
    * Exactly one of `projectPath` and `chainsDirectory` is required.
    */
   projectPath?: string;
   /**
    * Explicit chain directory for stores that are not tied to a project, such
-   * as the global template library under the Slan config directory.
+   * as the global template library under the Skill Loom config directory.
    */
   chainsDirectory?: string;
   /** Canonicalization seam for deterministic traversal tests. */
@@ -181,15 +181,15 @@ export interface ChainStore {
   delete(chainId: string): Promise<void>;
 }
 
-/** `<canonicalProject>/.slan/chains`; the input must already be canonical. */
+/** `<canonicalProject>/.loom/chains`; the input must already be canonical. */
 export function chainsDirectoryFor(projectPath: string): string {
-  return join(projectPath, SLAN_DIRECTORY_NAME, CHAINS_DIRECTORY_NAME);
+  return join(projectPath, LOOM_DIRECTORY_NAME, CHAINS_DIRECTORY_NAME);
 }
 
-/** Global chain template directory under the Slan config directory. */
+/** Global chain template directory under the Skill Loom config directory. */
 export const GLOBAL_CHAINS_DIRECTORY_NAME = 'chains';
 
-/** `<slanConfig>/chains`; the input must already be an absolute path. */
+/** `<loomConfig>/chains`; the input must already be an absolute path. */
 export function globalChainsDirectoryFor(configDirectory: string): string {
   return join(configDirectory, GLOBAL_CHAINS_DIRECTORY_NAME);
 }
@@ -482,14 +482,14 @@ class FileChainStore implements ChainStore {
       this.options.projectPath,
       this.options.realpathPath,
     );
-    const slanDirectory = join(canonicalProject, SLAN_DIRECTORY_NAME);
+    const loomDirectory = join(canonicalProject, LOOM_DIRECTORY_NAME);
     const chainsDirectory = chainsDirectoryFor(canonicalProject);
 
-    const slanState = await this.inspectEntry(slanDirectory);
-    assertNotSymlinkOrFile(slanState, slanDirectory, SLAN_DIRECTORY_NAME);
+    const loomState = await this.inspectEntry(loomDirectory);
+    assertNotSymlinkOrFile(loomState, loomDirectory, LOOM_DIRECTORY_NAME);
 
     const chainsState =
-      slanState === 'missing' ? 'missing' : await this.inspectEntry(chainsDirectory);
+      loomState === 'missing' ? 'missing' : await this.inspectEntry(chainsDirectory);
     assertNotSymlinkOrFile(chainsState, chainsDirectory, CHAINS_DIRECTORY_NAME);
 
     let exists = chainsState === 'directory';
@@ -509,13 +509,13 @@ class FileChainStore implements ChainStore {
 
     if (exists) {
       // Canonicalize the directory itself and require exact equality. A
-      // symlinked `.slan` or `chains` path resolves elsewhere and is rejected
+      // symlinked `.loom` or `chains` path resolves elsewhere and is rejected
       // before any chain file is read or written.
       const canonical = await this.canonicalizeChainsDirectory(chainsDirectory);
       if (canonical !== chainsDirectory) {
         throw new ChainStoreError(
           CHAIN_STORE_ERROR_CODES.PATH_ESCAPED,
-          'The chain directory resolves outside the project .slan directory.',
+          'The chain directory resolves outside the project .loom directory.',
           {
             path: chainsDirectory,
             resolvedPath: canonical,
@@ -759,7 +759,7 @@ export function createChainStore(options: ChainStoreOptions): ChainStore {
 }
 
 /**
- * Canonicalize the project directory before deriving `.slan/chains`. The
+ * Canonicalize the project directory before deriving `.loom/chains`. The
  * project is never created here: a missing project is a typed 404 candidate,
  * not an invitation to scaffold the user's filesystem.
  */

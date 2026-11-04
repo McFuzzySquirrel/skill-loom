@@ -6,7 +6,7 @@ import {
   CONFIG_TOP_LEVEL_FIELDS,
   CONFIG_VERSION,
   ConfigUpdateSchema,
-  SlanConfigSchema,
+  LoomConfigSchema,
   createDefaultConfig,
   type ConfigUpdate,
 } from '../../src/server/config/schema.js';
@@ -23,7 +23,7 @@ import {
 const roots: string[] = [];
 
 async function makeRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'slan-config-test-'));
+  const root = await mkdtemp(join(tmpdir(), 'loom-config-test-'));
   roots.push(root);
   return root;
 }
@@ -32,7 +32,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-function storeFor(root: string, env: NodeJS.ProcessEnv = { SLAN_CONFIG_DIR: join(root, 'config') }) {
+function storeFor(root: string, env: NodeJS.ProcessEnv = { LOOM_CONFIG_DIR: join(root, 'config') }) {
   return createConfigStore({ env, homeDirectory: () => join(root, 'home') });
 }
 
@@ -59,21 +59,21 @@ function temporaryFiles(names: string[]): string[] {
 }
 
 describe('config path resolution', () => {
-  it('honors SLAN_CONFIG_DIR and otherwise defaults to ~/.config/slan', () => {
-    const override = '/tmp/slan-config-override';
-    const env = { SLAN_CONFIG_DIR: override };
+  it('honors LOOM_CONFIG_DIR and otherwise defaults to ~/.config/loom', () => {
+    const override = '/tmp/loom-config-override';
+    const env = { LOOM_CONFIG_DIR: override };
 
     expect(resolveConfigDir({ env, homeDirectory: () => '/home/ignored' })).toBe(resolve(override));
     expect(resolveConfigPath({ env, homeDirectory: () => '/home/ignored' })).toBe(
       join(resolve(override), 'config.json'),
     );
 
-    const home = '/home/slan-user';
+    const home = '/home/loom-user';
     expect(resolveConfigPath({ env: {}, homeDirectory: () => home })).toBe(
-      join(home, '.config', 'slan', 'config.json'),
+      join(home, '.config', 'loom', 'config.json'),
     );
-    expect(resolveConfigPath({ env: { SLAN_CONFIG_DIR: '   ' }, homeDirectory: () => home })).toBe(
-      join(home, '.config', 'slan', 'config.json'),
+    expect(resolveConfigPath({ env: { LOOM_CONFIG_DIR: '   ' }, homeDirectory: () => home })).toBe(
+      join(home, '.config', 'loom', 'config.json'),
     );
   });
 
@@ -81,13 +81,13 @@ describe('config path resolution', () => {
     const root = await makeRoot();
     const first = join(root, 'first');
     const second = join(root, 'second');
-    const env: NodeJS.ProcessEnv = { SLAN_CONFIG_DIR: first };
+    const env: NodeJS.ProcessEnv = { LOOM_CONFIG_DIR: first };
     const store = createConfigStore({ env, homeDirectory: () => join(root, 'home') });
 
     await store.get();
     expect(await fileExists(join(first, 'config.json'))).toBe(true);
 
-    env.SLAN_CONFIG_DIR = second;
+    env.LOOM_CONFIG_DIR = second;
     expect(store.getConfigDir()).toBe(resolve(second));
     expect(store.getConfigPath()).toBe(join(resolve(second), 'config.json'));
 
@@ -322,7 +322,7 @@ describe('atomic writes', () => {
     const root = await makeRoot();
     const target = join(root, 'config', 'config.json');
     const store = createConfigStore({
-      env: { SLAN_CONFIG_DIR: dirname(target) },
+      env: { LOOM_CONFIG_DIR: dirname(target) },
       homeDirectory: () => join(root, 'home'),
       atomicWrite: async () => {
         throw Object.assign(new Error('simulated disk full'), { code: 'ENOSPC' });
@@ -348,7 +348,7 @@ describe('credential safety', () => {
       'recentProjects',
       'uiPreferences',
     ]);
-    expect(Object.keys(SlanConfigSchema.shape)).toEqual([...CONFIG_TOP_LEVEL_FIELDS]);
+    expect(Object.keys(LoomConfigSchema.shape)).toEqual([...CONFIG_TOP_LEVEL_FIELDS]);
 
     for (const field of CONFIG_TOP_LEVEL_FIELDS) {
       expect(field).not.toMatch(/(token|secret|password|api[-_]?key|credential|auth)/i);
@@ -356,7 +356,7 @@ describe('credential safety', () => {
   });
 
   it('rejects credential-like keys and never echoes their values in errors', async () => {
-    const parsed = SlanConfigSchema.safeParse({ ...createDefaultConfig(), apiKey: 'sk-live-secret-value' });
+    const parsed = LoomConfigSchema.safeParse({ ...createDefaultConfig(), apiKey: 'sk-live-secret-value' });
     expect(parsed.success).toBe(false);
     if (!parsed.success) {
       expect(parsed.error.issues).toContainEqual(

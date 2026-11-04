@@ -8,7 +8,7 @@ import {
 /**
  * Typed client for the skill catalog and global extra-directory settings.
  *
- * Catalog rows are rendered exactly as the harness reported them. Slan adds no
+ * Catalog rows are rendered exactly as the harness reported them. Skill Loom adds no
  * summaries, and the full `SKILL.md` body is fetched only when the user expands
  * one entry. Every response is decoded here so a server shape change becomes a
  * typed `ApiClientError` instead of a render crash.
@@ -23,7 +23,7 @@ export const SKILL_SOURCES = [
   'custom',
   'plugin',
   'builtin',
-  'slan-extra',
+  'loom-extra',
 ] as const;
 export type SkillSource = (typeof SKILL_SOURCES)[number];
 
@@ -144,7 +144,7 @@ function isNonEmptyString(value: unknown): value is string {
 
 function invalidResponse(what: string): ApiClientError {
   return new ApiClientError(
-    `The Slan server returned an unexpected ${what} response.`,
+    `The Skill Loom server returned an unexpected ${what} response.`,
     { code: 'INVALID_RESPONSE', status: 200 },
   );
 }
@@ -163,7 +163,7 @@ function decodeSource(value: unknown): SkillSource {
     value === 'custom' ||
     value === 'plugin' ||
     value === 'builtin' ||
-    value === 'slan-extra'
+    value === 'loom-extra'
   ) {
     return value;
   }

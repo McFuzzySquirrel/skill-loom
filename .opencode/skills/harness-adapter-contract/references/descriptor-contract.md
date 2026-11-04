@@ -42,7 +42,7 @@ export interface SpawnSpec {
 
 ## Resolution order
 
-1. Slan config `harnessCommands[id]` when present.
+1. Skill Loom config `harnessCommands[id]` when present.
 2. `PATH` entries in order.
 3. Typed `HARNESS_UNAVAILABLE` with the install command and the attempted override.
 

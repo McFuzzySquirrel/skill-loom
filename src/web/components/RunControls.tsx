@@ -330,7 +330,7 @@ export function RunControls({
 
       <p className="field__hint">
         Every control is a separate explicit action. A page load, a timer, or a terminal
-        transition never sends one. Skills are model-invoked context: Slan guarantees prompt
+        transition never sends one. Skills are model-invoked context: Skill Loom guarantees prompt
         order, not that the harness fires a named skill.
       </p>
     </div>

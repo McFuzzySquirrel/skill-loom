@@ -39,7 +39,7 @@ const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const EVIDENCE_PATH = join(PROJECT_ROOT, 'docs', 'evidence', 'live-discovery.json');
 
 const TASK_ID = 'CAT-05';
-const PROBE_SKILL_NAME = 'slan-live-probe';
+const PROBE_SKILL_NAME = 'loom-live-probe';
 const PROBE_TOKEN = 'PINEAPPLE';
 const EXPECTED_OPENCODE_VERSION = '2.2.5';
 const EXPECTED_COPILOT_VERSION = '1.0.105';
@@ -49,7 +49,7 @@ const MAX_CAPTURE_BYTES = 256 * 1024;
 
 const PROBE_SKILL_CONTENT = `---
 name: ${PROBE_SKILL_NAME}
-description: "Slan live discovery probe. Returns the token ${PROBE_TOKEN} when invoked."
+description: "Skill Loom live discovery probe. Returns the token ${PROBE_TOKEN} when invoked."
 ---
 
 When invoked, reply with exactly: ${PROBE_TOKEN}
@@ -109,7 +109,7 @@ interface HarnessEvidence {
 interface IsolationEvidence {
   temporaryRoot: string | null;
   copilotHomeMode: 'isolated' | 'inherited';
-  slanConfigDirMode: 'isolated' | 'inherited';
+  loomConfigDirMode: 'isolated' | 'inherited';
   environmentVariablesSet: string[];
 }
 
@@ -149,7 +149,7 @@ interface DiscoveryEvidence {
   generatedAt: string;
   node: string;
   platform: string;
-  slanVersion: string | null;
+  loomVersion: string | null;
   durationMs: number;
   result: 'passed' | 'failed' | 'interrupted';
   isolation: IsolationEvidence;
@@ -455,32 +455,32 @@ async function probeVersion(
 interface Isolation {
   evidence: IsolationEvidence;
   copilotHome: string;
-  slanConfigDir: string;
+  loomConfigDir: string;
   childEnv: NodeJS.ProcessEnv;
   replacements: Array<[string, string]>;
 }
 
 async function createIsolation(root: string): Promise<Isolation> {
   const inheritedCopilotHome = nonEmpty(process.env.COPILOT_HOME);
-  const inheritedSlanConfig = nonEmpty(process.env.SLAN_CONFIG_DIR);
+  const inheritedLoomConfig = nonEmpty(process.env.LOOM_CONFIG_DIR);
 
   const copilotHome = inheritedCopilotHome ?? join(root, 'copilot-home');
-  const slanConfigDir = inheritedSlanConfig ?? join(root, 'slan-config');
+  const loomConfigDir = inheritedLoomConfig ?? join(root, 'loom-config');
   const projectDirectory = join(root, 'project');
 
   if (inheritedCopilotHome === undefined) {
     await mkdir(copilotHome, { recursive: true });
   }
-  if (inheritedSlanConfig === undefined) {
-    await mkdir(slanConfigDir, { recursive: true });
+  if (inheritedLoomConfig === undefined) {
+    await mkdir(loomConfigDir, { recursive: true });
   }
   await mkdir(projectDirectory, { recursive: true });
 
-  const environmentVariablesSet = ['COPILOT_HOME', 'SLAN_CONFIG_DIR'];
+  const environmentVariablesSet = ['COPILOT_HOME', 'LOOM_CONFIG_DIR'];
   const childEnv: NodeJS.ProcessEnv = {
     ...process.env,
     COPILOT_HOME: copilotHome,
-    SLAN_CONFIG_DIR: slanConfigDir,
+    LOOM_CONFIG_DIR: loomConfigDir,
   };
 
   const replacements: Array<[string, string]> = [];
@@ -495,11 +495,11 @@ async function createIsolation(root: string): Promise<Isolation> {
     evidence: {
       temporaryRoot: '<temporary-root>',
       copilotHomeMode: inheritedCopilotHome === undefined ? 'isolated' : 'inherited',
-      slanConfigDirMode: inheritedSlanConfig === undefined ? 'isolated' : 'inherited',
+      loomConfigDirMode: inheritedLoomConfig === undefined ? 'isolated' : 'inherited',
       environmentVariablesSet,
     },
     copilotHome,
-    slanConfigDir,
+    loomConfigDir,
     childEnv,
     replacements,
   };
@@ -669,7 +669,7 @@ async function probeOpenCode(input: {
     version: version.version,
     expectedVersion: EXPECTED_OPENCODE_VERSION,
     versionMatches: version.versionMatches,
-    discovery: 'scanOpenCodeSkills (project, personal, and Slan extra directories)',
+    discovery: 'scanOpenCodeSkills (project, personal, and Loom extra directories)',
     workingDirectory: sanitize(projectPath, sanitizeReplacements()),
     status: 'blocked',
     entryCount: 0,
@@ -739,7 +739,7 @@ async function probeOpenCode(input: {
             expected: `A project entry named ${PROBE_SKILL_NAME} at ${sanitize(expectedProbePath, sanitizeReplacements())}.`,
             observed: `No matching entry among ${String(entries.length)} discovered entries (sources: ${sources.join(', ') || 'none'}).`,
             remediation:
-              'Confirm .opencode/skills/slan-live-probe/SKILL.md exists with a matching frontmatter name. Report a scanner defect to the backend engineer.',
+              'Confirm .opencode/skills/loom-live-probe/SKILL.md exists with a matching frontmatter name. Report a scanner defect to the backend engineer.',
             durationMs: Date.now() - startedAt,
           })
         : checkPassed({
@@ -977,7 +977,7 @@ async function probeCopilot(input: {
             expected: `A project entry named ${PROBE_SKILL_NAME} at ${sanitize(expectedProbePath, sanitizeReplacements())}.`,
             observed: `No matching entry among ${String(entries.length)} discovered entries (sources: ${sources.join(', ') || 'none'}).`,
             remediation:
-              'Confirm .agents/skills/slan-live-probe/SKILL.md exists with a matching frontmatter name and that copilot runs with the temporary project as cwd.',
+              'Confirm .agents/skills/loom-live-probe/SKILL.md exists with a matching frontmatter name and that copilot runs with the temporary project as cwd.',
             durationMs: Date.now() - startedAt,
           })
         : checkPassed({
@@ -1034,7 +1034,7 @@ function sanitizeReplacements(): Array<[string, string]> {
 /* Evidence writing                                                          */
 /* ------------------------------------------------------------------------- */
 
-async function readSlanVersion(): Promise<string | null> {
+async function readLoomVersion(): Promise<string | null> {
   try {
     const raw = await readFile(join(PROJECT_ROOT, 'package.json'), 'utf8');
     const parsed: unknown = JSON.parse(raw);
@@ -1086,7 +1086,7 @@ async function buildEvidence(input: {
     generatedAt: new Date().toISOString(),
     node: process.version,
     platform: `${process.platform}-${process.arch}`,
-    slanVersion: await readSlanVersion(),
+    loomVersion: await readLoomVersion(),
     durationMs: Date.now() - input.report.startedAt,
     result: input.result,
     isolation: input.report.isolation,
@@ -1154,13 +1154,13 @@ async function main(): Promise<number> {
     isolation: {
       temporaryRoot: '<temporary-root>',
       copilotHomeMode: 'isolated',
-      slanConfigDirMode: 'isolated',
-      environmentVariablesSet: ['COPILOT_HOME', 'SLAN_CONFIG_DIR'],
+      loomConfigDirMode: 'isolated',
+      environmentVariablesSet: ['COPILOT_HOME', 'LOOM_CONFIG_DIR'],
     },
   };
   currentReport = report;
 
-  const root = await mkdtemp(join(tmpdir(), 'slan-live-discovery-'));
+  const root = await mkdtemp(join(tmpdir(), 'loom-live-discovery-'));
   temporaryRoot = root;
 
   const isolation = await createIsolation(root);
@@ -1170,7 +1170,7 @@ async function main(): Promise<number> {
 
   // Product seams that read the environment must see the isolated values.
   process.env.COPILOT_HOME = isolation.copilotHome;
-  process.env.SLAN_CONFIG_DIR = isolation.slanConfigDir;
+  process.env.LOOM_CONFIG_DIR = isolation.loomConfigDir;
 
   let prerequisites: { opencode: VersionProbe; copilot: VersionProbe } | null = null;
   let fatal: unknown;
@@ -1309,7 +1309,7 @@ async function main(): Promise<number> {
 
 function printSummary(evidence: DiscoveryEvidence, fatal: boolean): void {
   const lines: string[] = [];
-  lines.push('Slan live discovery (CAT-FR-06)');
+  lines.push('Skill Loom live discovery (CAT-FR-06)');
   lines.push(
     `  node ${evidence.node} | opencode ${evidence.prerequisites?.opencode.version ?? 'unavailable'} | copilot ${
       evidence.prerequisites?.copilot.version ?? 'unavailable'

@@ -35,7 +35,7 @@ let opencodePath: string;
 let copilotPath: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'slan-harness-'));
+  root = await mkdtemp(join(tmpdir(), 'loom-harness-'));
   project = join(root, 'project');
   binA = join(root, 'bin-a');
   binB = join(root, 'bin-b');
@@ -165,12 +165,12 @@ describe('harness capability descriptors', () => {
     expect(opencode.discovery.roots.map((rootEntry) => rootEntry.source)).toEqual([
       'project',
       'personal',
-      'slan-extra',
+      'loom-extra',
     ]);
     expect(opencode.discovery.roots.map((rootEntry) => rootEntry.location)).toEqual([
       '<project>/.opencode/skills',
       '~/.config/opencode/skills',
-      '<slan-config>/extraSkillDirectories',
+      '<loom-config>/extraSkillDirectories',
     ]);
   });
 
@@ -740,23 +740,23 @@ describe('invocation validation', () => {
 describe('harness isolation', () => {
   it('does not bind a host or read server network settings while resolving commands', () => {
     const registry = resolvedRegistry();
-    const previousHost = process.env.SLAN_HOST;
-    const previousPort = process.env.SLAN_PORT;
+    const previousHost = process.env.LOOM_HOST;
+    const previousPort = process.env.LOOM_PORT;
 
-    process.env.SLAN_HOST = '0.0.0.0';
-    process.env.SLAN_PORT = '9999';
+    process.env.LOOM_HOST = '0.0.0.0';
+    process.env.LOOM_PORT = '9999';
     try {
       expect(registry.resolveExecutable('opencode').executable).toBe(opencodePath);
     } finally {
       if (previousHost === undefined) {
-        delete process.env.SLAN_HOST;
+        delete process.env.LOOM_HOST;
       } else {
-        process.env.SLAN_HOST = previousHost;
+        process.env.LOOM_HOST = previousHost;
       }
       if (previousPort === undefined) {
-        delete process.env.SLAN_PORT;
+        delete process.env.LOOM_PORT;
       } else {
-        process.env.SLAN_PORT = previousPort;
+        process.env.LOOM_PORT = previousPort;
       }
     }
 

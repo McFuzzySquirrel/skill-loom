@@ -125,7 +125,7 @@ const STATUS_BY_STORE_CODE: Record<ChainStoreErrorCode, number> = {
  *
  * Every operation takes a registered project id (never a filesystem path),
  * resolves it to the canonical project directory, and lets the chain service
- * derive `<project>/.slan/chains`. Handlers only validate input, resolve the
+ * derive `<project>/.loom/chains`. Handlers only validate input, resolve the
  * project, call the service, and map typed errors to the shared envelope.
  */
 export const chainRoutes: FastifyPluginAsync<ChainRoutesOptions> = async (

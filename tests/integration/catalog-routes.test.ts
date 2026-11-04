@@ -29,7 +29,7 @@ let catalogService: ReturnType<typeof createCatalogService>;
 let apps: FastifyInstance[];
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'slan-catalog-routes-'));
+  root = await mkdtemp(join(tmpdir(), 'loom-catalog-routes-'));
   project = join(root, 'workspace', 'demo-project');
   configDirectory = join(root, 'config');
   home = join(root, 'home');
@@ -85,7 +85,7 @@ beforeEach(async () => {
   });
 
   configStore = createConfigStore({
-    env: { SLAN_CONFIG_DIR: configDirectory },
+    env: { LOOM_CONFIG_DIR: configDirectory },
     homeDirectory: () => home,
   });
   catalogService = createCatalogService({
@@ -400,12 +400,12 @@ describe('extra skill directory settings', () => {
     expect(extraCatalog.groups.map((group) => group.source)).toEqual([
       'project',
       'personal',
-      'slan-extra',
+      'loom-extra',
     ]);
     expect(names(extraCatalog)).toContain('extra-skill');
 
     const copilot = await getCatalog(app, registered.id, 'copilot');
-    expect(catalogOf(copilot.body).groups.map((group) => group.source)).not.toContain('slan-extra');
+    expect(catalogOf(copilot.body).groups.map((group) => group.source)).not.toContain('loom-extra');
 
     const removed = await deleteExtraDirectory(app, extraDirectory);
     expect(removed.statusCode).toBe(200);

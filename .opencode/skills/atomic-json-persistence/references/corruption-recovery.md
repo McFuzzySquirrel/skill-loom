@@ -20,7 +20,7 @@ Quarantine means the item is excluded from normal use and reported, not silently
 {
   "code": "CORRUPT_CHAIN",
   "message": "Chain file could not be parsed",
-  "details": { "path": "/repo/.slan/chains/abc.json", "issue": "Unexpected end of JSON input" }
+  "details": { "path": "/repo/.loom/chains/abc.json", "issue": "Unexpected end of JSON input" }
 }
 ```
 
@@ -28,7 +28,7 @@ Never move, rename, or delete the user's file automatically. A user-initiated re
 
 ## Startup reconciliation
 
-1. Read the run index under `<project>/.slan/runs`.
+1. Read the run index under `<project>/.loom/runs`.
 2. For each record in `starting`, `running`, `paused`, or `awaiting-user`, set `status: "interrupted"` and write atomically.
 3. Read `<configRoot>/active-run.json`.
 4. If it references a run that is now `interrupted`, clear the pointer.

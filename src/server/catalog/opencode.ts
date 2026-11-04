@@ -45,7 +45,7 @@ export interface OpenCodeScanOptions {
   projectPath: string;
   /** Home directory seam for tests. Defaults to `os.homedir()`. */
   homeDirectory?: string;
-  /** Slan-configured extra skill directories from global config. */
+  /** Loom-configured extra skill directories from global config. */
   extraDirectories?: readonly string[];
   /** Recursion cap. Defaults to `DEFAULT_MAX_SKILL_DEPTH`. */
   maxDepth?: number;
@@ -131,7 +131,7 @@ function buildRoots(
 
   for (const extra of extraDirectories) {
     roots.push({
-      source: 'slan-extra',
+      source: 'loom-extra',
       path: typeof extra === 'string' ? extra.trim() : String(extra),
       optional: false,
     });

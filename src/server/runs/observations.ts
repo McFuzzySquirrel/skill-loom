@@ -1,7 +1,7 @@
 /**
  * Best-effort skill-firing observation.
  *
- * RUN-FR-10 allows Slan to report whether a harness visibly loaded a step's
+ * RUN-FR-10 allows Skill Loom to report whether a harness visibly loaded a step's
  * named skill. The signal is informational only:
  *
  * - Copilot prints lines such as `● skill(spike-skill)`; those map to

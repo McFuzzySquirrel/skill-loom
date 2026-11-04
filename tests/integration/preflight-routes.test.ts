@@ -209,7 +209,7 @@ interface AppHarness {
 async function buildTestApp(options: { runner?: TestRunner } = {}): Promise<AppHarness> {
   const runner = options.runner ?? createRunner();
   const configStore = createConfigStore({
-    env: { SLAN_CONFIG_DIR: configDirectory },
+    env: { LOOM_CONFIG_DIR: configDirectory },
     homeDirectory: () => home,
   });
   const app = await buildApp({
@@ -331,7 +331,7 @@ function noPromptArguments(args: readonly string[]): void {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'slan-preflight-routes-'));
+  root = await mkdtemp(join(tmpdir(), 'loom-preflight-routes-'));
   configDirectory = join(root, 'config');
   home = join(root, 'home');
   fakeBin = join(root, 'bin');

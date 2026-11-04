@@ -27,7 +27,7 @@ import {
  * - Headless runs require `--allow-all-tools`; `--allow-all-paths` broadens
  *   filesystem access. Both are emitted only after the per-chain opt-in.
  * - Persistent folder trust is recorded under `trustedFolders` in
- *   `~/.copilot/config.json`; Slan reads it and never writes it.
+ *   `~/.copilot/config.json`; Skill Loom reads it and never writes it.
  * - The CLI exposes no fork flag, so fork is a deterministic handoff note.
  *
  * This module only describes commands and capabilities. It never spawns a
@@ -38,7 +38,7 @@ export const COPILOT_HARNESS = 'copilot' satisfies HarnessId;
 export const COPILOT_DISPLAY_NAME = 'GitHub Copilot';
 export const COPILOT_EXECUTABLE_NAME = 'copilot';
 export const COPILOT_INSTALL_HINT =
-  'Install GitHub Copilot CLI 1.0.105 with "npm install -g @github/copilot" and ensure "copilot" is on PATH, or set harnessCommands.copilot in the Slan config.';
+  'Install GitHub Copilot CLI 1.0.105 with "npm install -g @github/copilot" and ensure "copilot" is on PATH, or set harnessCommands.copilot in the Skill Loom config.';
 
 /** Copilot can honor shared and fresh sessions and a fork handoff. */
 export const COPILOT_SUPPORTED_SESSION_MODES: readonly ChainSessionMode[] = Object.freeze([

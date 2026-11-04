@@ -144,7 +144,7 @@ export function TrustPanel({
             Copilot folder trust
           </h2>
           <p className="field__hint">
-            The first Copilot prompt can be swallowed by a folder-trust dialog. Slan starts an
+            The first Copilot prompt can be swallowed by a folder-trust dialog. Skill Loom starts an
             unseeded interactive session so you can accept that dialog before the run.
           </p>
         </div>
@@ -192,7 +192,7 @@ export function TrustPanel({
             Open a Copilot trust session?
           </h3>
           <p>
-            This starts an interactive Copilot session in this project. Slan sends no prompt,
+            This starts an interactive Copilot session in this project. Skill Loom sends no prompt,
             no session id, and no model call. A folder-trust dialog may appear in the embedded
             terminal.
           </p>
@@ -263,7 +263,7 @@ export function TrustPanel({
           Manual fallback
         </h3>
         <p className="field__hint">
-          Display only. Slan never executes this line for you. Run it in a terminal inside the
+          Display only. Skill Loom never executes this line for you. Run it in a terminal inside the
           project if the dialog cannot persist trust.
         </p>
         <pre className="trust-panel__command">

@@ -7,7 +7,7 @@ export const SOURCE_LABELS: Record<SkillSource, string> = {
   custom: 'Custom',
   plugin: 'Plugin',
   builtin: 'Builtin',
-  'slan-extra': 'Slan extra',
+  'loom-extra': 'Loom extra',
 };
 
 export interface SkillSourceBadgeProps {

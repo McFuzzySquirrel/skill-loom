@@ -18,14 +18,14 @@ import {
 /**
  * Global chain template library.
  *
- * Templates are snapshots stored outside any project, under the Slan config
+ * Templates are snapshots stored outside any project, under the Skill Loom config
  * directory. Importing one copies it into a project with a new id; there is no
  * live link back to the template. The store reuses the same schema, safe-id
  * rules, atomic writes, and corrupt-file warnings as project chains.
  */
 
 export interface GlobalChainServiceOptions {
-  /** Slan config directory that owns `chains/`. */
+  /** Skill Loom config directory that owns `chains/`. */
   configDirectory: string;
   /** Store factory seam for tests. Defaults to a directory-backed store. */
   createStore?: (directory: string) => ChainStore;

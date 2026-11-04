@@ -1,6 +1,6 @@
 ---
 name: pty-run-lifecycle
-description: "Slan PTY and run lifecycle procedure covering shell-free spawning, one-subscriber terminals, bounded tails, OpenCode OSC working-to-idle advancement, Copilot exit advancement, explicit pause and retry, and orphan-free cleanup."
+description: "Skill Loom PTY and run lifecycle procedure covering shell-free spawning, one-subscriber terminals, bounded tails, OpenCode OSC working-to-idle advancement, Copilot exit advancement, explicit pause and retry, and orphan-free cleanup."
 ---
 
 # Skill: PTY Run Lifecycle

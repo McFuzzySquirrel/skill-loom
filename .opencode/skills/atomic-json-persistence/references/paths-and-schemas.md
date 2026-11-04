@@ -1,18 +1,18 @@
 # Paths and Schemas
 
-> Load when you need the exact Slan storage layout, identifier rules, or versioned document shape.
+> Load when you need the exact Skill Loom storage layout, identifier rules, or versioned document shape.
 
 ## Storage layout
 
 | Document | Path | Notes |
 |----------|------|-------|
-| Global config | `$SLAN_CONFIG_DIR/config.json` or `~/.config/slan/config.json` | Created on first read; never stores a credential value |
-| Active run pointer | `$SLAN_CONFIG_DIR/active-run.json` | At most one active run across the whole server |
-| Chain | `<canonicalProject>/.slan/chains/<chainId>.json` | Project-local, reviewable in git |
-| Run | `<canonicalProject>/.slan/runs/<runId>.json` | `runs/` is listed in `<project>/.slan/.gitignore` |
-| `.slan` guard | `<canonicalProject>/.slan/.gitignore` | Created only when absent; contains `runs/` |
+| Global config | `$LOOM_CONFIG_DIR/config.json` or `~/.config/loom/config.json` | Created on first read; never stores a credential value |
+| Active run pointer | `$LOOM_CONFIG_DIR/active-run.json` | At most one active run across the whole server |
+| Chain | `<canonicalProject>/.loom/chains/<chainId>.json` | Project-local, reviewable in git |
+| Run | `<canonicalProject>/.loom/runs/<runId>.json` | `runs/` is listed in `<project>/.loom/.gitignore` |
+| `.loom` guard | `<canonicalProject>/.loom/.gitignore` | Created only when absent; contains `runs/` |
 
-`SLAN_CONFIG_DIR` must be honored by every store operation, including the active pointer. Unit tests inject a temporary directory; Playwright starts the app with an isolated directory.
+`LOOM_CONFIG_DIR` must be honored by every store operation, including the active pointer. Unit tests inject a temporary directory; Playwright starts the app with an isolated directory.
 
 ## Identifier rules
 

@@ -27,7 +27,7 @@ let extra: string;
 let restoreModePaths: string[];
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'slan-catalog-opencode-'));
+  root = await mkdtemp(join(tmpdir(), 'loom-catalog-opencode-'));
   project = join(root, 'project');
   home = join(root, 'home');
   extra = join(root, 'extra');
@@ -76,7 +76,7 @@ function namesBySource(entries: SkillEntry[]): Record<string, string[]> {
 }
 
 describe('OpenCode skill discovery', () => {
-  it('scans project, personal, and Slan extra directories', async () => {
+  it('scans project, personal, and Loom extra directories', async () => {
     const projectFile = await writeSkill(
       projectSkills(),
       'alpha',
@@ -104,7 +104,7 @@ describe('OpenCode skill discovery', () => {
     expect(namesBySource(result.entries)).toEqual({
       project: ['alpha-skill'],
       personal: ['beta-skill'],
-      'slan-extra': ['gamma-skill'],
+      'loom-extra': ['gamma-skill'],
     });
 
     const byName = new Map(result.entries.map((entry) => [entry.name, entry]));
@@ -120,7 +120,7 @@ describe('OpenCode skill discovery', () => {
       path: await realpath(personalFile),
     });
     expect(byName.get('gamma-skill')).toMatchObject({
-      source: 'slan-extra',
+      source: 'loom-extra',
       path: await realpath(extraFile),
     });
 
@@ -265,7 +265,7 @@ describe('OpenCode skill discovery', () => {
       CATALOG_WARNING_CODES.DIRECTORY_NOT_FOUND,
       CATALOG_WARNING_CODES.DIRECTORY_PATH_INVALID,
     ]);
-    expect(result.warnings.every((warning) => warning.source === 'slan-extra')).toBe(true);
+    expect(result.warnings.every((warning) => warning.source === 'loom-extra')).toBe(true);
   });
 
   it('does not follow nested directory symlinks into a loop', async () => {

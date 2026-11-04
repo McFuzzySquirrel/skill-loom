@@ -129,9 +129,9 @@ describe('PTY session transport', () => {
 
     await waitFor(() => output.text().includes('READY'), 'Child did not signal readiness.');
 
-    session.write('hello slan\n');
+    session.write('hello loom\n');
 
-    await waitFor(() => output.text().includes('ECHO:hello slan'), 'Child did not receive input.');
+    await waitFor(() => output.text().includes('ECHO:hello loom'), 'Child did not receive input.');
     output.stop();
   });
 
@@ -193,15 +193,15 @@ describe('PTY session transport', () => {
       createTerminalSession({
         executable: process.execPath,
         args: ['-e', ''],
-        cwd: join(tmpdir(), 'slan-missing-cwd-for-pty-test'),
+        cwd: join(tmpdir(), 'loom-missing-cwd-for-pty-test'),
       }),
     ).toThrow(TerminalInvalidSpecError);
 
-    const directory = await mkdtemp(join(tmpdir(), 'slan-pty-cwd-'));
+    const directory = await mkdtemp(join(tmpdir(), 'loom-pty-cwd-'));
     temporaryDirectories.push(directory);
 
     const session = createTerminalSession({
-      executable: 'slan-definitely-not-an-installed-command',
+      executable: 'loom-definitely-not-an-installed-command',
       args: [],
       cwd: directory,
     });

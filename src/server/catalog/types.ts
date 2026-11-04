@@ -14,8 +14,8 @@ export const SKILL_HARNESSES = ['opencode', 'copilot'] as const;
 export type SkillHarness = (typeof SKILL_HARNESSES)[number];
 
 /**
- * Source labels rendered as badges by the catalog. `slan-extra` is the global
- * extra-directory source owned by Slan; the remaining labels come from the
+ * Source labels rendered as badges by the catalog. `loom-extra` is the global
+ * extra-directory source owned by Skill Loom; the remaining labels come from the
  * harness (project-local, personal, plugin, custom, builtin).
  */
 export const SKILL_SOURCES = [
@@ -24,7 +24,7 @@ export const SKILL_SOURCES = [
   'custom',
   'plugin',
   'builtin',
-  'slan-extra',
+  'loom-extra',
 ] as const;
 export type SkillSource = (typeof SKILL_SOURCES)[number];
 

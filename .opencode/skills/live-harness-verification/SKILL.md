@@ -1,6 +1,6 @@
 ---
 name: live-harness-verification
-description: "Live OpenCode 2.2.5 and Copilot CLI 1.0.105 probe procedure using temporary projects, isolated COPILOT_HOME and SLAN_CONFIG_DIR, session-continuation token recall, and privacy-safe evidence JSON."
+description: "Live OpenCode 2.2.5 and Copilot CLI 1.0.105 probe procedure using temporary projects, isolated COPILOT_HOME and LOOM_CONFIG_DIR, session-continuation token recall, and privacy-safe evidence JSON."
 ---
 
 # Skill: Live Harness Verification
@@ -36,13 +36,13 @@ Do not make a paid model call in the discovery probe. Authentication checks use 
 Create one temporary root and set both environment variables before any harness call:
 
 ```bash
-export SLAN_CONFIG_DIR="$TMP/slan-config"
+export LOOM_CONFIG_DIR="$TMP/loom-config"
 export COPILOT_HOME="$TMP/copilot-home"
 ```
 
-This keeps Slan config, recent projects, and Copilot trust writes out of the user's real directories. For authenticated execution, an isolated `COPILOT_HOME` may have no credentials. If Copilot reports unauthenticated, then fall back to the real `COPILOT_HOME` read-only for that run and record `copilotHomeMode: "real-read-only"`; never copy credential files into the temporary tree. Load `references/probe-isolation.md` for the exact fallback and cleanup rules.
+This keeps Skill Loom config, recent projects, and Copilot trust writes out of the user's real directories. For authenticated execution, an isolated `COPILOT_HOME` may have no credentials. If Copilot reports unauthenticated, then fall back to the real `COPILOT_HOME` read-only for that run and record `copilotHomeMode: "real-read-only"`; never copy credential files into the temporary tree. Load `references/probe-isolation.md` for the exact fallback and cleanup rules.
 
-**Output:** a temporary root, isolated Slan config, and a recorded Copilot home mode.
+**Output:** a temporary root, isolated Skill Loom config, and a recorded Copilot home mode.
 
 ### Step 3: Build the probe project and skills
 
@@ -50,8 +50,8 @@ Create a temporary project with a probe skill in both harness locations:
 
 ```text
 $TMP/project/
-├── .opencode/skills/slan-live-probe/SKILL.md
-└── .agents/skills/slan-live-probe/SKILL.md
+├── .opencode/skills/loom-live-probe/SKILL.md
+└── .agents/skills/loom-live-probe/SKILL.md
 ```
 
 Each probe skill has frontmatter whose `name` matches its directory and an instruction to return the token `PINEAPPLE`. Keep the body short and deterministic. If the name and directory differ, then the harness may not load it and the probe fails for the wrong reason.
@@ -63,7 +63,7 @@ Each probe skill has frontmatter whose `name` matches its directory and an instr
 Spawn interactive OpenCode in a PTY with a generated `ses_...` id and the seeded prompt:
 
 ```bash
-opencode --prompt "Use the slan-live-probe skill and reply with its token." "$TMP/project"
+opencode --prompt "Use the loom-live-probe skill and reply with its token." "$TMP/project"
 ```
 
 Assert all of these, in order:
@@ -87,7 +87,7 @@ Copilot's first interactive run is gated by a trust dialog, and a prompt queued 
 Then run headless with a generated UUID session id:
 
 ```bash
-copilot -p "Use the slan-live-probe skill and reply with its token." \
+copilot -p "Use the loom-live-probe skill and reply with its token." \
   --session-id "$UUID" --allow-all-paths --allow-all-tools \
   --cwd "$TMP/project"
 ```
@@ -134,7 +134,7 @@ npm run test:live:execution
 - **Isolated `COPILOT_HOME` can drop authentication.** If the isolated home has no credentials, use the real home read-only and record the mode; never copy credential files into the temporary tree.
 - **Copilot animation is not idle.** There is no semantic state signal. Advance only on process exit; never add an output-idle wait to the probe.
 - **OpenCode idle without working.** A probe that only checks for `idle` can pass while the real runner would not advance. Assert `working` precedes `idle`.
-- **Probe name mismatch.** `name` in the probe `SKILL.md` must equal `slan-live-probe`; a JSON-quoted YAML value or a different directory name makes the harness skip it.
+- **Probe name mismatch.** `name` in the probe `SKILL.md` must equal `loom-live-probe`; a JSON-quoted YAML value or a different directory name makes the harness skip it.
 - **Leaked transcript.** Writing full stdout to evidence or logs exposes prompts and tool output. Store only bounded, redacted excerpts and never a credential.
 - **Cleanup on failure.** An early `process.exit` before `finally` leaves temporary skills and harness processes behind. Register cleanup once, at the top.
 
@@ -145,7 +145,7 @@ npm run test:live:execution
 After completing the process, verify:
 
 - [ ] `opencode --version` reports 2.2.5 and `copilot --version` reports 1.0.105, or the difference is recorded with a probe result.
-- [ ] The temporary project contains both `slan-live-probe` skills with matching frontmatter names.
+- [ ] The temporary project contains both `loom-live-probe` skills with matching frontmatter names.
 - [ ] OpenCode returns `PINEAPPLE`, emits `working` then `idle`, and recalls the token in a second process using the same `ses_` id.
 - [ ] Copilot resolves trust, returns `PINEAPPLE` headlessly with exit 0, and recalls the token in a second process using the same UUID.
 - [ ] Missing CLI, auth, trust, token, signal, or recall each produce a non-zero exit with a named check.

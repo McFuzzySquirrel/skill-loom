@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
  * Browser coverage for RUN-07 (terminal-dominant run view).
  *
  * Playwright starts the built app behind the real Fastify server with an
- * isolated SLAN_CONFIG_DIR, HOME, and PATH. Every project, chain, run, and fake
+ * isolated LOOM_CONFIG_DIR, HOME, and PATH. Every project, chain, run, and fake
  * harness executable in this spec lives under a temporary root. The fake
  * OpenCode emits real OSC 7501 working/idle sequences for automatic mode and
  * stays alive for supervised Done/Next. Runs are created through the typed API
@@ -132,7 +132,7 @@ async function writeSkill(projectPath: string, name: string): Promise<void> {
 }
 
 test.beforeAll(async ({ request }) => {
-  fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'slan-run-e2e-')));
+  fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'loom-run-e2e-')));
 
   const health = await request.get('/api/health');
   expect(health.ok()).toBe(true);
@@ -356,7 +356,7 @@ test.describe('Terminal-dominant run view', () => {
     await expect(terminalScreen(page)).toContainText('FAKE_SUPERVISED_HOLDING', {
       timeout: 15_000,
     });
-    await expect(page.getByTestId('run-terminal')).toHaveAttribute('data-session-id', /slan_run_/);
+    await expect(page.getByTestId('run-terminal')).toHaveAttribute('data-session-id', /loom_run_/);
 
     // Only supervised controls are present.
     await expect(page.getByTestId('run-outcome-done')).toBeVisible();
@@ -610,7 +610,7 @@ test.describe('Terminal-dominant run view', () => {
       ],
       reason: 'PROCESS_INTERRUPTED',
     };
-    const runsDirectory = join(project.canonicalPath, '.slan', 'runs');
+    const runsDirectory = join(project.canonicalPath, '.loom', 'runs');
     await mkdir(runsDirectory, { recursive: true });
     await writeFile(join(runsDirectory, `${runId}.json`), `${JSON.stringify(runRecord, null, 2)}\n`, 'utf8');
 

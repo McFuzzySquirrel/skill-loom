@@ -6,9 +6,9 @@ import { join } from 'node:path';
 /**
  * Browser coverage for CHAIN-06 (inputs, save, and harness binding).
  *
- * Playwright supplies an isolated SLAN_CONFIG_DIR and HOME. The project, skill
+ * Playwright supplies an isolated LOOM_CONFIG_DIR and HOME. The project, skill
  * packages, and every chain document used here live under this spec's own
- * temporary root, so no test reads or writes the developer's real Slan config
+ * temporary root, so no test reads or writes the developer's real Skill Loom config
  * or skills. The builder is driven through src/web/App.tsx and the real API.
  */
 
@@ -47,7 +47,7 @@ async function writeSkill(
 }
 
 test.beforeAll(async () => {
-  fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'slan-chain-save-e2e-')));
+  fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'loom-chain-save-e2e-')));
   projectPath = join(fixtureRoot, `save-project-${runSuffix}`);
   await writeSkill(
     join(projectPath, '.opencode', 'skills', 'deploy-helper'),

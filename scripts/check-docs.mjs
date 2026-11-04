@@ -17,11 +17,12 @@ const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = resolve(SCRIPT_DIRECTORY, '..');
 
 export const REQUIRED_README_HEADINGS = Object.freeze([
-  '# Slan',
+  '# Skill Loom',
   '## Requirements',
   '## Install',
   '## Development',
   '## Build and run',
+  '## Run from a package',
   '## Commands',
   '## First run',
   '## Security and privacy',
@@ -29,8 +30,9 @@ export const REQUIRED_README_HEADINGS = Object.freeze([
 ]);
 
 export const REQUIRED_OPERATIONS_HEADINGS = Object.freeze([
-  '# Slan Operations Guide',
+  '# Skill Loom Operations Guide',
   '## Configuration',
+  '## Package and CLI',
   '## Data locations',
   '## Harness prerequisites',
   '## Copilot trust and automatic permissions',
@@ -60,6 +62,11 @@ export const REQUIRED_README_COMMANDS = Object.freeze([
   Object.freeze({ command: 'npm run typecheck', script: 'typecheck' }),
   Object.freeze({ command: 'npm run test:unit', script: 'test:unit' }),
   Object.freeze({ command: 'npm run test:e2e', script: 'test:e2e' }),
+  Object.freeze({ command: 'npm run test:package', script: 'test:package' }),
+  Object.freeze({
+    command: 'npx --yes --package=./skill-loom-cli-0.1.0.tgz skill-loom',
+    script: null,
+  }),
   Object.freeze({
     command: 'npm run test:live:discovery',
     script: 'test:live:discovery',
@@ -77,13 +84,17 @@ export const REQUIRED_README_STATEMENTS = Object.freeze([
   'loopback-only',
   'no authentication',
   '127.0.0.1',
+  'skill-loom-cli',
+  'skill-loom',
 ]);
 
 export const REQUIRED_OPERATIONS_STATEMENTS = Object.freeze([
-  'SLAN_CONFIG_DIR',
-  '.slan/chains',
-  '.slan/runs',
-  '~/.config/slan',
+  'LOOM_CONFIG_DIR',
+  'skill-loom-cli',
+  'npx skill-loom-cli',
+  '.loom/chains',
+  '.loom/runs',
+  '~/.config/loom',
   'loopback-only',
   'no authentication',
   'model-invoked',

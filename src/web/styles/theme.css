@@ -1,5 +1,5 @@
 /*
- * Slan shell theme: dark, high-contrast, terminal-adjacent.
+ * Skill Loom shell theme: dark, high-contrast, terminal-adjacent.
  * All status treatments pair an icon with text; color is never the only signal.
  */
 
@@ -600,7 +600,7 @@ main:focus {
   color: var(--accent-strong);
 }
 
-.badge--slan {
+.badge--loom {
   border-color: var(--warning-border);
   color: var(--warning-text);
 }
@@ -943,7 +943,7 @@ main:focus {
   color: var(--text-muted);
 }
 
-.source-badge--slan-extra {
+.source-badge--loom-extra {
   border-color: var(--warning-border);
   background: var(--warning-bg);
   color: var(--warning-text);
@@ -2706,7 +2706,7 @@ main:focus {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  min-height: calc(100vh - 13rem);
+  min-height: 0;
 }
 
 .run-terminal-page__header {
@@ -2735,9 +2735,9 @@ main:focus {
 
 .run-terminal-page__surface {
   display: flex;
-  flex: 1;
+  flex: 0 0 auto;
   flex-direction: column;
-  min-height: 24rem;
+  min-height: 0;
 }
 
 .run-terminal-page__surface .terminal-pane {
@@ -2749,9 +2749,15 @@ main:focus {
 }
 
 .run-terminal-page__surface .terminal-pane__screen {
-  flex: 1;
-  min-height: 20rem;
-  height: auto;
+  /*
+   * A definite, viewport-relative height keeps xterm's row count from feeding
+   * back into the container size (fit grows rows, rows grow the container,
+   * the observer fits again). Scrollback stays inside xterm's own viewport.
+   */
+  height: 56vh;
+  height: clamp(16rem, calc(100dvh - 24rem), 44rem);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .run-controls--compact {

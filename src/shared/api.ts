@@ -1,5 +1,5 @@
 /**
- * Shared JSON API contracts for the Slan server and web client.
+ * Shared JSON API contracts for the Skill Loom server and web client.
  *
  * Every API failure uses a single envelope so the browser never has to infer
  * an error shape from a status code:
@@ -84,7 +84,7 @@ export interface HealthResponse {
   status: 'ok';
   /** Package version from the root package.json. */
   version: string;
-  /** Resolved global Slan config directory (never the file contents). */
+  /** Resolved global Skill Loom config directory (never the file contents). */
   configDirectory: string;
   /** Port the server is configured to use. */
   port: number;

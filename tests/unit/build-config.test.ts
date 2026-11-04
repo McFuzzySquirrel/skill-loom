@@ -11,8 +11,14 @@ function read(relativePath: string): string {
 }
 
 interface PackageJson {
+  name?: string;
+  version?: string;
+  private?: boolean;
+  license?: string;
   type?: string;
   engines?: Record<string, string>;
+  bin?: Record<string, string>;
+  files?: string[];
   scripts?: Record<string, string>;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
@@ -55,6 +61,7 @@ const verifiedVersions: Record<string, string> = {
 const requiredScripts = [
   'dev',
   'build',
+  'prepack',
   'start',
   'typecheck',
   'typecheck:server',
@@ -63,6 +70,7 @@ const requiredScripts = [
   'test:unit',
   'test:integration',
   'test:e2e',
+  'test:package',
   'test:live:discovery',
   'test:live:execution',
   'check',
@@ -92,9 +100,25 @@ describe('package contract', () => {
     expect(pkg.scripts?.['test:unit']).toContain('tests/unit');
     expect(pkg.scripts?.['test:integration']).toContain('tests/integration');
     expect(pkg.scripts?.['test:e2e']).toBe('playwright test');
+    expect(pkg.scripts?.['test:package']).toContain('scripts/package-smoke.mjs');
+    expect(pkg.scripts?.prepack).toBe('npm run build');
     expect(pkg.scripts?.['test:live:discovery']).toContain('scripts/live-discovery.ts');
     expect(pkg.scripts?.['test:live:execution']).toContain('scripts/live-execution.ts');
     expect(pkg.scripts?.check).toContain('scripts/check-docs.mjs');
+  });
+
+  it('declares the publishable CLI name, bin, and package file list', () => {
+    expect(pkg.name).toBe('skill-loom-cli');
+    expect(pkg.version).toBe('0.1.0');
+    expect(pkg.license).toBe('MIT');
+    expect(pkg.private).toBe(true);
+    expect(pkg.bin).toEqual({ 'skill-loom': 'dist/src/server/cli.js' });
+    expect(pkg.files).toEqual([
+      'dist/src',
+      'dist/web',
+      'dist/package.json',
+      'docs/OPERATIONS.md',
+    ]);
   });
 
   it('pins every verified dependency from PRD 6.1 exactly', () => {
@@ -193,11 +217,11 @@ describe('Playwright isolation contract', () => {
     expect(playwrightConfig).toContain('http://127.0.0.1:');
   });
 
-  it('uses a temporary SLAN_CONFIG_DIR instead of the developer config', () => {
-    expect(playwrightConfig).toContain('SLAN_CONFIG_DIR');
+  it('uses a temporary LOOM_CONFIG_DIR instead of the developer config', () => {
+    expect(playwrightConfig).toContain('LOOM_CONFIG_DIR');
     expect(playwrightConfig).toContain('tmpdir()');
     expect(playwrightConfig).toContain("join(isolatedRoot, 'config')");
-    expect(playwrightConfig).not.toContain('~/.config/slan');
+    expect(playwrightConfig).not.toContain('~/.config/loom');
     expect(tmpdir()).toBeTruthy();
   });
 
@@ -206,9 +230,9 @@ describe('Playwright isolation contract', () => {
     expect(playwrightConfig).toContain("join(isolatedRoot, 'home')");
   });
 
-  it('passes SLAN_CONFIG_DIR through the web server environment', () => {
+  it('passes LOOM_CONFIG_DIR through the web server environment', () => {
     expect(playwrightConfig).toMatch(
-      /env:\s*\{[\s\S]*SLAN_CONFIG_DIR:\s*configDir[\s\S]*\}/,
+      /env:\s*\{[\s\S]*LOOM_CONFIG_DIR:\s*configDir[\s\S]*\}/,
     );
   });
 });

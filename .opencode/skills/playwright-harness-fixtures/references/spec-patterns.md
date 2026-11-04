@@ -10,7 +10,7 @@ import { join } from "node:path";
 
 export const test = base.extend<{ projectDir: string }>({
   projectDir: async ({}, use, testInfo) => {
-    const dir = join(process.env.SLAN_E2E_ROOT!, "projects", `p-${testInfo.workerIndex}-${testInfo.title.replace(/\W+/g, "-")}`);
+    const dir = join(process.env.LOOM_E2E_ROOT!, "projects", `p-${testInfo.workerIndex}-${testInfo.title.replace(/\W+/g, "-")}`);
     await use(dir);
   },
 });
@@ -24,7 +24,7 @@ Create the project and skills inside the fixture only when the test needs them.
 test("groups duplicate names by source", async ({ page, projectDir }) => {
   await page.goto(`/projects/${projectId}/chains/new`);
   await expect(page.getByRole("region", { name: /catalog/i })).toBeVisible();
-  await expect(page.getByText("slan-e2e-alpha")).toHaveCount(2);
+  await expect(page.getByText("loom-e2e-alpha")).toHaveCount(2);
   await expect(page.getByText("project", { exact: true })).toBeVisible();
   await page.getByRole("searchbox", { name: /search skills/i }).fill("alpha");
   await expect(page.getByRole("listitem")).toHaveCount(2);

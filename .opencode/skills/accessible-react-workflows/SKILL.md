@@ -1,11 +1,11 @@
 ---
 name: accessible-react-workflows
-description: "Slan web accessibility procedure for skip links, focus-visible styling, aria-live announcements, keyboard reordering, non-color status text, dirty-navigation guards, and xterm screen-reader focus entry and exit."
+description: "Skill Loom web accessibility procedure for skip links, focus-visible styling, aria-live announcements, keyboard reordering, non-color status text, dirty-navigation guards, and xterm screen-reader focus entry and exit."
 ---
 
 # Skill: Accessible React Workflows
 
-Use when building or reviewing any Slan screen that authors a chain, runs preflight, starts a run, or renders a terminal. The acceptance bar is a keyboard-only journey with visible focus, announced status changes, and no status conveyed by color alone.
+Use when building or reviewing any Skill Loom screen that authors a chain, runs preflight, starts a run, or renders a terminal. The acceptance bar is a keyboard-only journey with visible focus, announced status changes, and no status conveyed by color alone.
 
 Load `references/keyboard-and-focus.md` when implementing landmarks, skip links, focus-visible styling, keyboard reordering, dialogs, or focus return.
 Load `references/announcements-and-status.md` when implementing live regions, step and run status, form errors, or preflight result announcements.

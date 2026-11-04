@@ -119,7 +119,7 @@ export function NewProjectForm({
         New project
       </h2>
       <p className="field__hint">
-        Slan creates one empty folder. Optionally initialize a git repository; no
+        Skill Loom creates one empty folder. Optionally initialize a git repository; no
         templates or scaffolding files are added.
       </p>
 

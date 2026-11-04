@@ -40,8 +40,8 @@ export interface DirectoryEntry {
   isDirectory: boolean;
   /** A `.git` marker exists (directory or worktree pointer file). */
   isGitRepo: boolean;
-  /** A `.slan` data directory exists. */
-  hasSlan: boolean;
+  /** A `.loom` data directory exists. */
+  hasLoom: boolean;
 }
 
 /** The documented response shape of `GET /api/fs`. */
@@ -115,7 +115,7 @@ export async function listDirectory(
       path: childPath,
       isDirectory,
       isGitRepo: false,
-      hasSlan: false,
+      hasLoom: false,
     });
   }
 
@@ -131,12 +131,12 @@ export async function listDirectory(
         return entry;
       }
 
-      const [isGitRepo, hasSlan] = await Promise.all([
+      const [isGitRepo, hasLoom] = await Promise.all([
         pathExists(join(entry.path, '.git'), accessPath),
-        pathExists(join(entry.path, '.slan'), accessPath),
+        pathExists(join(entry.path, '.loom'), accessPath),
       ]);
 
-      return { ...entry, isGitRepo, hasSlan };
+      return { ...entry, isGitRepo, hasLoom };
     }),
   );
 

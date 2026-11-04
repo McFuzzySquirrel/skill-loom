@@ -33,7 +33,7 @@ export type HarnessSupervisedAdvancement = 'user-only';
 /**
  * How skill firing can be observed in a harness's terminal output (RUN-FR-10).
  *
- * `log-lines` means the CLI may print `skill(name)` lines that Slan can report
+ * `log-lines` means the CLI may print `skill(name)` lines that Skill Loom can report
  * best-effort. `unobservable` means the harness exposes no equivalent visible
  * signal, so the run records `not-observable` instead of guessing.
  */
@@ -54,7 +54,7 @@ export interface HarnessDiscoveryRoot {
   /** Catalog source label. */
   readonly source: SkillSource;
   /**
-   * Display-form location. `<project>`, `~`, and `<slan-config>` are
+   * Display-form location. `<project>`, `~`, and `<loom-config>` are
    * placeholders resolved by the discovery implementation, never by the UI.
    */
   readonly location: string;
@@ -80,7 +80,7 @@ export interface HarnessForkMechanisms {
 
 export interface HarnessTrustDescriptor {
   readonly behavior: HarnessTrustBehavior;
-  /** Configuration file read for persistent trust evidence; never written by Slan. */
+  /** Configuration file read for persistent trust evidence; never written by Skill Loom. */
   readonly configPath: string | null;
   /** Key inside the configuration file that lists trusted folders. */
   readonly trustedFoldersKey: string | null;
@@ -136,7 +136,7 @@ export interface ExecutableResolutionOptions {
 }
 
 export interface HarnessAdapterOptions extends ExecutableResolutionOptions {
-  /** Slan config `harnessCommands[id]` override. */
+  /** Skill Loom config `harnessCommands[id]` override. */
   executableOverride?: string | undefined;
 }
 
@@ -181,7 +181,7 @@ export interface HarnessTrustCommand {
 }
 
 export interface HarnessAdapter extends HarnessDescriptor {
-  /** Resolve the executable from Slan config, then PATH, without a shell. */
+  /** Resolve the executable from Skill Loom config, then PATH, without a shell. */
   resolveExecutable(): ResolvedExecutable;
   /**
    * Generate a session id accepted by this harness. OpenCode requires the
@@ -399,8 +399,8 @@ export function createHarnessUnavailableError(input: {
       : `the configured ${input.harness} executable "${input.override}"`;
   const message =
     input.override === null
-      ? `Slan could not find ${target} on PATH.`
-      : `Slan could not use ${target}.`;
+      ? `Skill Loom could not find ${target} on PATH.`
+      : `Skill Loom could not use ${target}.`;
 
   return new HarnessUnavailableError(message, {
     harness: input.harness,
@@ -546,7 +546,7 @@ function searchPath(
 ): string | undefined {
   for (const segment of pathEnv.split(pathDelimiter)) {
     // An empty PATH segment would mean "current directory" in a POSIX shell.
-    // Slan deliberately skips it so resolution never depends on cwd contents.
+    // Skill Loom deliberately skips it so resolution never depends on cwd contents.
     if (segment === '') {
       continue;
     }
