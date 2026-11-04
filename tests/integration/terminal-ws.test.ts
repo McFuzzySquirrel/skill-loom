@@ -72,7 +72,7 @@ let root: string;
 let harness: Harness | null;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'slan-terminal-ws-'));
+  root = await mkdtemp(join(tmpdir(), 'loom-terminal-ws-'));
   harness = null;
 });
 
@@ -100,7 +100,7 @@ async function startHarness(): Promise<Harness> {
     env: {},
     serveStatic: false,
     configStore: createConfigStore({
-      env: { SLAN_CONFIG_DIR: join(root, 'config') },
+      env: { LOOM_CONFIG_DIR: join(root, 'config') },
       homeDirectory: () => join(root, 'home'),
     }),
     terminalManager: manager,
@@ -195,9 +195,9 @@ describe('terminal WebSocket transport through the composition root', () => {
       'The PTY output did not reach the WebSocket subscriber.',
     );
 
-    send(socket, { type: 'input', data: 'hello slan\n' });
+    send(socket, { type: 'input', data: 'hello loom\n' });
     await waitFor(
-      () => received.output().includes('ECHO:hello slan'),
+      () => received.output().includes('ECHO:hello loom'),
       'Client input did not reach the PTY.',
     );
 

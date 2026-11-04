@@ -25,10 +25,10 @@ import {
 import type { TerminalExit } from '../../src/server/terminal/pty.js';
 
 const CREATED_AT = '2026-11-04T10:00:00.000Z';
-const PROJECT_PATH = '/tmp/slan-supervised-project';
+const PROJECT_PATH = '/tmp/loom-supervised-project';
 
-const OPENCODE_EXECUTABLE = '/opt/slan/bin/opencode';
-const COPILOT_EXECUTABLE = '/opt/slan/bin/copilot';
+const OPENCODE_EXECUTABLE = '/opt/loom/bin/opencode';
+const COPILOT_EXECUTABLE = '/opt/loom/bin/copilot';
 
 function makeChain(overrides: Partial<Chain> = {}): Chain {
   return {
@@ -313,7 +313,7 @@ describe('supervised runner start', () => {
 
     expect(harness.ptys).toHaveLength(1);
     expect(harness.contexts).toEqual([
-      { terminalId: 'slan_run_run-supervised-1', cols: 120, rows: 32 },
+      { terminalId: 'loom_run_run-supervised-1', cols: 120, rows: 32 },
     ]);
     expect(harness.ptys[0]!.spawns).toHaveLength(1);
 
@@ -341,7 +341,7 @@ describe('supervised runner start', () => {
     });
     expect(run.steps[0]!.startedAt).not.toBeNull();
     expect(run.steps[0]!.finishedAt).toBeNull();
-    expect(harness.runner.terminalId).toBe('slan_run_run-supervised-1');
+    expect(harness.runner.terminalId).toBe('loom_run_run-supervised-1');
     expect(harness.runner.state.isProcessRunning).toBe(true);
     expect(harness.ptys[0]!.lastProcess.writes).toEqual([]);
   });
@@ -484,11 +484,11 @@ describe('supervised user outcomes and Next gating', () => {
     const harness = makeHarness();
     await harness.runner.start();
 
-    const skipped = await harness.runner.skip('Reviewed manually outside Slan.');
+    const skipped = await harness.runner.skip('Reviewed manually outside Skill Loom.');
     expect(skipped.status).toBe('awaiting-user');
     expect(skipped.steps[0]).toMatchObject({
       status: 'skipped',
-      reason: 'Reviewed manually outside Slan.',
+      reason: 'Reviewed manually outside Skill Loom.',
     });
     expect(skipped.steps[0]!.finishedAt).not.toBeNull();
     expect(harness.runner.canNext).toBe(true);

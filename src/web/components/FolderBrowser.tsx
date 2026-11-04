@@ -96,7 +96,7 @@ export function FolderBrowser({
         Folder browser
       </h2>
       <p className="field__hint">
-        Browse any readable folder on this machine. The path is resolved by the Slan
+        Browse any readable folder on this machine. The path is resolved by the Skill Loom
         server; the browser never reads file contents.
       </p>
 
@@ -207,7 +207,7 @@ export function FolderBrowser({
                   <span className="browser-entry__badges">
                     <span className="badge">{entry.isDirectory ? 'folder' : 'file'}</span>
                     {entry.isGitRepo ? <span className="badge badge--git">git repo</span> : null}
-                    {entry.hasSlan ? <span className="badge badge--slan">.slan</span> : null}
+                    {entry.hasLoom ? <span className="badge badge--loom">.loom</span> : null}
                   </span>
                 </li>
               ))}
@@ -216,7 +216,7 @@ export function FolderBrowser({
 
           {state.listing.truncated ? (
             <p className="state-note state-note--warning">
-              <span aria-hidden="true">!</span> This folder has more entries than Slan shows
+              <span aria-hidden="true">!</span> This folder has more entries than Skill Loom shows
               at once. Narrow the path to see the rest.
             </p>
           ) : null}

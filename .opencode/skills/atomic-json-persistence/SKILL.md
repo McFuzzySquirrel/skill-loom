@@ -1,11 +1,11 @@
 ---
 name: atomic-json-persistence
-description: "Versioned JSON persistence procedure for Slan config, chain, and run files using Zod validation, same-directory temporary-file rename, corrupt-file quarantine, and traversal-safe identifiers."
+description: "Versioned JSON persistence procedure for Skill Loom config, chain, and run files using Zod validation, same-directory temporary-file rename, corrupt-file quarantine, and traversal-safe identifiers."
 ---
 
 # Skill: Atomic JSON Persistence
 
-Use when reading, writing, migrating, or repairing Slan configuration, chains, or run records. Apply it before adding any persisted field so schema, path containment, and crash behavior stay consistent across `src/server/config/`, `src/server/chains/`, and `src/server/runs/`.
+Use when reading, writing, migrating, or repairing Skill Loom configuration, chains, or run records. Apply it before adding any persisted field so schema, path containment, and crash behavior stay consistent across `src/server/config/`, `src/server/chains/`, and `src/server/runs/`.
 
 Load `references/paths-and-schemas.md` when you need the exact directory layout, file naming, identifier rules, or schema shape.
 Load `references/atomic-write.md` when implementing or reviewing the write helper.
@@ -21,12 +21,12 @@ Resolve each store from its documented root before touching a file:
 
 | Store | Root | Environment override |
 |-------|------|----------------------|
-| Global config | `~/.config/slan/config.json` | `SLAN_CONFIG_DIR` |
-| Active-run pointer | `<configRoot>/active-run.json` | `SLAN_CONFIG_DIR` |
-| Chains | `<project>/.slan/chains/<chainId>.json` | none |
-| Runs | `<project>/.slan/runs/<runId>.json` | none |
+| Global config | `~/.config/loom/config.json` | `LOOM_CONFIG_DIR` |
+| Active-run pointer | `<configRoot>/active-run.json` | `LOOM_CONFIG_DIR` |
+| Chains | `<project>/.loom/chains/<chainId>.json` | none |
+| Runs | `<project>/.loom/runs/<runId>.json` | none |
 
-Call `realpath` on the project directory first, then join `.slan/chains` or `.slan/runs`. If the resolved target does not start with the canonical root plus `path.sep`, then throw a typed containment error before opening the file. Read the root from the injected config path in unit tests; never hard-code `os.homedir()` inside the store.
+Call `realpath` on the project directory first, then join `.loom/chains` or `.loom/runs`. If the resolved target does not start with the canonical root plus `path.sep`, then throw a typed containment error before opening the file. Read the root from the injected config path in unit tests; never hard-code `os.homedir()` inside the store.
 
 **Output:** a canonical absolute root plus a typed error for any escape, symlink, or unreadable directory.
 

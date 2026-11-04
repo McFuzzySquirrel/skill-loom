@@ -31,7 +31,7 @@ let project: string;
 let configDirectory: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'slan-catalog-merge-'));
+  root = await mkdtemp(join(tmpdir(), 'loom-catalog-merge-'));
   project = join(root, 'project');
   configDirectory = join(root, 'config');
   await mkdir(project, { recursive: true });
@@ -43,7 +43,7 @@ afterEach(async () => {
 
 function createStore(): ConfigStore {
   return createConfigStore({
-    env: { SLAN_CONFIG_DIR: configDirectory },
+    env: { LOOM_CONFIG_DIR: configDirectory },
     homeDirectory: () => join(root, 'home'),
   });
 }
@@ -112,7 +112,7 @@ async function captureError(action: () => Promise<unknown>): Promise<Error> {
 describe('catalog merge', () => {
   it('keeps duplicate names as separate entries with distinct stable ids', async () => {
     const first = entry('opencode', 'project', 'deploy', 'Project deployment', 'project-deploy');
-    const second = entry('opencode', 'slan-extra', 'deploy', 'Extra deployment', 'extra-deploy');
+    const second = entry('opencode', 'loom-extra', 'deploy', 'Extra deployment', 'extra-deploy');
     const opencode = adapter('opencode', [first, second], true);
     const service = createCatalogService({ configStore: createStore(), adapters: [opencode] });
 
@@ -121,7 +121,7 @@ describe('catalog merge', () => {
 
     expect(catalog.total).toBe(2);
     expect(merged.map((item) => item.name)).toEqual(['deploy', 'deploy']);
-    expect(catalog.groups.map((group) => group.source)).toEqual(['project', 'slan-extra']);
+    expect(catalog.groups.map((group) => group.source)).toEqual(['project', 'loom-extra']);
     expect(catalog.groups.map((group) => group.count)).toEqual([1, 1]);
 
     expect(merged[0]?.id).toBe(
@@ -135,7 +135,7 @@ describe('catalog merge', () => {
     expect(merged[1]?.id).toBe(
       createSkillId({
         harness: 'opencode',
-        source: 'slan-extra',
+        source: 'loom-extra',
         path: second.path,
         name: 'deploy',
       }),
@@ -171,7 +171,7 @@ describe('catalog merge', () => {
         custom: 1,
         plugin: 0,
         builtin: 1,
-        'slan-extra': 0,
+        'loom-extra': 0,
       },
     });
   });

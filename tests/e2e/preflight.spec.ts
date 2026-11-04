@@ -8,10 +8,10 @@ import { promisify } from 'node:util';
 /**
  * Browser coverage for PRE-04 (run start and preflight report).
  *
- * Playwright supplies an isolated SLAN_CONFIG_DIR and HOME. This spec keeps its
+ * Playwright supplies an isolated LOOM_CONFIG_DIR and HOME. This spec keeps its
  * project fixtures, fake harness executables, and chains under its own
  * temporary root. The isolated config is updated only through the health
- * endpoint's own configDirectory so the developer's real Slan state is never
+ * endpoint's own configDirectory so the developer's real Skill Loom state is never
  * read or written.
  */
 
@@ -114,7 +114,7 @@ async function writeExecutable(path: string, body: string): Promise<void> {
 }
 
 test.beforeAll(async ({ request }) => {
-  fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'slan-preflight-e2e-')));
+  fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'loom-preflight-e2e-')));
 
   const health = await request.get('/api/health');
   expect(health.ok()).toBe(true);
@@ -587,7 +587,7 @@ test.describe('Run start and preflight', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('trust-verify')).toBeFocused();
 
-    // Establishing persistent trust is a user action outside Slan: write the
+    // Establishing persistent trust is a user action outside Skill Loom: write the
     // isolated Copilot config the CLI would write, then verify.
     await mkdir(join(isolatedHome, '.copilot'), { recursive: true });
     await writeFile(

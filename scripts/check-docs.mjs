@@ -17,7 +17,7 @@ const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = resolve(SCRIPT_DIRECTORY, '..');
 
 export const REQUIRED_README_HEADINGS = Object.freeze([
-  '# Slan',
+  '# Skill Loom',
   '## Requirements',
   '## Install',
   '## Development',
@@ -29,7 +29,7 @@ export const REQUIRED_README_HEADINGS = Object.freeze([
 ]);
 
 export const REQUIRED_OPERATIONS_HEADINGS = Object.freeze([
-  '# Slan Operations Guide',
+  '# Skill Loom Operations Guide',
   '## Configuration',
   '## Data locations',
   '## Harness prerequisites',
@@ -80,10 +80,10 @@ export const REQUIRED_README_STATEMENTS = Object.freeze([
 ]);
 
 export const REQUIRED_OPERATIONS_STATEMENTS = Object.freeze([
-  'SLAN_CONFIG_DIR',
-  '.slan/chains',
-  '.slan/runs',
-  '~/.config/slan',
+  'LOOM_CONFIG_DIR',
+  '.loom/chains',
+  '.loom/runs',
+  '~/.config/loom',
   'loopback-only',
   'no authentication',
   'model-invoked',

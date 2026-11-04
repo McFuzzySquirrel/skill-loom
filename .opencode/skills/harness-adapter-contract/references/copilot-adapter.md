@@ -22,7 +22,7 @@ Do not combine `--trust-folder` with `--session-id`; the trust flag is for one p
 
 ## Trust
 
-The interactive first run in a folder is gated by a trust dialog. Persistent trust is recorded under `trustedFolders` in `~/.copilot/config.json`. Slan reads that file and never writes it.
+The interactive first run in a folder is gated by a trust dialog. Persistent trust is recorded under `trustedFolders` in `~/.copilot/config.json`. Skill Loom reads that file and never writes it.
 
 Trust flow:
 

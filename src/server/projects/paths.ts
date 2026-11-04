@@ -21,7 +21,7 @@ export type FolderPathErrorCode =
 /** Mode used to prove a directory can be listed and traversed. */
 export const READABLE_DIRECTORY_MODE = constants.R_OK | constants.X_OK;
 
-/** Existence-only probe mode used for `.git` and `.slan` markers. */
+/** Existence-only probe mode used for `.git` and `.loom` markers. */
 export const EXISTS_MODE = constants.F_OK;
 
 export type RealpathPath = (path: string) => Promise<string>;

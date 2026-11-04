@@ -44,7 +44,7 @@ let projectPath: string;
 let configDirectory: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'slan-run-store-'));
+  root = await mkdtemp(join(tmpdir(), 'loom-run-store-'));
   projectPath = join(root, 'project');
   configDirectory = join(root, 'config');
   await mkdir(projectPath);
@@ -145,7 +145,7 @@ async function expectRunStoreError(
 }
 
 describe('run storage layout', () => {
-  it('writes one JSON run under .slan/runs and claims the global pointer', async () => {
+  it('writes one JSON run under .loom/runs and claims the global pointer', async () => {
     const store = storeFor();
     const run = makeRun();
 
@@ -168,14 +168,14 @@ describe('run storage layout', () => {
     expect((await store.getActiveRun())?.runId).toBe(run.id);
   });
 
-  it('does not create .slan when reading or listing an empty project', async () => {
+  it('does not create .loom when reading or listing an empty project', async () => {
     const store = storeFor();
 
     await expectRunStoreError(store.read('run-missing'), RUN_STORE_ERROR_CODES.NOT_FOUND);
-    expect(await fileExists(join(projectPath, '.slan'))).toBe(false);
+    expect(await fileExists(join(projectPath, '.loom'))).toBe(false);
 
     expect(await store.list()).toEqual({ runs: [], warnings: [] });
-    expect(await fileExists(join(projectPath, '.slan'))).toBe(false);
+    expect(await fileExists(join(projectPath, '.loom'))).toBe(false);
   });
 
   it('rejects a duplicate run id without overwriting the original', async () => {
@@ -565,7 +565,7 @@ describe('identifier safety', () => {
     );
 
     expect(realpathSpy).not.toHaveBeenCalled();
-    expect(await fileExists(join(projectPath, '.slan'))).toBe(false);
+    expect(await fileExists(join(projectPath, '.loom'))).toBe(false);
     expect(await fileExists(join(root, 'escape.json'))).toBe(false);
   });
 
@@ -580,17 +580,17 @@ describe('identifier safety', () => {
 });
 
 describe('containment', () => {
-  it('rejects a symlinked .slan directory before creating anything outside the project', async () => {
+  it('rejects a symlinked .loom directory before creating anything outside the project', async () => {
     const outside = join(root, 'outside');
     await mkdir(outside);
-    await symlink(outside, join(projectPath, '.slan'), 'dir');
+    await symlink(outside, join(projectPath, '.loom'), 'dir');
     const store = storeFor();
 
     const listError = await expectRunStoreError(
       store.list(),
       RUN_STORE_ERROR_CODES.PATH_ESCAPED,
     );
-    expect(listError.details).toMatchObject({ name: '.slan', reason: 'SYMLINK' });
+    expect(listError.details).toMatchObject({ name: '.loom', reason: 'SYMLINK' });
 
     await expectRunStoreError(store.create(makeRun()), RUN_STORE_ERROR_CODES.PATH_ESCAPED);
     expect(await readdir(outside)).toEqual([]);
@@ -599,7 +599,7 @@ describe('containment', () => {
   it('rejects a symlinked runs directory', async () => {
     const outside = join(root, 'outside-runs');
     await mkdir(outside);
-    await mkdir(join(projectPath, '.slan'));
+    await mkdir(join(projectPath, '.loom'));
     await symlink(outside, runsDirectory(), 'dir');
     const store = storeFor();
 
@@ -736,10 +736,10 @@ describe('pointer helpers', () => {
     expect(await fileExists(pointerFile())).toBe(false);
   });
 
-  it('uses SLAN_CONFIG_DIR when no directory is injected', async () => {
+  it('uses LOOM_CONFIG_DIR when no directory is injected', async () => {
     const store = createRunStore({
       projectPath,
-      env: { ...process.env, SLAN_CONFIG_DIR: configDirectory },
+      env: { ...process.env, LOOM_CONFIG_DIR: configDirectory },
     });
     await store.create(makeRun({ id: 'run-env' }));
 

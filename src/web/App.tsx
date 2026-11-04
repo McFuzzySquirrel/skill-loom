@@ -90,7 +90,7 @@ function RoutedShell() {
   const screen = useMemo(() => resolveScreen(pathname), [pathname]);
 
   useEffect(() => {
-    document.title = `${screen.title} · Slan`;
+    document.title = `${screen.title} · Skill Loom`;
   }, [screen.title]);
 
   return (

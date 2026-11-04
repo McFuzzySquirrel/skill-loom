@@ -21,7 +21,7 @@ import {
   resolveConfigDir,
   type AtomicWriteDependencies,
 } from '../config/store.js';
-import { SLAN_DIRECTORY_NAME } from '../projects/registry.js';
+import { LOOM_DIRECTORY_NAME } from '../projects/registry.js';
 import {
   ACTIVE_RUN_STATUSES,
   RUN_VERSION,
@@ -187,7 +187,7 @@ export interface RunRecoveryResult {
 }
 
 /**
- * The single global active-run pointer. It lives in the Slan config directory
+ * The single global active-run pointer. It lives in the Skill Loom config directory
  * and stores just enough metadata for health reporting and startup recovery;
  * it never contains a prompt or terminal output.
  */
@@ -214,9 +214,9 @@ export type RunFileWriter = (target: string, run: Run) => Promise<void>;
 export type RealpathPath = (path: string) => Promise<string>;
 
 export interface RunStorePathOptions {
-  /** Slan config directory override. Defaults to `SLAN_CONFIG_DIR` or home. */
+  /** Skill Loom config directory override. Defaults to `LOOM_CONFIG_DIR` or home. */
   configDirectory?: string;
-  /** Environment source for `SLAN_CONFIG_DIR`. Defaults to `process.env`. */
+  /** Environment source for `LOOM_CONFIG_DIR`. Defaults to `process.env`. */
   env?: NodeJS.ProcessEnv;
   /** Home directory seam for tests. Defaults to `os.homedir()`. */
   homeDirectory?: () => string;
@@ -225,7 +225,7 @@ export interface RunStorePathOptions {
 export interface RunStoreOptions extends RunStorePathOptions {
   /**
    * Registered project directory. It is canonicalized with `realpath` before
-   * any `.slan` path is derived, so a symlinked project root is handled once.
+   * any `.loom` path is derived, so a symlinked project root is handled once.
    */
   projectPath: string;
   /** Canonicalization seam for deterministic traversal tests. */
@@ -277,15 +277,15 @@ export interface RunStore {
    * as `interrupted`, then clear a stale pointer. Never replays a step.
    */
   recoverInterruptedRuns(): Promise<RunRecoveryResult>;
-  /** Slan config directory that owns the active-run pointer. */
+  /** Skill Loom config directory that owns the active-run pointer. */
   getConfigDirectory(): string;
   /** Absolute path of the active-run pointer file. */
   getActiveRunPath(): string;
 }
 
-/** `<canonicalProject>/.slan/runs`; the input must already be canonical. */
+/** `<canonicalProject>/.loom/runs`; the input must already be canonical. */
 export function runsDirectoryFor(projectPath: string): string {
-  return join(projectPath, SLAN_DIRECTORY_NAME, RUNS_DIRECTORY_NAME);
+  return join(projectPath, LOOM_DIRECTORY_NAME, RUNS_DIRECTORY_NAME);
 }
 
 /** `<configDirectory>/active-run.json`. */
@@ -1011,14 +1011,14 @@ class FileRunStore implements RunStore {
       this.options.projectPath,
       this.options.realpathPath,
     );
-    const slanDirectory = join(canonicalProject, SLAN_DIRECTORY_NAME);
+    const loomDirectory = join(canonicalProject, LOOM_DIRECTORY_NAME);
     const runsDirectory = runsDirectoryFor(canonicalProject);
 
-    const slanState = await this.inspectEntry(slanDirectory);
-    assertNotSymlinkOrFile(slanState, slanDirectory, SLAN_DIRECTORY_NAME);
+    const loomState = await this.inspectEntry(loomDirectory);
+    assertNotSymlinkOrFile(loomState, loomDirectory, LOOM_DIRECTORY_NAME);
 
     const runsState =
-      slanState === 'missing' ? 'missing' : await this.inspectEntry(runsDirectory);
+      loomState === 'missing' ? 'missing' : await this.inspectEntry(runsDirectory);
     assertNotSymlinkOrFile(runsState, runsDirectory, RUNS_DIRECTORY_NAME);
 
     let exists = runsState === 'directory';
@@ -1038,13 +1038,13 @@ class FileRunStore implements RunStore {
 
     if (exists) {
       // Canonicalize the directory itself and require exact equality. A
-      // symlinked `.slan` or `runs` path resolves elsewhere and is rejected
+      // symlinked `.loom` or `runs` path resolves elsewhere and is rejected
       // before any run file is read or written.
       const canonical = await this.canonicalizeRunsDirectory(runsDirectory);
       if (canonical !== runsDirectory) {
         throw new RunStoreError(
           RUN_STORE_ERROR_CODES.PATH_ESCAPED,
-          'The run directory resolves outside the project .slan directory.',
+          'The run directory resolves outside the project .loom directory.',
           {
             path: runsDirectory,
             resolvedPath: canonical,
@@ -1333,7 +1333,7 @@ function isRecoverablePointerTargetError(code: RunStoreErrorCode): boolean {
 }
 
 /**
- * Resolve the Slan config directory without passing undefined values through
+ * Resolve the Skill Loom config directory without passing undefined values through
  * an exact-optional-property boundary.
  */
 function resolveStoreConfigDir(options: RunStorePathOptions): string {
@@ -1344,7 +1344,7 @@ function resolveStoreConfigDir(options: RunStorePathOptions): string {
 }
 
 /**
- * Canonicalize the project directory before deriving `.slan/runs`. The project
+ * Canonicalize the project directory before deriving `.loom/runs`. The project
  * is never created here: a missing project is a typed 404 candidate, not an
  * invitation to scaffold the user's filesystem.
  */

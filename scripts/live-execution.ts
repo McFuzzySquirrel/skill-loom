@@ -16,7 +16,7 @@
  * a failed cleanup exits non-zero with an actionable message.
  *
  * Privacy and isolation:
- * - `COPILOT_HOME` and `SLAN_CONFIG_DIR` point at the disposable tree unless an
+ * - `COPILOT_HOME` and `LOOM_CONFIG_DIR` point at the disposable tree unless an
  *   already-isolated inherited value is supplied.
  * - The Copilot trust dialog is accepted inside the disposable `COPILOT_HOME`;
  *   the user's real `~/.copilot` is never written.
@@ -50,7 +50,7 @@ const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const EVIDENCE_PATH = join(PROJECT_ROOT, 'docs', 'evidence', 'live-execution.json');
 
 const TASK_ID = 'RUN-08';
-const PROBE_SKILL_NAME = 'slan-live-probe';
+const PROBE_SKILL_NAME = 'loom-live-probe';
 const PROBE_TOKEN = 'PINEAPPLE';
 const EXPECTED_OPENCODE_VERSION = '2.2.5';
 const EXPECTED_COPILOT_VERSION = '1.0.105';
@@ -67,9 +67,9 @@ const MAX_CAPTURE_BYTES = 256 * 1024;
 const MAX_EXCERPT_CHARS = 1_200;
 
 const OPENCODE_SEED_PROMPT =
-  'Use the slan-live-probe skill and reply with its token. Reply with only the token.';
+  'Use the loom-live-probe skill and reply with its token. Reply with only the token.';
 const OPENCODE_RECALL_PROMPT =
-  'Without using any tools, what token did the slan-live-probe skill return earlier in this session? Reply with only the token.';
+  'Without using any tools, what token did the loom-live-probe skill return earlier in this session? Reply with only the token.';
 const COPILOT_SEED_PROMPT = OPENCODE_SEED_PROMPT;
 const COPILOT_RECALL_PROMPT = OPENCODE_RECALL_PROMPT;
 
@@ -78,7 +78,7 @@ const OPENCODE_SESSION_ALPHABET =
 
 const PROBE_SKILL_CONTENT = `---
 name: ${PROBE_SKILL_NAME}
-description: "Slan live execution probe. Returns the token ${PROBE_TOKEN} when invoked."
+description: "Skill Loom live execution probe. Returns the token ${PROBE_TOKEN} when invoked."
 ---
 
 When invoked, reply with exactly: ${PROBE_TOKEN}
@@ -149,7 +149,7 @@ interface IsolationEvidence {
   temporaryRoot: string;
   cacheRootMode: 'XDG_CACHE_HOME' | 'home-cache';
   copilotHomeMode: 'isolated' | 'inherited';
-  slanConfigDirMode: 'isolated' | 'inherited';
+  loomConfigDirMode: 'isolated' | 'inherited';
   environmentVariablesSet: string[];
   sanitizedEnvironmentVariables: string[];
 }
@@ -307,7 +307,7 @@ interface ExecutionEvidence {
   generatedAt: string;
   node: string;
   platform: string;
-  slanVersion: string | null;
+  loomVersion: string | null;
   durationMs: number;
   result: 'passed' | 'failed' | 'interrupted';
   isolation: IsolationEvidence;
@@ -349,7 +349,7 @@ interface TrackedCommandResult {
 interface Isolation {
   evidence: IsolationEvidence;
   copilotHome: string;
-  slanConfigDir: string;
+  loomConfigDir: string;
   childEnv: NodeJS.ProcessEnv;
   cacheRootMode: 'XDG_CACHE_HOME' | 'home-cache';
 }
@@ -989,7 +989,7 @@ async function probeVersion(input: {
 
 async function createIsolation(root: string): Promise<Isolation> {
   const inheritedCopilotHome = nonEmpty(process.env.COPILOT_HOME);
-  const inheritedSlanConfig = nonEmpty(process.env.SLAN_CONFIG_DIR);
+  const inheritedLoomConfig = nonEmpty(process.env.LOOM_CONFIG_DIR);
   const realCopilotHome = resolve(homedir(), '.copilot');
   const inheritedCopilotIsRealHome =
     inheritedCopilotHome !== undefined && resolve(inheritedCopilotHome) === realCopilotHome;
@@ -998,11 +998,11 @@ async function createIsolation(root: string): Promise<Isolation> {
     inheritedCopilotHome !== undefined && !inheritedCopilotIsRealHome
       ? inheritedCopilotHome
       : join(root, 'copilot-home');
-  const slanConfigDir = inheritedSlanConfig ?? join(root, 'slan-config');
+  const loomConfigDir = inheritedLoomConfig ?? join(root, 'loom-config');
   const projectDirectory = join(root, 'project');
 
   await mkdir(copilotHome, { recursive: true });
-  await mkdir(slanConfigDir, { recursive: true });
+  await mkdir(loomConfigDir, { recursive: true });
   await mkdir(projectDirectory, { recursive: true });
   await mkdir(join(root, 'opencode'), { recursive: true });
 
@@ -1011,7 +1011,7 @@ async function createIsolation(root: string): Promise<Isolation> {
     delete childEnv[name];
   }
   childEnv.COPILOT_HOME = copilotHome;
-  childEnv.SLAN_CONFIG_DIR = slanConfigDir;
+  childEnv.LOOM_CONFIG_DIR = loomConfigDir;
   childEnv.PWD = projectDirectory;
   childEnv.OLDPWD = projectDirectory;
   childEnv.COPILOT_AUTO_UPDATE = 'false';
@@ -1023,10 +1023,10 @@ async function createIsolation(root: string): Promise<Isolation> {
     cacheRootMode,
     copilotHomeMode:
       inheritedCopilotHome !== undefined && !inheritedCopilotIsRealHome ? 'inherited' : 'isolated',
-    slanConfigDirMode: inheritedSlanConfig !== undefined ? 'inherited' : 'isolated',
+    loomConfigDirMode: inheritedLoomConfig !== undefined ? 'inherited' : 'isolated',
     environmentVariablesSet: [
       'COPILOT_HOME',
-      'SLAN_CONFIG_DIR',
+      'LOOM_CONFIG_DIR',
       'PWD',
       'OLDPWD',
       'COPILOT_AUTO_UPDATE',
@@ -1038,7 +1038,7 @@ async function createIsolation(root: string): Promise<Isolation> {
   return {
     evidence,
     copilotHome,
-    slanConfigDir,
+    loomConfigDir,
     childEnv,
     cacheRootMode,
   };
@@ -1050,7 +1050,7 @@ async function selectOpenCodeModel(input: {
   cwd: string;
   configDirectory: string;
 }): Promise<OpenCodeModelSelection> {
-  const override = nonEmpty(process.env.SLAN_LIVE_OPENCODE_MODEL);
+  const override = nonEmpty(process.env.LOOM_LIVE_OPENCODE_MODEL);
   if (override !== undefined && /^[A-Za-z0-9._-]+\/[A-Za-z0-9._:-]+$/.test(override)) {
     await writeOpenCodeConfig(input.configDirectory, override);
     return {
@@ -1668,7 +1668,7 @@ async function runCopilotHeadless(input: {
 
   const combined = `${result.stdout}\n${result.stderr}`;
   const tokenObserved = result.stdout.includes(PROBE_TOKEN);
-  const skillObserved = /skill\(\s*slan-live-probe\s*\)/.test(combined);
+  const skillObserved = /skill\(\s*loom-live-probe\s*\)/.test(combined);
   let failureClass: FailureClass = 'none';
 
   if (result.timedOut) {
@@ -1967,7 +1967,7 @@ function installProcessHandlers(): void {
 /* Evidence writing                                                          */
 /* ------------------------------------------------------------------------- */
 
-async function readSlanVersion(): Promise<string | null> {
+async function readLoomVersion(): Promise<string | null> {
   try {
     const raw = await readFile(join(PROJECT_ROOT, 'package.json'), 'utf8');
     const parsed: unknown = JSON.parse(raw);
@@ -2000,7 +2000,7 @@ async function buildEvidence(input: {
     generatedAt: new Date().toISOString(),
     node: process.version,
     platform: `${process.platform}-${process.arch}`,
-    slanVersion: await readSlanVersion(),
+    loomVersion: await readLoomVersion(),
     durationMs: Date.now() - input.report.startedAt,
     result: input.result,
     isolation: input.report.isolation,
@@ -2044,7 +2044,7 @@ async function main(): Promise<number> {
       temporaryRoot: '<temporary-root>',
       cacheRootMode: 'home-cache',
       copilotHomeMode: 'isolated',
-      slanConfigDirMode: 'isolated',
+      loomConfigDirMode: 'isolated',
       environmentVariablesSet: [],
       sanitizedEnvironmentVariables: [...SANITIZED_ENV_NAMES],
     },
@@ -2052,8 +2052,8 @@ async function main(): Promise<number> {
   };
 
   const cacheBase = nonEmpty(process.env.XDG_CACHE_HOME) ?? join(homedir(), '.cache');
-  await mkdir(join(cacheBase, 'slan'), { recursive: true });
-  const root = await mkdtemp(join(cacheBase, 'slan', 'live-execution-'));
+  await mkdir(join(cacheBase, 'loom'), { recursive: true });
+  const root = await mkdtemp(join(cacheBase, 'loom', 'live-execution-'));
   temporaryRoot = root;
 
   const isolation = await createIsolation(root);
@@ -2065,7 +2065,7 @@ async function main(): Promise<number> {
   isolation.childEnv.PWD = canonicalProject;
   isolation.childEnv.OLDPWD = canonicalProject;
   process.env.COPILOT_HOME = isolation.copilotHome;
-  process.env.SLAN_CONFIG_DIR = isolation.slanConfigDir;
+  process.env.LOOM_CONFIG_DIR = isolation.loomConfigDir;
 
   replacementsValue = [
     [canonicalProject, '<temporary-project>'],
@@ -2974,13 +2974,13 @@ function openCodeRemediation(failureClass: FailureClass, recall = false): string
     case 'auth':
       return 'Run "opencode auth login" in a terminal, then rerun npm run test:live:execution. The probe never reads credential values.';
     case 'limit':
-      return 'The selected model is rate-limited or out of quota. Authenticate another provider, or set SLAN_LIVE_OPENCODE_MODEL to an available authenticated model, then rerun npm run test:live:execution.';
+      return 'The selected model is rate-limited or out of quota. Authenticate another provider, or set LOOM_LIVE_OPENCODE_MODEL to an available authenticated model, then rerun npm run test:live:execution.';
     case 'timeout':
       return 'The interactive OpenCode run exceeded the bounded timeout. Check the login state and selected model, then rerun npm run test:live:execution.';
     case 'token-missing':
       return recall
         ? 'Verify the same ses_ session id was passed to both OpenCode processes and that OpenCode persisted the first session. Rerun npm run test:live:execution.'
-        : 'Confirm the slan-live-probe skill was discovered and the selected model followed the seeded prompt, then rerun npm run test:live:execution.';
+        : 'Confirm the loom-live-probe skill was discovered and the selected model followed the seeded prompt, then rerun npm run test:live:execution.';
     default:
       return 'Inspect the bounded redacted excerpt, fix the reported CLI or skill problem, then rerun npm run test:live:execution.';
   }
@@ -3010,7 +3010,7 @@ function copilotRemediation(
 
 function printSummary(evidence: ExecutionEvidence, fatal: boolean): void {
   const lines: string[] = [];
-  lines.push('Slan live execution (RUN-FR-13)');
+  lines.push('Skill Loom live execution (RUN-FR-13)');
   lines.push(
     `  node ${evidence.node} | opencode ${
       evidence.prerequisites?.opencode.version ?? 'unavailable'

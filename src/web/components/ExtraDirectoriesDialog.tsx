@@ -146,8 +146,8 @@ export function ExtraDirectoriesDialog({
       </div>
 
       <p className="field__hint">
-        Changes are global to Slan and apply to every project. Extra directories are
-        scanned by OpenCode and appear with a Slan extra badge.
+        Changes are global to Skill Loom and apply to every project. Extra directories are
+        scanned by OpenCode and appear with a Loom extra badge.
       </p>
 
       <form className="catalog-settings__form" onSubmit={(event) => void handleAdd(event)}>
@@ -256,7 +256,7 @@ export function ExtraDirectoriesDialog({
                   aria-label={`Confirm removal of ${directory}`}
                 >
                   <p>
-                    Remove <code>{directory}</code> from Slan&apos;s extra skill
+                    Remove <code>{directory}</code> from Skill Loom&apos;s extra skill
                     directories? Skills in it will disappear from the catalog on the next
                     refresh. Files on disk are not deleted.
                   </p>

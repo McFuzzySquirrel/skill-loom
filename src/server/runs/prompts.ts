@@ -21,7 +21,7 @@ import {
  * Prompt assembly and session planning.
  *
  * A prompt names the skill explicitly and contains the resolved instruction.
- * Skill loading itself remains model-invoked (EXEC-01): Slan controls the text
+ * Skill loading itself remains model-invoked (EXEC-01): Skill Loom controls the text
  * and its order, not whether the harness chooses to load the skill.
  *
  * Session planning consumes adapter capabilities as data. This module never

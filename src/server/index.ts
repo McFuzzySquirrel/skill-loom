@@ -59,7 +59,7 @@ export function installShutdownHandlers(
         options.onCloseError(error);
         return;
       }
-      console.error(`Slan failed to shut down after ${signal}.`, error);
+      console.error(`Skill Loom failed to shut down after ${signal}.`, error);
       process.exitCode = 1;
     });
   };
@@ -86,7 +86,7 @@ export function installShutdownHandlers(
  */
 export async function startServer(options: BuildAppOptions = {}): Promise<StartedServer> {
   const app = await buildApp(options);
-  const settings: ServerSettings = { ...app.slanSettings };
+  const settings: ServerSettings = { ...app.loomSettings };
 
   try {
     await app.listen({ host: settings.host, port: settings.port });
@@ -122,10 +122,10 @@ function isMainModule(): boolean {
 if (isMainModule()) {
   startServer({ logger: true })
     .then(({ settings }) => {
-      console.log(`Slan listening on http://${settings.host}:${settings.port}`);
+      console.log(`Skill Loom listening on http://${settings.host}:${settings.port}`);
     })
     .catch((error: unknown) => {
-      console.error('Slan failed to start.', error);
+      console.error('Skill Loom failed to start.', error);
       process.exitCode = 1;
     });
 }

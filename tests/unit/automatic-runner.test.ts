@@ -28,10 +28,10 @@ import {
 import type { TerminalExit } from '../../src/server/terminal/pty.js';
 
 const CREATED_AT = '2026-11-04T10:00:00.000Z';
-const PROJECT_PATH = '/tmp/slan-automatic-project';
+const PROJECT_PATH = '/tmp/loom-automatic-project';
 
-const OPENCODE_EXECUTABLE = '/opt/slan/bin/opencode';
-const COPILOT_EXECUTABLE = '/opt/slan/bin/copilot';
+const OPENCODE_EXECUTABLE = '/opt/loom/bin/opencode';
+const COPILOT_EXECUTABLE = '/opt/loom/bin/copilot';
 
 const OSC_WORKING = '\x1b]7501;state=working\x07';
 const OSC_IDLE = '\x1b]7501;state=idle\x07';
@@ -342,7 +342,7 @@ describe('automatic OpenCode advancement', () => {
     expect(harness.spawner.spawns).toHaveLength(1);
     expect(harness.spawner.lastSpec).toMatchObject({
       surface: 'pty',
-      terminalId: 'slan_run_run-automatic-1',
+      terminalId: 'loom_run_run-automatic-1',
       executable: OPENCODE_EXECUTABLE,
       cwd: PROJECT_PATH,
     });
@@ -551,7 +551,7 @@ describe('automatic Copilot process-exit advancement', () => {
     expect(started.status).toBe('running');
     expect(harness.spawner.lastSpec).toMatchObject({
       surface: 'process',
-      terminalId: 'slan_run_run-automatic-1',
+      terminalId: 'loom_run_run-automatic-1',
       executable: COPILOT_EXECUTABLE,
       cwd: PROJECT_PATH,
     });

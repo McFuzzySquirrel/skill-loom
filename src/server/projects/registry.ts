@@ -18,17 +18,17 @@ import {
   type CanonicalDirectory,
 } from './paths.js';
 
-/** Relative directory holding every project-local Slan file. */
-export const SLAN_DIRECTORY_NAME = '.slan';
+/** Relative directory holding every project-local Skill Loom file. */
+export const LOOM_DIRECTORY_NAME = '.loom';
 
 /** Ignore file created exactly once per project. */
-export const SLAN_GITIGNORE_NAME = '.gitignore';
+export const LOOM_GITIGNORE_NAME = '.gitignore';
 
 /**
- * The only rule Slan itself needs ignored. `runs/` holds noisy per-run records
+ * The only rule Skill Loom itself needs ignored. `runs/` holds noisy per-run records
  * that must never be committed; chains stay tracked because they are recipes.
  */
-export const SLAN_GITIGNORE_CONTENT = 'runs/\n';
+export const LOOM_GITIGNORE_CONTENT = 'runs/\n';
 
 /** Safety cap for one project name, matching common filesystem limits. */
 export const MAX_PROJECT_NAME_LENGTH = 255;
@@ -49,7 +49,7 @@ export const PROJECT_ERROR_CODES = {
   PARENT_NOT_DIRECTORY: 'PROJECT_PARENT_NOT_DIRECTORY',
   PARENT_UNREADABLE: 'PROJECT_PARENT_UNREADABLE',
   RECENT_NOT_FOUND: 'RECENT_PROJECT_NOT_FOUND',
-  SLAN_SETUP_FAILED: 'PROJECT_SLAN_SETUP_FAILED',
+  LOOM_SETUP_FAILED: 'PROJECT_LOOM_SETUP_FAILED',
   GIT_UNAVAILABLE: 'GIT_UNAVAILABLE',
   GIT_INIT_FAILED: 'GIT_INIT_FAILED',
 } as const;
@@ -80,13 +80,13 @@ export class ProjectRegistryError extends Error {
 /** Run `git init` in a directory without a shell. Injected in tests. */
 export type GitInitRunner = (directory: string) => Promise<void>;
 
-/** State of the project's `.slan` directory after registration. */
-export interface ProjectSlanState {
-  /** Absolute `<project>/.slan` directory. */
+/** State of the project's `.loom` directory after registration. */
+export interface ProjectLoomState {
+  /** Absolute `<project>/.loom` directory. */
   directory: string;
-  /** True only when this call created `.slan/.gitignore`. */
+  /** True only when this call created `.loom/.gitignore`. */
   gitignoreCreated: boolean;
-  /** Number of chain JSON files already present under `.slan/chains`. */
+  /** Number of chain JSON files already present under `.loom/chains`. */
   chainCount: number;
   /** Convenience flag for the UI; true when `chainCount > 0`. */
   hasChains: boolean;
@@ -106,7 +106,7 @@ export interface ProjectRegistration {
   isGitRepo: boolean;
   /** True only when this call ran a successful `git init`. */
   gitInitialized: boolean;
-  slan: ProjectSlanState;
+  loom: ProjectLoomState;
 }
 
 export interface CreateProjectInput {
@@ -283,7 +283,7 @@ class FileProjectRegistry implements ProjectRegistry {
   ): Promise<ProjectRegistration> {
     const id = projectIdForPath(canonicalPath);
     const displayName = projectDisplayName(canonicalPath);
-    const slan = await ensureSlanData(canonicalPath);
+    const loom = await ensureLoomData(canonicalPath);
     const isGitRepo = await pathExists(join(canonicalPath, '.git'));
     const lastOpenedAt = this.timestamp();
 
@@ -306,7 +306,7 @@ class FileProjectRegistry implements ProjectRegistry {
       lastOpenedAt,
       isGitRepo,
       gitInitialized,
-      slan,
+      loom,
     };
   }
 
@@ -315,7 +315,7 @@ class FileProjectRegistry implements ProjectRegistry {
     const date = now instanceof Date ? now : new Date(now);
     if (Number.isNaN(date.getTime())) {
       throw new ProjectRegistryError(
-        PROJECT_ERROR_CODES.SLAN_SETUP_FAILED,
+        PROJECT_ERROR_CODES.LOOM_SETUP_FAILED,
         'The project clock returned an invalid date.',
       );
     }
@@ -360,11 +360,11 @@ export function createProjectRegistry(options: ProjectRegistryOptions): ProjectR
 }
 
 /**
- * Create `.slan` and its ignore file exactly once. An existing `.gitignore` is
+ * Create `.loom` and its ignore file exactly once. An existing `.gitignore` is
  * never rewritten, and no `chains/` or `runs/` directory is created here.
  */
-export async function ensureSlanData(projectPath: string): Promise<ProjectSlanState> {
-  const directory = join(projectPath, SLAN_DIRECTORY_NAME);
+export async function ensureLoomData(projectPath: string): Promise<ProjectLoomState> {
+  const directory = join(projectPath, LOOM_DIRECTORY_NAME);
 
   try {
     await mkdir(directory, { recursive: true, mode: 0o755 });
@@ -382,8 +382,8 @@ export async function ensureSlanData(projectPath: string): Promise<ProjectSlanSt
       throw error;
     }
     throw new ProjectRegistryError(
-      PROJECT_ERROR_CODES.SLAN_SETUP_FAILED,
-      'The project .slan directory could not be prepared.',
+      PROJECT_ERROR_CODES.LOOM_SETUP_FAILED,
+      'The project .loom directory could not be prepared.',
       { path: directory, reason: errnoCode(error) },
       { cause: error },
     );
@@ -391,14 +391,14 @@ export async function ensureSlanData(projectPath: string): Promise<ProjectSlanSt
 }
 
 async function createGitignoreIfAbsent(directory: string): Promise<boolean> {
-  const target = join(directory, SLAN_GITIGNORE_NAME);
+  const target = join(directory, LOOM_GITIGNORE_NAME);
   const temporary = join(
     directory,
-    `.${SLAN_GITIGNORE_NAME}.${process.pid}.${randomUUID()}.tmp`,
+    `.${LOOM_GITIGNORE_NAME}.${process.pid}.${randomUUID()}.tmp`,
   );
 
   try {
-    await writeFile(temporary, SLAN_GITIGNORE_CONTENT, {
+    await writeFile(temporary, LOOM_GITIGNORE_CONTENT, {
       encoding: 'utf8',
       mode: 0o644,
       flag: 'wx',

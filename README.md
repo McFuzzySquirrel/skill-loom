@@ -1,8 +1,8 @@
-# Slan
+# Skill Loom
 
-Slan is a single-user local web application for assembling, saving, and running ordered chains of installed agent skills. It inventories the skills a selected CLI harness can load, lets you inspect them and build a reusable recipe, preflights the run, and executes the chain in a real interactive terminal.
+Skill Loom is a single-user local web application for assembling, saving, and running ordered chains of installed agent skills. It inventories the skills a selected CLI harness can load, lets you inspect them and build a reusable recipe, preflights the run, and executes the chain in a real interactive terminal.
 
-Slan does not author skills and does not execute a skill as a callable command. Each chain step is sent to a local harness as a prompt; skills are **model-invoked** context. The chain order is prompt order, **not a guarantee** that a harness loads or fires a named skill. A harness may decline to load a skill even when preflight resolved it.
+Skill Loom does not author skills and does not execute a skill as a callable command. Each chain step is sent to a local harness as a prompt; skills are **model-invoked** context. The chain order is prompt order, **not a guarantee** that a harness loads or fires a named skill. A harness may decline to load a skill even when preflight resolved it.
 
 ## Requirements
 
@@ -20,9 +20,9 @@ Slan does not author skills and does not execute a skill as a callable command. 
 npm install
 ```
 
-`node-pty` compiles native code during installation. If the install fails at that step, install the native toolchain above and run `npm install` again (or `npm rebuild node-pty`). Slan does not hide a native build failure behind a generic install success message.
+`node-pty` compiles native code during installation. If the install fails at that step, install the native toolchain above and run `npm install` again (or `npm rebuild node-pty`). Skill Loom does not hide a native build failure behind a generic install success message.
 
-Harness CLIs are deliberately not installed by this project. Install OpenCode 2.2.5 and/or GitHub Copilot CLI 1.0.105 with their own installers, then confirm they are on `PATH`; alternatively set `harnessCommands.opencode` or `harnessCommands.copilot` in the Slan config.
+Harness CLIs are deliberately not installed by this project. Install OpenCode 2.2.5 and/or GitHub Copilot CLI 1.0.105 with their own installers, then confirm they are on `PATH`; alternatively set `harnessCommands.opencode` or `harnessCommands.copilot` in the Skill Loom config.
 
 ## Development
 
@@ -58,7 +58,7 @@ npm start
 | Live execution probe | `npm run test:live:execution` | Requires real harness CLIs and may make paid model calls. |
 | Documentation gate | `npm run check` | Runs `scripts/check-docs.mjs`. |
 
-Playwright never reads or writes your real Slan or harness state. `npm run test:e2e` builds the app, starts it with a temporary `SLAN_CONFIG_DIR`, a temporary `HOME`, a temporary project area, and an isolated harness `PATH`; it never attaches to an already-running developer instance.
+Playwright never reads or writes your real Skill Loom or harness state. `npm run test:e2e` builds the app, starts it with a temporary `LOOM_CONFIG_DIR`, a temporary `HOME`, a temporary project area, and an isolated harness `PATH`; it never attaches to an already-running developer instance.
 
 The live probes exercise real OpenCode and Copilot CLIs. They fail with a clear diagnostic when a required CLI is absent; they do not silently skip. Run them only when you intend to use the installed harnesses and credentials.
 
@@ -67,9 +67,9 @@ The live probes exercise real OpenCode and Copilot CLIs. They fail with a clear 
 1. Start the development app with `npm run dev` and open `http://127.0.0.1:5173`, or build and run production with `npm run build && npm start` and open `http://127.0.0.1:7373`.
 2. On the Projects screen, open an existing folder or create a new project. Registering a project records it in the recent-projects list; removing a recent entry does not delete project files.
 3. Open the project workspace and expand the skill catalog (it starts collapsed). Choose the harness, search or expand a skill's `SKILL.md`, and optionally add extra skill directories in the settings dialog. A skill discovered from a personal, plugin, custom, or extra source can be copied into the project with **Copy into this project**; OpenCode copies land in `.opencode/skills/` and Copilot copies in `.github/skills/`.
-4. Create a chain, add at least one step, choose the harness, give every step an instruction, declare any named inputs, and save. A saved chain is stored under `<project>/.slan/chains/`. **Save and run** saves the chain and opens its run-start screen.
+4. Create a chain, add at least one step, choose the harness, give every step an instruction, declare any named inputs, and save. A saved chain is stored under `<project>/.loom/chains/`. **Save and run** saves the chain and opens its run-start screen.
 5. On run start, choose supervised or automatic mode, provide required inputs, and run preflight. Preflight never makes a model call.
-6. Resolve every blocking finding and acknowledge every required warning, then choose **Start run**. Slan creates the run through `POST /api/projects/<projectId>/runs`, re-runs the blocking preflight on the server, and opens the dedicated terminal page at `/runs/<runId>/terminal`.
+6. Resolve every blocking finding and acknowledge every required warning, then choose **Start run**. Skill Loom creates the run through `POST /api/projects/<projectId>/runs`, re-runs the blocking preflight on the server, and opens the dedicated terminal page at `/runs/<runId>/terminal`.
 7. The terminal page keeps xterm and the compact run controls together without scrolling past step details; **Run details** opens `/runs/<runId>` for the step rail, full controls, and recovery guidance. A run never advances because of terminal output, a timer, or a page load. A chain card's **Run** action returns to the run-start screen, and the project screen links to any active run.
 8. To reuse a recipe, choose **Save copy to library** in the builder. The global library at `/chains` stores independent snapshots; importing one into another project copies it with a new chain id.
 
@@ -77,9 +77,9 @@ See the [operations guide](docs/OPERATIONS.md) for configuration, data locations
 
 ## Security and privacy
 
-Slan is **loopback-only**. The server binds to `127.0.0.1` by default, refuses any non-loopback `SLAN_HOST`, and has **no authentication** because there is no remote access. Never expose the port through a reverse proxy, tunnel, container port publish, or remote host.
+Skill Loom is **loopback-only**. The server binds to `127.0.0.1` by default, refuses any non-loopback `LOOM_HOST`, and has **no authentication** because there is no remote access. Never expose the port through a reverse proxy, tunnel, container port publish, or remote host.
 
-The server owns all filesystem traversal, persistence, process spawning, and PTY handling. The browser performs no shell execution and receives only typed API and WebSocket data. Slan sends no telemetry, crash reports, remote logs, or outbound application requests; only user-invoked harness CLIs and package installation use the network. Credentials and tokens are never read into Slan, persisted, or logged.
+The server owns all filesystem traversal, persistence, process spawning, and PTY handling. The browser performs no shell execution and receives only typed API and WebSocket data. Skill Loom sends no telemetry, crash reports, remote logs, or outbound application requests; only user-invoked harness CLIs and package installation use the network. Credentials and tokens are never read into Skill Loom, persisted, or logged.
 
 ## Operations guide
 

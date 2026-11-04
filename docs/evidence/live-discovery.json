@@ -4,16 +4,16 @@
   "generatedAt": "2026-11-04T11:21:16.498Z",
   "node": "v26.13.0",
   "platform": "linux-arm64",
-  "slanVersion": "0.1.0",
+  "loomVersion": "0.1.0",
   "durationMs": 1297,
   "result": "passed",
   "isolation": {
     "temporaryRoot": "<temporary-root>",
     "copilotHomeMode": "isolated",
-    "slanConfigDirMode": "isolated",
+    "loomConfigDirMode": "isolated",
     "environmentVariablesSet": [
       "COPILOT_HOME",
-      "SLAN_CONFIG_DIR"
+      "LOOM_CONFIG_DIR"
     ]
   },
   "prerequisites": {
@@ -46,7 +46,7 @@
       "version": "2.2.5",
       "expectedVersion": "2.2.5",
       "versionMatches": true,
-      "discovery": "scanOpenCodeSkills (project, personal, and Slan extra directories)",
+      "discovery": "scanOpenCodeSkills (project, personal, and Loom extra directories)",
       "workingDirectory": "<temporary-root>/project",
       "status": "passed",
       "entryCount": 1,
@@ -56,11 +56,11 @@
         "custom": 0,
         "plugin": 0,
         "builtin": 0,
-        "slan-extra": 0
+        "loom-extra": 0
       },
       "probeFound": true,
       "probeSource": "project",
-      "probePath": "<temporary-root>/project/.opencode/skills/slan-live-probe/SKILL.md",
+      "probePath": "<temporary-root>/project/.opencode/skills/loom-live-probe/SKILL.md",
       "existingSource": {
         "kind": "personal-or-builtin",
         "available": false,
@@ -86,11 +86,11 @@
         "custom": 0,
         "plugin": 0,
         "builtin": 2,
-        "slan-extra": 0
+        "loom-extra": 0
       },
       "probeFound": true,
       "probeSource": "project",
-      "probePath": "<temporary-root>/project/.agents/skills/slan-live-probe/SKILL.md",
+      "probePath": "<temporary-root>/project/.agents/skills/loom-live-probe/SKILL.md",
       "existingSource": {
         "kind": "personal-or-builtin",
         "available": true,
@@ -131,7 +131,7 @@
       "id": "opencode.probe",
       "harness": "opencode",
       "description": "Discover the temporary OpenCode probe skill with the real scanner.",
-      "expected": "A project entry named slan-live-probe at <temporary-root>/project/.opencode/skills/slan-live-probe/SKILL.md.",
+      "expected": "A project entry named loom-live-probe at <temporary-root>/project/.opencode/skills/loom-live-probe/SKILL.md.",
       "observed": "Found 1 entries in total, 1 from the project source.",
       "status": "passed",
       "passed": true,
@@ -160,7 +160,7 @@
       "id": "copilot.probe",
       "harness": "copilot",
       "description": "Discover the temporary Copilot probe skill through copilot skill list --json.",
-      "expected": "A project entry named slan-live-probe at <temporary-root>/project/.agents/skills/slan-live-probe/SKILL.md.",
+      "expected": "A project entry named loom-live-probe at <temporary-root>/project/.agents/skills/loom-live-probe/SKILL.md.",
       "observed": "Found 3 entries in total, 1 from the project source.",
       "status": "passed",
       "passed": true,

@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_HOST,
   DEFAULT_PORT,
-  SLAN_VERSION,
+  LOOM_VERSION,
   assertLoopbackHost,
   buildApp,
   isLoopbackHost,
@@ -30,7 +30,7 @@ let root: string;
 let apps: FastifyInstance[];
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'slan-server-test-'));
+  root = await mkdtemp(join(tmpdir(), 'loom-server-test-'));
   apps = [];
 });
 
@@ -41,7 +41,7 @@ afterEach(async () => {
 
 function configStoreFor(name = 'config'): ConfigStore {
   return createConfigStore({
-    env: { SLAN_CONFIG_DIR: join(root, name) },
+    env: { LOOM_CONFIG_DIR: join(root, name) },
     homeDirectory: () => join(root, 'home'),
   });
 }
@@ -107,22 +107,22 @@ describe('loopback-only server configuration', () => {
 
   it('defaults to 127.0.0.1:7373 and honors loopback-only environment overrides', () => {
     expect(resolveServerSettings({})).toEqual({ host: DEFAULT_HOST, port: DEFAULT_PORT });
-    expect(resolveServerSettings({ SLAN_HOST: 'localhost', SLAN_PORT: '9001' })).toEqual({
+    expect(resolveServerSettings({ LOOM_HOST: 'localhost', LOOM_PORT: '9001' })).toEqual({
       host: DEFAULT_HOST,
       port: 9001,
     });
-    expect(resolveServerSettings({ SLAN_HOST: '::1', SLAN_PORT: ' 8080 ' })).toEqual({
+    expect(resolveServerSettings({ LOOM_HOST: '::1', LOOM_PORT: ' 8080 ' })).toEqual({
       host: '::1',
       port: 8080,
     });
 
-    expect(() => resolveServerSettings({ SLAN_HOST: '0.0.0.0' })).toThrowError(
+    expect(() => resolveServerSettings({ LOOM_HOST: '0.0.0.0' })).toThrowError(
       expect.objectContaining({ code: 'HOST_NOT_LOOPBACK' }),
     );
-    expect(() => resolveServerSettings({ SLAN_PORT: 'not-a-port' })).toThrowError(
+    expect(() => resolveServerSettings({ LOOM_PORT: 'not-a-port' })).toThrowError(
       expect.objectContaining({ code: 'INVALID_PORT' }),
     );
-    expect(() => resolveServerSettings({ SLAN_PORT: '70000' })).toThrowError(
+    expect(() => resolveServerSettings({ LOOM_PORT: '70000' })).toThrowError(
       expect.objectContaining({ code: 'INVALID_PORT' }),
     );
   });
@@ -146,7 +146,7 @@ describe('GET /api/health through the composition root', () => {
       port: 7444,
       activeRun: { active: false, runId: null, status: null },
     });
-    expect(body.version).toBe(SLAN_VERSION);
+    expect(body.version).toBe(LOOM_VERSION);
     expect(response.body).not.toContain('harnessCommands');
   });
 
@@ -236,10 +236,10 @@ describe('production static serving and SPA fallback', () => {
     await mkdir(join(webRoot, 'assets'), { recursive: true });
     await writeFile(
       join(webRoot, 'index.html'),
-      '<!doctype html><html><body><div id="root">Slan shell</div></body></html>',
+      '<!doctype html><html><body><div id="root">Skill Loom shell</div></body></html>',
       'utf8',
     );
-    await writeFile(join(webRoot, 'assets', 'app.js'), 'console.log("slan");\n', 'utf8');
+    await writeFile(join(webRoot, 'assets', 'app.js'), 'console.log("loom");\n', 'utf8');
     return webRoot;
   }
 
@@ -250,11 +250,11 @@ describe('production static serving and SPA fallback', () => {
     const index = await app.inject({ method: 'GET', url: '/' });
     expect(index.statusCode).toBe(200);
     expect(index.headers['content-type']).toContain('text/html');
-    expect(index.body).toContain('Slan shell');
+    expect(index.body).toContain('Skill Loom shell');
 
     const directRoute = await app.inject({ method: 'GET', url: '/projects/abc' });
     expect(directRoute.statusCode).toBe(200);
-    expect(directRoute.body).toContain('Slan shell');
+    expect(directRoute.body).toContain('Skill Loom shell');
 
     const asset = await app.inject({ method: 'GET', url: '/assets/app.js' });
     expect(asset.statusCode).toBe(200);
@@ -294,9 +294,9 @@ describe('process lifecycle', () => {
           env: {
             ...process.env,
             NODE_ENV: 'test',
-            SLAN_HOST: '127.0.0.1',
-            SLAN_PORT: String(port),
-            SLAN_CONFIG_DIR: configDir,
+            LOOM_HOST: '127.0.0.1',
+            LOOM_PORT: String(port),
+            LOOM_CONFIG_DIR: configDir,
           },
           stdio: ['ignore', 'pipe', 'pipe'],
         },
@@ -332,9 +332,9 @@ describe('process lifecycle', () => {
         env: {
           ...process.env,
           NODE_ENV: 'test',
-          SLAN_HOST: '0.0.0.0',
-          SLAN_PORT: '7399',
-          SLAN_CONFIG_DIR: join(root, 'non-loopback'),
+          LOOM_HOST: '0.0.0.0',
+          LOOM_PORT: '7399',
+          LOOM_CONFIG_DIR: join(root, 'non-loopback'),
         },
         stdio: ['ignore', 'pipe', 'pipe'],
       },

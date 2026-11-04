@@ -3,7 +3,7 @@ import { z } from 'zod';
 /**
  * Current on-disk global configuration version.
  *
- * The version is a literal so an older Slan cannot silently reinterpret a
+ * The version is a literal so an older Skill Loom cannot silently reinterpret a
  * document whose shape it does not understand. A deliberate migration is the
  * only way to move this value forward.
  */
@@ -56,14 +56,14 @@ export type UiPreferences = z.infer<typeof UiPreferencesSchema>;
  * keys also surface as a corrupt document instead of silently disappearing on
  * the next write.
  */
-export const SlanConfigSchema = z.strictObject({
+export const LoomConfigSchema = z.strictObject({
   version: z.literal(CONFIG_VERSION),
   harnessCommands: HarnessCommandsSchema.default({}),
   extraSkillDirectories: z.array(NonEmptyStringSchema).default([]),
   recentProjects: z.array(RecentProjectSchema).default([]),
   uiPreferences: UiPreferencesSchema.default({}),
 });
-export type SlanConfig = z.infer<typeof SlanConfigSchema>;
+export type LoomConfig = z.infer<typeof LoomConfigSchema>;
 
 /**
  * A partial update. The store merges only the supplied top-level fields and
@@ -79,8 +79,8 @@ export const ConfigUpdateSchema = z.strictObject({
 export type ConfigUpdate = z.infer<typeof ConfigUpdateSchema>;
 
 /** The documented defaults returned when the config file does not exist. */
-export function createDefaultConfig(): SlanConfig {
-  return SlanConfigSchema.parse({ version: CONFIG_VERSION });
+export function createDefaultConfig(): LoomConfig {
+  return LoomConfigSchema.parse({ version: CONFIG_VERSION });
 }
 
 /** Top-level configuration fields, used by tests and diagnostics. */

@@ -9,7 +9,7 @@
   "version": 1,
   "generatedAt": "2026-11-04T12:00:00.000Z",
   "node": "24.22.2",
-  "slanVersion": "0.1.0",
+  "loomVersion": "0.1.0",
   "harnesses": {},
   "checks": [],
   "warnings": [],
@@ -58,7 +58,7 @@
       "copilotHomeMode": "isolated",
       "trust": { "resolved": true, "mechanism": "dialog" },
       "seededPrompt": { "passed": true, "exitCode": 0, "durationMs": 15300 },
-      "observation": { "state": "observed", "skill": "slan-live-probe" },
+      "observation": { "state": "observed", "skill": "loom-live-probe" },
       "recall": { "passed": true, "sessionId": "00000000-0000-0000-0000-000000000000" }
     }
   },

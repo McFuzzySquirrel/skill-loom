@@ -99,11 +99,11 @@ describe('step prompt assembly', () => {
     const prompt = assembleStepPrompt({
       chain,
       stepIndex: 0,
-      inputs: { task: 'ship it', project: 'slan' },
+      inputs: { task: 'ship it', project: 'loom' },
     });
 
     expect(prompt).toBe(
-      'Skill: brainstorm\n\nInstruction:\nPlan the task for ship it in slan.',
+      'Skill: brainstorm\n\nInstruction:\nPlan the task for ship it in loom.',
     );
     expect(prompt).toContain('brainstorm');
     expect(prompt).not.toContain('{{');

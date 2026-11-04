@@ -193,7 +193,7 @@ function isNonEmptyString(value: unknown): value is string {
 
 function invalidResponse(what: string): ApiClientError {
   return new ApiClientError(
-    `The Slan server returned an unexpected ${what} response.`,
+    `The Skill Loom server returned an unexpected ${what} response.`,
     { code: 'INVALID_RESPONSE', status: 200 },
   );
 }

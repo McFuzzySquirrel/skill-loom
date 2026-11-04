@@ -64,7 +64,7 @@ export const terminalRoutes: FastifyPluginAsync<TerminalRouteOptions> = async (a
       // live harness PTY. The orchestrator owns their lifecycle and closes them
       // on completion, abort, and shutdown. Trust terminals keep the original
       // behavior: leaving the trust panel ends the one-shot trust session.
-      const terminateOnDetach = !request.params.sessionId.startsWith('slan_run_');
+      const terminateOnDetach = !request.params.sessionId.startsWith('loom_run_');
 
       let attachment: TerminalAttachment;
       try {

@@ -297,7 +297,7 @@ export interface RunAutomaticSpawnerContext {
 type Resolvable<T> = T | (() => T | Promise<T>);
 
 export interface RunOrchestratorOptions {
-  /** Slan config directory that owns the global active-run pointer. */
+  /** Skill Loom config directory that owns the global active-run pointer. */
   readonly configDirectory: string;
   readonly projectRegistry: ProjectRegistry;
   readonly chainService: ChainService;
@@ -361,7 +361,7 @@ interface Subscription {
 }
 
 export function runTerminalIdFor(runId: string): string {
-  return `slan_run_${runId}`;
+  return `loom_run_${runId}`;
 }
 
 class RunOrchestratorService implements RunOrchestrator {
@@ -381,7 +381,7 @@ class RunOrchestratorService implements RunOrchestrator {
     if (typeof options.configDirectory !== 'string' || options.configDirectory.trim() === '') {
       throw new RunOrchestratorError(
         RUN_ORCHESTRATOR_ERROR_CODES.START_FAILED,
-        'A Slan config directory is required.',
+        'A Skill Loom config directory is required.',
       );
     }
     this.options = options;

@@ -44,4 +44,4 @@ Each action states what will and will not replay.
 
 ## Retention
 
-Keep only the bounded tail per step. Do not add a transcript field, log full output, or copy credential-bearing output into evidence. `runs/` stays in the project `.slan/.gitignore`.
+Keep only the bounded tail per step. Do not add a transcript field, log full output, or copy credential-bearing output into evidence. `runs/` stays in the project `.loom/.gitignore`.

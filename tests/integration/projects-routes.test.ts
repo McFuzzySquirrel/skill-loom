@@ -19,7 +19,7 @@ interface ProjectPayload {
   lastOpenedAt: string;
   isGitRepo: boolean;
   gitInitialized: boolean;
-  slan: {
+  loom: {
     directory: string;
     gitignoreCreated: boolean;
     chainCount: number;
@@ -39,7 +39,7 @@ let configDirectory: string;
 let apps: FastifyInstance[];
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'slan-project-routes-'));
+  root = await mkdtemp(join(tmpdir(), 'loom-project-routes-'));
   configDirectory = join(root, 'config');
   apps = [];
 });
@@ -56,7 +56,7 @@ async function buildTestApp(gitInit?: GitInitRunner): Promise<FastifyInstance> {
     env: {},
     serveStatic: false,
     configStore: createConfigStore({
-      env: { SLAN_CONFIG_DIR: configDirectory },
+      env: { LOOM_CONFIG_DIR: configDirectory },
       homeDirectory: () => join(root, 'home'),
     }),
     ...(gitInit === undefined ? {} : { projectGitInit: gitInit }),
@@ -135,7 +135,7 @@ async function exists(path: string): Promise<boolean> {
 }
 
 describe('POST /api/projects through the composition root', () => {
-  it('opens an existing project, initializes .slan, and lists it as recent', async () => {
+  it('opens an existing project, initializes .loom, and lists it as recent', async () => {
     const project = join(root, 'existing-project');
     await mkdir(project);
     const secret = 'PROJECT-FILE-SECRET-MARKER';
@@ -152,13 +152,13 @@ describe('POST /api/projects through the composition root', () => {
     expect(registration.displayName).toBe('existing-project');
     expect(registration.gitInitialized).toBe(false);
     expect(registration.isGitRepo).toBe(false);
-    expect(registration.slan.gitignoreCreated).toBe(true);
-    expect(registration.slan.chainCount).toBe(0);
-    expect(registration.slan.hasChains).toBe(false);
+    expect(registration.loom.gitignoreCreated).toBe(true);
+    expect(registration.loom.chainCount).toBe(0);
+    expect(registration.loom.hasChains).toBe(false);
 
-    expect(await readFile(join(project, '.slan', '.gitignore'), 'utf8')).toBe('runs/\n');
-    expect(await exists(join(project, '.slan', 'chains'))).toBe(false);
-    expect(await exists(join(project, '.slan', 'runs'))).toBe(false);
+    expect(await readFile(join(project, '.loom', '.gitignore'), 'utf8')).toBe('runs/\n');
+    expect(await exists(join(project, '.loom', 'chains'))).toBe(false);
+    expect(await exists(join(project, '.loom', 'runs'))).toBe(false);
 
     const recent = await getRecent(app);
     expect(recent.statusCode).toBe(200);
@@ -212,34 +212,34 @@ describe('POST /api/projects through the composition root', () => {
     expect(envelope(missingResponse.body).error.code).toBe('PATH_NOT_FOUND');
   });
 
-  it('preserves an existing .slan/.gitignore across opens', async () => {
+  it('preserves an existing .loom/.gitignore across opens', async () => {
     const project = join(root, 'custom-ignore');
-    await mkdir(join(project, '.slan'), { recursive: true });
+    await mkdir(join(project, '.loom'), { recursive: true });
     const custom = '# keep this\nnode_modules/\nruns/\n';
-    await writeFile(join(project, '.slan', '.gitignore'), custom, 'utf8');
+    await writeFile(join(project, '.loom', '.gitignore'), custom, 'utf8');
 
     const app = await buildTestApp();
     const first = projectOf((await postProject(app, { path: project })).body);
     const second = projectOf((await postProject(app, { path: project })).body);
 
-    expect(first.slan.gitignoreCreated).toBe(false);
-    expect(second.slan.gitignoreCreated).toBe(false);
-    expect(await readFile(join(project, '.slan', '.gitignore'), 'utf8')).toBe(custom);
+    expect(first.loom.gitignoreCreated).toBe(false);
+    expect(second.loom.gitignoreCreated).toBe(false);
+    expect(await readFile(join(project, '.loom', '.gitignore'), 'utf8')).toBe(custom);
   });
 
   it('reports existing chains without creating or deleting them', async () => {
     const project = join(root, 'chains-project');
-    await mkdir(join(project, '.slan', 'chains'), { recursive: true });
-    const chainPath = join(project, '.slan', 'chains', 'alpha.json');
+    await mkdir(join(project, '.loom', 'chains'), { recursive: true });
+    const chainPath = join(project, '.loom', 'chains', 'alpha.json');
     await writeFile(chainPath, '{"version":1,"id":"alpha"}\n', 'utf8');
 
     const app = await buildTestApp();
     const registration = projectOf((await postProject(app, { path: project })).body);
 
-    expect(registration.slan.chainCount).toBe(1);
-    expect(registration.slan.hasChains).toBe(true);
+    expect(registration.loom.chainCount).toBe(1);
+    expect(registration.loom.hasChains).toBe(true);
     expect(await readFile(chainPath, 'utf8')).toBe('{"version":1,"id":"alpha"}\n');
-    expect(await exists(join(project, '.slan', 'runs'))).toBe(false);
+    expect(await exists(join(project, '.loom', 'runs'))).toBe(false);
   });
 
   it('returns field-specific validation issues for malformed bodies', async () => {
@@ -298,10 +298,10 @@ describe('POST /api/projects create mode', () => {
     expect(registration.canonicalPath).toBe(await realpath(target));
     expect(registration.gitInitialized).toBe(false);
     expect(registration.isGitRepo).toBe(false);
-    expect(await readdir(target)).toEqual(['.slan']);
+    expect(await readdir(target)).toEqual(['.loom']);
     expect(await exists(join(target, '.git'))).toBe(false);
     expect(await exists(join(target, 'package.json'))).toBe(false);
-    expect(await exists(join(target, '.slan', 'chains'))).toBe(false);
+    expect(await exists(join(target, '.loom', 'chains'))).toBe(false);
   });
 
   it('runs git init only when requested and reports the created repository', async () => {
@@ -388,7 +388,7 @@ describe('POST /api/projects create mode', () => {
     expect(response.statusCode).toBe(409);
     expect(envelope(response.body).error.code).toBe('PROJECT_CREATE_TARGET_EXISTS');
     expect(await readFile(join(existing, 'marker.txt'), 'utf8')).toBe('original\n');
-    expect(await exists(join(existing, '.slan'))).toBe(false);
+    expect(await exists(join(existing, '.loom'))).toBe(false);
     expect(recentOf((await getRecent(app)).body)).toEqual([]);
   });
 
@@ -449,9 +449,9 @@ describe('GET /api/projects/recent and DELETE /api/projects/recent/:projectId', 
 
   it('removes only the recent entry and leaves every project file intact', async () => {
     const project = join(root, 'keep-files');
-    await mkdir(join(project, '.slan', 'chains'), { recursive: true });
+    await mkdir(join(project, '.loom', 'chains'), { recursive: true });
     await writeFile(join(project, 'source.ts'), 'export const kept = true;\n', 'utf8');
-    const chainPath = join(project, '.slan', 'chains', 'chain.json');
+    const chainPath = join(project, '.loom', 'chains', 'chain.json');
     await writeFile(chainPath, '{"version":1}\n', 'utf8');
 
     const app = await buildTestApp();

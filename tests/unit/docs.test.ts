@@ -22,7 +22,7 @@ const checkScript = join(repoRoot, 'scripts', 'check-docs.mjs');
 const fixtures: string[] = [];
 
 function createFixture(): string {
-  const root = mkdtempSync(join(tmpdir(), 'slan-docs-'));
+  const root = mkdtempSync(join(tmpdir(), 'loom-docs-'));
   fixtures.push(root);
   mkdirSync(join(root, 'docs'), { recursive: true });
 

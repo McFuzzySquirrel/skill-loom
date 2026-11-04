@@ -98,7 +98,7 @@ export async function requestJson<T>(
       throw error;
     }
     throw new ApiClientError(
-      'Could not reach the Slan server. Check that it is running, then retry.',
+      'Could not reach the Skill Loom server. Check that it is running, then retry.',
       { code: 'NETWORK_ERROR', status: 0 },
     );
   }
@@ -116,13 +116,13 @@ export async function requestJson<T>(
     }
 
     throw new ApiClientError(
-      `The Slan server returned HTTP ${response.status} without a readable error message.`,
+      `The Skill Loom server returned HTTP ${response.status} without a readable error message.`,
       { code: 'UNEXPECTED_RESPONSE', status: response.status },
     );
   }
 
   if (payload === undefined) {
-    throw new ApiClientError('The Slan server returned an empty or invalid JSON response.', {
+    throw new ApiClientError('The Skill Loom server returned an empty or invalid JSON response.', {
       code: 'INVALID_RESPONSE',
       status: response.status,
     });
@@ -141,7 +141,7 @@ function decodeHealthResponse(value: unknown): HealthResponse {
     !isRecord(value.activeRun) ||
     typeof value.activeRun.active !== 'boolean'
   ) {
-    throw new ApiClientError('The Slan server returned an unexpected health response.', {
+    throw new ApiClientError('The Skill Loom server returned an unexpected health response.', {
       code: 'INVALID_RESPONSE',
       status: 200,
     });

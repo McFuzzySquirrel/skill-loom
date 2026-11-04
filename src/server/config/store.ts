@@ -7,11 +7,11 @@ import {
   CONFIG_FILE_NAME,
   CONFIG_VERSION,
   ConfigUpdateSchema,
-  SlanConfigSchema,
+  LoomConfigSchema,
   createDefaultConfig,
   type ConfigUpdate,
   type HarnessCommands,
-  type SlanConfig,
+  type LoomConfig,
 } from './schema.js';
 
 export type ConfigErrorCode =
@@ -47,7 +47,7 @@ export class ConfigError extends Error {
 
 export class ConfigCorruptError extends ConfigError {
   constructor(configPath: string, issues: Array<{ path: string; code: string }> = []) {
-    super('CONFIG_CORRUPT', 'The Slan configuration file is not valid JSON configuration.', {
+    super('CONFIG_CORRUPT', 'The Skill Loom configuration file is not valid JSON configuration.', {
       path: configPath,
       issues,
     });
@@ -56,7 +56,7 @@ export class ConfigCorruptError extends ConfigError {
 
 export class ConfigUnsupportedVersionError extends ConfigError {
   constructor(configPath: string, version: unknown) {
-    super('CONFIG_UNSUPPORTED_VERSION', 'The Slan configuration file uses an unsupported version.', {
+    super('CONFIG_UNSUPPORTED_VERSION', 'The Skill Loom configuration file uses an unsupported version.', {
       path: configPath,
       version: describeVersion(version),
     });
@@ -65,7 +65,7 @@ export class ConfigUnsupportedVersionError extends ConfigError {
 
 export class ConfigReadError extends ConfigError {
   constructor(configPath: string, cause: unknown) {
-    super('CONFIG_READ_FAILED', 'The Slan configuration file could not be read.', {
+    super('CONFIG_READ_FAILED', 'The Skill Loom configuration file could not be read.', {
       path: configPath,
       reason: errnoCode(cause),
     }, cause);
@@ -74,7 +74,7 @@ export class ConfigReadError extends ConfigError {
 
 export class ConfigWriteError extends ConfigError {
   constructor(configPath: string, cause: unknown) {
-    super('CONFIG_WRITE_FAILED', 'The Slan configuration file could not be written.', {
+    super('CONFIG_WRITE_FAILED', 'The Skill Loom configuration file could not be written.', {
       path: configPath,
       reason: errnoCode(cause),
     }, cause);
@@ -103,25 +103,25 @@ export interface ConfigStore {
   getConfigDir(): string;
   getConfigPath(): string;
   /** Read the configuration, creating the documented defaults on first read. */
-  get(): Promise<SlanConfig>;
+  get(): Promise<LoomConfig>;
   /** Read-modify-write a partial update atomically, preserving unrelated fields. */
-  update(update: ConfigUpdate | ((current: SlanConfig) => ConfigUpdate)): Promise<SlanConfig>;
+  update(update: ConfigUpdate | ((current: LoomConfig) => ConfigUpdate)): Promise<LoomConfig>;
   /** Validate and persist a complete configuration document atomically. */
-  write(config: SlanConfig): Promise<SlanConfig>;
+  write(config: LoomConfig): Promise<LoomConfig>;
 }
 
 /**
- * `$SLAN_CONFIG_DIR` wins over the XDG-style default. The environment is read
+ * `$LOOM_CONFIG_DIR` wins over the XDG-style default. The environment is read
  * per call so every store operation honors a changed override.
  */
 export function resolveConfigDir(options: ConfigPathOptions = {}): string {
   const env = options.env ?? process.env;
-  const override = env.SLAN_CONFIG_DIR;
+  const override = env.LOOM_CONFIG_DIR;
   if (typeof override === 'string' && override.trim() !== '') {
     return resolve(override.trim());
   }
   const home = options.homeDirectory ?? homedir;
-  return join(home(), '.config', 'slan');
+  return join(home(), '.config', 'loom');
 }
 
 export function resolveConfigPath(options: ConfigPathOptions = {}): string {
@@ -135,7 +135,7 @@ export function resolveConfigPath(options: ConfigPathOptions = {}): string {
  * `version` is a distinct typed error so callers can tell the user to upgrade
  * instead of treating the file as damaged.
  */
-export function parseConfigDocument(raw: unknown, configPath: string): SlanConfig {
+export function parseConfigDocument(raw: unknown, configPath: string): LoomConfig {
   if (!isPlainRecord(raw)) {
     throw new ConfigCorruptError(configPath, [{ path: '', code: 'invalid_type' }]);
   }
@@ -148,7 +148,7 @@ export function parseConfigDocument(raw: unknown, configPath: string): SlanConfi
     throw new ConfigUnsupportedVersionError(configPath, raw.version);
   }
 
-  const result = SlanConfigSchema.safeParse(raw);
+  const result = LoomConfigSchema.safeParse(raw);
   if (!result.success) {
     throw new ConfigCorruptError(configPath, normalizeIssues(result.error.issues));
   }
@@ -252,7 +252,7 @@ class FileConfigStore implements ConfigStore {
     return resolveConfigPath(this.options);
   }
 
-  async get(): Promise<SlanConfig> {
+  async get(): Promise<LoomConfig> {
     const target = this.getConfigPath();
     return enqueueWrite(target, async () => {
       const existing = await readExistingConfig(target);
@@ -266,7 +266,7 @@ class FileConfigStore implements ConfigStore {
     });
   }
 
-  async update(update: ConfigUpdate | ((current: SlanConfig) => ConfigUpdate)): Promise<SlanConfig> {
+  async update(update: ConfigUpdate | ((current: LoomConfig) => ConfigUpdate)): Promise<LoomConfig> {
     const target = this.getConfigPath();
     return enqueueWrite(target, async () => {
       const current = (await readExistingConfig(target)) ?? createDefaultConfig();
@@ -278,7 +278,7 @@ class FileConfigStore implements ConfigStore {
       }
 
       const next = applyUpdate(current, parsedUpdate.data);
-      const parsedConfig = SlanConfigSchema.safeParse(next);
+      const parsedConfig = LoomConfigSchema.safeParse(next);
       if (!parsedConfig.success) {
         throw new ConfigValidationError(normalizeIssues(parsedConfig.error.issues));
       }
@@ -288,10 +288,10 @@ class FileConfigStore implements ConfigStore {
     });
   }
 
-  async write(config: SlanConfig): Promise<SlanConfig> {
+  async write(config: LoomConfig): Promise<LoomConfig> {
     const target = this.getConfigPath();
     return enqueueWrite(target, async () => {
-      const parsed = SlanConfigSchema.safeParse(config);
+      const parsed = LoomConfigSchema.safeParse(config);
       if (!parsed.success) {
         throw new ConfigValidationError(normalizeIssues(parsed.error.issues));
       }
@@ -301,7 +301,7 @@ class FileConfigStore implements ConfigStore {
     });
   }
 
-  private async persist(target: string, config: SlanConfig): Promise<void> {
+  private async persist(target: string, config: LoomConfig): Promise<void> {
     const writer = this.options.atomicWrite ?? atomicWriteJson;
     try {
       await mkdir(dirname(target), { recursive: true, mode: 0o700 });
@@ -327,17 +327,17 @@ export function getConfigStore(): ConfigStore {
   return defaultStore;
 }
 
-export function readConfig(): Promise<SlanConfig> {
+export function readConfig(): Promise<LoomConfig> {
   return getConfigStore().get();
 }
 
 export function updateConfig(
-  update: ConfigUpdate | ((current: SlanConfig) => ConfigUpdate),
-): Promise<SlanConfig> {
+  update: ConfigUpdate | ((current: LoomConfig) => ConfigUpdate),
+): Promise<LoomConfig> {
   return getConfigStore().update(update);
 }
 
-export function writeConfig(config: SlanConfig): Promise<SlanConfig> {
+export function writeConfig(config: LoomConfig): Promise<LoomConfig> {
   return getConfigStore().write(config);
 }
 
@@ -345,7 +345,7 @@ export function writeConfig(config: SlanConfig): Promise<SlanConfig> {
 export const loadConfig = readConfig;
 export const saveConfig = writeConfig;
 
-async function readExistingConfig(target: string): Promise<SlanConfig | undefined> {
+async function readExistingConfig(target: string): Promise<LoomConfig | undefined> {
   let text: string;
   try {
     text = await readFile(target, 'utf8');
@@ -366,7 +366,7 @@ async function readExistingConfig(target: string): Promise<SlanConfig | undefine
   return parseConfigDocument(decoded, target);
 }
 
-function applyUpdate(current: SlanConfig, patch: ConfigUpdate): SlanConfig {
+function applyUpdate(current: LoomConfig, patch: ConfigUpdate): LoomConfig {
   const harnessCommands: HarnessCommands = { ...current.harnessCommands };
   if (patch.harnessCommands?.opencode !== undefined) {
     harnessCommands.opencode = patch.harnessCommands.opencode;

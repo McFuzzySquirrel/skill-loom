@@ -193,11 +193,11 @@ describe('Playwright isolation contract', () => {
     expect(playwrightConfig).toContain('http://127.0.0.1:');
   });
 
-  it('uses a temporary SLAN_CONFIG_DIR instead of the developer config', () => {
-    expect(playwrightConfig).toContain('SLAN_CONFIG_DIR');
+  it('uses a temporary LOOM_CONFIG_DIR instead of the developer config', () => {
+    expect(playwrightConfig).toContain('LOOM_CONFIG_DIR');
     expect(playwrightConfig).toContain('tmpdir()');
     expect(playwrightConfig).toContain("join(isolatedRoot, 'config')");
-    expect(playwrightConfig).not.toContain('~/.config/slan');
+    expect(playwrightConfig).not.toContain('~/.config/loom');
     expect(tmpdir()).toBeTruthy();
   });
 
@@ -206,9 +206,9 @@ describe('Playwright isolation contract', () => {
     expect(playwrightConfig).toContain("join(isolatedRoot, 'home')");
   });
 
-  it('passes SLAN_CONFIG_DIR through the web server environment', () => {
+  it('passes LOOM_CONFIG_DIR through the web server environment', () => {
     expect(playwrightConfig).toMatch(
-      /env:\s*\{[\s\S]*SLAN_CONFIG_DIR:\s*configDir[\s\S]*\}/,
+      /env:\s*\{[\s\S]*LOOM_CONFIG_DIR:\s*configDir[\s\S]*\}/,
     );
   });
 });

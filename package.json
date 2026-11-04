@@ -1,5 +1,5 @@
 {
-  "name": "slan",
+  "name": "loom",
   "version": "0.1.0",
   "private": true,
   "description": "Local web application for assembling and running ordered chains of agent skills.",

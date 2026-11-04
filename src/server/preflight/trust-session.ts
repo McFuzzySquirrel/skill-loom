@@ -22,7 +22,7 @@ import {
  * foundation terminal transport, then re-reads the harness trust configuration
  * on verify. It never writes the harness config, never queues a prompt, and
  * never supplies a session id to the interactive trust command. Persistent
- * trust is established by the user in the terminal; Slan only observes it.
+ * trust is established by the user in the terminal; Skill Loom only observes it.
  *
  * Failures are typed so the route can map them to the shared error envelope
  * without inspecting a harness name or a filesystem message.

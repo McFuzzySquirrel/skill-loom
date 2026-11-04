@@ -1,5 +1,5 @@
 /*
- * Slan shell theme: dark, high-contrast, terminal-adjacent.
+ * Skill Loom shell theme: dark, high-contrast, terminal-adjacent.
  * All status treatments pair an icon with text; color is never the only signal.
  */
 
@@ -600,7 +600,7 @@ main:focus {
   color: var(--accent-strong);
 }
 
-.badge--slan {
+.badge--loom {
   border-color: var(--warning-border);
   color: var(--warning-text);
 }
@@ -943,7 +943,7 @@ main:focus {
   color: var(--text-muted);
 }
 
-.source-badge--slan-extra {
+.source-badge--loom-extra {
   border-color: var(--warning-border);
   background: var(--warning-bg);
   color: var(--warning-text);

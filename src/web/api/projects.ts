@@ -21,10 +21,10 @@ export interface RecentProject {
   lastOpenedAt: string;
 }
 
-/** Project-local `.slan` state returned by open/create. */
-export interface ProjectSlanState {
+/** Project-local `.loom` state returned by open/create. */
+export interface ProjectLoomState {
   directory: string;
-  /** True only when this request created `.slan/.gitignore`. */
+  /** True only when this request created `.loom/.gitignore`. */
   gitignoreCreated: boolean;
   chainCount: number;
   hasChains: boolean;
@@ -38,7 +38,7 @@ export interface ProjectRegistration {
   lastOpenedAt: string;
   isGitRepo: boolean;
   gitInitialized: boolean;
-  slan: ProjectSlanState;
+  loom: ProjectLoomState;
 }
 
 /** One child in a folder-browser listing. */
@@ -47,7 +47,7 @@ export interface DirectoryEntry {
   path: string;
   isDirectory: boolean;
   isGitRepo: boolean;
-  hasSlan: boolean;
+  hasLoom: boolean;
 }
 
 /** The documented `GET /api/fs?path=` response. */
@@ -92,7 +92,7 @@ function isNonEmptyString(value: unknown): value is string {
 
 function invalidResponse(what: string): ApiClientError {
   return new ApiClientError(
-    `The Slan server returned an unexpected ${what} response.`,
+    `The Skill Loom server returned an unexpected ${what} response.`,
     { code: 'INVALID_RESPONSE', status: 200 },
   );
 }
@@ -127,7 +127,7 @@ function decodeRecentProject(value: unknown): RecentProject {
   };
 }
 
-function decodeSlanState(value: unknown): ProjectSlanState {
+function decodeLoomState(value: unknown): ProjectLoomState {
   if (
     !isRecord(value) ||
     !isNonEmptyString(value.directory) ||
@@ -137,7 +137,7 @@ function decodeSlanState(value: unknown): ProjectSlanState {
     value.chainCount < 0 ||
     typeof value.hasChains !== 'boolean'
   ) {
-    throw invalidResponse('.slan state');
+    throw invalidResponse('.loom state');
   }
 
   return {
@@ -168,7 +168,7 @@ function decodeProjectRegistration(value: unknown): ProjectRegistration {
     lastOpenedAt: value.lastOpenedAt,
     isGitRepo: value.isGitRepo,
     gitInitialized: value.gitInitialized,
-    slan: decodeSlanState(value.slan),
+    loom: decodeLoomState(value.loom),
   };
 }
 
@@ -179,7 +179,7 @@ function decodeDirectoryEntry(value: unknown): DirectoryEntry {
     !isNonEmptyString(value.path) ||
     typeof value.isDirectory !== 'boolean' ||
     typeof value.isGitRepo !== 'boolean' ||
-    typeof value.hasSlan !== 'boolean'
+    typeof value.hasLoom !== 'boolean'
   ) {
     throw invalidResponse('directory entry');
   }
@@ -189,7 +189,7 @@ function decodeDirectoryEntry(value: unknown): DirectoryEntry {
     path: value.path,
     isDirectory: value.isDirectory,
     isGitRepo: value.isGitRepo,
-    hasSlan: value.hasSlan,
+    hasLoom: value.hasLoom,
   };
 }
 
@@ -218,7 +218,7 @@ function optionsFor(signal: AbortSignal | undefined): RequestJsonOptions {
 
 /**
  * Successful registrations are cached for this browser session so the project
- * route can show the exact git and `.slan` result without a second request.
+ * route can show the exact git and `.loom` result without a second request.
  * Reloads fall back to the recent list plus a metadata-only directory listing.
  */
 const registrationCache = new Map<string, ProjectRegistration>();

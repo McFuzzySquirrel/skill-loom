@@ -321,7 +321,7 @@ export function PreflightReport({
             ))}
           </ul>
           <p className="field__hint">
-            Skills are model-invoked context. Slan guarantees prompt order, but a harness may
+            Skills are model-invoked context. Skill Loom guarantees prompt order, but a harness may
             decline to load a named skill.
           </p>
         </section>

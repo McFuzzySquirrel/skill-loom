@@ -33,7 +33,7 @@ export const HARNESS_REGISTRY_IDS = HARNESS_IDS;
 export type HarnessRegistryId = (typeof HARNESS_REGISTRY_IDS)[number];
 
 export interface HarnessRegistryOptions extends ExecutableResolutionOptions {
-  /** Slan config `harnessCommands` map. Missing entries fall back to PATH. */
+  /** Skill Loom config `harnessCommands` map. Missing entries fall back to PATH. */
   commands?: HarnessCommands | undefined;
 }
 
@@ -71,7 +71,7 @@ export function createHarnessAdapter(
 }
 
 /**
- * Create a registry bound to the current Slan configuration and injection
+ * Create a registry bound to the current Skill Loom configuration and injection
  * seams.
  *
  * Executable resolution honours `commands[id]` first and then PATH. A missing

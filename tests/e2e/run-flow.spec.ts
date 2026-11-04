@@ -64,7 +64,7 @@ async function writeSkill(projectPath: string): Promise<void> {
 }
 
 test.beforeAll(async ({ request }) => {
-  fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'slan-run-flow-e2e-')));
+  fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'loom-run-flow-e2e-')));
   const health = await request.get('/api/health');
   expect(health.ok()).toBe(true);
   const configDirectory = (await health.json()) as { configDirectory: string };

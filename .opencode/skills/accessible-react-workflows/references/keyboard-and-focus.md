@@ -7,7 +7,7 @@
 ```tsx
 <a className="skip-link" href="#main">Skip to main content</a>
 <header>
-  <span>Slan</span>
+  <span>Skill Loom</span>
   <span className="local-only">Local only</span>
 </header>
 <main id="main" tabIndex={-1}>{children}</main>

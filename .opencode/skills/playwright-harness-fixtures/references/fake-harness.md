@@ -6,7 +6,7 @@
 
 ```js
 #!/usr/bin/env node
-const mode = process.env.SLAN_FAKE_MODE ?? "auto";
+const mode = process.env.LOOM_FAKE_MODE ?? "auto";
 const args = process.argv.slice(2);
 const prompt = args.join(" ");
 

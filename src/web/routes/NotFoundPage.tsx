@@ -10,7 +10,7 @@ export function NotFoundPage() {
         Page not found
       </h1>
       <p>
-        No Slan screen matches <code>{pathname}</code>.
+        No Skill Loom screen matches <code>{pathname}</code>.
       </p>
       <p className="panel__actions">
         <Link className="button" to="/projects">

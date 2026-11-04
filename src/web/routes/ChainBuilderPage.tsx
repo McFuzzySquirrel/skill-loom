@@ -456,7 +456,7 @@ export function ChainBuilderPage({
             Chain authoring
           </h1>
           <p className="lede">
-            Assemble an ordered recipe from this project&apos;s skills. Slan guarantees
+            Assemble an ordered recipe from this project&apos;s skills. Skill Loom guarantees
             prompt order; it cannot guarantee that a harness loads a named skill.
           </p>
         </div>

@@ -33,10 +33,10 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
 
       <header className="app-header">
         <div className="app-header__identity">
-          <span className="wordmark">Slan</span>
+          <span className="wordmark">Skill Loom</span>
           <span
             className="local-badge"
-            title="Slan binds to 127.0.0.1 and sends no application data off this machine."
+            title="Skill Loom binds to 127.0.0.1 and sends no application data off this machine."
           >
             <span aria-hidden="true">●</span> Local-only
           </span>
@@ -68,7 +68,7 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
 
       <footer className="app-footer">
         <p>
-          Slan runs on this machine only. Skills are model-invoked context: prompt order is
+          Skill Loom runs on this machine only. Skills are model-invoked context: prompt order is
           guaranteed, but a harness may decline to load a named skill.
         </p>
       </footer>

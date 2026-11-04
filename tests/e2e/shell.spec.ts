@@ -29,7 +29,7 @@ const EMPTY_CATALOG = {
       custom: 0,
       plugin: 0,
       builtin: 0,
-      'slan-extra': 0,
+      'loom-extra': 0,
     },
   },
   groups: [],
@@ -174,7 +174,7 @@ function collectConsoleErrors(page: Page): string[] {
   return errors;
 }
 
-test.describe('Slan shell', () => {
+test.describe('Skill Loom shell', () => {
   test('redirects the initial route to /projects', async ({ page }) => {
     await page.goto('/');
 
@@ -273,7 +273,7 @@ test.describe('Slan shell', () => {
     await expect(page.getByText(/Server connected · v/)).toBeVisible();
     await expect(panel).toHaveCount(0);
     await expect(page.getByRole('status')).toHaveText(
-      /Server connection restored\. Slan .* is responding\./,
+      /Server connection restored\. Skill Loom .* is responding\./,
     );
     expect(healthRequests).toBe(2);
   });

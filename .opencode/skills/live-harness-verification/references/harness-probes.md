@@ -6,7 +6,7 @@
 
 ```bash
 opencode --version
-opencode --prompt "Use the slan-live-probe skill and reply with its token." "$TMP/project"
+opencode --prompt "Use the loom-live-probe skill and reply with its token." "$TMP/project"
 ```
 
 Use the interactive entry in a PTY so the state signal is observable. Generate a session id with the `ses_` prefix expected by the CLI, or capture the id the harness returns.
@@ -35,7 +35,7 @@ Accept the dialog or use the manual fallback, then verify the trusted-folder ent
 Headless probe:
 
 ```bash
-copilot -p "Use the slan-live-probe skill and reply with its token." \
+copilot -p "Use the loom-live-probe skill and reply with its token." \
   --session-id "$UUID" --allow-all-paths --allow-all-tools \
   --cwd "$TMP/project"
 ```
@@ -46,7 +46,7 @@ Assertions:
 2. Stdout contains `PINEAPPLE`.
 3. The UUID passed to the process is recorded.
 4. A second process with the same `--session-id` and a recall prompt contains `PINEAPPLE`.
-5. `skill(slan-live-probe)` is recorded as observed when present; otherwise record `not-observable`.
+5. `skill(loom-live-probe)` is recorded as observed when present; otherwise record `not-observable`.
 
 Never combine `--trust-folder` with `--session-id`. Never use output-idle or animation quiescence as a completion signal; process exit is the only advancement signal.
 

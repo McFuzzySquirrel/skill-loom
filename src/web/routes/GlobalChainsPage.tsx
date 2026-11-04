@@ -141,7 +141,7 @@ export function GlobalChainsPage({ api = globalChainsApi }: GlobalChainsPageProp
               ))}
             </select>
             <p className="field__hint" id={destinationHelpId}>
-              Import copies the template into <code>.slan/chains</code> and opens its builder.
+              Import copies the template into <code>.loom/chains</code> and opens its builder.
             </p>
           </div>
         </section>

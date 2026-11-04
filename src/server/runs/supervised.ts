@@ -218,7 +218,7 @@ export interface SupervisedRunnerOptions {
   readonly now?: (() => Date) | undefined;
   /** Session id seam used by fresh and fork plans. */
   readonly createSessionId?: (() => string) | undefined;
-  /** Stable terminal id. Defaults to `slan_run_<runId>`. */
+  /** Stable terminal id. Defaults to `loom_run_<runId>`. */
   readonly terminalId?: string | undefined;
   readonly cols?: number | undefined;
   readonly rows?: number | undefined;
@@ -346,7 +346,7 @@ export class SupervisedRunner {
     this.createPty = options.createPty;
     this.clock = options.now ?? (() => new Date());
     this.createSessionId = options.createSessionId ?? (() => this.adapter.createSessionId());
-    this.requestedTerminalId = options.terminalId ?? `slan_run_${run.id}`;
+    this.requestedTerminalId = options.terminalId ?? `loom_run_${run.id}`;
     assertTerminalId(this.requestedTerminalId);
     this.cols = positiveDimension(options.cols, SUPERVISED_TERMINAL_COLS, 'cols');
     this.rows = positiveDimension(options.rows, SUPERVISED_TERMINAL_ROWS, 'rows');

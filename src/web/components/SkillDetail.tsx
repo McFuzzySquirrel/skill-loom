@@ -152,7 +152,7 @@ export function SkillDetail({
             {state.detail.content}
           </pre>
           <p className="skill-detail__note">
-            Text shown exactly as it appears in SKILL.md. Slan adds no summary or
+            Text shown exactly as it appears in SKILL.md. Skill Loom adds no summary or
             recommendation.
           </p>
         </>

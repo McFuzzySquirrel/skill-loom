@@ -23,7 +23,7 @@ export interface SkillCatalogProps {
 
 function harnessDescription(harness: CatalogHarness): string {
   return harness === 'opencode'
-    ? 'Scans the project .opencode/skills directory, the personal OpenCode skills directory, and Slan extra directories.'
+    ? 'Scans the project .opencode/skills directory, the personal OpenCode skills directory, and Loom extra directories.'
     : 'Runs the Copilot CLI command "copilot skill list --json" in this project and merges the reported sources.';
 }
 
@@ -90,7 +90,7 @@ export function SkillCatalog({
             Skill catalog
           </h2>
           <p className="field__hint">
-            Descriptions come from each SKILL.md frontmatter. Slan never adds a model
+            Descriptions come from each SKILL.md frontmatter. Skill Loom never adds a model
             summary or recommendation.
           </p>
         </div>

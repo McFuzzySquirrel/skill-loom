@@ -23,8 +23,8 @@ export interface NewChainDialogProps {
 
 function harnessDescription(harness: ChainHarness): string {
   return harness === 'opencode'
-    ? 'Runs the OpenCode CLI. Skills are model-invoked context, so Slan guarantees prompt order rather than skill firing.'
-    : 'Runs the Copilot CLI. Skills are model-invoked context, so Slan guarantees prompt order rather than skill firing.';
+    ? 'Runs the OpenCode CLI. Skills are model-invoked context, so Skill Loom guarantees prompt order rather than skill firing.'
+    : 'Runs the Copilot CLI. Skills are model-invoked context, so Skill Loom guarantees prompt order rather than skill firing.';
 }
 
 /**
@@ -32,7 +32,7 @@ function harnessDescription(harness: ChainHarness): string {
  *
  * The harness is chosen here and cannot change later without duplicating the
  * chain, so the dialog says that explicitly. No chain file is written yet: the
- * builder owns the first save and a cancelled draft leaves `.slan/chains`
+ * builder owns the first save and a cancelled draft leaves `.loom/chains`
  * untouched. The dialog is non-modal and never traps focus.
  */
 export function NewChainDialog({ projectId, onClose }: NewChainDialogProps) {

@@ -660,7 +660,7 @@ function resolveAdapter(
       severity: 'block',
       status: 'block',
       message: 'No harness adapter is registered for the chain harness.',
-      remediation: 'Update Slan or choose a supported harness when creating the chain.',
+      remediation: 'Update Skill Loom or choose a supported harness when creating the chain.',
       details: { harness, reason: errorCode(error) },
     });
     return null;
@@ -1186,7 +1186,7 @@ function describeSessionPlan(
   } else if (mechanism === 'native') {
     description = `${adapter.displayName} will create a native fork of the previous session.`;
   } else if (mechanism === 'handoff') {
-    description = `${adapter.displayName} has no native fork on the ${surface} surface; Slan will start a new session with a deterministic handoff note.`;
+    description = `${adapter.displayName} has no native fork on the ${surface} surface; Skill Loom will start a new session with a deterministic handoff note.`;
   } else {
     description = `${adapter.displayName} cannot fork a session on the ${surface} surface.`;
   }

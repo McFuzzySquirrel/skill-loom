@@ -328,7 +328,7 @@ export function RunPage({ runId }: RunPageProps) {
         </dl>
 
         <p className="field__hint run-header__truth">
-          Skills are model-invoked context. Slan guarantees prompt order, not that the harness
+          Skills are model-invoked context. Skill Loom guarantees prompt order, not that the harness
           fires a named skill. Skill observation is best-effort and never blocks a step.
         </p>
 

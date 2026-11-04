@@ -32,7 +32,7 @@ let root: string;
 let projectPath: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'slan-chain-store-'));
+  root = await mkdtemp(join(tmpdir(), 'loom-chain-store-'));
   projectPath = join(root, 'project');
   await mkdir(projectPath);
 });
@@ -68,7 +68,7 @@ function storeFor(overrides: Partial<Parameters<typeof createChainStore>[0]> = {
 }
 
 function chainDirectory(): string {
-  return join(projectPath, '.slan', CHAINS_DIRECTORY_NAME);
+  return join(projectPath, '.loom', CHAINS_DIRECTORY_NAME);
 }
 
 function chainFile(chainId: string): string {
@@ -110,7 +110,7 @@ async function expectChainError(
 }
 
 describe('chain storage layout', () => {
-  it('creates .slan/chains on demand and writes only inside the project directory', async () => {
+  it('creates .loom/chains on demand and writes only inside the project directory', async () => {
     const store = storeFor();
 
     const created = await store.create(makeChain());
@@ -119,7 +119,7 @@ describe('chain storage layout', () => {
     expect(chainsDirectoryFor(projectPath)).toBe(chainDirectory());
     expect(await fileExists(chainDirectory())).toBe(true);
     expect(await fileExists(chainFile('chain-alpha'))).toBe(true);
-    expect(await readdir(join(projectPath, '.slan'))).toEqual([CHAINS_DIRECTORY_NAME]);
+    expect(await readdir(join(projectPath, '.loom'))).toEqual([CHAINS_DIRECTORY_NAME]);
 
     const onDisk = JSON.parse(await readFile(chainFile('chain-alpha'), 'utf8')) as Chain;
     expect(onDisk).toEqual(makeChain());
@@ -127,14 +127,14 @@ describe('chain storage layout', () => {
     expect(await temporaryFiles(chainDirectory())).toEqual([]);
   });
 
-  it('does not create .slan when reading or listing a project with no chains', async () => {
+  it('does not create .loom when reading or listing a project with no chains', async () => {
     const store = storeFor();
 
     await expectChainError(store.read('chain-missing'), CHAIN_STORE_ERROR_CODES.NOT_FOUND);
-    expect(await fileExists(join(projectPath, '.slan'))).toBe(false);
+    expect(await fileExists(join(projectPath, '.loom'))).toBe(false);
 
     expect(await store.list()).toEqual({ chains: [], warnings: [] });
-    expect(await fileExists(join(projectPath, '.slan'))).toBe(false);
+    expect(await fileExists(join(projectPath, '.loom'))).toBe(false);
   });
 });
 
@@ -361,7 +361,7 @@ describe('identifier safety', () => {
     );
 
     expect(realpathSpy).not.toHaveBeenCalled();
-    expect(await fileExists(join(projectPath, '.slan'))).toBe(false);
+    expect(await fileExists(join(projectPath, '.loom'))).toBe(false);
     expect(await fileExists(join(root, 'escape.json'))).toBe(false);
   });
 
@@ -455,17 +455,17 @@ describe('atomic replacement', () => {
 });
 
 describe('containment', () => {
-  it('rejects a symlinked .slan directory before creating anything outside the project', async () => {
+  it('rejects a symlinked .loom directory before creating anything outside the project', async () => {
     const outside = join(root, 'outside');
     await mkdir(outside);
-    await symlink(outside, join(projectPath, '.slan'), 'dir');
+    await symlink(outside, join(projectPath, '.loom'), 'dir');
     const store = storeFor();
 
     const listError = await expectChainError(
       store.list(),
       CHAIN_STORE_ERROR_CODES.PATH_ESCAPED,
     );
-    expect(listError.details).toMatchObject({ name: '.slan', reason: 'SYMLINK' });
+    expect(listError.details).toMatchObject({ name: '.loom', reason: 'SYMLINK' });
 
     await expectChainError(
       store.create(makeChain()),
@@ -477,7 +477,7 @@ describe('containment', () => {
   it('rejects a symlinked chains directory', async () => {
     const outside = join(root, 'outside-chains');
     await mkdir(outside);
-    await mkdir(join(projectPath, '.slan'));
+    await mkdir(join(projectPath, '.loom'));
     await symlink(outside, chainDirectory(), 'dir');
     const store = storeFor();
 

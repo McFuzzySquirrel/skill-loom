@@ -7,7 +7,7 @@ import { FolderPathError } from '../../src/server/projects/paths.js';
 import {
   PROJECT_ERROR_CODES,
   ProjectRegistryError,
-  SLAN_GITIGNORE_CONTENT,
+  LOOM_GITIGNORE_CONTENT,
   createProjectRegistry,
   isProjectId,
   projectDisplayName,
@@ -20,7 +20,7 @@ let root: string;
 let configDirectory: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'slan-project-registry-'));
+  root = await mkdtemp(join(tmpdir(), 'loom-project-registry-'));
   configDirectory = join(root, 'config');
 });
 
@@ -30,7 +30,7 @@ afterEach(async () => {
 
 function storeFor() {
   return createConfigStore({
-    env: { SLAN_CONFIG_DIR: configDirectory },
+    env: { LOOM_CONFIG_DIR: configDirectory },
     homeDirectory: () => join(root, 'home'),
   });
 }
@@ -151,58 +151,58 @@ describe('project identity', () => {
   });
 });
 
-describe('.slan initialization', () => {
-  it('creates .slan/.gitignore with runs/ and no chains or run directories', async () => {
+describe('.loom initialization', () => {
+  it('creates .loom/.gitignore with runs/ and no chains or run directories', async () => {
     const project = join(root, 'fresh-project');
     await mkdir(project);
 
     const registry = registryWith();
     const registration = await registry.openProject(project);
 
-    expect(registration.slan.gitignoreCreated).toBe(true);
-    expect(registration.slan.directory).toBe(join(await realpath(project), '.slan'));
-    expect(registration.slan.chainCount).toBe(0);
-    expect(registration.slan.hasChains).toBe(false);
+    expect(registration.loom.gitignoreCreated).toBe(true);
+    expect(registration.loom.directory).toBe(join(await realpath(project), '.loom'));
+    expect(registration.loom.chainCount).toBe(0);
+    expect(registration.loom.hasChains).toBe(false);
 
-    const gitignore = await readFile(join(project, '.slan', '.gitignore'), 'utf8');
-    expect(gitignore).toBe(SLAN_GITIGNORE_CONTENT);
+    const gitignore = await readFile(join(project, '.loom', '.gitignore'), 'utf8');
+    expect(gitignore).toBe(LOOM_GITIGNORE_CONTENT);
     expect(gitignore).toContain('runs/');
 
-    expect(await readdir(join(project, '.slan'))).toEqual(['.gitignore']);
-    expect(await exists(join(project, '.slan', 'chains'))).toBe(false);
-    expect(await exists(join(project, '.slan', 'runs'))).toBe(false);
-    expect(await readdir(project)).toEqual(['.slan']);
+    expect(await readdir(join(project, '.loom'))).toEqual(['.gitignore']);
+    expect(await exists(join(project, '.loom', 'chains'))).toBe(false);
+    expect(await exists(join(project, '.loom', 'runs'))).toBe(false);
+    expect(await readdir(project)).toEqual(['.loom']);
   });
 
-  it('preserves an existing .slan/.gitignore and other user files', async () => {
+  it('preserves an existing .loom/.gitignore and other user files', async () => {
     const project = join(root, 'existing-project');
-    await mkdir(join(project, '.slan'), { recursive: true });
+    await mkdir(join(project, '.loom'), { recursive: true });
     const custom = '# custom ignore\nnode_modules/\nruns/\n';
-    await writeFile(join(project, '.slan', '.gitignore'), custom, 'utf8');
-    await writeFile(join(project, '.slan', 'keep.txt'), 'keep me\n', 'utf8');
+    await writeFile(join(project, '.loom', '.gitignore'), custom, 'utf8');
+    await writeFile(join(project, '.loom', 'keep.txt'), 'keep me\n', 'utf8');
 
     const registry = registryWith();
     await registry.openProject(project);
     const second = await registry.openProject(project);
 
-    expect(second.slan.gitignoreCreated).toBe(false);
-    expect(await readFile(join(project, '.slan', '.gitignore'), 'utf8')).toBe(custom);
-    expect(await readFile(join(project, '.slan', 'keep.txt'), 'utf8')).toBe('keep me\n');
+    expect(second.loom.gitignoreCreated).toBe(false);
+    expect(await readFile(join(project, '.loom', '.gitignore'), 'utf8')).toBe(custom);
+    expect(await readFile(join(project, '.loom', 'keep.txt'), 'utf8')).toBe('keep me\n');
   });
 
   it('reports existing chain files without modifying them', async () => {
     const project = join(root, 'with-chains');
-    await mkdir(join(project, '.slan', 'chains'), { recursive: true });
-    const chainPath = join(project, '.slan', 'chains', 'alpha.json');
+    await mkdir(join(project, '.loom', 'chains'), { recursive: true });
+    const chainPath = join(project, '.loom', 'chains', 'alpha.json');
     await writeFile(chainPath, '{"version":1,"id":"alpha"}\n', 'utf8');
-    await writeFile(join(project, '.slan', 'chains', 'notes.txt'), 'not a chain\n', 'utf8');
+    await writeFile(join(project, '.loom', 'chains', 'notes.txt'), 'not a chain\n', 'utf8');
 
     const registration = await registryWith().openProject(project);
 
-    expect(registration.slan.chainCount).toBe(1);
-    expect(registration.slan.hasChains).toBe(true);
+    expect(registration.loom.chainCount).toBe(1);
+    expect(registration.loom.hasChains).toBe(true);
     expect(await readFile(chainPath, 'utf8')).toBe('{"version":1,"id":"alpha"}\n');
-    expect(await exists(join(project, '.slan', 'runs'))).toBe(false);
+    expect(await exists(join(project, '.loom', 'runs'))).toBe(false);
   });
 });
 
@@ -219,7 +219,7 @@ describe('creating a project', () => {
     expect(registration.gitInitialized).toBe(false);
     expect(registration.isGitRepo).toBe(false);
     expect((await stat(target)).isDirectory()).toBe(true);
-    expect(await readdir(target)).toEqual(['.slan']);
+    expect(await readdir(target)).toEqual(['.loom']);
     expect(await exists(join(target, '.git'))).toBe(false);
     expect(await exists(join(target, 'package.json'))).toBe(false);
 
@@ -264,7 +264,7 @@ describe('creating a project', () => {
     );
 
     expect(error.details).toMatchObject({ reason: 'ENOENT' });
-    expect(await exists(join(root, 'no-git', '.slan'))).toBe(false);
+    expect(await exists(join(root, 'no-git', '.loom'))).toBe(false);
     expect(await registry.listRecentProjects()).toEqual([]);
   });
 
@@ -299,7 +299,7 @@ describe('creating a project', () => {
 
     expect(error.details).toMatchObject({ path: existing });
     expect(await readFile(join(existing, 'marker.txt'), 'utf8')).toBe('original\n');
-    expect(await exists(join(existing, '.slan'))).toBe(false);
+    expect(await exists(join(existing, '.loom'))).toBe(false);
     expect(await registry.listRecentProjects()).toEqual([]);
   });
 
@@ -410,9 +410,9 @@ describe('recent projects and removal', () => {
 
   it('removes only the recent entry and leaves project files intact', async () => {
     const project = join(root, 'keep-my-files');
-    await mkdir(join(project, '.slan', 'chains'), { recursive: true });
+    await mkdir(join(project, '.loom', 'chains'), { recursive: true });
     await writeFile(join(project, 'source.ts'), 'export const kept = true;\n', 'utf8');
-    const chainPath = join(project, '.slan', 'chains', 'chain.json');
+    const chainPath = join(project, '.loom', 'chains', 'chain.json');
     await writeFile(chainPath, '{"version":1}\n', 'utf8');
 
     const registry = registryWith();
