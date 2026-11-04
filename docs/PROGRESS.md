@@ -4,7 +4,7 @@
 **Phase**: APP-FOUNDATION-1
 **Status**: In Progress
 **Validation Gaps**: 2 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T10:26:49.287Z
+**Last Updated**: 2026-11-04T10:29:30.065Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -12,6 +12,8 @@
 ## Completed Tasks
 - [x] Phase APP-FOUNDATION-1, Task FOUND-01: Initialize the TypeScript application scaffold (@platform-engineer)
   - Files: package.json, tsconfig.json, tsconfig.server.json, tsconfig.web.json, vite.config.ts, vitest.config.ts, playwright.config.ts, index.html, .gitignore, tests/unit/build-config.test.ts, package-lock.json
+- [x] Phase APP-FOUNDATION-1, Task FOUND-02: Implement the global configuration store (@backend-engineer)
+  - Files: src/server/config/schema.ts, src/server/config/store.ts, tests/unit/config.test.ts
 
 ## Current Task
 - None currently running
