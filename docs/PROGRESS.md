@@ -4,7 +4,7 @@
 **Phase**: PROJECT-WORKSPACE-1
 **Status**: In Progress
 **Validation Gaps**: 4 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T10:44:29.985Z
+**Last Updated**: 2026-11-04T10:50:29.254Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -22,12 +22,13 @@
   - Files: src/server/terminal/pty.ts, src/server/routes/terminal.ts, src/server/app.ts, tests/unit/pty.test.ts, tests/integration/terminal-ws.test.ts, src/server/routes/index.ts, src/shared/terminal.ts
 - [x] Phase PROJECT-WORKSPACE-1, Task PROJ-01: Implement the server-side folder browser (@backend-engineer)
   - Files: src/server/projects/paths.ts, src/server/projects/browser.ts, src/server/routes/fs.ts, src/server/routes/index.ts, tests/unit/projects-paths.test.ts, tests/integration/fs-routes.test.ts
+- [x] Phase PROJECT-WORKSPACE-1, Task PROJ-02: Register projects, recent entries, and .slan initialization (@backend-engineer)
+  - Files: src/server/projects/registry.ts, src/server/routes/projects.ts, src/server/routes/index.ts, tests/unit/project-registry.test.ts, tests/integration/projects-routes.test.ts, src/server/app.ts
 
 ## Current Task
 - None currently running
 
 ## Remaining
-- [ ] Phase PROJECT-WORKSPACE-1: Phase 1: Filesystem and Project APIs
 - [ ] Phase PROJECT-WORKSPACE-2: Phase 2: Project Screen
 - [ ] Phase SKILL-CATALOG-1: Phase 1: Discovery and Catalog API
 - [ ] Phase SKILL-CATALOG-2: Phase 2: Catalog Panel and Live Verification

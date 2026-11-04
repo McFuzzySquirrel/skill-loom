@@ -16,6 +16,7 @@ import {
   type ActiveRunSummary,
 } from '../shared/api.js';
 import { createConfigStore, type ConfigStore } from './config/store.js';
+import type { GitInitRunner } from './projects/registry.js';
 import { routes } from './routes/index.js';
 import {
   createTerminalManager,
@@ -92,6 +93,8 @@ export interface BuildAppOptions {
   getActiveRun?: () => ActiveRunSummary;
   /** Injected PTY registry. Defaults to a fresh manager owned by this app. */
   terminalManager?: TerminalManager;
+  /** Git initializer seam used by the project registry. */
+  projectGitInit?: GitInitRunner;
 }
 
 /** Strip IPv6 brackets and compare case-insensitively. */
@@ -314,6 +317,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     port,
     terminalManager,
     ...(options.getActiveRun === undefined ? {} : { getActiveRun: options.getActiveRun }),
+    ...(options.projectGitInit === undefined ? {} : { gitInit: options.projectGitInit }),
   });
 
   return app;

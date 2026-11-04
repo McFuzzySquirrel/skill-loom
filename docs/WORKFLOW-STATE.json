@@ -1,7 +1,7 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T10:44:29.984Z",
+  "lastUpdatedAt": "2026-11-04T10:50:29.253Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
@@ -313,10 +313,52 @@
     },
     "PROJ-02": {
       "taskId": "PROJ-02",
-      "status": "pending",
+      "status": "complete",
       "ownerAgent": "backend-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 1,
+      "outputFiles": [
+        "src/server/projects/registry.ts",
+        "src/server/routes/projects.ts",
+        "src/server/routes/index.ts",
+        "tests/unit/project-registry.test.ts",
+        "tests/integration/projects-routes.test.ts",
+        "src/server/app.ts"
+      ],
+      "startedAt": "2026-11-04T10:44:30.465Z",
+      "usage": {
+        "inputTokens": 72291,
+        "outputTokens": 21711,
+        "reasoningTokens": 28847,
+        "cacheReadTokens": 4148480,
+        "cacheWriteTokens": 0,
+        "costUsd": 0.053623889999999994,
+        "source": "harness"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/PROJ-02.2026-11-04T10-50-29-246Z.attempt-1.result.json",
+          "usage": {
+            "inputTokens": 72291,
+            "outputTokens": 21711,
+            "reasoningTokens": 28847,
+            "cacheReadTokens": 4148480,
+            "cacheWriteTokens": 0,
+            "costUsd": 0.053623889999999994,
+            "source": "harness"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T10:50:29.250Z",
+      "agentOutput": "I'll start by reading the execution file.\nNow I'll implement the project registry.\nNow I'll add the unit tests.\nNow the integration tests.\nImplemented PROJ-02: project open/create, path-derived stable ids, optional `git init`, recent-project persistence and removal, and idempotent `.slan` initialization with an atomic, non-clobbering `.gitignore`. All project routes are mounted through `src/server/routes/index.ts` and verified through `src/server/app.ts`.\n\n**Files created**\n- `src/server/projects/registry.ts`\n- `src/server/routes/projects.ts`\n- `tests/unit/project-registry.test.ts`\n- `tests/integration/projects-routes.test.ts`\n\n**Files changed**\n- `src/server/routes/index.ts` — registered project routes.\n- `src/server/app.ts` — added the `projectGitInit` injection seam for deterministic integration tests.\n\n**Validation run**\n- `npx vitest run tests/unit/project-registry.test.ts tests/integration/projects-routes.test.ts` — 39 passed.\n- `npx vitest run` — 130 passed across 9 files.\n- `npm run typecheck` — passed.\n- `npm run build` / `npm run build:server` — passed.\n- Real default `git init` smoke check against a temporary project — repository created successfully.\n\n```forge-result\n{\"summary\":\"Implemented the project registry and project routes: stable path-derived ids, open/create with conflict and missing-parent rejection, injected git init with typed unavailable/failure errors, newest-first recent projects in global config, removal without filesystem deletion, and idempotent .slan/.gitignore setup that preserves existing content. All declared tests, the full Vitest suite, typecheck, and build pass.\",\"decisions\":[\"Project ids are deterministic `<slug>-<12 hex chars of sha256(canonicalPath)>`, so reopening the same realpath always yields the same id and ids are safe as URL segments.\",\"POST /api/projects treats `mode: \\\"create\\\"` as the create form ({ parentPath, name, gitInit? }); any other body is the open form ({ path }). This keeps the two operations explicit and field-specific validation simple.\",\"The .slan/.gitignore is written to a same-directory temporary file and hard-linked into place, which is atomic and refuses to overwrite an existing ignore file; no chains/ or runs/ directory is created.\",\"Git failures are surfaced rather than silently ignored: a missing executable returns GIT_UNAVAILABLE (503), and a non-zero git init returns GIT_INIT_FAILED (500) with the exit code. The newly created empty directory is left in place because project files are never deleted.\",\"Recent projects are persisted newest-first in global config and sorted by lastOpenedAt descending with stable tie handling; removal only filters the config entry and never touches project files.\",\"A `projectGitInit` injection seam was added to buildApp so integration tests can exercise git success and failure deterministically without depending on an installed git binary.\"],\"interfaces\":[\"src/server/projects/registry.ts: PROJECT_ERROR_CODES, ProjectRegistryError, GitInitRunner, ProjectRegistration, ProjectSlanState, CreateProjectInput, ProjectRegistry, createProjectRegistry, projectIdForPath, isProjectId, projectDisplayName, ensureSlanData, runGitInit\",\"ProjectRegistry: openProject(path), createProject({parentPath,name,gitInit?}), listRecentProjects(), removeRecentProject(projectId), findRecentProject(projectId)\",\"ProjectRegistration: { id, canonicalPath, displayName, lastOpenedAt, isGitRepo, gitInitialized, slan: { directory, gitignoreCreated, chainCount, hasChains } }\",\"POST /api/projects -> 200 { project } for open, 201 { project } for create\",\"GET /api/projects/recent -> 200 { projects: RecentProject[] } newest first\",\"DELETE /api/projects/recent/:projectId -> 200 { projectId, removed: true }\",\"Failure envelope: { error: { code, message, details } } with PATH_* and PROJECT_*, GIT_*, RECENT_PROJECT_NOT_FOUND codes\"],\"tests\":[\"npx vitest run tests/unit/project-registry.test.ts tests/integration/projects-routes.test.ts: exit 0 (39 tests)\",\"npx vitest run: exit 0 (130 tests, 9 files)\",\"npm run typecheck: exit 0\",\"npm run build: exit 0\",\"npm run build:server: exit 0\",\"Default git runner smoke check with real git: repository initialized and detected\"],\"unresolved\":[]}\n```\n",
+      "artifactId": "work-proj-02-001",
+      "inputArtifactIds": [
+        "work-proj-01-001",
+        "work-found-02-001",
+        "work-found-04-001",
+        "work-found-05-001"
+      ]
     },
     "PROJ-03": {
       "taskId": "PROJ-03",
