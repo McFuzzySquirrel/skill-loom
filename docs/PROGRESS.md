@@ -1,10 +1,10 @@
 # Project Progress
 
 ## Current State
-**Phase**: SKILL-CATALOG-2
+**Phase**: CHAIN-AUTHORING-1
 **Status**: In Progress
-**Validation Gaps**: 6 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T11:22:22.384Z
+**Validation Gaps**: 7 unverified check(s) - see "Validation Gaps"
+**Last Updated**: 2026-11-04T11:24:59.365Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -36,6 +36,8 @@
   - Files: src/web/components/SkillCatalog.tsx, src/web/components/SkillDetail.tsx, src/web/components/SkillSourceBadge.tsx, src/web/components/ExtraDirectoriesDialog.tsx, src/web/hooks/useCatalog.ts, src/web/api/catalog.ts, src/web/routes/ProjectsPage.tsx, tests/e2e/catalog.spec.ts, src/server/routes/catalog.ts, src/web/styles/theme.css
 - [x] Phase SKILL-CATALOG-2, Task CAT-05: Verify live discovery against both harness CLIs (@integration-engineer)
   - Files: scripts/live-discovery.ts, docs/evidence/live-discovery.json
+- [x] Phase CHAIN-AUTHORING-1, Task CHAIN-01: Implement the chain model and validation (@backend-engineer)
+  - Files: src/server/chains/model.ts, tests/unit/chain-model.test.ts
 
 ## Current Task
 - None currently running
@@ -63,6 +65,7 @@
 - Task FOUND-05: The full npm run build (web plus server) was not run because src/web is owned by FOUND-04 and does not exist yet; npm run build:server passed.
 - Task PROJ-03: Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed.
 - Task CAT-05: The live probe requires installed OpenCode 2.2.5 and Copilot CLI 1.0.105; on machines lacking either CLI the validation command intentionally fails with a clear diagnostic rather than skipping.
+- Task CHAIN-01: npm ci was required in the sandbox worktree because node_modules was absent; no dependency versions or lockfile content changed.
 
 ## Notes
 - Workflow engine run 25930d7e-150c-4ea9-a081-47fcf1941eb6
