@@ -63,6 +63,13 @@ export const CATALOG_WARNING_CODES = {
   DIRECTORY_NOT_A_DIRECTORY: 'SKILL_DIRECTORY_NOT_A_DIRECTORY',
   DIRECTORY_PATH_INVALID: 'SKILL_DIRECTORY_PATH_INVALID',
   DEPTH_EXCEEDED: 'SKILL_DEPTH_EXCEEDED',
+  COMMAND_UNAVAILABLE: 'SKILL_COMMAND_UNAVAILABLE',
+  COMMAND_FAILED: 'SKILL_COMMAND_FAILED',
+  COMMAND_TIMEOUT: 'SKILL_COMMAND_TIMEOUT',
+  OUTPUT_INVALID: 'SKILL_OUTPUT_INVALID',
+  ENTRY_INVALID: 'SKILL_ENTRY_INVALID',
+  SOURCE_UNKNOWN: 'SKILL_SOURCE_UNKNOWN',
+  PATH_UNRESOLVED: 'SKILL_PATH_UNRESOLVED',
 } as const;
 export type CatalogWarningCode =
   (typeof CATALOG_WARNING_CODES)[keyof typeof CATALOG_WARNING_CODES];
@@ -81,6 +88,15 @@ export interface CatalogWarning {
   path?: string;
   /** Errno-style reason such as `EACCES` or `ENOENT`, never file content. */
   reason?: string;
+  /** Executable plus argument array rendered for diagnostics; never a shell string. */
+  command?: string;
+  /** Exit code of a failed discovery command, when one actually ran. */
+  exitCode?: number | null;
+  /**
+   * Bounded, redacted stderr excerpt for a failed discovery command. Credential
+   * values are removed before the excerpt reaches a warning.
+   */
+  stderr?: string;
 }
 
 /** The normalized output of one harness discovery pass. */

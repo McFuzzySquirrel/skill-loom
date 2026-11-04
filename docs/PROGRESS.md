@@ -4,7 +4,7 @@
 **Phase**: SKILL-CATALOG-1
 **Status**: In Progress
 **Validation Gaps**: 5 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T11:05:46.198Z
+**Last Updated**: 2026-11-04T11:09:09.403Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -28,6 +28,8 @@
   - Files: src/web/routes/ProjectsPage.tsx, src/web/components/FolderBrowser.tsx, src/web/components/RecentProjects.tsx, src/web/components/NewProjectForm.tsx, src/web/api/projects.ts, tests/e2e/projects.spec.ts, src/web/App.tsx, src/web/styles/theme.css, src/web/components/InlineError.tsx, src/web/hooks/useDirectoryListing.ts, src/web/hooks/useRecentProjects.ts
 - [x] Phase SKILL-CATALOG-1, Task CAT-01: Implement OpenCode skill discovery (@backend-engineer)
   - Files: src/server/catalog/types.ts, src/server/catalog/frontmatter.ts, src/server/catalog/opencode.ts, tests/unit/catalog-opencode.test.ts
+- [x] Phase SKILL-CATALOG-1, Task CAT-02: Implement Copilot CLI skill discovery (@backend-engineer)
+  - Files: src/server/catalog/copilot.ts, tests/unit/catalog-copilot.test.ts, src/server/catalog/types.ts
 
 ## Current Task
 - None currently running
