@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import {
@@ -149,6 +150,73 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRoutesOptions> = async (
     }
   });
 
+  app.get<{
+    Params: ProjectRouteParams & { skillId: string };
+    Querystring: { harness?: string; q?: string };
+  }>(
+    '/api/projects/:projectId/catalog/skills/:skillId',
+    async (request, reply) => {
+      const parsed = catalogQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        return reply.code(422).send(
+          createApiErrorEnvelope(
+            API_ERROR_CODES.VALIDATION_ERROR,
+            'The skill detail request is not valid.',
+            { issues: toValidationIssues(parsed.error.issues) },
+          ),
+        );
+      }
+
+      try {
+        const project = await resolveRegisteredProject(registry, request.params.projectId);
+        // The id is matched against a freshly discovered entry; a client can
+        // never supply a filesystem path to this route.
+        const catalog = await service.getCatalog({
+          projectPath: project.canonicalPath,
+          harness: parsed.data.harness ?? service.defaultHarness,
+        });
+        const entry = catalog.groups
+          .flatMap((group) => group.entries)
+          .find((candidate) => candidate.id === request.params.skillId);
+
+        if (entry === undefined) {
+          return reply
+            .code(404)
+            .send(
+              createApiErrorEnvelope(
+                'CATALOG_SKILL_NOT_FOUND',
+                'No catalog entry matches that skill id for the selected harness.',
+                { skillId: request.params.skillId },
+              ),
+            );
+        }
+
+        let content: string;
+        try {
+          content = await readFile(entry.path, 'utf8');
+        } catch (error) {
+          return reply.code(404).send(
+            createApiErrorEnvelope(
+              'CATALOG_SKILL_CONTENT_UNAVAILABLE',
+              'The SKILL.md file could not be read. Refresh the catalog and try again.',
+              { skillId: entry.id, path: entry.path, reason: errnoCode(error) },
+            ),
+          );
+        }
+
+        return reply.code(200).send({
+          id: entry.id,
+          harness: entry.harness,
+          name: entry.name,
+          path: entry.path,
+          content,
+        });
+      } catch (error) {
+        return sendCatalogFailure(reply, error);
+      }
+    },
+  );
+
   app.get('/api/settings/extra-skill-directories', async (_request, reply) => {
     try {
       const extraSkillDirectories = await listExtraSkillDirectories(options.configStore);
@@ -267,4 +335,17 @@ function toValidationIssues(
     code: issue.code,
     message: issue.message,
   }));
+}
+
+/** Errno-style reason for a file read failure, never file content. */
+function errnoCode(error: unknown): string {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof (error as { code?: unknown }).code === 'string'
+  ) {
+    return (error as { code: string }).code;
+  }
+  return 'READ_FAILED';
 }

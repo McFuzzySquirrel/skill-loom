@@ -14,6 +14,7 @@ import { FolderBrowser } from '../components/FolderBrowser';
 import { InlineError } from '../components/InlineError';
 import { NewProjectForm } from '../components/NewProjectForm';
 import { RecentProjects } from '../components/RecentProjects';
+import { SkillCatalog } from '../components/SkillCatalog';
 import { useStatusAnnouncer } from '../components/StatusRegion';
 import { useRecentProjects } from '../hooks/useRecentProjects';
 
@@ -332,8 +333,8 @@ export function ProjectPage({ projectId }: { projectId: string }) {
         {summary.displayName}
       </h1>
       <p className="lede">
-        This project is registered locally. Chain authoring and the skill catalog arrive
-        in later screens.
+        This project is registered locally. Browse its skill catalog below; chain
+        authoring arrives in a later screen.
       </p>
 
       <dl className="detail-grid project-facts">
@@ -415,19 +416,9 @@ export function ProjectPage({ projectId }: { projectId: string }) {
             arrives with chain authoring.
           </p>
         </section>
-        <section
-          className="placeholder"
-          aria-labelledby="project-catalog-placeholder"
-        >
-          <h2 className="section-title" id="project-catalog-placeholder">
-            Skill catalog
-          </h2>
-          <p>
-            The catalog placeholder. Harness selection, grouped skills, and source badges
-            arrive with the skill catalog.
-          </p>
-        </section>
       </div>
+
+      <SkillCatalog projectId={summary.id} context="project" />
 
       <p className="panel__actions">
         <Link className="button button--secondary" to="/projects">

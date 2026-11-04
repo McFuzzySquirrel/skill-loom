@@ -1,7 +1,7 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T11:21:16.544Z",
+  "lastUpdatedAt": "2026-11-04T11:22:22.382Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
@@ -554,11 +554,45 @@
     },
     "CAT-04": {
       "taskId": "CAT-04",
-      "status": "running",
+      "status": "complete",
       "ownerAgent": "frontend-engineer",
       "attempt": 1,
-      "outputFiles": [],
-      "startedAt": "2026-11-04T11:14:12.078Z"
+      "outputFiles": [
+        "src/web/components/SkillCatalog.tsx",
+        "src/web/components/SkillDetail.tsx",
+        "src/web/components/SkillSourceBadge.tsx",
+        "src/web/components/ExtraDirectoriesDialog.tsx",
+        "src/web/hooks/useCatalog.ts",
+        "src/web/api/catalog.ts",
+        "src/web/routes/ProjectsPage.tsx",
+        "tests/e2e/catalog.spec.ts",
+        "src/server/routes/catalog.ts",
+        "src/web/styles/theme.css"
+      ],
+      "startedAt": "2026-11-04T11:14:12.078Z",
+      "usage": {
+        "source": "unavailable",
+        "note": "opencode usage unavailable: Expected ',' or '}' after property value in JSON at position 547167 (line 3826 column 31)"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/CAT-04.2026-11-04T11-22-22-374Z.attempt-1.result.json",
+          "usage": {
+            "source": "unavailable",
+            "note": "opencode usage unavailable: Expected ',' or '}' after property value in JSON at position 547167 (line 3826 column 31)"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T11:22:22.377Z",
+      "agentOutput": "I'll start by reading the execution file.\nNow I have a clear picture. Let me implement the API client and hook first.\nImplemented the CAT-04 skill catalog and extra-directory settings.\n\nWhat was built:\n- Typed catalog API client with catalog, skill-detail, and extra-directory endpoints.\n- Debounced catalog hook with harness switching, refresh, abort/generation guarding, and aria-live announcements.\n- Grouped source rendering with badges, duplicate-name separation, canonical paths, warnings, and distinct loading/empty/error states.\n- Expandable full `SKILL.md` detail rendered as escaped React text in a scrollable `<pre>`.\n- Non-modal extra-directory settings dialog with absolute-path validation, add/remove confirmation, Escape handling, and focus return.\n- Catalog wired into the project route; `context=\"builder\"` exposes Add as step while the project context omits it.\n- Added the minimal real-server skill-detail route needed to supply full `SKILL.md` text without client-side filesystem access.\n- Added the Playwright catalog spec using isolated config and temporary project/skill fixtures.\n\nValidation run:\n- `npx playwright test tests/e2e/catalog.spec.ts` — 5 passed.\n- `npm test` — 186 passed.\n- `npm run typecheck` — passed.\n- `npm run build` — passed.\n- `npx playwright test tests/e2e/shell.spec.ts tests/e2e/projects.spec.ts` — 19 passed.\n\nFiles created:\n- `src/web/api/catalog.ts`\n- `src/web/hooks/useCatalog.ts`\n- `src/web/components/SkillCatalog.tsx`\n- `src/web/components/SkillDetail.tsx`\n- `src/web/components/SkillSourceBadge.tsx`\n- `src/web/components/ExtraDirectoriesDialog.tsx`\n- `tests/e2e/catalog.spec.ts`\n\nFiles changed:\n- `src/web/routes/ProjectsPage.tsx`\n- `src/web/styles/theme.css`\n- `src/server/routes/catalog.ts`\n\n```forge-result\n{\"summary\":\"Built the grouped, searchable skill catalog with expandable full SKILL.md detail, warning and error states, refresh, builder-only Add as step support, and a global extra-directory settings dialog; added a real-server skill-detail endpoint and passing Playwright coverage.\",\"decisions\":[\"Added GET /api/projects/:projectId/catalog/skills/:skillId because the existing catalog response carries metadata only; the route resolves a freshly discovered entry by id and never accepts a client-supplied filesystem path.\",\"Search is debounced in the hook at 150 ms, refresh preserves the current query, and only the newest request may publish.\",\"The settings dialog is non-modal so it never becomes an additional focus trap; Escape closes it and focus returns to the trigger.\",\"Duplicate skill names are never deduplicated in the UI; ids from the API key rows and source badges plus canonical paths disambiguate them.\",\"Add as step is rendered only when context is builder and a handler is supplied; the project route omits it.\",\"Skill text is rendered only through escaped React text in a scrollable pre element; no raw HTML or model summaries are used.\"],\"interfaces\":[\"src/web/api/catalog.ts: CatalogApi, createCatalogApi, catalogApi, CatalogResponse, SkillEntry, SkillDetail, ExtraDirectoryMutation\",\"GET /api/projects/:projectId/catalog?harness=&q= -> CatalogResponse\",\"GET /api/projects/:projectId/catalog/skills/:skillId?harness= -> {id,harness,name,path,content}\",\"GET|POST|DELETE /api/settings/extra-skill-directories -> configured extra skill directories\",\"src/web/hooks/useCatalog.ts: useCatalog, useExtraDirectories, CATALOG_SEARCH_DEBOUNCE_MS\"],\"tests\":[\"npx playwright test tests/e2e/catalog.spec.ts: 5 passed (exit 0)\",\"npm test: 13 files, 186 tests passed (exit 0)\",\"npm run typecheck: server and web passed (exit 0)\",\"npm run build: web and server builds passed (exit 0)\",\"npx playwright test tests/e2e/shell.spec.ts tests/e2e/projects.spec.ts: 19 passed (exit 0)\"],\"unresolved\":[]}\n```\n",
+      "artifactId": "work-cat-04-001",
+      "inputArtifactIds": [
+        "work-cat-03-001",
+        "work-cat-01-001",
+        "work-cat-02-001"
+      ]
     },
     "CAT-05": {
       "taskId": "CAT-05",
