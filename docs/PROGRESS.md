@@ -1,10 +1,10 @@
 # Project Progress
 
 ## Current State
-**Phase**: V1-ACCEPTANCE-1
+**Phase**: V1-ACCEPTANCE-2
 **Status**: In Progress
 **Validation Gaps**: 33 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T15:09:52.950Z
+**Last Updated**: 2026-11-04T16:01:47.759Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -74,6 +74,8 @@
   - Files: scripts/live-execution.ts, docs/evidence/live-execution.json
 - [x] Phase V1-ACCEPTANCE-1, Task ACC-01: Write the operator documentation and docs check (@platform-engineer)
   - Files: README.md, docs/OPERATIONS.md, scripts/check-docs.mjs, tests/unit/docs.test.ts
+- [x] Phase V1-ACCEPTANCE-2, Task ACC-02: Review the primary chain journey with both harnesses
+  - Files: docs/reviews/v1-primary-journey.json
 
 ## Current Task
 - None currently running

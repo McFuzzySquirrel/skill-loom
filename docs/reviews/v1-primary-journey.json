@@ -1,0 +1,13 @@
+{
+  "taskId": "ACC-02",
+  "taskDigest": "d4e715c2f6a7c31de40f63f1513aca39878c379d9fa1809978041c305b2c75b8",
+  "reviewer": "squirrel",
+  "reviewedAt": "2026-11-04T16:01:44.680Z",
+  "decision": "approved",
+  "evidence": [
+    {
+      "path": "docs/reviews/ACC-02-console-review.md",
+      "sha256": "2594bac2b13ac979a4221646c4e70a003c2f94f0410e7656d71c3e3abbd5eee5"
+    }
+  ]
+}

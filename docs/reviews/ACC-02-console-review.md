@@ -1,0 +1,9 @@
+# Human Review: Review the primary chain journey with both harnesses
+
+Reviewer: squirrel
+Reviewed at: 2026-11-04T16:01:44.672Z
+Decision: Approved
+
+## Review notes
+
+I confirm I ran erform this review in order against the running application: 1. From a clean checkout, run npm install and npm run dev, then open http://127.0.0.1:7373 and confirm the local-only notice and empty project state. 2. Open or create a real project directory, confirm it appears in recent projects, restart the server, and confirm it persists. 3. Select OpenCode, confirm project-local skills appear with source badges, search for one by description, expand its full SKILL.md, and add one extra skill directory. 4. Create a chain with at least three steps, give every step an instruction, declare one named input used in a step, reorder one step with the keyboard, and save. 5. Run preflight, resolve or acknowledge every finding, start a supervised run, let the first step reach an interactive prompt, mark it Done, advance with Next, and complete the chain. Confirm the terminal is live and the step statuses are truthful. 6. Reload the run page and confirm the recorded status. Edit the chain to use a different input value, re-run it, and confirm no prompt is retyped. 7. Run the same chain in automatic OpenCode mode and confirm each step advances only after the working-to-idle signal; use Pause and Run next at least once. 8. Exercise Copilot: confirm discovery, complete the trust flow or the documented fallback, and run at least one Copilot step with automatic permission opt-in or in supervised mode. 9. Force a failing or interrupted step, confirm the chain pauses, then exercise Retry and Abort; confirm no step replays silently after reload. 10. Record the harness versions, chain path, observed session ids, run ids, what was exercised, and every deviation in docs/reviews/v1-primary-journey.json. Approve only if the primary journey and the two-run reuse criterion pass.
