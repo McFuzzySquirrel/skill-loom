@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/skill-loom-logo.png" alt="Skill Loom logo: a squirrel weaving skills on a neon loom" width="140">
+</p>
+
 # Skill Loom
 
 [![Node.js >=24](https://img.shields.io/badge/Node.js-%3E%3D24-339933?logo=nodedotjs&logoColor=white)](package.json)
