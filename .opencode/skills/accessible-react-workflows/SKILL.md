@@ -127,7 +127,7 @@ If a keyboard step fails, then fix the control or focus order before adding an a
 ## Gotchas
 
 - **`outline: none` with no replacement.** Removing the default outline makes focus invisible. Always add a `:focus-visible` outline with contrast against the dark theme.
-- **Color-only status.** A green dot for done and a red dot for failed fails `A11Y-03`. Render an icon plus the word, and keep the word in the accessible name.
+- **Color-only status.** A green dot for done and a red dot for failed hides state from a grayscale or screen-reader user. Render an icon plus the word, and keep the word in the accessible name.
 - **Duplicate live announcements.** Announcing on every render, or using both `role="status"` and `aria-live` on nested nodes, makes a screen reader repeat the same state. Keep one region and change the message.
 - **Reordering loses focus.** Re-rendering a list after Move up can drop focus to `<body>`. Restore focus to the moved row by stable step id, not by index.
 - **Drag-only reordering.** Native drag events are not keyboard-operable. The Move up and Move down buttons are the required path.

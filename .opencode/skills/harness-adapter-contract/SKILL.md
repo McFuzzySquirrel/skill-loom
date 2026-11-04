@@ -130,7 +130,7 @@ If the installed version differs from 2.2.5 or 1.0.105, then run the live probes
 - **`--trust-folder` conflicts with `--session-id`.** Copilot applies the trust flag to one prompt-mode session and rejects the combination with a session id. Establish persistent trust first, then use the session id.
 - **Interactive OpenCode has no fork flag.** Only the `run` subcommand exposes `--fork`. Do not pass `--fork` to the interactive entry point and do not claim a native fork where it is unavailable.
 - **Copilot has no native fork at all.** Report `fork` as a handoff note built from the previous step's label, skill, instruction, status, and bounded tail.
-- **Shell-free resolution.** `execSync("which …")` violates `SEC-01` and breaks when `PATH` contains spaces. Walk `PATH` and check `X_OK`.
+- **Shell-free resolution.** `execSync("which …")` breaks when `PATH` contains spaces and shells out needlessly. Walk `PATH` and check `X_OK`.
 - **Discovery failure is not an empty catalog.** A missing executable, timeout, or invalid JSON must surface a warning and an error state so the user does not mistake a broken CLI for "no skills installed".
 - **Trust config is read-only to Slan.** Detect `trustedFolders` in `~/.copilot/config.json`; never write it. A prompt queued during the trust dialog can be swallowed.
 - **Broad permissions are opt-in only.** `--allow-all-paths --allow-all-tools` never appear without a per-chain opt-in and must be shown verbatim at preflight and run start.

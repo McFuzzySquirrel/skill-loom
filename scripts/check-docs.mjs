@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Operator documentation gate for ACC-FR-01.
+ * Operator documentation gate for README.md and docs/OPERATIONS.md.
  *
  * The check is intentionally executable rather than a prose promise: it fails
  * when a required heading, npm command, or safety statement disappears from
