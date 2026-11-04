@@ -16,6 +16,7 @@ import {
   type ActiveRunSummary,
 } from '../shared/api.js';
 import type { CatalogService } from './catalog/merge.js';
+import type { ChainService } from './chains/service.js';
 import { createConfigStore, type ConfigStore } from './config/store.js';
 import type { GitInitRunner } from './projects/registry.js';
 import { routes } from './routes/index.js';
@@ -84,6 +85,8 @@ export interface BuildAppOptions {
   configStore?: ConfigStore;
   /** Injected catalog service. Defaults to the v1 adapter registry. */
   catalogService?: CatalogService;
+  /** Injected chain service. Defaults to the filesystem-backed service. */
+  chainService?: ChainService;
   /** Injected package version. Defaults to the root package.json version. */
   version?: string;
   /** Fastify logger configuration. Tests pass `false`. */
@@ -322,6 +325,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     ...(options.getActiveRun === undefined ? {} : { getActiveRun: options.getActiveRun }),
     ...(options.projectGitInit === undefined ? {} : { gitInit: options.projectGitInit }),
     ...(options.catalogService === undefined ? {} : { catalogService: options.catalogService }),
+    ...(options.chainService === undefined ? {} : { chainService: options.chainService }),
   });
 
   return app;

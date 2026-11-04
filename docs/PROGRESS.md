@@ -3,8 +3,8 @@
 ## Current State
 **Phase**: CHAIN-AUTHORING-1
 **Status**: In Progress
-**Validation Gaps**: 8 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T11:28:46.109Z
+**Validation Gaps**: 9 unverified check(s) - see "Validation Gaps"
+**Last Updated**: 2026-11-04T11:32:52.297Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -40,12 +40,13 @@
   - Files: src/server/chains/model.ts, tests/unit/chain-model.test.ts
 - [x] Phase CHAIN-AUTHORING-1, Task CHAIN-02: Implement chain storage with atomic writes (@backend-engineer)
   - Files: src/server/chains/store.ts, tests/unit/chain-store.test.ts
+- [x] Phase CHAIN-AUTHORING-1, Task CHAIN-03: Expose chain CRUD and duplicate endpoints (@backend-engineer)
+  - Files: src/server/routes/chains.ts, src/server/routes/index.ts, tests/integration/chains-routes.test.ts, src/server/app.ts, src/server/chains/service.ts
 
 ## Current Task
 - None currently running
 
 ## Remaining
-- [ ] Phase CHAIN-AUTHORING-1: Phase 1: Model, Storage, and API
 - [ ] Phase CHAIN-AUTHORING-2: Phase 2: Chain Library and Builder
 - [ ] Phase RUN-PREFLIGHT-1: Phase 1: Adapters, Checks, and API
 - [ ] Phase RUN-PREFLIGHT-2: Phase 2: Run-Start Screen
@@ -69,6 +70,7 @@
 - Task CAT-05: The live probe requires installed OpenCode 2.2.5 and Copilot CLI 1.0.105; on machines lacking either CLI the validation command intentionally fails with a clear diagnostic rather than skipping.
 - Task CHAIN-01: npm ci was required in the sandbox worktree because node_modules was absent; no dependency versions or lockfile content changed.
 - Task CHAIN-02: npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.
+- Task CHAIN-03: npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.
 
 ## Notes
 - Workflow engine run 25930d7e-150c-4ea9-a081-47fcf1941eb6
