@@ -2,11 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isAbortError, type ApiClientError } from '../api/client';
 import {
   CHAIN_HARNESSES,
+  CHAIN_INPUT_NAME_PATTERN,
   CHAIN_SESSION_MODES,
   NEW_CHAIN_ID,
   chainsApi,
+  normalizeChainDraft,
   toApiClientError,
   type Chain,
+  type ChainDraft,
   type ChainHarness,
   type ChainInput,
   type ChainSessionMode,
@@ -16,16 +19,18 @@ import {
 import { useStatusAnnouncer } from '../components/StatusRegion';
 
 /**
- * Unsaved editor state for one chain (CHAIN-05).
+ * Unsaved editor state for one chain (CHAIN-05, CHAIN-06).
  *
- * The hook owns step add, edit, remove, and reorder. Nothing here writes to the
- * API: the builder can validate and order a draft, while persistence and named
- * inputs belong to CHAIN-06. Steps are keyed by their stable id, never by name
- * or array index, so repeated skills and reordering stay correct.
+ * The hook owns steps, named inputs, validation, dirty tracking, and the save
+ * mutation. A draft is always keyed by stable step ids and by input names; the
+ * inputs editor keeps its own row identity while a rename is being reviewed, so
+ * a rejected rename never rewrites a saved instruction.
  */
 
-/** Editable content mirrored from the chain model, plus optional timestamps. */
+/** Editable content mirrored from the chain model, plus optional identity. */
 export interface ChainDraftDocument {
+  id?: string;
+  version?: number;
   name: string;
   harness: ChainHarness;
   sessionMode: ChainSessionMode;
@@ -41,18 +46,39 @@ export type ChainDraftState =
   | { status: 'error'; chainId: string; document: null; error: ApiClientError }
   | { status: 'ready'; chainId: string; document: ChainDraftDocument; error: null };
 
-export interface StepInstructionIssue {
-  stepId: string;
-  /** One-based position at the time validation ran. */
-  position: number;
+export type ChainDraftIssueKind = 'chain' | 'step' | 'placeholder' | 'input';
+
+/** One blocking reason that keeps Save disabled. */
+export interface ChainDraftIssue {
+  /** Stable key for rendering; never an array index. */
+  key: string;
+  kind: ChainDraftIssueKind;
   message: string;
+  stepId?: string;
+  /** One-based step position at validation time. */
+  position?: number;
+  inputName?: string;
 }
 
 export interface ChainDraftValidation {
-  issues: StepInstructionIssue[];
+  issues: ChainDraftIssue[];
   invalidStepIds: ReadonlySet<string>;
-  /** False when there are no steps or any instruction is blank. */
+  /** Per-step messages so the step editor can mark the exact field. */
+  stepIssues: ReadonlyMap<string, ChainDraftIssue[]>;
+  /** Non-blocking advisories such as an input no instruction uses. */
+  warnings: string[];
+  /** False when there are no steps or any blocking issue remains. */
   canSave: boolean;
+}
+
+/** One instruction that references a named input placeholder. */
+export interface InputReference {
+  stepId: string;
+  position: number;
+  displayName: string;
+  instruction: string;
+  occurrences: number;
+  placeholder: string;
 }
 
 export interface UseChainDraftOptions {
@@ -76,7 +102,19 @@ export interface UseChainDraftResult {
   removeStep: (stepId: string) => void;
   moveStep: (stepId: string, direction: 'up' | 'down') => void;
   reorderStep: (draggedStepId: string, targetStepId: string) => void;
+  addInput: (input: ChainInput) => void;
+  updateInput: (name: string, patch: Partial<Omit<ChainInput, 'name'>>) => void;
+  /** Apply a reviewed rename and rewrite every matching placeholder. */
+  renameInput: (oldName: string, newName: string) => void;
+  /** Apply a reviewed removal and delete every matching placeholder. */
+  removeInput: (name: string) => void;
+  /** The harness can change only before the draft is first saved. */
+  setHarness: (harness: ChainHarness) => void;
   validation: ChainDraftValidation;
+  /** True when the editable content differs from the last load or save. */
+  isDirty: boolean;
+  /** Persist through the chain API and return the server's saved document. */
+  save: () => Promise<Chain>;
   reload: () => void;
 }
 
@@ -125,8 +163,10 @@ export function parseNewChainDraft(search: string): ChainDraftDocument {
   };
 }
 
-function documentFromChain(chain: Chain): ChainDraftDocument {
+export function documentFromChain(chain: Chain): ChainDraftDocument {
   return {
+    id: chain.id,
+    version: chain.version,
     name: chain.name,
     harness: chain.harness,
     sessionMode: chain.sessionMode,
@@ -138,20 +178,81 @@ function documentFromChain(chain: Chain): ChainDraftDocument {
   };
 }
 
+/** API payload; identity and timestamps stay server-owned. */
+export function toChainDraft(document: ChainDraftDocument): ChainDraft {
+  return {
+    name: document.name,
+    harness: document.harness,
+    sessionMode: document.sessionMode,
+    steps: document.steps,
+    inputs: document.inputs,
+    automaticPermissionOptIn: document.automaticPermissionOptIn,
+  };
+}
+
 /** Human name used in row actions and announcements. */
 export function stepDisplayName(step: ChainStep): string {
   const label = step.label?.trim() ?? '';
   return label === '' ? step.skillName : label;
 }
 
+/**
+ * Canonical serialization of editable content only. Timestamps are excluded so
+ * a save that changes nothing else leaves the dirty indicator off.
+ */
+export function serializeChainDraft(document: ChainDraftDocument): string {
+  return JSON.stringify({
+    name: document.name,
+    harness: document.harness,
+    sessionMode: document.sessionMode,
+    steps: document.steps.map((step) => {
+      const label = step.label?.trim() ?? '';
+      return {
+        id: step.id,
+        skillName: step.skillName,
+        instruction: step.instruction,
+        ...(label === '' ? {} : { label }),
+      };
+    }),
+    inputs: document.inputs.map((input) => {
+      const label = input.label?.trim() ?? '';
+      const defaultValue = input.defaultValue;
+      return {
+        name: input.name,
+        required: input.required,
+        ...(label === '' ? {} : { label }),
+        ...(defaultValue === undefined || defaultValue === '' ? {} : { defaultValue }),
+      };
+    }),
+    automaticPermissionOptIn: document.automaticPermissionOptIn,
+  });
+}
+
+/** Find every `{{name}}` token, including an invalid or empty expression. */
+export interface PlaceholderMatch {
+  raw: string;
+  name: string;
+}
+
+export function findPlaceholders(instruction: string): PlaceholderMatch[] {
+  const matches: PlaceholderMatch[] = [];
+  for (const match of instruction.matchAll(/\{\{([^{}]*)\}\}/g)) {
+    const raw = match[1] ?? '';
+    matches.push({ raw, name: raw.trim() });
+  }
+  return matches;
+}
+
 /** Find every step whose instruction is empty after trimming. */
 export function collectStepInstructionIssues(
   steps: readonly ChainStep[],
-): StepInstructionIssue[] {
-  const issues: StepInstructionIssue[] = [];
+): ChainDraftIssue[] {
+  const issues: ChainDraftIssue[] = [];
   steps.forEach((step, index) => {
     if (step.instruction.trim() === '') {
       issues.push({
+        key: `step:${step.id}:instruction`,
+        kind: 'step',
         stepId: step.id,
         position: index + 1,
         message: `Step ${String(index + 1)} needs an instruction before the draft can be saved.`,
@@ -159,6 +260,226 @@ export function collectStepInstructionIssues(
     }
   });
   return issues;
+}
+
+/**
+ * Validate placeholders before save. Every issue names the step and the exact
+ * placeholder, matching the server's own `chain_placeholder_*` diagnostics.
+ */
+export function collectPlaceholderIssues(
+  steps: readonly ChainStep[],
+  inputs: readonly ChainInput[],
+): ChainDraftIssue[] {
+  const declared = new Set(inputs.map((input) => input.name));
+  const issues: ChainDraftIssue[] = [];
+
+  steps.forEach((step, index) => {
+    const position = index + 1;
+    const display = stepDisplayName(step);
+    const reported = new Set<string>();
+
+    for (const placeholder of findPlaceholders(step.instruction)) {
+      const identity = placeholder.name === '' ? placeholder.raw : placeholder.name;
+      if (reported.has(identity)) {
+        continue;
+      }
+      reported.add(identity);
+
+      if (
+        placeholder.name === '' ||
+        !CHAIN_INPUT_NAME_PATTERN.test(placeholder.name)
+      ) {
+        issues.push({
+          key: `placeholder:${step.id}:${identity}`,
+          kind: 'placeholder',
+          stepId: step.id,
+          position,
+          inputName: placeholder.name,
+          message: `Step ${String(position)} "${display}" contains an invalid placeholder "{{${placeholder.raw}}}". Placeholder names must start with a letter and use only letters, numbers, and underscores.`,
+        });
+        continue;
+      }
+
+      if (!declared.has(placeholder.name)) {
+        issues.push({
+          key: `placeholder:${step.id}:${placeholder.name}`,
+          kind: 'placeholder',
+          stepId: step.id,
+          position,
+          inputName: placeholder.name,
+          message: `Step ${String(position)} "${display}" references undeclared input "${placeholder.name}".`,
+        });
+      }
+    }
+  });
+
+  return issues;
+}
+
+function collectInputDeclarationIssues(inputs: readonly ChainInput[]): ChainDraftIssue[] {
+  const issues: ChainDraftIssue[] = [];
+  const seen = new Map<string, number>();
+
+  inputs.forEach((input, index) => {
+    const position = index + 1;
+    const name = input.name.trim();
+    if (name === '') {
+      issues.push({
+        key: `input:${String(index)}:empty`,
+        kind: 'input',
+        position,
+        inputName: input.name,
+        message: `Input ${String(position)} needs a name.`,
+      });
+      return;
+    }
+
+    if (!CHAIN_INPUT_NAME_PATTERN.test(name)) {
+      issues.push({
+        key: `input:${name}:syntax`,
+        kind: 'input',
+        position,
+        inputName: name,
+        message: `Input ${String(position)} name "${name}" must start with a letter and use only letters, numbers, and underscores.`,
+      });
+    }
+
+    const previous = seen.get(name);
+    if (previous !== undefined) {
+      issues.push({
+        key: `input:${name}:duplicate`,
+        kind: 'input',
+        position,
+        inputName: name,
+        message: `Input "${name}" is declared more than once (first at position ${String(
+          previous + 1,
+        )}).`,
+      });
+      return;
+    }
+    seen.set(name, index);
+  });
+
+  return issues;
+}
+
+/** Declared inputs that no instruction references are allowed but reported. */
+export function collectInputWarnings(
+  steps: readonly ChainStep[],
+  inputs: readonly ChainInput[],
+): string[] {
+  return inputs
+    .filter((input) => collectInputReferences(steps, input.name).length === 0)
+    .map(
+      (input) =>
+        `Input "${input.name}" is declared but no instruction uses {{${input.name}}}. Unused inputs do not block saving.`,
+    );
+}
+
+/** Validate the whole draft in one pass shared by the header and editor. */
+export function validateChainDraft(document: ChainDraftDocument): ChainDraftValidation {
+  const issues: ChainDraftIssue[] = [];
+
+  if (document.name.trim() === '') {
+    issues.push({
+      key: 'chain:name',
+      kind: 'chain',
+      message: 'Enter a chain name before saving.',
+    });
+  }
+  if (document.steps.length === 0) {
+    issues.push({
+      key: 'chain:steps',
+      kind: 'chain',
+      message: 'Add at least one catalog skill as a step before saving.',
+    });
+  }
+
+  issues.push(...collectStepInstructionIssues(document.steps));
+  issues.push(...collectPlaceholderIssues(document.steps, document.inputs));
+  issues.push(...collectInputDeclarationIssues(document.inputs));
+
+  const invalidStepIds = new Set<string>();
+  const stepIssues = new Map<string, ChainDraftIssue[]>();
+  for (const issue of issues) {
+    if (issue.stepId === undefined) {
+      continue;
+    }
+    invalidStepIds.add(issue.stepId);
+    const existing = stepIssues.get(issue.stepId);
+    if (existing === undefined) {
+      stepIssues.set(issue.stepId, [issue]);
+    } else {
+      existing.push(issue);
+    }
+  }
+
+  return {
+    issues,
+    invalidStepIds,
+    stepIssues,
+    warnings: collectInputWarnings(document.steps, document.inputs),
+    canSave: issues.length === 0,
+  };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function placeholderPattern(inputName: string): RegExp {
+  return new RegExp(`\\{\\{\\s*${escapeRegExp(inputName)}\\s*\\}\\}`, 'g');
+}
+
+/** Every instruction that references one input, in chain order. */
+export function collectInputReferences(
+  steps: readonly ChainStep[],
+  inputName: string,
+): InputReference[] {
+  if (inputName === '') {
+    return [];
+  }
+
+  const pattern = placeholderPattern(inputName);
+  const references: InputReference[] = [];
+  steps.forEach((step, index) => {
+    const occurrences = step.instruction.match(pattern)?.length ?? 0;
+    if (occurrences === 0) {
+      return;
+    }
+    references.push({
+      stepId: step.id,
+      position: index + 1,
+      displayName: stepDisplayName(step),
+      instruction: step.instruction,
+      occurrences,
+      placeholder: `{{${inputName}}}`,
+    });
+  });
+  return references;
+}
+
+/** Rewrite every whitespace-tolerant occurrence of one placeholder. */
+export function replaceInputPlaceholders(
+  instruction: string,
+  oldName: string,
+  newName: string,
+): string {
+  return instruction.replace(placeholderPattern(oldName), `{{${newName}}}`);
+}
+
+/**
+ * Remove every occurrence of one placeholder while preserving the rest of the
+ * instruction's text. Remaining content may become empty; validation then
+ * blocks the save and names that step instead of silently inventing text.
+ */
+export function removeInputPlaceholders(instruction: string, inputName: string): string {
+  return instruction
+    .replace(placeholderPattern(inputName), '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .trim();
 }
 
 /**
@@ -199,7 +520,7 @@ function updateReadyDocument(
   return { ...state, document: update(state.document) };
 }
 
-/** Load or draft one chain and expose ordered step editing operations. */
+/** Load or draft one chain and expose ordered editing plus persistence. */
 export function useChainDraft({
   projectId,
   chainId,
@@ -218,6 +539,9 @@ export function useChainDraft({
       : { status: 'loading', chainId, document: null, error: null },
   );
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  const [baseline, setBaseline] = useState<string | null>(() =>
+    isNew ? serializeChainDraft(parseNewChainDraft(search)) : null,
+  );
   const [reloadToken, setReloadToken] = useState(0);
   const generation = useRef(0);
   const { announce } = useStatusAnnouncer();
@@ -231,6 +555,7 @@ export function useChainDraft({
     generation.current = current;
     const controller = new AbortController();
     setState({ status: 'loading', chainId, document: null, error: null });
+    setBaseline(null);
 
     api
       .getChain(projectId, chainId, { signal: controller.signal })
@@ -241,9 +566,12 @@ export function useChainDraft({
         const document = documentFromChain(chain);
         setState({ status: 'ready', chainId, document, error: null });
         setSelectedStepId(document.steps[0]?.id ?? null);
+        setBaseline(serializeChainDraft(document));
         announce(
           `Chain ${document.name} loaded with ${String(document.steps.length)} step${
             document.steps.length === 1 ? '' : 's'
+          } and ${String(document.inputs.length)} input${
+            document.inputs.length === 1 ? '' : 's'
           }.`,
         );
       })
@@ -257,6 +585,7 @@ export function useChainDraft({
         );
         setState({ status: 'error', chainId, document: null, error: apiError });
         setSelectedStepId(null);
+        setBaseline(null);
         announce(`Chain could not be loaded: ${apiError.message}`);
       });
 
@@ -404,6 +733,137 @@ export function useChainDraft({
     [announce, state],
   );
 
+  const addInput = useCallback(
+    (input: ChainInput) => {
+      setState((previous) =>
+        updateReadyDocument(previous, (document) => ({
+          ...document,
+          inputs: [...document.inputs, input],
+        })),
+      );
+      announce(
+        `Added input ${input.name}. Use {{${input.name}}} in a step instruction.`,
+      );
+    },
+    [announce],
+  );
+
+  const updateInput = useCallback(
+    (name: string, patch: Partial<Omit<ChainInput, 'name'>>) => {
+      setState((previous) =>
+        updateReadyDocument(previous, (document) => ({
+          ...document,
+          inputs: document.inputs.map((input) =>
+            input.name === name ? { ...input, ...patch } : input,
+          ),
+        })),
+      );
+    },
+    [],
+  );
+
+  const renameInput = useCallback(
+    (oldName: string, newName: string) => {
+      if (state.status !== 'ready' || oldName === newName) {
+        return;
+      }
+
+      const occurrences = state.document.steps.reduce(
+        (total, step) =>
+          total + (step.instruction.match(placeholderPattern(oldName))?.length ?? 0),
+        0,
+      );
+      setState((previous) =>
+        updateReadyDocument(previous, (document) => ({
+          ...document,
+          inputs: document.inputs.map((input) =>
+            input.name === oldName ? { ...input, name: newName } : input,
+          ),
+          steps: document.steps.map((step) => ({
+            ...step,
+            instruction: replaceInputPlaceholders(step.instruction, oldName, newName),
+          })),
+        })),
+      );
+      announce(
+        `Renamed input ${oldName} to ${newName} and updated ${String(
+          occurrences,
+        )} placeholder${occurrences === 1 ? '' : 's'}.`,
+      );
+    },
+    [announce, state],
+  );
+
+  const removeInput = useCallback(
+    (name: string) => {
+      if (state.status !== 'ready') {
+        return;
+      }
+      if (!state.document.inputs.some((input) => input.name === name)) {
+        return;
+      }
+
+      setState((previous) =>
+        updateReadyDocument(previous, (document) => ({
+          ...document,
+          inputs: document.inputs.filter((input) => input.name !== name),
+          steps: document.steps.map((step) => ({
+            ...step,
+            instruction: removeInputPlaceholders(step.instruction, name),
+          })),
+        })),
+      );
+      announce(`Removed input ${name} and its placeholders from every step.`);
+    },
+    [announce, state],
+  );
+
+  const setHarness = useCallback(
+    (harness: ChainHarness) => {
+      if (!isNew) {
+        announce(
+          'The harness is read-only after creation. Duplicate the chain to use another harness.',
+        );
+        return;
+      }
+      setState((previous) =>
+        updateReadyDocument(previous, (document) => ({ ...document, harness })),
+      );
+      announce(`Draft harness set to ${harness}.`);
+    },
+    [announce, isNew],
+  );
+
+  const save = useCallback(async (): Promise<Chain> => {
+    if (state.status !== 'ready') {
+      throw new Error('The chain must finish loading before it can be saved.');
+    }
+
+    const draft = normalizeChainDraft(toChainDraft(state.document));
+    const saved = isNew
+      ? await api.createChain(projectId, draft)
+      : await api.updateChain(projectId, chainId, {
+          ...draft,
+          ...(state.document.id === undefined ? {} : { id: state.document.id }),
+          ...(state.document.version === undefined
+            ? {}
+            : { version: state.document.version }),
+          ...(state.document.createdAt === undefined
+            ? {}
+            : { createdAt: state.document.createdAt }),
+        });
+
+    const next = documentFromChain(saved);
+    setState({ status: 'ready', chainId: saved.id, document: next, error: null });
+    setSelectedStepId((current) =>
+      current !== null && next.steps.some((step) => step.id === current)
+        ? current
+        : (next.steps[0]?.id ?? null),
+    );
+    setBaseline(serializeChainDraft(next));
+    return saved;
+  }, [api, chainId, isNew, projectId, state]);
+
   const reload = useCallback(() => {
     setReloadToken((current) => current + 1);
   }, []);
@@ -415,15 +875,27 @@ export function useChainDraft({
     return state.document.steps.find((step) => step.id === selectedStepId) ?? null;
   }, [selectedStepId, state]);
 
-  const validation = useMemo<ChainDraftValidation>(() => {
-    const steps = state.status === 'ready' ? state.document.steps : [];
-    const issues = collectStepInstructionIssues(steps);
-    return {
-      issues,
-      invalidStepIds: new Set(issues.map((issue) => issue.stepId)),
-      canSave: steps.length > 0 && issues.length === 0,
-    };
-  }, [state]);
+  const validation = useMemo<ChainDraftValidation>(
+    () =>
+      state.status === 'ready'
+        ? validateChainDraft(state.document)
+        : {
+            issues: [],
+            invalidStepIds: new Set<string>(),
+            stepIssues: new Map<string, ChainDraftIssue[]>(),
+            warnings: [],
+            canSave: false,
+          },
+    [state],
+  );
+
+  const isDirty = useMemo(
+    () =>
+      state.status === 'ready' &&
+      baseline !== null &&
+      serializeChainDraft(state.document) !== baseline,
+    [baseline, state],
+  );
 
   return {
     state,
@@ -435,7 +907,14 @@ export function useChainDraft({
     removeStep,
     moveStep,
     reorderStep,
+    addInput,
+    updateInput,
+    renameInput,
+    removeInput,
+    setHarness,
     validation,
+    isDirty,
+    save,
     reload,
   };
 }

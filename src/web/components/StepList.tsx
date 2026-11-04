@@ -6,6 +6,8 @@ export interface StepListProps {
   steps: ChainStep[];
   selectedStepId: string | null;
   invalidStepIds: ReadonlySet<string>;
+  /** Per-step text label for a blocking issue; defaults to "Needs instruction". */
+  stepIssueLabels?: ReadonlyMap<string, string>;
   onSelect: (stepId: string) => void;
   onMove: (stepId: string, direction: 'up' | 'down') => void;
   onRemove: (stepId: string) => void;
@@ -34,6 +36,7 @@ export function StepList({
   steps,
   selectedStepId,
   invalidStepIds,
+  stepIssueLabels,
   onSelect,
   onMove,
   onRemove,
@@ -221,7 +224,8 @@ export function StepList({
                         className="status-tag status-tag--warning step-row__warning"
                         data-testid="step-needs-instruction"
                       >
-                        <span aria-hidden="true">▲</span> Needs instruction
+                        <span aria-hidden="true">▲</span>{' '}
+                        {stepIssueLabels?.get(step.id) ?? 'Needs instruction'}
                       </span>
                     ) : null}
                   </button>

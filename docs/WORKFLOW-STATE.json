@@ -1,7 +1,7 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T11:53:50.891Z",
+  "lastUpdatedAt": "2026-11-04T12:05:11.099Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
@@ -889,10 +889,51 @@
     },
     "CHAIN-06": {
       "taskId": "CHAIN-06",
-      "status": "pending",
+      "status": "complete",
       "ownerAgent": "frontend-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 1,
+      "outputFiles": [
+        "src/web/components/InputsEditor.tsx",
+        "src/web/routes/ChainBuilderPage.tsx",
+        "src/web/api/chains.ts",
+        "tests/e2e/chain-save.spec.ts",
+        "src/web/components/StepEditor.tsx",
+        "src/web/components/StepList.tsx",
+        "src/web/hooks/useChainDraft.ts",
+        "src/web/router.tsx",
+        "src/web/styles/theme.css",
+        "tests/e2e/chain-builder.spec.ts"
+      ],
+      "startedAt": "2026-11-04T11:53:51.511Z",
+      "usage": {
+        "source": "unavailable",
+        "note": "opencode usage unavailable: Unterminated string in JSON at position 584481 (line 2593 column 1351)"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/CHAIN-06.2026-11-04T12-05-11-086Z.attempt-1.result.json",
+          "usage": {
+            "source": "unavailable",
+            "note": "opencode usage unavailable: Unterminated string in JSON at position 584481 (line 2593 column 1351)"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T12:05:11.094Z",
+      "agentOutput": "I'll start by reading the execution file to understand the task.\nNow I have a clear picture. Let me implement the typed API additions first.\nNow the draft hook with inputs, validation, dirty tracking, and save.\nNow the builder route integrating inputs, save, dirty guards, and harness duplication.\nNow the end-to-end spec for the full save flow.\nImplemented chain inputs editing, placeholder reconciliation, persistence, dirty-navigation guards, and harness duplication.\n\n## Files created\n- `src/web/components/InputsEditor.tsx`\n- `tests/e2e/chain-save.spec.ts`\n\n## Files changed\n- `src/web/api/chains.ts`\n- `src/web/hooks/useChainDraft.ts`\n- `src/web/routes/ChainBuilderPage.tsx`\n- `src/web/router.tsx`\n- `src/web/components/StepEditor.tsx`\n- `src/web/components/StepList.tsx`\n- `src/web/styles/theme.css`\n- `tests/e2e/chain-builder.spec.ts`\n\nI did not modify `docs/artifacts/CHAIN-06.md` or add anything under `docs/artifacts/`.\n\n```forge-result\n{\n  \"summary\": \"Implemented the chain inputs editor, reviewed placeholder reconciliation, server-backed save with dirty tracking, in-app and beforeunload navigation guards, read-only harness binding, and duplicate-with-another-harness flow. Added Playwright coverage for input add/edit/remove, placeholder blocking, save and reload persistence, dirty navigation confirmation, and harness duplication.\",\n  \"decisions\": [\n    \"Renames and removals are staged in a review panel that lists every referencing step with its position and occurrence count; the draft hook rewrites or removes placeholders only after explicit confirmation.\",\n    \"Placeholder validation lives in useChainDraft and mirrors the server rules, naming the step position, step label or skill, and placeholder on each issue so Save is blocked before an API request.\",\n    \"Dirty state is derived from a canonical serialization of editable content, so reverting an edit or loading/saving a document does not leave a false unsaved indicator.\",\n    \"The router now exposes setNavigationGuard plus skipGuard, and the builder registers a guard while dirty; beforeunload is registered with the same wording for full-page exits.\",\n    \"Existing chains render a disabled harness selector and a duplicate control that duplicates the saved record first, updates only the copy's harness, then navigates to the copy.\",\n    \"A new unsaved draft may change harness before its first save; once a chain file exists the harness is read-only.\",\n    \"Save canonicalizes empty optional labels and defaults before sending so the server model never receives an empty label.\"\n  ],\n  \"interfaces\": [\n    \"src/web/components/InputsEditor.tsx: InputsEditor, InputsEditorProps(inputs, steps, disabled, onAdd, onUpdate, onRename, onRemove)\",\n    \"src/web/hooks/useChainDraft.ts: addInput, updateInput, renameInput, removeInput, setHarness, save, isDirty, ChainDraftIssue, input reference and placeholder helpers\",\n    \"src/web/router.tsx: NavigationGuard, NavigateOptions.skipGuard, RouterValue.setNavigationGuard\",\n    \"src/web/api/chains.ts: CHAIN_INPUT_NAME_PATTERN, normalizeChainDraft\",\n    \"tests/e2e/chain-save.spec.ts: input reconciliation, placeholder blocking, save/reload, dirty guard, and harness duplication coverage\"\n  ],\n  \"tests\": [\n    \"npx playwright test tests/e2e/chain-save.spec.ts: exit 0 (5 passed)\",\n    \"npx playwright test tests/e2e/chain-save.spec.ts tests/e2e/chain-builder.spec.ts tests/e2e/chain-library.spec.ts tests/e2e/shell.spec.ts: exit 0 (27 passed)\",\n    \"npm test: exit 0 (16 files, 249 tests)\",\n    \"npm run typecheck: exit 0\",\n    \"npm run build: exit 0\"\n  ],\n  \"unresolved\": [],\n  \"validationLimitations\": [\n    \"Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed; automated focus, keyboard, and browser coverage passed.\",\n    \"Native beforeunload and browser back/forward guard behavior is implemented but the Playwright spec exercises the in-app confirmation path; no separate native-dialog assertion was added.\",\n    \"npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.\"\n  ]\n}\n```\n",
+      "validationLimitations": [
+        "Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed; automated focus, keyboard, and browser coverage passed.",
+        "Native beforeunload and browser back/forward guard behavior is implemented but the Playwright spec exercises the in-app confirmation path; no separate native-dialog assertion was added.",
+        "npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed."
+      ],
+      "artifactId": "work-chain-06-001",
+      "inputArtifactIds": [
+        "work-chain-05-001",
+        "work-chain-03-001",
+        "work-chain-01-001",
+        "work-chain-02-001"
+      ]
     },
     "PRE-01": {
       "taskId": "PRE-01",

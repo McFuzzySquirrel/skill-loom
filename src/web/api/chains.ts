@@ -21,6 +21,12 @@ export const CHAIN_SESSION_MODES = ['shared', 'fresh', 'fork'] as const;
 export type ChainSessionMode = (typeof CHAIN_SESSION_MODES)[number];
 
 /**
+ * Input names double as `{{placeholder}}` keys, so they use identifier syntax.
+ * The inputs editor validates against this before a name reaches the API.
+ */
+export const CHAIN_INPUT_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
+
+/**
  * Reserved route segment for a chain that exists only as an editor draft.
  * It can never collide with a generated chain id, which always carries a
  * random suffix after the name slug.
@@ -317,18 +323,54 @@ function withUniqueName(path: string, uniqueName: boolean | undefined): string {
   return uniqueName === true ? `${path}?uniqueName=true` : path;
 }
 
-function toDraftBody(draft: ChainDraft): Record<string, unknown> {
-  const body: Record<string, unknown> = {
+/**
+ * Normalize an editor draft before it is sent.
+ *
+ * Optional empty labels and empty default values are omitted instead of being
+ * sent as empty strings, which the chain model rejects for labels. Trimming
+ * happens here rather than in a component so every save path behaves the same.
+ */
+export function normalizeChainDraft(draft: ChainDraft): ChainDraft {
+  return {
     name: draft.name,
     harness: draft.harness,
     sessionMode: draft.sessionMode,
-    steps: draft.steps,
+    steps: draft.steps.map((step) => {
+      const label = step.label?.trim() ?? '';
+      return {
+        id: step.id,
+        skillName: step.skillName,
+        instruction: step.instruction,
+        ...(label === '' ? {} : { label }),
+      };
+    }),
+    inputs: (draft.inputs ?? []).map((input) => {
+      const label = input.label?.trim() ?? '';
+      const defaultValue = input.defaultValue;
+      return {
+        name: input.name.trim(),
+        required: input.required,
+        ...(label === '' ? {} : { label }),
+        ...(defaultValue === undefined || defaultValue === '' ? {} : { defaultValue }),
+      };
+    }),
+    automaticPermissionOptIn: draft.automaticPermissionOptIn ?? false,
   };
-  if (draft.inputs !== undefined) {
-    body.inputs = draft.inputs;
+}
+
+function toDraftBody(draft: ChainDraft): Record<string, unknown> {
+  const normalized = normalizeChainDraft(draft);
+  const body: Record<string, unknown> = {
+    name: normalized.name,
+    harness: normalized.harness,
+    sessionMode: normalized.sessionMode,
+    steps: normalized.steps,
+  };
+  if (normalized.inputs !== undefined) {
+    body.inputs = normalized.inputs;
   }
-  if (draft.automaticPermissionOptIn !== undefined) {
-    body.automaticPermissionOptIn = draft.automaticPermissionOptIn;
+  if (normalized.automaticPermissionOptIn !== undefined) {
+    body.automaticPermissionOptIn = normalized.automaticPermissionOptIn;
   }
   return body;
 }

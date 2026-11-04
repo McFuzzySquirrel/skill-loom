@@ -239,7 +239,13 @@ test.describe('Chain builder', () => {
     await expect(page.getByTestId('step-needs-instruction')).toHaveCount(0);
 
     await save.click();
-    await expect(page.getByRole('status')).toContainText('Draft is valid.');
+    await expect(page).toHaveURL(
+      new RegExp(`/projects/${escapeRegExp(project.id)}/chains/(?!new)[^/]+$`),
+    );
+    await expect(page.getByTestId('builder-draft-state')).toHaveText('Saved chain');
+    await expect(page.getByTestId('chain-dirty-indicator')).toContainText(
+      'All changes saved',
+    );
 
     await instruction.fill('   ');
     await expect(page.getByTestId('step-instruction-error')).toBeVisible();
@@ -402,3 +408,7 @@ test.describe('Chain builder', () => {
     expect(await orderedSkillNames(page)).toEqual(dragOrder);
   });
 });
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}

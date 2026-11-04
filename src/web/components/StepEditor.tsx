@@ -12,6 +12,8 @@ export interface StepEditorProps {
    * after Add as step so the keyboard path lands where work is needed.
    */
   focusRequest?: number;
+  /** Placeholder problems for this step, already naming the input. */
+  placeholderIssues?: string[];
   onChange: (
     patch: Partial<Pick<ChainStep, 'skillName' | 'instruction' | 'label'>>,
   ) => void;
@@ -31,6 +33,7 @@ export function StepEditor({
   totalSteps,
   skillOptions,
   focusRequest,
+  placeholderIssues = [],
   onChange,
 }: StepEditorProps) {
   const baseId = useId();
@@ -66,6 +69,7 @@ export function StepEditor({
   }
 
   const instructionMissing = step.instruction.trim() === '';
+  const hasPlaceholderIssues = placeholderIssues.length > 0;
   const options =
     skillOptions.includes(step.skillName)
       ? skillOptions
@@ -130,9 +134,9 @@ export function StepEditor({
           onChange={(event) => onChange({ instruction: event.target.value })}
           rows={7}
           required
-          aria-invalid={instructionMissing}
+          aria-invalid={instructionMissing || hasPlaceholderIssues}
           aria-describedby={
-            instructionMissing
+            instructionMissing || hasPlaceholderIssues
               ? `${instructionHelpId} ${instructionErrorId}`
               : instructionHelpId
           }
@@ -148,6 +152,17 @@ export function StepEditor({
             <span aria-hidden="true">! </span>
             Enter an instruction for step {String(position ?? '')} before saving.
           </p>
+        ) : null}
+        {hasPlaceholderIssues ? (
+          <ul
+            className="field__error step-editor__placeholder-errors"
+            id={instructionErrorId}
+            data-testid="step-placeholder-errors"
+          >
+            {placeholderIssues.map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
         ) : null}
       </div>
 

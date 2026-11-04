@@ -3,8 +3,8 @@
 ## Current State
 **Phase**: CHAIN-AUTHORING-2
 **Status**: In Progress
-**Validation Gaps**: 13 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T11:53:50.894Z
+**Validation Gaps**: 16 unverified check(s) - see "Validation Gaps"
+**Last Updated**: 2026-11-04T12:05:11.102Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -46,12 +46,13 @@
   - Files: src/web/components/ChainList.tsx, src/web/components/NewChainDialog.tsx, src/web/api/chains.ts, src/web/routes/ProjectsPage.tsx, tests/e2e/chain-library.spec.ts, src/web/styles/theme.css, src/web/hooks/useChains.ts
 - [x] Phase CHAIN-AUTHORING-2, Task CHAIN-05: Build the chain step editor and reordering (@frontend-engineer)
   - Files: src/web/routes/ChainBuilderPage.tsx, src/web/components/StepList.tsx, src/web/components/StepEditor.tsx, src/web/hooks/useChainDraft.ts, tests/e2e/chain-builder.spec.ts, src/web/components/SkillCatalog.tsx, src/web/styles/theme.css, tests/e2e/shell.spec.ts
+- [x] Phase CHAIN-AUTHORING-2, Task CHAIN-06: Add chain inputs, save, and harness binding (@frontend-engineer)
+  - Files: src/web/components/InputsEditor.tsx, src/web/routes/ChainBuilderPage.tsx, src/web/api/chains.ts, tests/e2e/chain-save.spec.ts, src/web/components/StepEditor.tsx, src/web/components/StepList.tsx, src/web/hooks/useChainDraft.ts, src/web/router.tsx, src/web/styles/theme.css, tests/e2e/chain-builder.spec.ts
 
 ## Current Task
 - None currently running
 
 ## Remaining
-- [ ] Phase CHAIN-AUTHORING-2: Phase 2: Chain Library and Builder
 - [ ] Phase RUN-PREFLIGHT-1: Phase 1: Adapters, Checks, and API
 - [ ] Phase RUN-PREFLIGHT-2: Phase 2: Run-Start Screen
 - [ ] Phase RUN-EXECUTION-1: Phase 1: Run Model, Prompts, and Signal Parsing
@@ -79,6 +80,9 @@
 - Task CHAIN-04: Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed; automated keyboard coverage passed.
 - Task CHAIN-05: npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.
 - Task CHAIN-05: Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed; automated keyboard and focus coverage passed.
+- Task CHAIN-06: Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed; automated focus, keyboard, and browser coverage passed.
+- Task CHAIN-06: Native beforeunload and browser back/forward guard behavior is implemented but the Playwright spec exercises the in-app confirmation path; no separate native-dialog assertion was added.
+- Task CHAIN-06: npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.
 
 ## Notes
 - Workflow engine run 25930d7e-150c-4ea9-a081-47fcf1941eb6

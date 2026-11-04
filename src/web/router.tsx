@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useSyncExternalStore,
   type AnchorHTMLAttributes,
   type MouseEvent as ReactMouseEvent,
@@ -21,13 +22,23 @@ import {
 
 export interface NavigateOptions {
   replace?: boolean;
+  /** Skip a registered unsaved-changes guard, e.g. after a successful save. */
+  skipGuard?: boolean;
 }
+
+/**
+ * Return false to cancel a pending navigation and keep the current location.
+ * A guard is responsible for explaining why and for offering the next step.
+ */
+export type NavigationGuard = (to: string) => boolean;
 
 export interface RouterValue {
   pathname: string;
   search: string;
   hash: string;
   navigate: (to: string, options?: NavigateOptions) => void;
+  /** Register one screen's unsaved-changes guard; pass null to clear it. */
+  setNavigationGuard: (guard: NavigationGuard | null) => void;
 }
 
 export interface RouteMatch {
@@ -53,11 +64,17 @@ function serverLocationKey(): string {
 
 export function RouterProvider({ children }: { children: ReactNode }) {
   const key = useSyncExternalStore(subscribeToHistory, locationKey, serverLocationKey);
+  const guardRef = useRef<NavigationGuard | null>(null);
+  const lastKeyRef = useRef(locationKey());
 
   const location = useMemo(() => {
     const url = new URL(key, window.location.origin);
     return { pathname: url.pathname, search: url.search, hash: url.hash };
   }, [key]);
+
+  const setNavigationGuard = useCallback((guard: NavigationGuard | null) => {
+    guardRef.current = guard;
+  }, []);
 
   const navigate = useCallback((to: string, options: NavigateOptions = {}) => {
     const target = new URL(to, window.location.origin);
@@ -66,17 +83,54 @@ export function RouterProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    if (
+      options.skipGuard !== true &&
+      guardRef.current !== null &&
+      !guardRef.current(nextKey)
+    ) {
+      return;
+    }
+
     if (options.replace === true) {
       window.history.replaceState(null, '', target);
     } else {
       window.history.pushState(null, '', target);
     }
+    lastKeyRef.current = nextKey;
     window.dispatchEvent(new PopStateEvent('popstate'));
   }, []);
 
+  /**
+   * Back and forward move the URL before React can render, so a dirty screen
+   * must intercept the capture-phase event. A blocked entry restores the
+   * previous URL and stops the store subscriber from publishing the new route.
+   */
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const nextKey = locationKey();
+      if (nextKey === lastKeyRef.current) {
+        return;
+      }
+
+      const guard = guardRef.current;
+      if (guard !== null && !guard(nextKey)) {
+        window.history.pushState(null, '', lastKeyRef.current);
+        event.stopImmediatePropagation();
+        return;
+      }
+
+      lastKeyRef.current = nextKey;
+    };
+
+    window.addEventListener('popstate', handlePopState, true);
+    return () => {
+      window.removeEventListener('popstate', handlePopState, true);
+    };
+  }, []);
+
   const value = useMemo<RouterValue>(
-    () => ({ ...location, navigate }),
-    [location, navigate],
+    () => ({ ...location, navigate, setNavigationGuard }),
+    [location, navigate, setNavigationGuard],
   );
 
   return <RouterContext.Provider value={value}>{children}</RouterContext.Provider>;
