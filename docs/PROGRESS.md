@@ -1,10 +1,10 @@
 # Project Progress
 
 ## Current State
-**Phase**: RUN-EXECUTION-2
+**Phase**: RUN-EXECUTION-3
 **Status**: In Progress
-**Validation Gaps**: 26 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T13:26:48.236Z
+**Validation Gaps**: 28 unverified check(s) - see "Validation Gaps"
+**Last Updated**: 2026-11-04T13:49:59.403Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -66,12 +66,13 @@
   - Files: src/server/runs/supervised.ts, tests/unit/supervised-runner.test.ts
 - [x] Phase RUN-EXECUTION-2, Task RUN-05: Implement the automatic OpenCode and Copilot runners (@backend-engineer)
   - Files: src/server/runs/automatic.ts, tests/unit/automatic-runner.test.ts
+- [x] Phase RUN-EXECUTION-3, Task RUN-06: Implement run orchestration, actions, and event streaming (@backend-engineer)
+  - Files: src/server/runs/orchestrator.ts, src/server/routes/runs.ts, src/server/routes/index.ts, tests/integration/run-routes.test.ts, src/server/app.ts
 
 ## Current Task
 - None currently running
 
 ## Remaining
-- [ ] Phase RUN-EXECUTION-3: Phase 3: Run Orchestration and API
 - [ ] Phase RUN-EXECUTION-4: Phase 4: Run View
 - [ ] Phase RUN-EXECUTION-5: Phase 5: Live Harness Verification
 - [ ] Phase V1-ACCEPTANCE-1: Phase 1: Operator Documentation
@@ -107,6 +108,8 @@
 - Task RUN-02: npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.
 - Task RUN-02: No live harness process, prompt, or model call was started, by task constraint; all planning is pure and unit-tested.
 - Task RUN-04: npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.
+- Task RUN-06: No Playwright run view or live CLI probe was performed; both are outside RUN-06 scope.
+- Task RUN-06: No human review was performed or claimed.
 
 ## Notes
 - Workflow engine run 25930d7e-150c-4ea9-a081-47fcf1941eb6

@@ -1,12 +1,12 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T13:26:48.232Z",
+  "lastUpdatedAt": "2026-11-04T13:49:59.400Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
   "status": "running",
-  "currentPhase": "RUN-EXECUTION-2",
+  "currentPhase": "RUN-EXECUTION-3",
   "tasks": {
     "FOUND-01": {
       "taskId": "FOUND-01",
@@ -1363,10 +1363,44 @@
     },
     "RUN-06": {
       "taskId": "RUN-06",
-      "status": "pending",
+      "status": "complete",
       "ownerAgent": "backend-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 1,
+      "outputFiles": [
+        "src/server/runs/orchestrator.ts",
+        "src/server/routes/runs.ts",
+        "src/server/routes/index.ts",
+        "tests/integration/run-routes.test.ts",
+        "src/server/app.ts"
+      ],
+      "startedAt": "2026-11-04T13:26:48.893Z",
+      "usage": {
+        "source": "unavailable",
+        "note": "opencode usage unavailable: Unterminated string in JSON at position 694246 (line 1732 column 71745)"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/RUN-06.2026-11-04T13-49-59-390Z.attempt-1.result.json",
+          "usage": {
+            "source": "unavailable",
+            "note": "opencode usage unavailable: Unterminated string in JSON at position 694246 (line 1732 column 71745)"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T13:49:59.395Z",
+      "agentOutput": "I'll start by reading the execution file to understand the task.\nNow I have enough context. Let me implement the orchestrator.\nImplemented RUN-06: run orchestration, actions, recovery, and WebSocket event streaming.\n\n## Files created\n\n- `src/server/runs/orchestrator.ts`\n- `src/server/routes/runs.ts`\n- `tests/integration/run-routes.test.ts`\n\n## Files changed\n\n- `src/server/routes/index.ts` — registered the run route plugin\n- `src/server/app.ts` — added run orchestrator, clock, session-id, run-id, PTY, and step-timeout seams\n\n## Validation\n\n- `npx vitest run tests/integration/run-routes.test.ts` — **10 passed**\n- `npx vitest run` — **489 passed across 26 files**\n- `npm run typecheck` — **passed** (server and web)\n\n```forge-result\n{\"summary\":\"Implemented run orchestration with preflight-gated creation, immutable chain snapshots, one-active-run enforcement, mode-aware actions, interrupted-run retry/continue/restart recovery, snapshot-first WebSocket event streaming, serialized run persistence, and PTY cleanup on completion/abort/shutdown. Added integration coverage through the real app composition root.\",\"decisions\":[\"Run creation requires report.startAllowed; blocked or unacknowledged preflight returns 409 RUN_PREFLIGHT_BLOCKED with the full report in details.\",\"Active-run checks run before preflight so a second start always returns 409 RUN_ACTIVE_CONFLICT even if that request would otherwise fail preflight.\",\"Recovery actions are explicit: retry resets the interrupted step, continue starts from the next pending step, and restart creates a new run from the frozen snapshot. No recovery path auto-replays a step.\",\"Per-run store updates are serialized so a best-effort process-exit write cannot overwrite a later abort/completion transition.\",\"WebSocket clients receive a full snapshot with the current sequence first, then ordered deltas; reconnect buffering prevents gaps between snapshot construction and subscription activation.\",\"The production supervised surface reuses a stable terminal id through the terminal manager, closing the previous OS PTY before each step spawn; the automatic process-exit surface uses shell-free child_process spawning.\",\"Startup recovery runs eagerly only when a config file already exists and lazily otherwise, preserving the existing invariant that health checks never create a config file.\",\"Published terminalId only while an attachable PTY is live; headless process-exit runs report null.\"],\"interfaces\":[\"src/server/runs/orchestrator.ts: createRunOrchestrator, RunOrchestrator, RunOrchestratorError, RUN_ORCHESTRATOR_ERROR_CODES, RUN_ACTIONS, RUN_RECOVERY_ACTIONS, RunActionAvailability, RunRecoveryOptions, RunView, RunActiveState, RunStreamSnapshot, RunStreamDelta, RunStreamError, runTerminalIdFor\",\"src/server/routes/runs.ts: POST /api/projects/:projectId/runs, GET /api/runs/active, GET /api/runs/:runId, POST /api/runs/:runId/actions, WS /api/runs/:runId/events\",\"src/server/app.ts: runOrchestrator, runRecoverOnStartup, runNow, runCreateSessionId, runCreateRunId, runCreateSupervisedPty, runCreateAutomaticSpawner, runStepTimeoutMs\",\"src/server/routes/index.ts: runRoutes mounted through the single route registration point\"],\"tests\":[\"npx vitest run tests/integration/run-routes.test.ts: exit 0 (10 tests)\",\"npx vitest run: exit 0 (489 tests, 26 files)\",\"npm run typecheck: exit 0 (server and web)\"],\"warnings\":[\"Tests use an injected fake terminal manager, fake terminal sessions, and synthetic OSC 7501 output; no live OpenCode or Copilot process or paid model call was started. Live harness verification remains RUN-08.\",\"npm ci was run because node_modules was absent in the sandbox worktree; package-lock.json and dependency versions were unchanged.\",\"docs/EXECUTION-AUDIT.jsonl and docs/WORKFLOW-STATE.json were already modified before this task and were left untouched.\"],\"validationLimitations\":[\"No Playwright run view or live CLI probe was performed; both are outside RUN-06 scope.\",\"No human review was performed or claimed.\"],\"unresolved\":[]}\n```\n",
+      "validationLimitations": [
+        "No Playwright run view or live CLI probe was performed; both are outside RUN-06 scope.",
+        "No human review was performed or claimed."
+      ],
+      "artifactId": "work-run-06-001",
+      "inputArtifactIds": [
+        "work-run-04-001",
+        "work-run-05-001",
+        "work-pre-03-001"
+      ]
     },
     "RUN-07": {
       "taskId": "RUN-07",
@@ -1615,15 +1649,21 @@
     },
     "RUN-EXECUTION-2": {
       "phaseId": "RUN-EXECUTION-2",
-      "status": "running",
+      "status": "complete",
       "contractFingerprint": "{\"title\":\"Phase 2: Supervised and Automatic Runners\",\"description\":\"```forge-task {   \\\"id\\\": \\\"RUN-04\\\",\",\"completionPolicy\":\"strict\",\"dependencies\":[\"RUN-EXECUTION-1\"],\"requiredOutputs\":[\"src/server/runs/supervised.ts\",\"tests/unit/supervised-runner.test.ts\",\"src/server/runs/automatic.ts\",\"tests/unit/automatic-runner.test.ts\"],\"validationCommands\":[],\"tasks\":[{\"id\":\"RUN-04\",\"title\":\"Implement the supervised runner\",\"description\":\"Implement the supervised run state machine. For each step, restart the harness CLI in the same PTY with the planned session id and seeded prompt, stream output, capture a bounded tail, and transition to awaiting-user. The user marks Done, Failed, or Skipped; Next advances only after Done or Skipped, Retry restarts the current step with the same plan, Skip records the reason, and Abort kills the process. Process exit is shown as a signal but never auto-advances. Record session id, exit code, timestamps, and observation. Add tests/unit/supervised-runner.test.ts with a fake PTY covering the full transition matrix, same-PTY reuse, restart arguments, no keystroke injection, retry, skip, abort, and cleanup. Do not implement automatic mode or the UI.\",\"ownerAgent\":\"backend-engineer\",\"required\":true,\"dependencies\":[\"RUN-02\",\"RUN-03\",\"FOUND-05\"],\"expectedOutputs\":[\"src/server/runs/supervised.ts\",\"tests/unit/supervised-runner.test.ts\"],\"validationCommands\":[\"npx vitest run tests/unit/supervised-runner.test.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"RUN-FR-06: Run supervised steps by restarting the harness CLI in the same PTY with the session id and seeded prompt; the user marks Done, Failed, or Skipped and controls Next, Retry, Skip, and Abort.\",\"RUN-FR-08: Pause the chain on any failed step, non-zero exit, missing completion signal within the configured timeout, or ambiguous state; offer Retry, Skip, or Abort and never auto-continue through failure.\"],\"acceptanceCriteria\":[\"Each step starts a fresh CLI process in the same PTY with the session id and prompt\",\"No keystrokes are written into a live TUI to advance a step\",\"Process exit alone does not mark a supervised step done\",\"Done and Skipped enable Next; Failed does not\",\"Retry restarts the same step; Skip records a reason; Abort kills the process\",\"The runner records the bounded tail and observation state\"],\"constraints\":[\"Do not reuse a running TUI across steps\",\"Do not auto-advance supervised steps\",\"EXEC-07: Supervised step transitions restart the harness CLI in the same PTY with a documented session flag and seeded prompt. Do not script keystrokes into a live TUI.\",\"EXEC-02: Automatic advancement is allowed only on OpenCode OSC 7501 state=idle after state=working, or on Copilot process exit. Output-idle heuristics, animation quiescence, and fixed sleeps must not advance a chain.\",\"NFR-REL-02: Close PTY processes, WebSocket subscriptions, and child processes on disconnect, error, run completion, and SIGINT/SIGTERM; never leave an orphan harness process attached to a finished run.\"],\"references\":[\"docs/PRD.md#6.4 Execution Model\",\"docs/PRD.md#10.5 Run\",\"docs/features/run-execution.md#RUN-FR-06\",\"docs/features/run-execution.md#RUN-FR-08\",\"docs/PRD.md#EXEC-07\",\"docs/PRD.md#EXEC-02\",\"docs/PRD.md#NFR-REL-02\"]}},{\"id\":\"RUN-05\",\"title\":\"Implement the automatic OpenCode and Copilot runners\",\"description\":\"Implement the automatic run state machine with adapter-specific advancement. OpenCode: run the step in a PTY, watch for OSC working then idle, advance only on idle, stop the process gracefully, and restart the next step with the planned session. Copilot: run one headless process per step with the shared session id and broad flags only when the chain opted in, and advance only on exit. Pause stops advancement after the current signal; Run next starts the next pending step; timeout or ambiguous state pauses with a failure. Non-zero exit fails. Implement shared, fresh, and fork plans including native fork versus handoff. Add tests/unit/automatic-runner.test.ts with fake sessions covering working-idle, idle-only, timeout, non-zero exit, Copilot exit 0 and non-zero, permission flags, pause/run-next, fresh/shared/fork, and cleanup. Do not implement the run UI or HTTP routes.\",\"ownerAgent\":\"backend-engineer\",\"required\":true,\"dependencies\":[\"RUN-02\",\"RUN-03\",\"FOUND-05\"],\"expectedOutputs\":[\"src/server/runs/automatic.ts\",\"tests/unit/automatic-runner.test.ts\"],\"validationCommands\":[\"npx vitest run tests/unit/automatic-runner.test.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"RUN-FR-07: Run automatic OpenCode steps in a PTY and advance only on OSC 7501 state=idle after observing state=working; run automatic Copilot as one headless process per step sharing the session id and advance only on process exit.\",\"RUN-FR-08: Pause the chain on any failed step, non-zero exit, missing completion signal within the configured timeout, or ambiguous state; offer Retry, Skip, or Abort and never auto-continue through failure.\",\"RUN-FR-09: Expose Pause and Run-next controls in automatic mode so the user can take over without switching modes.\"],\"acceptanceCriteria\":[\"OpenCode advances only after working then idle in the same step\",\"An idle-only or quiet terminal does not advance\",\"A missing completion signal within the timeout pauses the run\",\"Copilot advances only on process exit and fails on non-zero exit\",\"Broad Copilot flags appear only with the per-chain opt-in\",\"Pause and Run next behave without changing mode\",\"Shared, fresh, and fork plans select the documented session behavior\"],\"constraints\":[\"Do not use output-idle heuristics\",\"Do not pass broad Copilot flags without the opt-in\",\"EXEC-02: Automatic advancement is allowed only on OpenCode OSC 7501 state=idle after state=working, or on Copilot process exit. Output-idle heuristics, animation quiescence, and fixed sleeps must not advance a chain.\",\"EXEC-06: Automatic Copilot runs may pass broad permission flags only after an explicit per-chain opt-in; the exact flags and scope must be shown at preflight and on every automatic run.\",\"EXEC-05: Preflight hard-blocks unresolved skills, missing or unauthenticated harness CLIs, unresolved Copilot trust, unresolved inputs, and unsupported session modes. A dirty git tree is a warning, not a block.\"],\"references\":[\"docs/PRD.md#6.4 Execution Model\",\"docs/PRD.md#10.5 Run\",\"docs/features/run-execution.md#RUN-FR-07\",\"docs/features/run-execution.md#RUN-FR-08\",\"docs/features/run-execution.md#RUN-FR-09\",\"docs/PRD.md#EXEC-02\",\"docs/PRD.md#EXEC-06\",\"docs/PRD.md#EXEC-05\"]}}]}",
-      "updatedAt": "2026-11-04T13:10:53.751Z"
+      "updatedAt": "2026-11-04T13:26:48.758Z",
+      "validationEvidence": [
+        "output exists: src/server/runs/supervised.ts",
+        "output exists: tests/unit/supervised-runner.test.ts",
+        "output exists: src/server/runs/automatic.ts",
+        "output exists: tests/unit/automatic-runner.test.ts"
+      ]
     },
     "RUN-EXECUTION-3": {
       "phaseId": "RUN-EXECUTION-3",
-      "status": "pending",
+      "status": "running",
       "contractFingerprint": "{\"title\":\"Phase 3: Run Orchestration and API\",\"description\":\"```forge-task {   \\\"id\\\": \\\"RUN-06\\\",\",\"completionPolicy\":\"strict\",\"dependencies\":[\"RUN-EXECUTION-2\"],\"requiredOutputs\":[\"src/server/runs/orchestrator.ts\",\"src/server/routes/runs.ts\",\"src/server/routes/index.ts\",\"tests/integration/run-routes.test.ts\"],\"validationCommands\":[],\"tasks\":[{\"id\":\"RUN-06\",\"title\":\"Implement run orchestration, actions, and event streaming\",\"description\":\"Implement the orchestrator and HTTP/WebSocket surface. POST /api/projects/:projectId/runs re-runs the blocking preflight, snapshots the chain, resolves inputs, creates the run, and starts the selected runner. GET /api/runs/:runId returns the record, GET /api/runs/active returns the current run summary, and POST /api/runs/:runId/actions handles next, retry, skip, abort, pause, resume, run-next, continue, and restart with mode-appropriate validation. Stream state events over WS /api/runs/:runId/events. On reconnect, send a full snapshot then deltas. Enforce one active run, clean up PTYs on completion/abort, and expose interrupted recovery. Register routes through src/server/routes/index.ts. Add tests/integration/run-routes.test.ts covering creation, preflight block, conflict, actions, event order, reconnect snapshot, recovery actions, and error envelopes through src/server/app.ts. Do not implement the run view.\",\"ownerAgent\":\"backend-engineer\",\"required\":true,\"dependencies\":[\"RUN-04\",\"RUN-05\",\"PRE-03\"],\"expectedOutputs\":[\"src/server/runs/orchestrator.ts\",\"src/server/routes/runs.ts\",\"src/server/routes/index.ts\",\"tests/integration/run-routes.test.ts\"],\"validationCommands\":[\"npx vitest run tests/integration/run-routes.test.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"RUN-FR-11: Stream run and step state over WebSocket, reconnect the UI after reload, and offer retry-interrupted-step, continue-from-next-pending-step, or restart after a server restart; never auto-replay a step.\"],\"acceptanceCriteria\":[\"Creating a run re-runs preflight and rejects a blocked report\",\"A second active run returns 409\",\"Mode-inappropriate actions return a typed error\",\"Events include run and step transitions in order and a full snapshot on reconnect\",\"Interrupted recovery offers retry, continue, and restart without auto-replay\",\"PTYs are cleaned up on completion and abort\",\"All routes are reachable through src/server/app.ts\"],\"constraints\":[\"Do not start a step without an explicit run or action\",\"Do not expose a second active run\",\"EXEC-03: At most one run may be active across the whole Slan server. A second start request must fail with a conflict while a run is starting, running, paused, or awaiting user input.\",\"NFR-REL-02: Close PTY processes, WebSocket subscriptions, and child processes on disconnect, error, run completion, and SIGINT/SIGTERM; never leave an orphan harness process attached to a finished run.\",\"ARCH-05: Every server route registers through src/server/app.ts, every web route mounts through src/web/App.tsx, and every new user-facing capability must be reachable through those composition roots with a test that exercises it there.\"],\"references\":[\"docs/PRD.md#6.3 Key APIs and Interfaces\",\"docs/PRD.md#10.5 Run\",\"docs/features/run-execution.md#RUN-FR-11\",\"docs/PRD.md#EXEC-03\",\"docs/PRD.md#NFR-REL-02\",\"docs/PRD.md#ARCH-05\"]}}]}",
-      "updatedAt": "2026-11-04T10:23:05.185Z"
+      "updatedAt": "2026-11-04T13:26:48.763Z"
     },
     "RUN-EXECUTION-4": {
       "phaseId": "RUN-EXECUTION-4",

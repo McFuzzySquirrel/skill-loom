@@ -26,6 +26,13 @@ import type {
 import type { PreflightEngine } from './preflight/engine.js';
 import type { TrustSessionService } from './preflight/trust-session.js';
 import type { GitInitRunner } from './projects/registry.js';
+import type { AutomaticSpawner } from './runs/automatic.js';
+import type {
+  RunAutomaticSpawnerContext,
+  RunOrchestrator,
+  RunSupervisedPtyContext,
+} from './runs/orchestrator.js';
+import type { SupervisedPty } from './runs/supervised.js';
 import { routes } from './routes/index.js';
 import {
   createTerminalManager,
@@ -124,6 +131,22 @@ export interface BuildAppOptions {
   preflightEngine?: PreflightEngine;
   /** Pre-built Copilot trust-session service seam. */
   trustSessionService?: TrustSessionService;
+  /** Pre-built run orchestrator seam. */
+  runOrchestrator?: RunOrchestrator;
+  /** Run startup recovery. Defaults to true. */
+  runRecoverOnStartup?: boolean;
+  /** Clock seam forwarded to the default run orchestrator. */
+  runNow?: () => Date;
+  /** Session id seam forwarded to the default run orchestrator. */
+  runCreateSessionId?: () => string;
+  /** Run id seam forwarded to the default run orchestrator. */
+  runCreateRunId?: () => string;
+  /** Production PTY seam forwarded to the default run orchestrator. */
+  runCreateSupervisedPty?: (context: RunSupervisedPtyContext) => SupervisedPty;
+  /** Automatic process/PTY seam forwarded to the default run orchestrator. */
+  runCreateAutomaticSpawner?: (context: RunAutomaticSpawnerContext) => AutomaticSpawner;
+  /** Automatic step timeout forwarded to the default run orchestrator. */
+  runStepTimeoutMs?: number;
 }
 
 /** Strip IPv6 brackets and compare case-insensitively. */
@@ -369,6 +392,28 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     ...(options.trustSessionService === undefined
       ? {}
       : { trustSessionService: options.trustSessionService }),
+    ...(options.runOrchestrator === undefined
+      ? {}
+      : { runOrchestrator: options.runOrchestrator }),
+    ...(options.runRecoverOnStartup === undefined
+      ? {}
+      : { runRecoverOnStartup: options.runRecoverOnStartup }),
+    ...(options.runNow === undefined ? {} : { runNow: options.runNow }),
+    ...(options.runCreateSessionId === undefined
+      ? {}
+      : { runCreateSessionId: options.runCreateSessionId }),
+    ...(options.runCreateRunId === undefined
+      ? {}
+      : { runCreateRunId: options.runCreateRunId }),
+    ...(options.runCreateSupervisedPty === undefined
+      ? {}
+      : { runCreateSupervisedPty: options.runCreateSupervisedPty }),
+    ...(options.runCreateAutomaticSpawner === undefined
+      ? {}
+      : { runCreateAutomaticSpawner: options.runCreateAutomaticSpawner }),
+    ...(options.runStepTimeoutMs === undefined
+      ? {}
+      : { runStepTimeoutMs: options.runStepTimeoutMs }),
   });
 
   return app;
