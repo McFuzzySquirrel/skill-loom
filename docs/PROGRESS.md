@@ -3,8 +3,8 @@
 ## Current State
 **Phase**: CHAIN-AUTHORING-1
 **Status**: In Progress
-**Validation Gaps**: 7 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T11:24:59.365Z
+**Validation Gaps**: 8 unverified check(s) - see "Validation Gaps"
+**Last Updated**: 2026-11-04T11:28:46.109Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -38,6 +38,8 @@
   - Files: scripts/live-discovery.ts, docs/evidence/live-discovery.json
 - [x] Phase CHAIN-AUTHORING-1, Task CHAIN-01: Implement the chain model and validation (@backend-engineer)
   - Files: src/server/chains/model.ts, tests/unit/chain-model.test.ts
+- [x] Phase CHAIN-AUTHORING-1, Task CHAIN-02: Implement chain storage with atomic writes (@backend-engineer)
+  - Files: src/server/chains/store.ts, tests/unit/chain-store.test.ts
 
 ## Current Task
 - None currently running
@@ -66,6 +68,7 @@
 - Task PROJ-03: Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed.
 - Task CAT-05: The live probe requires installed OpenCode 2.2.5 and Copilot CLI 1.0.105; on machines lacking either CLI the validation command intentionally fails with a clear diagnostic rather than skipping.
 - Task CHAIN-01: npm ci was required in the sandbox worktree because node_modules was absent; no dependency versions or lockfile content changed.
+- Task CHAIN-02: npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.
 
 ## Notes
 - Workflow engine run 25930d7e-150c-4ea9-a081-47fcf1941eb6
