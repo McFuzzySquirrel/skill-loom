@@ -41,6 +41,34 @@ npm start
 
 `npm run build` builds the React UI into `dist/web` and compiles the server into `dist/src`. `npm start` runs the compiled server, which serves both the API and the built UI from the single loopback origin `http://127.0.0.1:7373`. The production server does not use the Vite dev proxy.
 
+## Run from a package
+
+The package is named `skill-loom-cli` and exposes the `skill-loom` command. It remains local-only for now (`"private": true`), so build a tarball instead of publishing:
+
+```bash
+npm pack
+npx --yes --package=./skill-loom-cli-0.1.0.tgz skill-loom
+```
+
+Flags:
+
+```bash
+npx --yes --package=./skill-loom-cli-0.1.0.tgz skill-loom --help
+npx --yes --package=./skill-loom-cli-0.1.0.tgz skill-loom --version
+npx --yes --package=./skill-loom-cli-0.1.0.tgz skill-loom --no-open --port 7399
+npx --yes --package=./skill-loom-cli-0.1.0.tgz skill-loom --config-dir /absolute/path/to/profile
+```
+
+The unambiguous `npm exec` form is also supported:
+
+```bash
+npm exec --package ./skill-loom-cli-0.1.0.tgz -- skill-loom --help
+```
+
+The CLI starts the same production server and prints the loopback URL and config directory. It opens the default browser only when stdout is a TTY; `--no-open` and `CI` disable that. Once the package is published, the command becomes `npx skill-loom-cli`.
+
+The packed package contains only `dist/src`, `dist/web`, the compiled package metadata, docs, and the package manifest. It excludes source, tests, and build scripts. The native `node-pty` toolchain is still required when npm installs the package.
+
 ## Commands
 
 | Capability | Command | Notes |
@@ -54,6 +82,7 @@ npm start
 | Integration tests | `npm run test:integration` | Vitest, real Fastify composition root. |
 | All Node tests | `npm test` | Unit and integration suites. |
 | Browser end-to-end | `npm run test:e2e` | Builds and starts an isolated app; see below. |
+| Package smoke test | `npm run test:package` | Packs, inspects, and starts the packaged CLI on a spare loopback port. |
 | Live discovery probe | `npm run test:live:discovery` | Requires real harness CLIs. |
 | Live execution probe | `npm run test:live:execution` | Requires real harness CLIs and may make paid model calls. |
 | Documentation gate | `npm run check` | Runs `scripts/check-docs.mjs`. |

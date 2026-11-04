@@ -25,6 +25,22 @@ The versioned config document contains `version`, `harnessCommands`, `extraSkill
 
 `extraSkillDirectories` is the global list managed from the skill-catalog settings dialog. Recent projects store the canonical path, display name, derived id, and last-opened time; removing a recent entry never removes project files.
 
+## Package and CLI
+
+The npm package is `skill-loom-cli` and exposes the `skill-loom` binary. It remains private for now, so local use is from a packed tarball:
+
+```bash
+npm run build
+npm pack
+npx --yes --package=./skill-loom-cli-0.1.0.tgz skill-loom
+```
+
+The CLI supports `--help`, `--version`, `--no-open`, `--port <number>`, and `--config-dir <path>`. It starts the same loopback-only production server as `npm start`, prints the resolved config directory and URL, and opens the default browser only when stdout is a TTY and `CI` is unset. `--no-open` disables that behavior entirely.
+
+`--port` sets `LOOM_PORT`; `--config-dir` sets `LOOM_CONFIG_DIR`. Environment variables remain authoritative when a flag is omitted. The package contains only the compiled server, built web UI, compiled package metadata, docs, and manifest; source, tests, and build scripts are excluded. Installing the package still builds the native `node-pty` module, so the Python/make/C++ toolchain is required.
+
+Before publishing, flip `"private"` to `false`, choose and add the license and repository metadata, verify the package name is still available, run `npm run test:package`, and publish with `npm publish`. Once published, the invocation is `npx skill-loom-cli`.
+
 ## Data locations
 
 | Path | Contents | Notes |

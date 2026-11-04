@@ -11,8 +11,13 @@ function read(relativePath: string): string {
 }
 
 interface PackageJson {
+  name?: string;
+  version?: string;
+  private?: boolean;
   type?: string;
   engines?: Record<string, string>;
+  bin?: Record<string, string>;
+  files?: string[];
   scripts?: Record<string, string>;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
@@ -55,6 +60,7 @@ const verifiedVersions: Record<string, string> = {
 const requiredScripts = [
   'dev',
   'build',
+  'prepack',
   'start',
   'typecheck',
   'typecheck:server',
@@ -63,6 +69,7 @@ const requiredScripts = [
   'test:unit',
   'test:integration',
   'test:e2e',
+  'test:package',
   'test:live:discovery',
   'test:live:execution',
   'check',
@@ -92,9 +99,24 @@ describe('package contract', () => {
     expect(pkg.scripts?.['test:unit']).toContain('tests/unit');
     expect(pkg.scripts?.['test:integration']).toContain('tests/integration');
     expect(pkg.scripts?.['test:e2e']).toBe('playwright test');
+    expect(pkg.scripts?.['test:package']).toContain('scripts/package-smoke.mjs');
+    expect(pkg.scripts?.prepack).toBe('npm run build');
     expect(pkg.scripts?.['test:live:discovery']).toContain('scripts/live-discovery.ts');
     expect(pkg.scripts?.['test:live:execution']).toContain('scripts/live-execution.ts');
     expect(pkg.scripts?.check).toContain('scripts/check-docs.mjs');
+  });
+
+  it('declares the publishable CLI name, bin, and package file list', () => {
+    expect(pkg.name).toBe('skill-loom-cli');
+    expect(pkg.version).toBe('0.1.0');
+    expect(pkg.private).toBe(true);
+    expect(pkg.bin).toEqual({ 'skill-loom': 'dist/src/server/cli.js' });
+    expect(pkg.files).toEqual([
+      'dist/src',
+      'dist/web',
+      'dist/package.json',
+      'docs/OPERATIONS.md',
+    ]);
   });
 
   it('pins every verified dependency from PRD 6.1 exactly', () => {
