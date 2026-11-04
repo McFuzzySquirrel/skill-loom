@@ -207,10 +207,25 @@ test.describe('Chain to run flow', () => {
       page.getByRole('heading', { level: 1, name: 'Run terminal' }),
     ).toBeVisible();
     await expect(page.getByTestId('terminal-run-chain-name')).toHaveText(chain.name);
-    await expect(page.getByTestId('run-terminal-screen')).toContainText(
-      'FAKE_RUN_FLOW_HOLDING',
-      { timeout: 15_000 },
-    );
+    const terminalScreen = page.getByTestId('run-terminal-screen');
+    await expect(terminalScreen).toContainText('FAKE_RUN_FLOW_HOLDING', {
+      timeout: 15_000,
+    });
+
+    // The pane must stay a fixed, viewport-bounded size while output arrives.
+    // Regression guard: an auto-height xterm container used to grow on every
+    // fit/resize cycle, slowing the browser and the whole page.
+    const viewport = page.viewportSize();
+    expect(viewport).not.toBeNull();
+    const initialBox = await terminalScreen.boundingBox();
+    expect(initialBox).not.toBeNull();
+    expect(initialBox!.height).toBeLessThanOrEqual(viewport!.height);
+    await page.waitForTimeout(2_500);
+    const laterBox = await terminalScreen.boundingBox();
+    expect(laterBox).not.toBeNull();
+    expect(Math.abs(laterBox!.height - initialBox!.height)).toBeLessThanOrEqual(1);
+    expect(laterBox!.height).toBeLessThanOrEqual(viewport!.height);
+
     await page.getByTestId('run-control-abort').click();
     await expect(page.getByTestId('terminal-run-status')).toContainText('Aborted');
 
