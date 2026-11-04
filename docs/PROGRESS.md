@@ -1,10 +1,10 @@
 # Project Progress
 
 ## Current State
-**Phase**: PROJECT-WORKSPACE-2
+**Phase**: SKILL-CATALOG-1
 **Status**: In Progress
 **Validation Gaps**: 5 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T11:02:11.943Z
+**Last Updated**: 2026-11-04T11:05:46.198Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -26,6 +26,8 @@
   - Files: src/server/projects/registry.ts, src/server/routes/projects.ts, src/server/routes/index.ts, tests/unit/project-registry.test.ts, tests/integration/projects-routes.test.ts, src/server/app.ts
 - [x] Phase PROJECT-WORKSPACE-2, Task PROJ-03: Build the project selection screen (@frontend-engineer)
   - Files: src/web/routes/ProjectsPage.tsx, src/web/components/FolderBrowser.tsx, src/web/components/RecentProjects.tsx, src/web/components/NewProjectForm.tsx, src/web/api/projects.ts, tests/e2e/projects.spec.ts, src/web/App.tsx, src/web/styles/theme.css, src/web/components/InlineError.tsx, src/web/hooks/useDirectoryListing.ts, src/web/hooks/useRecentProjects.ts
+- [x] Phase SKILL-CATALOG-1, Task CAT-01: Implement OpenCode skill discovery (@backend-engineer)
+  - Files: src/server/catalog/types.ts, src/server/catalog/frontmatter.ts, src/server/catalog/opencode.ts, tests/unit/catalog-opencode.test.ts
 
 ## Current Task
 - None currently running

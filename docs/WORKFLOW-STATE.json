@@ -1,12 +1,12 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T11:02:11.942Z",
+  "lastUpdatedAt": "2026-11-04T11:05:46.196Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
   "status": "running",
-  "currentPhase": "PROJECT-WORKSPACE-2",
+  "currentPhase": "SKILL-CATALOG-1",
   "tasks": {
     "FOUND-01": {
       "taskId": "FOUND-01",
@@ -407,10 +407,51 @@
     },
     "CAT-01": {
       "taskId": "CAT-01",
-      "status": "pending",
+      "status": "complete",
       "ownerAgent": "backend-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 1,
+      "outputFiles": [
+        "src/server/catalog/types.ts",
+        "src/server/catalog/frontmatter.ts",
+        "src/server/catalog/opencode.ts",
+        "tests/unit/catalog-opencode.test.ts"
+      ],
+      "startedAt": "2026-11-04T11:02:12.507Z",
+      "usage": {
+        "inputTokens": 47799,
+        "outputTokens": 12956,
+        "reasoningTokens": 19428,
+        "cacheReadTokens": 1463296,
+        "cacheWriteTokens": 0,
+        "costUsd": 0.030990137999999993,
+        "source": "harness"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/CAT-01.2026-11-04T11-05-46-191Z.attempt-1.result.json",
+          "usage": {
+            "inputTokens": 47799,
+            "outputTokens": 12956,
+            "reasoningTokens": 19428,
+            "cacheReadTokens": 1463296,
+            "cacheWriteTokens": 0,
+            "costUsd": 0.030990137999999993,
+            "source": "harness"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T11:05:46.194Z",
+      "agentOutput": "I'll start by reading the execution file.\nNow I have the full context. Let me implement the catalog domain types and parsers.\nImplemented CAT-01: catalog domain types, YAML frontmatter parsing, and OpenCode filesystem discovery.\n\n## Files created\n\n- `src/server/catalog/types.ts`\n- `src/server/catalog/frontmatter.ts`\n- `src/server/catalog/opencode.ts`\n- `tests/unit/catalog-opencode.test.ts`\n\nNo other tracked files were modified. (`node_modules/` and `dist/` are git-ignored build artifacts.)\n\n## Validation\n\n| Command | Outcome |\n|---|---|\n| `npx vitest run tests/unit/catalog-opencode.test.ts` | Passed — 20 tests |\n| `npx vitest run` | Passed — 150 tests across 10 files |\n| `npm run typecheck:server` | Passed |\n| `npm run build:server` | Passed |\n\n```forge-result\n{\"summary\":\"Implemented catalog domain types, YAML frontmatter parsing, and recursive OpenCode skill discovery across project, personal, and Slan extra directories with warnings for malformed or unreadable packages. All focused and full-suite checks pass.\",\"decisions\":[\"Discovery keeps malformed packages as entries using the directory-name fallback and records a warning, so one bad SKILL.md never suppresses valid siblings.\",\"Missing project and personal roots are treated as normal empty sources; missing or invalid configured extra directories produce warnings.\",\"Each discovered package records the realpath of SKILL.md as its canonical path, and ids are stable hashes of harness/source/path/name.\",\"Nested directory symlinks are not followed and recursion is depth-capped, preventing unreadable or cyclic trees from looping.\",\"Extra directories are passed into the scanner by the caller; the scanner does not read global config or invoke the OpenCode CLI.\"],\"interfaces\":[\"src/server/catalog/types.ts: SKILL_HARNESSES, SKILL_SOURCES, SKILL_SOURCE_ORDER, SkillEntry, CatalogWarning, SkillDiscoveryResult, createSkillId, compareSkillEntries, CatalogError, CATALOG_WARNING_CODES\",\"src/server/catalog/frontmatter.ts: parseSkillFrontmatter, frontmatterString, FrontmatterError, FRONTMATTER_ERROR_CODES, SkillFrontmatter\",\"src/server/catalog/opencode.ts: scanOpenCodeSkills, OpenCodeScanOptions, OPENCODE_HARNESS, SKILL_FILE_NAME, DEFAULT_MAX_SKILL_DEPTH\"],\"tests\":[\"npx vitest run tests/unit/catalog-opencode.test.ts: 20 passed\",\"npx vitest run: 150 passed\",\"npm run typecheck:server: passed\",\"npm run build:server: passed\"],\"unresolved\":[]}\n```\n",
+      "artifactId": "work-cat-01-001",
+      "inputArtifactIds": [
+        "work-proj-02-001",
+        "work-found-02-001",
+        "work-found-04-001",
+        "work-found-05-001",
+        "work-proj-03-001"
+      ]
     },
     "CAT-02": {
       "taskId": "CAT-02",
@@ -659,15 +700,23 @@
     },
     "PROJECT-WORKSPACE-2": {
       "phaseId": "PROJECT-WORKSPACE-2",
-      "status": "running",
+      "status": "complete",
       "contractFingerprint": "{\"title\":\"Phase 2: Project Screen\",\"description\":\"```forge-task {   \\\"id\\\": \\\"PROJ-03\\\",\",\"completionPolicy\":\"strict\",\"dependencies\":[\"PROJECT-WORKSPACE-1\"],\"requiredOutputs\":[\"src/web/routes/ProjectsPage.tsx\",\"src/web/components/FolderBrowser.tsx\",\"src/web/components/RecentProjects.tsx\",\"src/web/components/NewProjectForm.tsx\",\"src/web/api/projects.ts\",\"tests/e2e/projects.spec.ts\"],\"validationCommands\":[],\"tasks\":[{\"id\":\"PROJ-03\",\"title\":\"Build the project selection screen\",\"description\":\"Replace the placeholder projects route with the real project screen. Implement recent projects, the folder browser, typed path entry, Up/Home navigation, open-folder action, and the new-project form with optional git init. Show loading, empty, invalid-path, and server-error states; keep recent projects usable when a path fails. On success, navigate to the project route and show canonical path, git state, and .slan state. Add tests/e2e/projects.spec.ts covering open existing, create with and without git, invalid path, recent ordering, removal confirmation, and keyboard-only selection. Do not implement chain or catalog content beyond placeholders.\",\"ownerAgent\":\"frontend-engineer\",\"required\":true,\"dependencies\":[\"PROJ-02\"],\"expectedOutputs\":[\"src/web/routes/ProjectsPage.tsx\",\"src/web/components/FolderBrowser.tsx\",\"src/web/components/RecentProjects.tsx\",\"src/web/components/NewProjectForm.tsx\",\"src/web/api/projects.ts\",\"tests/e2e/projects.spec.ts\"],\"validationCommands\":[\"npx playwright test tests/e2e/projects.spec.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"PROJ-FR-05: Provide a project screen that browses and lists directories, accepts a typed absolute path, opens a recent project, creates a folder with optional git init, and shows loading, empty, invalid-path, and server-error states.\"],\"acceptanceCriteria\":[\"The reviewer can open a recent project and an arbitrary directory through the browser\",\"Creating a folder with git init enabled produces a repository and opens the project\",\"An invalid path shows an inline error without clearing recent projects\",\"The browser and new-project form are operable with the keyboard alone\",\"Removing a recent project requires confirmation and does not delete files\",\"The Playwright test drives the screen through src/web/App.tsx and the real API\"],\"constraints\":[\"Do not add templates or scaffolding options\",\"Do not hide server errors behind a generic empty state\",\"NFR-UX-01: Each screen exposes loading, empty, and error states. Delete, abort, restart, and trust actions require explicit confirmation and state the consequence.\",\"A11Y-01: Every authoring action, including adding, removing, reordering, saving, preflight, and run control, must be reachable and executable with the keyboard alone, with move-up/move-down alternatives to drag-and-drop.\",\"A11Y-02: Provide visible focus indicators, semantic labels, a skip link, logical focus order, and aria-live announcements for step transitions, preflight results, and run state.\"],\"references\":[\"docs/features/project-workspace.md#4. UI / Interaction Design\",\"docs/PRD.md#10.1 Project\",\"docs/features/project-workspace.md#PROJ-FR-05\",\"docs/PRD.md#NFR-UX-01\",\"docs/PRD.md#A11Y-01\",\"docs/PRD.md#A11Y-02\"]}}]}",
-      "updatedAt": "2026-11-04T10:50:29.746Z"
+      "updatedAt": "2026-11-04T11:02:12.383Z",
+      "validationEvidence": [
+        "output exists: src/web/routes/ProjectsPage.tsx",
+        "output exists: src/web/components/FolderBrowser.tsx",
+        "output exists: src/web/components/RecentProjects.tsx",
+        "output exists: src/web/components/NewProjectForm.tsx",
+        "output exists: src/web/api/projects.ts",
+        "output exists: tests/e2e/projects.spec.ts"
+      ]
     },
     "SKILL-CATALOG-1": {
       "phaseId": "SKILL-CATALOG-1",
-      "status": "pending",
+      "status": "running",
       "contractFingerprint": "{\"title\":\"Phase 1: Discovery and Catalog API\",\"description\":\"```forge-task {   \\\"id\\\": \\\"CAT-01\\\",\",\"completionPolicy\":\"strict\",\"dependencies\":[\"APP-FOUNDATION-2\",\"PROJECT-WORKSPACE-2\"],\"requiredOutputs\":[\"src/server/catalog/types.ts\",\"src/server/catalog/frontmatter.ts\",\"src/server/catalog/opencode.ts\",\"tests/unit/catalog-opencode.test.ts\",\"src/server/catalog/copilot.ts\",\"tests/unit/catalog-copilot.test.ts\",\"src/server/catalog/merge.ts\",\"src/server/routes/catalog.ts\",\"src/server/routes/index.ts\",\"tests/unit/catalog-merge.test.ts\",\"tests/integration/catalog-routes.test.ts\"],\"validationCommands\":[],\"tasks\":[{\"id\":\"CAT-01\",\"title\":\"Implement OpenCode skill discovery\",\"description\":\"Implement the catalog domain types and the OpenCode scanner. Scan the project .opencode/skills directory, the personal ~/.config/opencode/skills directory, and each Slan-configured extra directory, recursively finding SKILL.md packages. Parse YAML frontmatter with the verified yaml package, require a nonempty name, fall back to the directory name with a warning when name is absent, and retain description, canonical path, source, and harness. Handle unreadable directories and malformed frontmatter as warnings. Add tests/unit/catalog-opencode.test.ts with temporary project and home directories covering nested packages, missing frontmatter, duplicate names, extra directories, and unreadable paths. Do not invoke the OpenCode CLI and do not merge Copilot results here.\",\"ownerAgent\":\"backend-engineer\",\"required\":true,\"dependencies\":[\"PROJ-02\",\"FOUND-02\"],\"expectedOutputs\":[\"src/server/catalog/types.ts\",\"src/server/catalog/frontmatter.ts\",\"src/server/catalog/opencode.ts\",\"tests/unit/catalog-opencode.test.ts\"],\"validationCommands\":[\"npx vitest run tests/unit/catalog-opencode.test.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"CAT-FR-01: Discover OpenCode skills by scanning <project>/.opencode/skills, ~/.config/opencode/skills, and Slan-configured extra directories, recursively finding SKILL.md packages, parsing YAML frontmatter name and description, and retaining source, canonical path, and harness.\"],\"acceptanceCriteria\":[\"Project, personal, and Slan-extra directories are all scanned\",\"Nested SKILL.md packages are discovered and their canonical paths recorded\",\"Frontmatter name and description are parsed; malformed files become warnings\",\"Duplicate names are returned separately with distinct source and path\",\"No skill body is executed and no CLI is invoked\"],\"constraints\":[\"Do not use AI summaries or infer descriptions\",\"Do not follow unreadable directories into an infinite loop\",\"ARCH-03: The server owns all filesystem traversal, config/chain/run persistence, CLI process spawning, and PTY handling. The browser performs no shell execution and receives only typed API and WebSocket data.\",\"SEC-03: Render terminal bytes only through xterm.js and render skill text through escaped React text. Do not use dangerouslySetInnerHTML for harness, skill, or run content.\",\"NFR-COMPAT-01: All harness-specific commands, flags, discovery formats, state parsing, and trust behavior live behind the adapter contract; route and UI code must not branch on harness names.\"],\"references\":[\"docs/PRD.md#6. Technical Architecture\",\"docs/PRD.md#5. Research Findings\",\"docs/features/skill-catalog.md#CAT-FR-01\",\"docs/PRD.md#ARCH-03\",\"docs/PRD.md#SEC-03\",\"docs/PRD.md#NFR-COMPAT-01\"]}},{\"id\":\"CAT-02\",\"title\":\"Implement Copilot CLI skill discovery\",\"description\":\"Implement the Copilot catalog adapter. Invoke copilot skill list --json in the project directory with an executable-plus-arguments spawn, a bounded timeout, and captured stdout/stderr. Normalize the returned array into catalog entries with harness copilot, source, enabled state, canonical path when present, and a stable id. Map the documented project, personal, plugin, custom, and builtin source labels. Return a warning entry rather than throwing when the command is missing, exits non-zero, emits invalid JSON, or times out. Add tests/unit/catalog-copilot.test.ts with an injected command runner covering valid output, malformed JSON, non-zero exit, missing executable, and timeout. Do not call the real CLI in this unit test.\",\"ownerAgent\":\"backend-engineer\",\"required\":true,\"dependencies\":[\"PROJ-02\",\"CAT-01\"],\"expectedOutputs\":[\"src/server/catalog/copilot.ts\",\"tests/unit/catalog-copilot.test.ts\"],\"validationCommands\":[\"npx vitest run tests/unit/catalog-copilot.test.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"CAT-FR-02: Discover Copilot skills by invoking copilot skill list --json with the project as working directory, mapping project, personal, plugin, custom, and builtin sources, and surfacing command failures as warnings without crashing the catalog.\"],\"acceptanceCriteria\":[\"The adapter invokes copilot skill list --json without shell interpolation\",\"Valid output maps every source label and preserves enabled state\",\"Malformed JSON, non-zero exit, missing executable, and timeout each produce a warning rather than a crash\",\"The unit test uses the injected runner and never depends on an installed Copilot CLI\"],\"constraints\":[\"Do not read credential files\",\"Do not treat a discovery failure as an empty catalog\",\"SEC-01: Spawn harness CLIs with an executable plus argument array and no shell string interpolation. Canonicalize project and chain paths with realpath and reject traversal outside the intended project data directory.\",\"SEC-02: Never read credential values, copy tokens, or log environment secrets. Authentication checks may inspect command output, credential-file presence, and environment-variable presence, but must redact values.\",\"NFR-COMPAT-01: All harness-specific commands, flags, discovery formats, state parsing, and trust behavior live behind the adapter contract; route and UI code must not branch on harness names.\"],\"references\":[\"docs/PRD.md#5. Research Findings\",\"docs/PRD.md#6.3 Key APIs and Interfaces\",\"docs/features/skill-catalog.md#CAT-FR-02\",\"docs/PRD.md#SEC-01\",\"docs/PRD.md#SEC-02\",\"docs/PRD.md#NFR-COMPAT-01\"]}},{\"id\":\"CAT-03\",\"title\":\"Merge catalog sources and expose the catalog API\",\"description\":\"Implement catalog merge, search, and the HTTP surface. Merge OpenCode and Copilot entries for the selected harness without deduplicating names, assign stable ids from harness/source/path/name, group by source, count entries, and apply case-insensitive substring search to name and description. Read extra skill directories from the global config and pass them to OpenCode scanning. Add settings endpoints to add and remove an extra directory with canonical-path validation and duplicate rejection. Register GET /api/projects/:projectId/catalog and the settings endpoints through src/server/routes/index.ts. Add tests/unit/catalog-merge.test.ts and tests/integration/catalog-routes.test.ts covering grouping, duplicates, search, harness selection, extra-directory add/remove, and error envelopes. Do not build the catalog panel here.\",\"ownerAgent\":\"backend-engineer\",\"required\":true,\"dependencies\":[\"CAT-01\",\"CAT-02\",\"FOUND-03\"],\"expectedOutputs\":[\"src/server/catalog/merge.ts\",\"src/server/routes/catalog.ts\",\"src/server/routes/index.ts\",\"tests/unit/catalog-merge.test.ts\",\"tests/integration/catalog-routes.test.ts\"],\"validationCommands\":[\"npx vitest run tests/unit/catalog-merge.test.ts tests/integration/catalog-routes.test.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"CAT-FR-03: Merge harness and source results without silent deduplication; when names collide, return every entry with a visible source badge and stable id, and support case-insensitive search across name and description.\",\"CAT-FR-04: Expose GET /api/projects/:projectId/catalog?harness=&q= returning grouped entries, counts, and warnings; allow adding and removing extra skill directories in Slan settings and merge them into the selected harness catalog.\"],\"acceptanceCriteria\":[\"Duplicate skill names produce multiple entries with distinct source badges\",\"Search is case-insensitive and matches name or description\",\"Selecting OpenCode versus Copilot returns only that harness plus Slan extras where applicable\",\"Extra directories are validated, persisted in global config, and reflected in the next catalog response\",\"Catalog and settings routes are reachable through src/server/app.ts and use the shared error envelope\"],\"constraints\":[\"Do not silently deduplicate by skill name\",\"Do not cache results across projects without invalidation\",\"NFR-PERF-01: Catalog discovery and merge must complete within 3 seconds for up to 500 skills on the local machine; exceeding the budget is reported as a warning rather than hiding entries.\",\"ARCH-04: Persist configuration, chains, and runs as versioned JSON files with atomic temp-file replacement. Do not introduce a database or a second persistence model in v1.\",\"NFR-COMPAT-01: All harness-specific commands, flags, discovery formats, state parsing, and trust behavior live behind the adapter contract; route and UI code must not branch on harness names.\"],\"references\":[\"docs/PRD.md#6.3 Key APIs and Interfaces\",\"docs/PRD.md#7. Non-Functional Requirements\",\"docs/features/skill-catalog.md#CAT-FR-03\",\"docs/features/skill-catalog.md#CAT-FR-04\",\"docs/PRD.md#NFR-PERF-01\",\"docs/PRD.md#ARCH-04\",\"docs/PRD.md#NFR-COMPAT-01\"]}}]}",
-      "updatedAt": "2026-11-04T10:23:05.185Z"
+      "updatedAt": "2026-11-04T11:02:12.389Z"
     },
     "SKILL-CATALOG-2": {
       "phaseId": "SKILL-CATALOG-2",
