@@ -1,7 +1,7 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T13:00:48.742Z",
+  "lastUpdatedAt": "2026-11-04T13:04:59.746Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
@@ -1182,10 +1182,58 @@
     },
     "RUN-02": {
       "taskId": "RUN-02",
-      "status": "pending",
+      "status": "complete",
       "ownerAgent": "backend-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 1,
+      "outputFiles": [
+        "src/server/runs/prompts.ts",
+        "src/server/runs/handoff.ts",
+        "tests/unit/prompts.test.ts"
+      ],
+      "startedAt": "2026-11-04T13:00:49.408Z",
+      "usage": {
+        "inputTokens": 87257,
+        "outputTokens": 14285,
+        "reasoningTokens": 22732,
+        "cacheReadTokens": 2252416,
+        "cacheWriteTokens": 0,
+        "costUsd": 0.042055998,
+        "source": "harness"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/RUN-02.2026-11-04T13-04-59-738Z.attempt-1.result.json",
+          "usage": {
+            "inputTokens": 87257,
+            "outputTokens": 14285,
+            "reasoningTokens": 22732,
+            "cacheReadTokens": 2252416,
+            "cacheWriteTokens": 0,
+            "costUsd": 0.042055998,
+            "source": "harness"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T13:04:59.742Z",
+      "agentOutput": "Implemented prompt assembly, session planning, and deterministic handoff notes.\n\n**Files created**\n- `src/server/runs/prompts.ts`\n- `src/server/runs/handoff.ts`\n- `tests/unit/prompts.test.ts`\n\n**Validation run**\n- `npx vitest run tests/unit/prompts.test.ts` — 26 tests passed\n- `npx vitest run tests/unit/run-model.test.ts tests/unit/run-store.test.ts tests/unit/harness-registry.test.ts tests/unit/preflight-engine.test.ts` — 116 tests passed\n- `npx vitest run tests/unit` — 324 tests passed\n- `npm run typecheck:server` — passed\n- `npm run build:server` — passed\n\n```forge-result\n{\n  \"summary\": \"Implemented deterministic step prompt assembly, adapter-driven shared/fresh/fork session planning, and sanitized bounded handoff notes without spawning any process. Added 26 focused unit tests and verified the full unit suite, server typecheck, and server build.\",\n  \"decisions\": [\n    \"Prompts use the exact shape `Skill: <name>\\\\n\\\\nInstruction:\\\\n<resolved text>` so the skill name is explicit and the resolved instruction is preserved verbatim.\",\n    \"Required declared inputs are checked across the whole chain before any step prompt is assembled, so a missing value fails before a process could start.\",\n    \"Placeholder resolution trims inner whitespace, rejects invalid names, and fails with the step id, index, label, and placeholder name when a value is absent.\",\n    \"Session planning consumes only adapter capability data: shared reuses one id, fresh creates one per step, and fork selects the surface's native mechanism only when the adapter reports it; otherwise the step is marked handoffRequired.\",\n    \"The first step of a fork chain starts a new session because no parent exists; subsequent native forks carry the previous step's session id.\",\n    \"Handoff notes are deterministically built from the previous step's index, label, skill, resolved instruction, status, and bounded tail. ANSI escapes, NULs, C0/C1 controls, and invisible formatting are stripped.\",\n    \"Handoff notes apply both a 200-line and 32 KiB cap, trimming the oldest tail output first while preserving the metadata block.\"\n  ],\n  \"interfaces\": [\n    \"src/server/runs/prompts.ts: RUN_PROMPT_ERROR_CODES, RunPromptError, PromptInputValues, SessionCapabilities, PlannedStepSession, RunSessionPlan, PlanRunSessionsInput, AssembleStepPromptInput, PreviousStepState, BuildStepPromptInput\",\n    \"src/server/runs/prompts.ts: formatStepPrompt, resolveStepInstruction, assembleStepPrompt, planRunSessions, buildStepPrompt\",\n    \"src/server/runs/handoff.ts: HANDOFF_HEADING, HANDOFF_TAIL_HEADING, MAX_HANDOFF_BYTES, MAX_HANDOFF_LINES, MAX_HANDOFF_FIELD_CHARS, HandoffSourceStep, HandoffNoteOptions\",\n    \"src/server/runs/handoff.ts: sanitizeHandoffText, buildHandoffNote, truncateUtf8\"\n  ],\n  \"tests\": [\n    \"npx vitest run tests/unit/prompts.test.ts: exit 0 (26 tests)\",\n    \"npx vitest run tests/unit/run-model.test.ts tests/unit/run-store.test.ts tests/unit/harness-registry.test.ts tests/unit/preflight-engine.test.ts: exit 0 (116 tests)\",\n    \"npx vitest run tests/unit: exit 0 (324 tests)\",\n    \"npm run typecheck:server: exit 0\",\n    \"npm run build:server: exit 0\"\n  ],\n  \"warnings\": [\n    \"Session ids default to a random UUID through an injected seam; RUN-04/RUN-05 should pass a harness-appropriate generator when the orchestration layer knows one.\"\n  ],\n  \"validationLimitations\": [\n    \"npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.\",\n    \"No live harness process, prompt, or model call was started, by task constraint; all planning is pure and unit-tested.\"\n  ],\n  \"unresolved\": []\n}\n```\n",
+      "validationLimitations": [
+        "npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.",
+        "No live harness process, prompt, or model call was started, by task constraint; all planning is pure and unit-tested."
+      ],
+      "artifactId": "work-run-02-001",
+      "inputArtifactIds": [
+        "work-run-01-001",
+        "work-pre-01-001",
+        "work-found-04-001",
+        "work-found-05-001",
+        "work-proj-03-001",
+        "work-chain-04-001",
+        "work-chain-05-001",
+        "work-chain-06-001",
+        "work-pre-04-001"
+      ]
     },
     "RUN-03": {
       "taskId": "RUN-03",

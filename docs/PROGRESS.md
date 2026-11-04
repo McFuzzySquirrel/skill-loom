@@ -3,8 +3,8 @@
 ## Current State
 **Phase**: RUN-EXECUTION-1
 **Status**: In Progress
-**Validation Gaps**: 23 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T13:00:48.745Z
+**Validation Gaps**: 25 unverified check(s) - see "Validation Gaps"
+**Last Updated**: 2026-11-04T13:04:59.749Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -58,6 +58,8 @@
   - Files: src/web/routes/RunStartPage.tsx, src/web/components/PreflightReport.tsx, src/web/components/InputsForm.tsx, src/web/components/TrustPanel.tsx, src/web/hooks/usePreflight.ts, src/web/api/preflight.ts, tests/e2e/preflight.spec.ts, playwright.config.ts, src/web/styles/theme.css, tests/e2e/shell.spec.ts, src/web/components/TerminalPane.tsx
 - [x] Phase RUN-EXECUTION-1, Task RUN-01: Implement the run record, snapshot, lock, and bounded tail (@backend-engineer)
   - Files: src/server/runs/model.ts, src/server/runs/store.ts, tests/unit/run-model.test.ts, tests/unit/run-store.test.ts
+- [x] Phase RUN-EXECUTION-1, Task RUN-02: Implement prompt assembly, session planning, and handoff notes (@backend-engineer)
+  - Files: src/server/runs/prompts.ts, src/server/runs/handoff.ts, tests/unit/prompts.test.ts
 
 ## Current Task
 - None currently running
@@ -98,6 +100,8 @@
 - Task PRE-04: Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed; automated keyboard, focus, Escape, and browser coverage passed.
 - Task PRE-04: No live Copilot trust dialog or paid model call was performed; the trust flow used an isolated fake executable and a temporary Copilot config.
 - Task RUN-01: npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.
+- Task RUN-02: npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.
+- Task RUN-02: No live harness process, prompt, or model call was started, by task constraint; all planning is pure and unit-tested.
 
 ## Notes
 - Workflow engine run 25930d7e-150c-4ea9-a081-47fcf1941eb6
