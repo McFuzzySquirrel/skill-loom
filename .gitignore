@@ -1,3 +1,11 @@
 node_modules/
+dist/
+coverage/
+.tmp/
+*.tsbuildinfo
+test-results/
+playwright-report/
+blob-report/
 docs/engine-run.log
 docs/artifacts/
+.slan/runs/

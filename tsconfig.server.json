@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2024"],
+    "types": ["node"],
+    "rootDir": ".",
+    "outDir": "dist",
+    "sourceMap": true,
+    "noEmitOnError": true
+  },
+  "include": [
+    "src/server/**/*.ts",
+    "src/shared/**/*.ts",
+    "scripts/**/*.ts",
+    "tests/unit/**/*.ts",
+    "tests/integration/**/*.ts",
+    "vitest.config.ts"
+  ],
+  "exclude": ["node_modules", "dist", "tests/e2e"]
+}
