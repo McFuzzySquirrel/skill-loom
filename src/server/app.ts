@@ -18,6 +18,13 @@ import {
 import type { CatalogService } from './catalog/merge.js';
 import type { ChainService } from './chains/service.js';
 import { createConfigStore, type ConfigStore } from './config/store.js';
+import type { HarnessRegistry } from './harness/registry.js';
+import type {
+  HarnessAuthStrategy,
+  LocalCommandRunner,
+} from './preflight/auth.js';
+import type { PreflightEngine } from './preflight/engine.js';
+import type { TrustSessionService } from './preflight/trust-session.js';
 import type { GitInitRunner } from './projects/registry.js';
 import { routes } from './routes/index.js';
 import {
@@ -101,6 +108,22 @@ export interface BuildAppOptions {
   terminalManager?: TerminalManager;
   /** Git initializer seam used by the project registry. */
   projectGitInit?: GitInitRunner;
+  /** Injected harness adapter registry shared by preflight and trust routes. */
+  harnessRegistry?: HarnessRegistry;
+  /** Injected command runner for static auth probes and git status. */
+  preflightCommandRunner?: LocalCommandRunner;
+  /** Injected trust-config reader for preflight and trust verification. */
+  preflightReadFileText?: (path: string) => Promise<string>;
+  /** Injected home directory for trust-config and auth-file resolution. */
+  preflightHomeDirectory?: string;
+  /** Injected environment for auth evidence, trust, and harness PATH lookup. */
+  preflightEnv?: NodeJS.ProcessEnv;
+  /** Override auth evidence strategies in tests or for a future harness. */
+  preflightAuthStrategies?: readonly HarnessAuthStrategy[];
+  /** Pre-built preflight engine seam. */
+  preflightEngine?: PreflightEngine;
+  /** Pre-built Copilot trust-session service seam. */
+  trustSessionService?: TrustSessionService;
 }
 
 /** Strip IPv6 brackets and compare case-insensitively. */
@@ -326,6 +349,26 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     ...(options.projectGitInit === undefined ? {} : { gitInit: options.projectGitInit }),
     ...(options.catalogService === undefined ? {} : { catalogService: options.catalogService }),
     ...(options.chainService === undefined ? {} : { chainService: options.chainService }),
+    ...(options.harnessRegistry === undefined ? {} : { harnessRegistry: options.harnessRegistry }),
+    ...(options.preflightCommandRunner === undefined
+      ? {}
+      : { preflightCommandRunner: options.preflightCommandRunner }),
+    ...(options.preflightReadFileText === undefined
+      ? {}
+      : { preflightReadFileText: options.preflightReadFileText }),
+    ...(options.preflightHomeDirectory === undefined
+      ? {}
+      : { preflightHomeDirectory: options.preflightHomeDirectory }),
+    preflightEnv: options.preflightEnv ?? env,
+    ...(options.preflightAuthStrategies === undefined
+      ? {}
+      : { preflightAuthStrategies: options.preflightAuthStrategies }),
+    ...(options.preflightEngine === undefined
+      ? {}
+      : { preflightEngine: options.preflightEngine }),
+    ...(options.trustSessionService === undefined
+      ? {}
+      : { trustSessionService: options.trustSessionService }),
   });
 
   return app;
