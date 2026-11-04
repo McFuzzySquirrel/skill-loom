@@ -1,7 +1,7 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T13:18:34.745Z",
+  "lastUpdatedAt": "2026-11-04T13:26:48.232Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
@@ -1328,10 +1328,38 @@
     },
     "RUN-05": {
       "taskId": "RUN-05",
-      "status": "pending",
+      "status": "complete",
       "ownerAgent": "backend-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 1,
+      "outputFiles": [
+        "src/server/runs/automatic.ts",
+        "tests/unit/automatic-runner.test.ts"
+      ],
+      "startedAt": "2026-11-04T13:18:35.383Z",
+      "usage": {
+        "source": "unavailable",
+        "note": "opencode usage unavailable: Unterminated string in JSON at position 620963 (line 2216 column 83)"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/RUN-05.2026-11-04T13-26-48-221Z.attempt-1.result.json",
+          "usage": {
+            "source": "unavailable",
+            "note": "opencode usage unavailable: Unterminated string in JSON at position 620963 (line 2216 column 83)"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T13:26:48.227Z",
+      "agentOutput": "I'll start by reading the execution file to understand the task.\nNow I have a clear picture. Let me implement the automatic runner.\nNow let me write the comprehensive test suite.\nImplemented the automatic OpenCode and Copilot runner state machine.\n\n## Files created\n- `src/server/runs/automatic.ts`\n- `tests/unit/automatic-runner.test.ts`\n\nNo other project files were changed. `docs/artifacts/` and the execution file were not modified.\n\n## What was implemented\n- Adapter-driven automatic advancement: `osc-working-idle` uses a PTY surface; `process-exit` uses a headless process surface.\n- OpenCode advances only on `OSC 7501 state=working` followed by `state=idle` in the same step, then stops the child gracefully and starts the next planned step.\n- Copilot runs one headless process per step, advances only on exit 0, and fails/pauses on non-zero exit. Broad flags come only from the chain opt-in through the adapter.\n- Bounded per-step timeout (default 30 minutes) pauses with a failed step when the completion signal never arrives.\n- Pause stops advancement after the current signal; Run next starts the next pending step without changing mode. Resume, Retry, Skip, and Abort are also supported.\n- Shared, fresh, and fork plans are consumed from `planRunSessions`; native OpenCode fork and Copilot handoff are both covered.\n- Process cleanup, timeout cleanup, bounded tails, skill observation, atomic persistence callback, and serialized transitions (`whenSettled`) are included.\n\n## Validation\n- `npx vitest run tests/unit/automatic-runner.test.ts` — 22 passed\n- `npx vitest run` — 25 files, 479 tests passed\n- `npm run typecheck:server` — passed\n- `npm run build:server` — passed\n\n```forge-result\n{\"summary\":\"Implemented adapter-driven automatic OpenCode and Copilot runners with signal-only advancement, timeout/failure pausing, Pause/Run-next controls, shared/fresh/fork sessions, permission opt-in enforcement, and bounded cleanup. Added 22 focused fake-process/fake-timer tests; all declared and focused checks pass.\",\"decisions\":[\"The automatic surface is selected from adapter.automaticAdvancement: osc-working-idle uses a PTY, process-exit uses a headless process. The runner never branches on a harness name.\",\"Automatic steps always use the adapter's buildHeadlessCommand so OpenCode run --fork is honored for fork chains while the command still runs on a PTY surface.\",\"Each step gets a fresh Osc7501StateMachine; only the working-to-idle advanced edge can complete a step. Idle-only, clear-reset, quiet output, and process exit without a completion edge never advance.\",\"Pause records the paused run immediately but leaves the in-flight process alive so its declared signal can still complete the current step; the next pending step waits for runNext or resume.\",\"Timeout and non-zero exit mark the step failed and the run paused, keeping Retry, Skip, Abort, and explicit Run next available. No failure auto-continues.\",\"Success reasons record the concrete advancement signal (COMPLETION_SIGNAL or PROCESS_EXITED), while failures record stable bounded reasons.\",\"Signal-driven transitions are serialized through a queue with whenSettled() so persistence and sequential step spawning stay ordered without sleeps.\"],\"interfaces\":[\"src/server/runs/automatic.ts: AutomaticRunner, createAutomaticRunner, AutomaticRunnerOptions, AutomaticRunnerState, AutomaticRunnerError, AUTOMATIC_RUNNER_ERROR_CODES, AUTOMATIC_STEP_REASONS, AUTOMATIC_ACTIONS, AUTOMATIC_EVENT_TYPES, AutomaticRunEvent\",\"src/server/runs/automatic.ts: AutomaticSpawnSpec, AutomaticSpawnSurface, AutomaticProcess, AutomaticSpawner, AutomaticTimers, automaticSurfaceFor, isFinalAutomaticStatus, DEFAULT_AUTOMATIC_STEP_TIMEOUT_MS\",\"AutomaticRunner methods: start, pause, resume, runNext, next, retry, skip, abort, applyAction, dispose, whenSettled, getRun, onEvent, state, terminalId\"],\"tests\":[\"npx vitest run tests/unit/automatic-runner.test.ts: exit 0 (22 tests)\",\"npx vitest run: exit 0 (25 files, 479 tests)\",\"npm run typecheck:server: exit 0\",\"npm run build:server: exit 0\"],\"warnings\":[\"npm ci was run because node_modules was absent in the sandbox worktree; package-lock.json and dependency versions were unchanged.\",\"docs/EXECUTION-AUDIT.jsonl was already modified before this task and was left untouched.\",\"Tests use injected fake processes and fake timers; no live harness process or model call was started, by task constraint.\"],\"unresolved\":[]}\n```\n",
+      "artifactId": "work-run-05-001",
+      "inputArtifactIds": [
+        "work-run-02-001",
+        "work-run-03-001",
+        "work-found-05-001",
+        "work-run-01-001"
+      ]
     },
     "RUN-06": {
       "taskId": "RUN-06",

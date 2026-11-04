@@ -4,7 +4,7 @@
 **Phase**: RUN-EXECUTION-2
 **Status**: In Progress
 **Validation Gaps**: 26 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T13:18:34.747Z
+**Last Updated**: 2026-11-04T13:26:48.236Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -64,12 +64,13 @@
   - Files: src/server/runs/osc.ts, src/server/runs/observations.ts, tests/unit/osc.test.ts, src/server/harness/copilot.ts, src/server/harness/opencode.ts, src/server/harness/types.ts
 - [x] Phase RUN-EXECUTION-2, Task RUN-04: Implement the supervised runner (@backend-engineer)
   - Files: src/server/runs/supervised.ts, tests/unit/supervised-runner.test.ts
+- [x] Phase RUN-EXECUTION-2, Task RUN-05: Implement the automatic OpenCode and Copilot runners (@backend-engineer)
+  - Files: src/server/runs/automatic.ts, tests/unit/automatic-runner.test.ts
 
 ## Current Task
 - None currently running
 
 ## Remaining
-- [ ] Phase RUN-EXECUTION-2: Phase 2: Supervised and Automatic Runners
 - [ ] Phase RUN-EXECUTION-3: Phase 3: Run Orchestration and API
 - [ ] Phase RUN-EXECUTION-4: Phase 4: Run View
 - [ ] Phase RUN-EXECUTION-5: Phase 5: Live Harness Verification
