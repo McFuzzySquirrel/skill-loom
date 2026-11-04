@@ -1,12 +1,12 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T10:50:29.253Z",
+  "lastUpdatedAt": "2026-11-04T11:02:11.942Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
   "status": "running",
-  "currentPhase": "PROJECT-WORKSPACE-1",
+  "currentPhase": "PROJECT-WORKSPACE-2",
   "tasks": {
     "FOUND-01": {
       "taskId": "FOUND-01",
@@ -362,10 +362,48 @@
     },
     "PROJ-03": {
       "taskId": "PROJ-03",
-      "status": "pending",
+      "status": "complete",
       "ownerAgent": "frontend-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 1,
+      "outputFiles": [
+        "src/web/routes/ProjectsPage.tsx",
+        "src/web/components/FolderBrowser.tsx",
+        "src/web/components/RecentProjects.tsx",
+        "src/web/components/NewProjectForm.tsx",
+        "src/web/api/projects.ts",
+        "tests/e2e/projects.spec.ts",
+        "src/web/App.tsx",
+        "src/web/styles/theme.css",
+        "src/web/components/InlineError.tsx",
+        "src/web/hooks/useDirectoryListing.ts",
+        "src/web/hooks/useRecentProjects.ts"
+      ],
+      "startedAt": "2026-11-04T10:50:29.850Z",
+      "usage": {
+        "source": "unavailable",
+        "note": "opencode usage unavailable: Expected ',' or '}' after property value in JSON at position 654902 (line 6308 column 25)"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/PROJ-03.2026-11-04T11-02-11-935Z.attempt-1.result.json",
+          "usage": {
+            "source": "unavailable",
+            "note": "opencode usage unavailable: Expected ',' or '}' after property value in JSON at position 654902 (line 6308 column 25)"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T11:02:11.938Z",
+      "agentOutput": "I'll start by reading the execution file.\nNow I'll implement the typed project API client.\nImplemented the PROJ-03 project selection screen and browser coverage.\n\n**What changed**\n- Real project screen with recent projects, server-backed folder browser, absolute-path entry, Up/Home navigation, open-folder, and new-project form with optional `git init`.\n- Added `/projects/:projectId` workspace route showing canonical path, git state, `.slan` state, and chain/catalog placeholders.\n- Distinct loading, empty, invalid-path, warning, and server-error states; recent projects remain usable when a path fails.\n- Removal confirmation explicitly states files are not deleted.\n- Keyboard-complete flow with focus management and polite status-region announcements.\n- Playwright spec with isolated config/home/temp fixtures covering browsing, opening recent projects, creation with and without git, invalid paths, ordering, removal, state rendering, and keyboard-only use.\n\n**Validation**\n- `npx playwright test tests/e2e/projects.spec.ts` — 7 passed\n- `npx playwright test tests/e2e/shell.spec.ts` — 12 passed\n- `npm run typecheck` — passed\n- `npx vitest run` — 130 passed\n\n**Files created**\n- `src/web/api/projects.ts`\n- `src/web/components/FolderBrowser.tsx`\n- `src/web/components/RecentProjects.tsx`\n- `src/web/components/NewProjectForm.tsx`\n- `src/web/components/InlineError.tsx`\n- `src/web/hooks/useDirectoryListing.ts`\n- `src/web/hooks/useRecentProjects.ts`\n- `tests/e2e/projects.spec.ts`\n\n**Files changed**\n- `src/web/routes/ProjectsPage.tsx`\n- `src/web/App.tsx`\n- `src/web/styles/theme.css`\n\n```forge-result\n{\n  \"summary\": \"Implemented the PROJ-03 project selection screen with typed API decoding, recent projects, server-side folder browser, absolute-path entry, Up/Home navigation, open-folder, new-project creation with optional git init, a project workspace route, distinct request states, accessible confirmation and keyboard flows, and real-API Playwright coverage.\",\n  \"decisions\": [\n    \"Project ids returned by the server are used verbatim as route keys and cache keys; names and paths are never used as React keys.\",\n    \"Successful registrations are cached for the current browser session so the project route can show exact git and .slan results; reloads reconstruct the same facts from the recent list plus a metadata-only directory listing.\",\n    \"The folder API does not expose a server home directory, so the Home control navigates to the filesystem root and this limitation is documented in the component.\",\n    \"Removal uses an in-page confirmation group rather than window.confirm so the consequence text, focus handling, and keyboard path stay inside the accessible screen.\",\n    \"Project and recent-list failures render inline alerts with the server message while leaving sibling regions usable instead of replacing the screen with an empty state.\"\n  ],\n  \"interfaces\": [\n    \"src/web/api/projects.ts: RecentProject, ProjectRegistration, ProjectSlanState, DirectoryEntry, DirectoryListing, CreateProjectInput, ProjectsApi, createProjectsApi, projectsApi, rememberProject, recallProject, toApiClientError\",\n    \"src/web/components/FolderBrowser.tsx: FolderBrowser, FOLDER_BROWSER_HOME\",\n    \"src/web/components/RecentProjects.tsx: RecentProjects\",\n    \"src/web/components/NewProjectForm.tsx: NewProjectForm\",\n    \"src/web/components/InlineError.tsx: InlineError\",\n    \"src/web/hooks/useDirectoryListing.ts: useDirectoryListing, DirectoryListingState\",\n    \"src/web/hooks/useRecentProjects.ts: useRecentProjects, RecentProjectsState\",\n    \"src/web/routes/ProjectsPage.tsx: ProjectsPage, ProjectPage\",\n    \"src/web/App.tsx: /projects/:projectId route\"\n  ],\n  \"tests\": [\n    \"npx playwright test tests/e2e/projects.spec.ts: 7 passed\",\n    \"npx playwright test tests/e2e/shell.spec.ts: 12 passed\",\n    \"npm run typecheck: passed\",\n    \"npx vitest run: 130 passed in 9 test files\"\n  ],\n  \"unresolved\": [],\n  \"validationLimitations\": [\n    \"Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed.\"\n  ]\n}\n```\n",
+      "validationLimitations": [
+        "Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed."
+      ],
+      "artifactId": "work-proj-03-001",
+      "inputArtifactIds": [
+        "work-proj-02-001",
+        "work-proj-01-001"
+      ]
     },
     "CAT-01": {
       "taskId": "CAT-01",
@@ -603,15 +641,27 @@
     },
     "PROJECT-WORKSPACE-1": {
       "phaseId": "PROJECT-WORKSPACE-1",
-      "status": "running",
+      "status": "complete",
       "contractFingerprint": "{\"title\":\"Phase 1: Filesystem and Project APIs\",\"description\":\"```forge-task {   \\\"id\\\": \\\"PROJ-01\\\",\",\"completionPolicy\":\"strict\",\"dependencies\":[\"APP-FOUNDATION-2\"],\"requiredOutputs\":[\"src/server/projects/paths.ts\",\"src/server/projects/browser.ts\",\"src/server/routes/fs.ts\",\"src/server/routes/index.ts\",\"tests/unit/projects-paths.test.ts\",\"tests/integration/fs-routes.test.ts\",\"src/server/projects/registry.ts\",\"src/server/routes/projects.ts\",\"tests/unit/project-registry.test.ts\",\"tests/integration/projects-routes.test.ts\"],\"validationCommands\":[],\"tasks\":[{\"id\":\"PROJ-01\",\"title\":\"Implement the server-side folder browser\",\"description\":\"Implement canonical path resolution and directory listing for the folder browser. Accept any readable absolute path, resolve it with realpath, reject files, non-directories, and unreadable paths with typed errors, and return the canonical path, parent, entries with name/path/isDirectory/isGitRepo/hasSlan, and a truncated flag. Sort directories before files and hide unreadable children without failing the listing. Register GET /api/fs through src/server/routes/index.ts. Add tests/unit/projects-paths.test.ts for canonicalization, traversal rejection, and symlink handling, and tests/integration/fs-routes.test.ts for listing, file rejection, and unreadable paths. Do not register projects or read file contents.\",\"ownerAgent\":\"backend-engineer\",\"required\":true,\"dependencies\":[\"FOUND-03\"],\"expectedOutputs\":[\"src/server/projects/paths.ts\",\"src/server/projects/browser.ts\",\"src/server/routes/fs.ts\",\"src/server/routes/index.ts\",\"tests/unit/projects-paths.test.ts\",\"tests/integration/fs-routes.test.ts\"],\"validationCommands\":[\"npx vitest run tests/unit/projects-paths.test.ts tests/integration/fs-routes.test.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"PROJ-FR-01: List directories for the server-side folder browser from any readable absolute path, canonicalize every requested path with realpath, return parent, entries, git status, and Slan-data presence, reject files and unreadable paths with typed errors, and never expose file contents.\",\"PROJ-FR-06: Expose project APIs for listing directories, opening or creating a project, listing recent projects, and removing a recent entry, all returning the shared error envelope.\"],\"acceptanceCriteria\":[\"Relative and non-absolute paths are rejected or resolved against the documented base, never silently accepted\",\"The returned path is canonical and matches realpath\",\"A file path returns a typed not-a-directory error\",\"An unreadable child is omitted while the listing succeeds\",\"The integration test reaches GET /api/fs through src/server/app.ts\"],\"constraints\":[\"Do not read or return file contents\",\"Do not use shell commands for listing\",\"ARCH-03: The server owns all filesystem traversal, config/chain/run persistence, CLI process spawning, and PTY handling. The browser performs no shell execution and receives only typed API and WebSocket data.\",\"SEC-01: Spawn harness CLIs with an executable plus argument array and no shell string interpolation. Canonicalize project and chain paths with realpath and reject traversal outside the intended project data directory.\",\"SEC-03: Render terminal bytes only through xterm.js and render skill text through escaped React text. Do not use dangerouslySetInnerHTML for harness, skill, or run content.\"],\"references\":[\"docs/PRD.md#6.3 Key APIs and Interfaces\",\"docs/PRD.md#8.2 Risk Acceptance\",\"docs/features/project-workspace.md#PROJ-FR-01\",\"docs/features/project-workspace.md#PROJ-FR-06\",\"docs/PRD.md#ARCH-03\",\"docs/PRD.md#SEC-01\",\"docs/PRD.md#SEC-03\"]}},{\"id\":\"PROJ-02\",\"title\":\"Register projects, recent entries, and .slan initialization\",\"description\":\"Implement the project registry. Open an existing directory by canonical path and assign a stable id derived from the path; create a new empty directory under a selected parent with an optional git init; reject existing targets and missing parents. Persist recent projects in the global config with id, canonical path, display name, and lastOpenedAt, return them newest first, and remove an entry without touching the filesystem. On first open, create <project>/.slan with a .gitignore containing runs/ when absent, preserve an existing .slan/.gitignore, and report existing chains. Register POST /api/projects, GET /api/projects/recent, and DELETE /api/projects/recent/:projectId through src/server/routes/index.ts. Add tests/unit/project-registry.test.ts and tests/integration/projects-routes.test.ts covering open, create, git init success and failure, recent ordering, removal, and idempotent .slan setup. Do not create chains or run directories here.\",\"ownerAgent\":\"backend-engineer\",\"required\":true,\"dependencies\":[\"PROJ-01\",\"FOUND-02\"],\"expectedOutputs\":[\"src/server/projects/registry.ts\",\"src/server/routes/projects.ts\",\"src/server/routes/index.ts\",\"tests/unit/project-registry.test.ts\",\"tests/integration/projects-routes.test.ts\"],\"validationCommands\":[\"npx vitest run tests/unit/project-registry.test.ts tests/integration/projects-routes.test.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"PROJ-FR-02: Register an existing directory or create a new empty directory under a selected parent, optionally run git init, reject a create target that already exists or whose parent is missing, and perform no scaffolding or template copying.\",\"PROJ-FR-03: Persist recent projects in global configuration with id, canonical path, display name, and lastOpenedAt; return newest first and allow removing an entry without deleting files.\",\"PROJ-FR-04: Create or extend <project>/.slan/ with a .gitignore containing runs/ when a project is first opened, never rewrite an existing .gitignore, never delete files, and detect existing chains.\",\"PROJ-FR-06: Expose project APIs for listing directories, opening or creating a project, listing recent projects, and removing a recent entry, all returning the shared error envelope.\"],\"acceptanceCriteria\":[\"Opening the same canonical path twice returns the same project id\",\"Creating an existing directory fails with a conflict and leaves it untouched\",\"The optional git init creates a repository only when requested and git is available\",\"Recent projects are returned newest first and removal leaves the directory intact\",\"First open creates .slan/.gitignore with runs/ and preserves an existing file\",\"All project routes are registered through src/server/routes/index.ts\"],\"constraints\":[\"Do not copy templates or scaffold application code\",\"Do not delete project files\",\"ARCH-04: Persist configuration, chains, and runs as versioned JSON files with atomic temp-file replacement. Do not introduce a database or a second persistence model in v1.\",\"PRIV-02: Removing a recent project removes only the recent-entry record. Chain deletion touches only the selected chain file inside the project's .slan/chains directory.\",\"SEC-01: Spawn harness CLIs with an executable plus argument array and no shell string interpolation. Canonicalize project and chain paths with realpath and reject traversal outside the intended project data directory.\"],\"references\":[\"docs/PRD.md#6.3 Key APIs and Interfaces\",\"docs/PRD.md#10.1 Project\",\"docs/features/project-workspace.md#PROJ-FR-02\",\"docs/features/project-workspace.md#PROJ-FR-03\",\"docs/features/project-workspace.md#PROJ-FR-04\",\"docs/features/project-workspace.md#PROJ-FR-06\",\"docs/PRD.md#ARCH-04\",\"docs/PRD.md#PRIV-02\",\"docs/PRD.md#SEC-01\"]}}]}",
-      "updatedAt": "2026-11-04T10:41:24.341Z"
+      "updatedAt": "2026-11-04T10:50:29.744Z",
+      "validationEvidence": [
+        "output exists: src/server/projects/paths.ts",
+        "output exists: src/server/projects/browser.ts",
+        "output exists: src/server/routes/fs.ts",
+        "output exists: src/server/routes/index.ts",
+        "output exists: tests/unit/projects-paths.test.ts",
+        "output exists: tests/integration/fs-routes.test.ts",
+        "output exists: src/server/projects/registry.ts",
+        "output exists: src/server/routes/projects.ts",
+        "output exists: tests/unit/project-registry.test.ts",
+        "output exists: tests/integration/projects-routes.test.ts"
+      ]
     },
     "PROJECT-WORKSPACE-2": {
       "phaseId": "PROJECT-WORKSPACE-2",
-      "status": "pending",
+      "status": "running",
       "contractFingerprint": "{\"title\":\"Phase 2: Project Screen\",\"description\":\"```forge-task {   \\\"id\\\": \\\"PROJ-03\\\",\",\"completionPolicy\":\"strict\",\"dependencies\":[\"PROJECT-WORKSPACE-1\"],\"requiredOutputs\":[\"src/web/routes/ProjectsPage.tsx\",\"src/web/components/FolderBrowser.tsx\",\"src/web/components/RecentProjects.tsx\",\"src/web/components/NewProjectForm.tsx\",\"src/web/api/projects.ts\",\"tests/e2e/projects.spec.ts\"],\"validationCommands\":[],\"tasks\":[{\"id\":\"PROJ-03\",\"title\":\"Build the project selection screen\",\"description\":\"Replace the placeholder projects route with the real project screen. Implement recent projects, the folder browser, typed path entry, Up/Home navigation, open-folder action, and the new-project form with optional git init. Show loading, empty, invalid-path, and server-error states; keep recent projects usable when a path fails. On success, navigate to the project route and show canonical path, git state, and .slan state. Add tests/e2e/projects.spec.ts covering open existing, create with and without git, invalid path, recent ordering, removal confirmation, and keyboard-only selection. Do not implement chain or catalog content beyond placeholders.\",\"ownerAgent\":\"frontend-engineer\",\"required\":true,\"dependencies\":[\"PROJ-02\"],\"expectedOutputs\":[\"src/web/routes/ProjectsPage.tsx\",\"src/web/components/FolderBrowser.tsx\",\"src/web/components/RecentProjects.tsx\",\"src/web/components/NewProjectForm.tsx\",\"src/web/api/projects.ts\",\"tests/e2e/projects.spec.ts\"],\"validationCommands\":[\"npx playwright test tests/e2e/projects.spec.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"PROJ-FR-05: Provide a project screen that browses and lists directories, accepts a typed absolute path, opens a recent project, creates a folder with optional git init, and shows loading, empty, invalid-path, and server-error states.\"],\"acceptanceCriteria\":[\"The reviewer can open a recent project and an arbitrary directory through the browser\",\"Creating a folder with git init enabled produces a repository and opens the project\",\"An invalid path shows an inline error without clearing recent projects\",\"The browser and new-project form are operable with the keyboard alone\",\"Removing a recent project requires confirmation and does not delete files\",\"The Playwright test drives the screen through src/web/App.tsx and the real API\"],\"constraints\":[\"Do not add templates or scaffolding options\",\"Do not hide server errors behind a generic empty state\",\"NFR-UX-01: Each screen exposes loading, empty, and error states. Delete, abort, restart, and trust actions require explicit confirmation and state the consequence.\",\"A11Y-01: Every authoring action, including adding, removing, reordering, saving, preflight, and run control, must be reachable and executable with the keyboard alone, with move-up/move-down alternatives to drag-and-drop.\",\"A11Y-02: Provide visible focus indicators, semantic labels, a skip link, logical focus order, and aria-live announcements for step transitions, preflight results, and run state.\"],\"references\":[\"docs/features/project-workspace.md#4. UI / Interaction Design\",\"docs/PRD.md#10.1 Project\",\"docs/features/project-workspace.md#PROJ-FR-05\",\"docs/PRD.md#NFR-UX-01\",\"docs/PRD.md#A11Y-01\",\"docs/PRD.md#A11Y-02\"]}}]}",
-      "updatedAt": "2026-11-04T10:23:05.185Z"
+      "updatedAt": "2026-11-04T10:50:29.746Z"
     },
     "SKILL-CATALOG-1": {
       "phaseId": "SKILL-CATALOG-1",

@@ -5,7 +5,7 @@ import { StatusAnnouncerProvider } from './components/StatusRegion';
 import { Redirect, RouterProvider, matchRoute, useRouter } from './router';
 import { ChainBuilderPage } from './routes/ChainBuilderPage';
 import { NotFoundPage } from './routes/NotFoundPage';
-import { ProjectsPage } from './routes/ProjectsPage';
+import { ProjectPage, ProjectsPage } from './routes/ProjectsPage';
 import { RunPage } from './routes/RunPage';
 import { RunStartPage } from './routes/RunStartPage';
 
@@ -20,6 +20,11 @@ const ROUTES: RouteDefinition[] = [
     pattern: '/projects',
     title: 'Projects',
     render: () => <ProjectsPage />,
+  },
+  {
+    pattern: '/projects/:projectId',
+    title: 'Project workspace',
+    render: (params) => <ProjectPage projectId={params.projectId ?? ''} />,
   },
   {
     pattern: '/projects/:projectId/chains/:chainId/run',

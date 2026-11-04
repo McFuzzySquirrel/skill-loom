@@ -1,10 +1,10 @@
 # Project Progress
 
 ## Current State
-**Phase**: PROJECT-WORKSPACE-1
+**Phase**: PROJECT-WORKSPACE-2
 **Status**: In Progress
-**Validation Gaps**: 4 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T10:50:29.254Z
+**Validation Gaps**: 5 unverified check(s) - see "Validation Gaps"
+**Last Updated**: 2026-11-04T11:02:11.943Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -24,12 +24,13 @@
   - Files: src/server/projects/paths.ts, src/server/projects/browser.ts, src/server/routes/fs.ts, src/server/routes/index.ts, tests/unit/projects-paths.test.ts, tests/integration/fs-routes.test.ts
 - [x] Phase PROJECT-WORKSPACE-1, Task PROJ-02: Register projects, recent entries, and .slan initialization (@backend-engineer)
   - Files: src/server/projects/registry.ts, src/server/routes/projects.ts, src/server/routes/index.ts, tests/unit/project-registry.test.ts, tests/integration/projects-routes.test.ts, src/server/app.ts
+- [x] Phase PROJECT-WORKSPACE-2, Task PROJ-03: Build the project selection screen (@frontend-engineer)
+  - Files: src/web/routes/ProjectsPage.tsx, src/web/components/FolderBrowser.tsx, src/web/components/RecentProjects.tsx, src/web/components/NewProjectForm.tsx, src/web/api/projects.ts, tests/e2e/projects.spec.ts, src/web/App.tsx, src/web/styles/theme.css, src/web/components/InlineError.tsx, src/web/hooks/useDirectoryListing.ts, src/web/hooks/useRecentProjects.ts
 
 ## Current Task
 - None currently running
 
 ## Remaining
-- [ ] Phase PROJECT-WORKSPACE-2: Phase 2: Project Screen
 - [ ] Phase SKILL-CATALOG-1: Phase 1: Discovery and Catalog API
 - [ ] Phase SKILL-CATALOG-2: Phase 2: Catalog Panel and Live Verification
 - [ ] Phase CHAIN-AUTHORING-1: Phase 1: Model, Storage, and API
@@ -52,6 +53,7 @@
 - Task FOUND-01: npm run check and the live-probe commands reference scripts created by ACC-01, CAT-05, and RUN-08 and were not run.
 - Task FOUND-03: Full npm run build was not run because the Vite web entry (src/web) belongs to FOUND-04 and does not exist yet. Production static serving and SPA fallback were verified with a fixture web root through the real composition root.
 - Task FOUND-05: The full npm run build (web plus server) was not run because src/web is owned by FOUND-04 and does not exist yet; npm run build:server passed.
+- Task PROJ-03: Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed.
 
 ## Notes
 - Workflow engine run 25930d7e-150c-4ea9-a081-47fcf1941eb6
