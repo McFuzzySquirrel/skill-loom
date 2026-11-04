@@ -1,0 +1,198 @@
+{
+  "version": 1,
+  "taskId": "CAT-05",
+  "generatedAt": "2026-11-04T11:21:16.498Z",
+  "node": "v26.13.0",
+  "platform": "linux-arm64",
+  "slanVersion": "0.1.0",
+  "durationMs": 1297,
+  "result": "passed",
+  "isolation": {
+    "temporaryRoot": "<temporary-root>",
+    "copilotHomeMode": "isolated",
+    "slanConfigDirMode": "isolated",
+    "environmentVariablesSet": [
+      "COPILOT_HOME",
+      "SLAN_CONFIG_DIR"
+    ]
+  },
+  "prerequisites": {
+    "opencode": {
+      "executable": "opencode",
+      "command": "opencode --version",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 205,
+      "version": "2.2.5",
+      "expectedVersion": "2.2.5",
+      "versionMatches": true,
+      "available": true
+    },
+    "copilot": {
+      "executable": "copilot",
+      "command": "copilot --version",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 181,
+      "version": "1.0.105",
+      "expectedVersion": "1.0.105",
+      "versionMatches": true,
+      "available": true
+    }
+  },
+  "harnesses": {
+    "opencode": {
+      "harness": "opencode",
+      "version": "2.2.5",
+      "expectedVersion": "2.2.5",
+      "versionMatches": true,
+      "discovery": "scanOpenCodeSkills (project, personal, and Slan extra directories)",
+      "workingDirectory": "<temporary-root>/project",
+      "status": "passed",
+      "entryCount": 1,
+      "bySource": {
+        "project": 1,
+        "personal": 0,
+        "custom": 0,
+        "plugin": 0,
+        "builtin": 0,
+        "slan-extra": 0
+      },
+      "probeFound": true,
+      "probeSource": "project",
+      "probePath": "<temporary-root>/project/.opencode/skills/slan-live-probe/SKILL.md",
+      "existingSource": {
+        "kind": "personal-or-builtin",
+        "available": false,
+        "sources": [
+          "project"
+        ]
+      },
+      "warnings": [],
+      "durationMs": 13
+    },
+    "copilot": {
+      "harness": "copilot",
+      "version": "1.0.105",
+      "expectedVersion": "1.0.105",
+      "versionMatches": true,
+      "discovery": "copilot skill list --json",
+      "workingDirectory": "<temporary-root>/project",
+      "status": "passed",
+      "entryCount": 3,
+      "bySource": {
+        "project": 1,
+        "personal": 0,
+        "custom": 0,
+        "plugin": 0,
+        "builtin": 2,
+        "slan-extra": 0
+      },
+      "probeFound": true,
+      "probeSource": "project",
+      "probePath": "<temporary-root>/project/.agents/skills/slan-live-probe/SKILL.md",
+      "existingSource": {
+        "kind": "personal-or-builtin",
+        "available": true,
+        "sources": [
+          "builtin",
+          "project"
+        ]
+      },
+      "warnings": [],
+      "durationMs": 879,
+      "command": "copilot skill list --json",
+      "exitCode": 0,
+      "timedOut": false
+    }
+  },
+  "checks": [
+    {
+      "id": "prereq.opencode",
+      "harness": "opencode",
+      "description": "Confirm the opencode CLI is installed and reports a version.",
+      "expected": "opencode --version exits 0 and prints a semantic version.",
+      "observed": "opencode --version exited 0 and reported 2.2.5.",
+      "status": "passed",
+      "passed": true,
+      "durationMs": 205
+    },
+    {
+      "id": "prereq.copilot",
+      "harness": "copilot",
+      "description": "Confirm the copilot CLI is installed and reports a version.",
+      "expected": "copilot --version exits 0 and prints a semantic version.",
+      "observed": "copilot --version exited 0 and reported 1.0.105.",
+      "status": "passed",
+      "passed": true,
+      "durationMs": 181
+    },
+    {
+      "id": "opencode.probe",
+      "harness": "opencode",
+      "description": "Discover the temporary OpenCode probe skill with the real scanner.",
+      "expected": "A project entry named slan-live-probe at <temporary-root>/project/.opencode/skills/slan-live-probe/SKILL.md.",
+      "observed": "Found 1 entries in total, 1 from the project source.",
+      "status": "passed",
+      "passed": true,
+      "durationMs": 13
+    },
+    {
+      "id": "opencode.existing-source",
+      "harness": "opencode",
+      "description": "Assert an existing personal or builtin source is returned where available.",
+      "expected": "At least one personal or builtin entry when the machine has one installed.",
+      "observed": "Sources returned: project. No personal or builtin source is available on this machine.",
+      "status": "not-applicable",
+      "passed": true
+    },
+    {
+      "id": "copilot.command",
+      "harness": "copilot",
+      "description": "Run the real copilot skill list --json discovery command.",
+      "expected": "Exit code 0 without a timeout.",
+      "observed": "copilot skill list --json exited 0",
+      "status": "passed",
+      "passed": true,
+      "durationMs": 875
+    },
+    {
+      "id": "copilot.probe",
+      "harness": "copilot",
+      "description": "Discover the temporary Copilot probe skill through copilot skill list --json.",
+      "expected": "A project entry named slan-live-probe at <temporary-root>/project/.agents/skills/slan-live-probe/SKILL.md.",
+      "observed": "Found 3 entries in total, 1 from the project source.",
+      "status": "passed",
+      "passed": true,
+      "durationMs": 879
+    },
+    {
+      "id": "copilot.existing-source",
+      "harness": "copilot",
+      "description": "Assert an existing personal or builtin source is returned where available.",
+      "expected": "At least one personal or builtin entry when the machine has one installed.",
+      "observed": "Sources returned: builtin, project. Existing source(s): builtin.",
+      "status": "passed",
+      "passed": true
+    },
+    {
+      "id": "cleanup.temporary-root",
+      "harness": "environment",
+      "description": "Remove the temporary project, probe skills, and config directories.",
+      "expected": "The temporary root no longer exists and no child process remains.",
+      "observed": "Temporary root removed; 0 tracked child process(es) remaining.",
+      "status": "passed",
+      "passed": true
+    }
+  ],
+  "warnings": [],
+  "cleanup": {
+    "attempted": true,
+    "temporaryRootRemoved": true,
+    "processesRemaining": 0,
+    "temporaryRoot": null
+  },
+  "limitations": [
+    "OpenCode returned no personal or builtin skill source; this machine has no personal OpenCode skills installed, so only project discovery could be asserted."
+  ]
+}

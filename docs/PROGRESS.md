@@ -1,10 +1,10 @@
 # Project Progress
 
 ## Current State
-**Phase**: SKILL-CATALOG-1
+**Phase**: SKILL-CATALOG-2
 **Status**: In Progress
-**Validation Gaps**: 5 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T11:14:11.357Z
+**Validation Gaps**: 6 unverified check(s) - see "Validation Gaps"
+**Last Updated**: 2026-11-04T11:21:16.547Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -32,9 +32,12 @@
   - Files: src/server/catalog/copilot.ts, tests/unit/catalog-copilot.test.ts, src/server/catalog/types.ts
 - [x] Phase SKILL-CATALOG-1, Task CAT-03: Merge catalog sources and expose the catalog API (@backend-engineer)
   - Files: src/server/catalog/merge.ts, src/server/routes/catalog.ts, src/server/routes/index.ts, tests/unit/catalog-merge.test.ts, tests/integration/catalog-routes.test.ts, src/server/app.ts, src/server/catalog/types.ts
+- [x] Phase SKILL-CATALOG-2, Task CAT-05: Verify live discovery against both harness CLIs (@integration-engineer)
+  - Files: scripts/live-discovery.ts, docs/evidence/live-discovery.json
 
 ## Current Task
-- None currently running
+- [ ] Phase SKILL-CATALOG-2, Task CAT-04: Build the catalog panel and extra-directory settings (@frontend-engineer)
+  - Status: In progress
 
 ## Remaining
 - [ ] Phase SKILL-CATALOG-2: Phase 2: Catalog Panel and Live Verification
@@ -59,6 +62,7 @@
 - Task FOUND-03: Full npm run build was not run because the Vite web entry (src/web) belongs to FOUND-04 and does not exist yet. Production static serving and SPA fallback were verified with a fixture web root through the real composition root.
 - Task FOUND-05: The full npm run build (web plus server) was not run because src/web is owned by FOUND-04 and does not exist yet; npm run build:server passed.
 - Task PROJ-03: Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed.
+- Task CAT-05: The live probe requires installed OpenCode 2.2.5 and Copilot CLI 1.0.105; on machines lacking either CLI the validation command intentionally fails with a clear diagnostic rather than skipping.
 
 ## Notes
 - Workflow engine run 25930d7e-150c-4ea9-a081-47fcf1941eb6
