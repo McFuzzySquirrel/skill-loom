@@ -26,6 +26,16 @@ Run **`forge-build-agent-team`** against canonical vision and features, for init
 
 ---
 
+## Responsibilities
+
+1. Read the canonical PRD and every registered feature document before generating or extending a team.
+2. Map each requirement and implementation task to exactly one specialist owner, using the planned `ownerAgent` values where the planning documents provide them.
+3. Write or extend only the affected agent files in the detected harness agents directory, preserving unaffected files.
+4. Persist the `docs/SKILL-CANDIDATES.json` handoff with stable candidate names, actions, consumers, and reasons.
+5. Validate generated agents and the handoff, and report any authoring correction required instead of silently rewriting the plan.
+
+---
+
 ## Collaboration
 
 - **forge-build-prd**, **forge-decompose-prd**, **forge-build-feature-prd** skills - Upstream authoring skills that produce the inputs I consume.
