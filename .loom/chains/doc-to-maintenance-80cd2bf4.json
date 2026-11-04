@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "id": "doc-to-maintenance-80cd2bf4",
+  "name": "doc to maintenance",
+  "harness": "opencode",
+  "sessionMode": "shared",
+  "steps": [
+    {
+      "id": "step-7ecf3532-3fe4-4a6e-99a4-31109184f00d",
+      "skillName": "create-project-documentation",
+      "instruction": "Use it to create project documentation",
+      "label": "Project documentation"
+    },
+    {
+      "id": "step-3b8ba473-e68c-4407-8612-53894d6b7693",
+      "skillName": "doc-map",
+      "instruction": "Once project documentation has been created, add to document map. Do not include any . folders",
+      "label": "add to docmap"
+    }
+  ],
+  "inputs": [],
+  "automaticPermissionOptIn": false,
+  "createdAt": "2026-11-04T18:57:09.659Z",
+  "updatedAt": "2026-11-04T18:57:16.217Z"
+}
