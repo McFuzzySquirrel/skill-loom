@@ -1,7 +1,7 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T10:29:30.063Z",
+  "lastUpdatedAt": "2026-11-04T10:35:00.143Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
@@ -105,10 +105,53 @@
     },
     "FOUND-03": {
       "taskId": "FOUND-03",
-      "status": "pending",
+      "status": "complete",
       "ownerAgent": "backend-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 1,
+      "outputFiles": [
+        "src/server/app.ts",
+        "src/server/index.ts",
+        "src/server/routes/index.ts",
+        "src/server/routes/health.ts",
+        "src/shared/api.ts",
+        "tests/integration/server.test.ts"
+      ],
+      "startedAt": "2026-11-04T10:29:30.768Z",
+      "usage": {
+        "inputTokens": 49987,
+        "outputTokens": 15312,
+        "reasoningTokens": 23709,
+        "cacheReadTokens": 3010048,
+        "cacheWriteTokens": 0,
+        "costUsd": 0.039940793999999995,
+        "source": "harness"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/FOUND-03.2026-11-04T10-35-00-137Z.attempt-1.result.json",
+          "usage": {
+            "inputTokens": 49987,
+            "outputTokens": 15312,
+            "reasoningTokens": 23709,
+            "cacheReadTokens": 3010048,
+            "cacheWriteTokens": 0,
+            "costUsd": 0.039940793999999995,
+            "source": "harness"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T10:35:00.140Z",
+      "agentOutput": "I'll start by reading the execution file for this task.\nNow I'll implement the composition root, entry point, routes, shared envelope, and integration tests.\nImplemented FOUND-03 and verified it end to end.\n\n## What changed\n\n**Created**\n- `src/shared/api.ts` — shared error envelope, error codes, validation issue type, health response and active-run summary types, envelope guard.\n- `src/server/routes/health.ts` — `GET /api/health` with status, package version, config directory, port, and active-run placeholder.\n- `src/server/routes/index.ts` — single route registration plugin used by the composition root.\n- `src/server/app.ts` — Fastify composition root with loopback-only host validation, `SLAN_HOST`/`SLAN_PORT` resolution, production `dist/web` static serving with SPA fallback, shared 404/error handlers, and config/version/run-state injection seams.\n- `src/server/index.ts` — process entry, `startServer`, idempotent SIGINT/SIGTERM shutdown, direct-execution guard so imports stay side-effect free.\n- `tests/integration/server.test.ts` — 15 tests covering health, envelope shape, thrown-error handling, non-loopback refusal, static/SPA behavior, and real SIGTERM/SIGINT child-process shutdown.\n\nNo existing tracked files were modified.\n\n## Validation actually run\n\n| Command | Result |\n|---|---|\n| `npx vitest run tests/integration/server.test.ts` | Passed — 15/15 tests |\n| `npm test` | Passed — 46/46 tests across 3 files |\n| `npm run typecheck` | Passed — server and web projects |\n| `npm run build:server` | Passed |\n| Compiled `node dist/src/server/index.js` smoke test | Health returned documented JSON; SIGTERM exited with code 0 |\n| Non-loopback child startup (`SLAN_HOST=0.0.0.0`) | Exited non-zero with `HOST_NOT_LOOPBACK` |\n\n```forge-result\n{\n  \"summary\": \"Implemented the Fastify composition root, process entry, loopback-only startup validation, production static/SPA serving, shared API envelope, health route, and graceful SIGINT/SIGTERM shutdown. The declared integration test passes 15/15, the full suite passes 46/46, typecheck passes, and a compiled-server smoke test verified health and SIGTERM exit 0.\",\n  \"decisions\": [\n    \"buildApp validates the bind host before creating Fastify and accepts only 127.0.0.0/8, ::1, and localhost (mapped to 127.0.0.1); a real child process with SLAN_HOST=0.0.0.0 exits non-zero.\",\n    \"Static serving is enabled only when dist/web/index.html exists. The static wildcard routes missing non-API GET/HEAD paths to the SPA shell, while every /api path still returns the JSON envelope.\",\n    \"GET /api/health only resolves the config directory and never reads or creates config.json, so a corrupt config cannot break health or be overwritten.\",\n    \"All failures leave through createApiErrorEnvelope; 5xx responses use a generic message and never expose internal error text or stacks.\",\n    \"SIGINT/SIGTERM handlers are idempotent, remove themselves on shutdown, close Fastify, and let the event loop drain naturally without forcing process.exit.\"\n  ],\n  \"interfaces\": [\n    \"src/shared/api.ts: ApiError, ApiErrorEnvelope, ApiErrorCode, ApiValidationIssue, ActiveRunSummary, HealthResponse, API_ERROR_CODES, createApiErrorEnvelope, isApiErrorEnvelope, createInactiveRunSummary\",\n    \"src/server/app.ts: DEFAULT_HOST, DEFAULT_PORT, SLAN_VERSION, BuildAppOptions, ServerSettings, buildApp(options), resolveServerSettings(env), isLoopbackHost(host), assertLoopbackHost(host), assertValidPort(port)\",\n    \"src/server/index.ts: startServer(options), installShutdownHandlers(server, options), StartedServer, SignalSource\",\n    \"GET /api/health -> {status:'ok', version, configDirectory, port, activeRun:{active,runId,status}}\",\n    \"All API failures -> {error:{code,message,details?}}; unknown API routes use code NOT_FOUND\"\n  ],\n  \"tests\": [\n    \"npx vitest run tests/integration/server.test.ts: exit 0, 15/15 tests\",\n    \"npm test: exit 0, 46/46 tests\",\n    \"npm run typecheck: exit 0 for server and web projects\",\n    \"npm run build:server: exit 0; compiled dist/src/server/index.js served /api/health and exited 0 on SIGTERM\"\n  ],\n  \"validationLimitations\": [\n    \"Full npm run build was not run because the Vite web entry (src/web) belongs to FOUND-04 and does not exist yet. Production static serving and SPA fallback were verified with a fixture web root through the real composition root.\"\n  ],\n  \"unresolved\": []\n}\n```\n",
+      "validationLimitations": [
+        "Full npm run build was not run because the Vite web entry (src/web) belongs to FOUND-04 and does not exist yet. Production static serving and SPA fallback were verified with a fixture web root through the real composition root."
+      ],
+      "artifactId": "work-found-03-001",
+      "inputArtifactIds": [
+        "work-found-01-001",
+        "work-found-02-001"
+      ]
     },
     "FOUND-04": {
       "taskId": "FOUND-04",
