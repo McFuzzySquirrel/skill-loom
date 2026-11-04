@@ -3,8 +3,8 @@
 ## Current State
 **Phase**: RUN-PREFLIGHT-1
 **Status**: In Progress
-**Validation Gaps**: 18 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T12:11:33.590Z
+**Validation Gaps**: 19 unverified check(s) - see "Validation Gaps"
+**Last Updated**: 2026-11-04T12:23:09.536Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -50,6 +50,8 @@
   - Files: src/web/components/InputsEditor.tsx, src/web/routes/ChainBuilderPage.tsx, src/web/api/chains.ts, tests/e2e/chain-save.spec.ts, src/web/components/StepEditor.tsx, src/web/components/StepList.tsx, src/web/hooks/useChainDraft.ts, src/web/router.tsx, src/web/styles/theme.css, tests/e2e/chain-builder.spec.ts
 - [x] Phase RUN-PREFLIGHT-1, Task PRE-01: Implement the harness adapter registry (@backend-engineer)
   - Files: src/server/harness/types.ts, src/server/harness/registry.ts, src/server/harness/opencode.ts, src/server/harness/copilot.ts, tests/unit/harness-registry.test.ts
+- [x] Phase RUN-PREFLIGHT-1, Task PRE-02: Implement the preflight engine and checks (@backend-engineer)
+  - Files: src/server/preflight/auth.ts, src/server/preflight/trust.ts, src/server/preflight/engine.ts, tests/unit/preflight-engine.test.ts
 
 ## Current Task
 - None currently running
@@ -87,6 +89,7 @@
 - Task CHAIN-06: npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.
 - Task PRE-01: No live harness prompt or PTY session was started, by task constraint. Command flags were checked against installed CLI help output instead.
 - Task PRE-01: The declared unit suite uses fake executables in temporary directories and does not depend on installed OpenCode or Copilot binaries.
+- Task PRE-02: No live harness prompt, paid model call, or interactive trust session was started, by task constraint. Auth and trust behavior was exercised through injected command runners and config readers.
 
 ## Notes
 - Workflow engine run 25930d7e-150c-4ea9-a081-47fcf1941eb6

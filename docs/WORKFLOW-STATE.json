@@ -1,7 +1,7 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T12:11:33.587Z",
+  "lastUpdatedAt": "2026-11-04T12:23:09.533Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
@@ -995,10 +995,50 @@
     },
     "PRE-02": {
       "taskId": "PRE-02",
-      "status": "pending",
+      "status": "complete",
       "ownerAgent": "backend-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 1,
+      "outputFiles": [
+        "src/server/preflight/auth.ts",
+        "src/server/preflight/trust.ts",
+        "src/server/preflight/engine.ts",
+        "tests/unit/preflight-engine.test.ts"
+      ],
+      "startedAt": "2026-11-04T12:11:34.199Z",
+      "usage": {
+        "source": "unavailable",
+        "note": "opencode usage unavailable: Unterminated string in JSON at position 693263 (line 4675 column 732)"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/PRE-02.2026-11-04T12-23-09-523Z.attempt-1.result.json",
+          "usage": {
+            "source": "unavailable",
+            "note": "opencode usage unavailable: Unterminated string in JSON at position 693263 (line 4675 column 732)"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T12:23:09.528Z",
+      "agentOutput": "Implemented the PRE-02 preflight engine.\n\n## Files created\n\n- `src/server/preflight/auth.ts`\n- `src/server/preflight/trust.ts`\n- `src/server/preflight/engine.ts`\n- `tests/unit/preflight-engine.test.ts`\n\n## Validation run\n\n- `npx vitest run tests/unit/preflight-engine.test.ts` — 33 tests passed\n- `npx vitest run tests/unit tests/integration` — 321 tests passed\n- `npm run typecheck` — passed\n- `npm run build:server` — passed\n\n```forge-result\n{\n  \"summary\": \"Implemented the deterministic preflight engine with chain and input validation, catalog skill resolution, CLI presence, local authentication evidence, Copilot folder-trust inspection, git dirty-tree warning, session/fork planning, automatic-permission opt-in blocking, acknowledgement handling, and secret redaction. Added 33 focused unit tests; the declared test, full Vitest unit/integration suite, server typecheck, and server build all pass.\",\n  \"decisions\": [\n    \"Catalog discovery, auth evidence, trust inspection, and git status run concurrently with bounded timeouts; checks are assembled in a fixed order so reports are deterministic.\",\n    \"Authentication uses only static non-prompt commands, environment-variable presence, and file presence. Explicit signed-out output blocks; ambiguous evidence becomes an acknowledgement-required finding instead of passing.\",\n    \"Copilot trust is read from its JSONC config and never written. A missing config or unlisted folder is untrusted and blocks; unreadable or invalid config requires acknowledgement.\",\n    \"Warnings such as a dirty git tree and catalog warnings keep report status warn and require the warnings acknowledgement before startAllowed becomes true.\",\n    \"Automatic Copilot broad flags come from the adapter descriptor and are blocked until the chain records automaticPermissionOptIn; exact flags and scope are always present in the report.\",\n    \"Secret values are never copied into evidence; environment values are represented only by name/presence, and bounded command excerpts pass through redaction.\"\n  ],\n  \"interfaces\": [\n    \"src/server/preflight/auth.ts: collectAuthEvidence, runLocalCommand, redactSecrets, assertLocalEvidenceArgs, HARNESS_AUTH_STRATEGIES, AuthEvidenceResult, HarnessAuthStrategy, LocalCommandRunner\",\n    \"src/server/preflight/trust.ts: checkFolderTrust, readTrustedFolders, resolveTrustConfigPath, stripJsonComments, TrustCheckResult, TRUST_STATES, TRUST_REASONS\",\n    \"src/server/preflight/engine.ts: createPreflightEngine, runPreflight, PreflightReport, PreflightCheck, PreflightRequest, PreflightEngineDependencies, PreflightSessionPlan, PreflightPermissions, authenticationAcknowledgementKey, trustAcknowledgementKey, PREFLIGHT_WARNINGS_ACKNOWLEDGEMENT\",\n    \"PreflightReport exposes status pass|warn|blocked, startAllowed, ordered checks with severity/status/message/remediation/details, resolvedInputs, skills, catalogWarnings, sessionPlan, permissions, and acknowledgements.\"\n  ],\n  \"tests\": [\n    \"npx vitest run tests/unit/preflight-engine.test.ts: exit 0 (33 tests)\",\n    \"npx vitest run tests/unit tests/integration: exit 0 (321 tests)\",\n    \"npm run typecheck: exit 0\",\n    \"npm run build:server: exit 0\"\n  ],\n  \"unresolved\": [],\n  \"validationLimitations\": [\n    \"No live harness prompt, paid model call, or interactive trust session was started, by task constraint. Auth and trust behavior was exercised through injected command runners and config readers.\"\n  ]\n}\n```\n",
+      "validationLimitations": [
+        "No live harness prompt, paid model call, or interactive trust session was started, by task constraint. Auth and trust behavior was exercised through injected command runners and config readers."
+      ],
+      "artifactId": "work-pre-02-001",
+      "inputArtifactIds": [
+        "work-pre-01-001",
+        "work-cat-03-001",
+        "work-chain-02-001",
+        "work-found-04-001",
+        "work-found-05-001",
+        "work-proj-03-001",
+        "work-cat-04-001",
+        "work-cat-05-001",
+        "work-chain-04-001",
+        "work-chain-05-001",
+        "work-chain-06-001"
+      ]
     },
     "PRE-03": {
       "taskId": "PRE-03",
