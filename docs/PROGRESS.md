@@ -1,10 +1,10 @@
 # Project Progress
 
 ## Current State
-**Phase**: APP-FOUNDATION-1
+**Phase**: APP-FOUNDATION-2
 **Status**: In Progress
 **Validation Gaps**: 3 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T10:35:00.144Z
+**Last Updated**: 2026-11-04T10:40:06.343Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -16,9 +16,12 @@
   - Files: src/server/config/schema.ts, src/server/config/store.ts, tests/unit/config.test.ts
 - [x] Phase APP-FOUNDATION-1, Task FOUND-03: Build the Fastify composition root and health API (@backend-engineer)
   - Files: src/server/app.ts, src/server/index.ts, src/server/routes/index.ts, src/server/routes/health.ts, src/shared/api.ts, tests/integration/server.test.ts
+- [x] Phase APP-FOUNDATION-2, Task FOUND-04: Build the routed React shell and API client (@frontend-engineer)
+  - Files: src/web/main.tsx, src/web/App.tsx, src/web/api/client.ts, src/web/components/AppLayout.tsx, src/web/components/StatusRegion.tsx, src/web/routes/ProjectsPage.tsx, src/web/routes/ChainBuilderPage.tsx, src/web/routes/RunStartPage.tsx, src/web/routes/RunPage.tsx, src/web/routes/NotFoundPage.tsx, src/web/styles/theme.css, tests/e2e/shell.spec.ts, src/web/components/ErrorBoundary.tsx, src/web/components/ServerStatus.tsx, src/web/hooks/useHealth.ts, src/web/router.tsx
 
 ## Current Task
-- None currently running
+- [ ] Phase APP-FOUNDATION-2, Task FOUND-05: Implement the PTY WebSocket transport (@backend-engineer)
+  - Status: In progress
 
 ## Remaining
 - [ ] Phase APP-FOUNDATION-2: Phase 2: Web Shell and Terminal Transport

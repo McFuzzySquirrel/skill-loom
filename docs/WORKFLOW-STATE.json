@@ -1,12 +1,12 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T10:35:00.143Z",
+  "lastUpdatedAt": "2026-11-04T10:40:06.341Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
   "status": "running",
-  "currentPhase": "APP-FOUNDATION-1",
+  "currentPhase": "APP-FOUNDATION-2",
   "tasks": {
     "FOUND-01": {
       "taskId": "FOUND-01",
@@ -155,17 +155,69 @@
     },
     "FOUND-04": {
       "taskId": "FOUND-04",
-      "status": "pending",
+      "status": "complete",
       "ownerAgent": "frontend-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 1,
+      "outputFiles": [
+        "src/web/main.tsx",
+        "src/web/App.tsx",
+        "src/web/api/client.ts",
+        "src/web/components/AppLayout.tsx",
+        "src/web/components/StatusRegion.tsx",
+        "src/web/routes/ProjectsPage.tsx",
+        "src/web/routes/ChainBuilderPage.tsx",
+        "src/web/routes/RunStartPage.tsx",
+        "src/web/routes/RunPage.tsx",
+        "src/web/routes/NotFoundPage.tsx",
+        "src/web/styles/theme.css",
+        "tests/e2e/shell.spec.ts",
+        "src/web/components/ErrorBoundary.tsx",
+        "src/web/components/ServerStatus.tsx",
+        "src/web/hooks/useHealth.ts",
+        "src/web/router.tsx"
+      ],
+      "startedAt": "2026-11-04T10:35:00.788Z",
+      "usage": {
+        "inputTokens": 42102,
+        "outputTokens": 16021,
+        "reasoningTokens": 20346,
+        "cacheReadTokens": 1699840,
+        "cacheWriteTokens": 0,
+        "costUsd": 0.03323502,
+        "source": "harness"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/FOUND-04.2026-11-04T10-40-06-330Z.attempt-1.result.json",
+          "usage": {
+            "inputTokens": 42102,
+            "outputTokens": 16021,
+            "reasoningTokens": 20346,
+            "cacheReadTokens": 1699840,
+            "cacheWriteTokens": 0,
+            "costUsd": 0.03323502,
+            "source": "harness"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T10:40:06.335Z",
+      "agentOutput": "I'll start by reading the execution file.\nNow I'll build the web shell. Starting with the router, API client, and status region.\nImplemented and verified the FOUND-04 shell. All 12 Playwright shell tests pass against the production build and real Fastify server, `npm run typecheck` passes, the full Vitest suite passes (46 tests), and `npm run build` succeeds.\n\n**Files created**\n- `src/web/main.tsx`\n- `src/web/App.tsx`\n- `src/web/router.tsx`\n- `src/web/api/client.ts`\n- `src/web/hooks/useHealth.ts`\n- `src/web/components/AppLayout.tsx`\n- `src/web/components/StatusRegion.tsx`\n- `src/web/components/ServerStatus.tsx`\n- `src/web/components/ErrorBoundary.tsx`\n- `src/web/routes/ProjectsPage.tsx`\n- `src/web/routes/ChainBuilderPage.tsx`\n- `src/web/routes/RunStartPage.tsx`\n- `src/web/routes/RunPage.tsx`\n- `src/web/routes/NotFoundPage.tsx`\n- `src/web/styles/theme.css`\n- `tests/e2e/shell.spec.ts`\n\nNo existing source files were modified; `docs/artifacts/` was not touched.\n\n```forge-result\n{\"summary\":\"Built the routed React shell through src/web/App.tsx: dark high-contrast layout, skip link, local-only badge, server health indicator, typed envelope-aware API client, error boundary, persistent polite/assertive aria-live region, and placeholder projects, chain authoring, run start, run view, and not-found routes. Added tests/e2e/shell.spec.ts covering initial redirect, direct loads of every route with console-error checks, skip-link focus on every route, an inline API failure with Retry and live-region announcement, and keyboard return from not-found. All 12 Playwright tests pass; typecheck, full Vitest suite (46 tests), and production build pass.\",\"decisions\":[\"Implemented a small history-based router in src/web/router.tsx rather than adding an unverified dependency, because PRD 6.1 pins no routing package and every route must still mount through src/web/App.tsx.\",\"Added a header health indicator backed by the typed client so API failures have a real inline surface; failures announce through the polite aria-live region and expose Retry, while navigation is never blocked by the request.\",\"The API-failure test intercepts only the first /api/health response to force a deterministic failure; Retry, all other routing, the built app, and the real server are exercised normally.\"],\"interfaces\":[\"src/web/api/client.ts: ApiClientError, ApiClientErrorOptions, RequestJsonOptions, FetchLike, requestJson, createApiClient, apiClient, isAbortError\",\"src/web/router.tsx: RouterProvider, useRouter, Link, Redirect, matchRoute; routes /projects, /projects/:projectId/chains/:chainId, /projects/:projectId/chains/:chainId/run, /runs/:runId, / redirect, and not-found fallback\",\"src/web/components/StatusRegion.tsx: StatusAnnouncerProvider, useStatusAnnouncer, StatusRegion; src/web/components/AppLayout.tsx: AppLayout\",\"src/web/App.tsx: App composition root and resolveScreen\"],\"tests\":[\"npx playwright test tests/e2e/shell.spec.ts: 12 passed\",\"npm run typecheck: exit 0\",\"npm test: 46 passed\",\"npm run build: exit 0\"],\"unresolved\":[]}\n```\n",
+      "artifactId": "work-found-04-001",
+      "inputArtifactIds": [
+        "work-found-03-001",
+        "work-found-01-001",
+        "work-found-02-001"
+      ]
     },
     "FOUND-05": {
       "taskId": "FOUND-05",
-      "status": "pending",
+      "status": "running",
       "ownerAgent": "backend-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 1,
+      "outputFiles": [],
+      "startedAt": "2026-11-04T10:35:00.765Z"
     },
     "PROJ-01": {
       "taskId": "PROJ-01",
@@ -372,15 +424,36 @@
   "phases": {
     "APP-FOUNDATION-1": {
       "phaseId": "APP-FOUNDATION-1",
-      "status": "running",
+      "status": "complete",
       "contractFingerprint": "{\"title\":\"Phase 1: Skeleton, Configuration, and Server\",\"description\":\"```forge-task {   \\\"id\\\": \\\"FOUND-01\\\",\",\"completionPolicy\":\"strict\",\"dependencies\":[],\"requiredOutputs\":[\"package.json\",\"tsconfig.json\",\"tsconfig.server.json\",\"tsconfig.web.json\",\"vite.config.ts\",\"vitest.config.ts\",\"playwright.config.ts\",\"index.html\",\".gitignore\",\"tests/unit/build-config.test.ts\",\"src/server/config/schema.ts\",\"src/server/config/store.ts\",\"tests/unit/config.test.ts\",\"src/server/app.ts\",\"src/server/index.ts\",\"src/server/routes/index.ts\",\"src/server/routes/health.ts\",\"src/shared/api.ts\",\"tests/integration/server.test.ts\"],\"validationCommands\":[],\"tasks\":[{\"id\":\"FOUND-01\",\"title\":\"Initialize the TypeScript application scaffold\",\"description\":\"Create the single-package TypeScript application from the project structure in the PRD. Add npm scripts for dev, build, start, typecheck, unit/integration Vitest, Playwright, live discovery, live execution, and docs checking. Pin the verified dependency versions from PRD section 6.1, configure strict TypeScript for server and web, configure Vite with the React plugin and dist/web output, configure Vitest for tests/unit and tests/integration, and configure Playwright to start the app with an isolated SLAN_CONFIG_DIR. Add tests/unit/build-config.test.ts asserting the required scripts, Node engine floor, and dependency majors. Do not implement application routes, config loading, or UI components in this task.\",\"ownerAgent\":\"platform-engineer\",\"required\":true,\"dependencies\":[],\"expectedOutputs\":[\"package.json\",\"tsconfig.json\",\"tsconfig.server.json\",\"tsconfig.web.json\",\"vite.config.ts\",\"vitest.config.ts\",\"playwright.config.ts\",\"index.html\",\".gitignore\",\"tests/unit/build-config.test.ts\"],\"validationCommands\":[\"npm run typecheck\",\"npx vitest run tests/unit/build-config.test.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"FOUND-FR-05: Provide npm scripts for development, production build, start, typecheck, Vitest unit and integration tests, Playwright browser tests, and live harness probes; the production server serves the built UI from one origin.\"],\"acceptanceCriteria\":[\"npm run typecheck passes for the server and web projects\",\"The build-config test asserts dev, build, start, typecheck, test, test:e2e, test:live:discovery, test:live:execution, and check scripts\",\"package.json declares Node >=24 and the verified React, Vite, Fastify, node-pty, xterm, Zod, Vitest, and Playwright versions\",\"Playwright is configured to launch the app with an isolated config directory\"],\"constraints\":[\"Do not add application behavior beyond the scaffold and its contract test\",\"ARCH-02: Use the verified Node 24, TypeScript, React, Vite, Fastify, node-pty, xterm.js, Zod, Vitest, and Playwright versions recorded in section 6.1; do not silently substitute deprecated or unverified major versions.\",\"NFR-MAINT-01: A clean checkout must support documented install, development, build, start, typecheck, unit/integration, e2e, and live-probe commands without undocumented global tooling.\"],\"references\":[\"docs/PRD.md#6. Technical Architecture\",\"docs/PRD.md#6.2 Project Structure\",\"docs/features/app-foundation.md#FOUND-FR-05\",\"docs/PRD.md#ARCH-02\",\"docs/PRD.md#NFR-MAINT-01\"]}},{\"id\":\"FOUND-02\",\"title\":\"Implement the global configuration store\",\"description\":\"Implement the versioned global configuration module. Resolve the config directory from SLAN_CONFIG_DIR or ~/.config/slan, default to a schema with harness command paths, extra skill directories, recent projects, and UI preferences, and create the file on first read. Validate with Zod, reject unknown top-level versions, write through a temporary file plus rename, and expose typed get/update helpers for later features. Authentication values must never be stored. Cover missing file, corrupt file, atomic update, environment override, and unknown-version cases in tests/unit/config.test.ts. Do not implement project registration or skill discovery here.\",\"ownerAgent\":\"backend-engineer\",\"required\":true,\"dependencies\":[\"FOUND-01\"],\"expectedOutputs\":[\"src/server/config/schema.ts\",\"src/server/config/store.ts\",\"tests/unit/config.test.ts\"],\"validationCommands\":[\"npx vitest run tests/unit/config.test.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"FOUND-FR-02: Load and persist user configuration in $SLAN_CONFIG_DIR when set, otherwise ~/.config/slan/config.json, validating a versioned schema and writing atomically; expose harness command paths, extra skill directories, recent projects, and UI preferences.\"],\"acceptanceCriteria\":[\"SLAN_CONFIG_DIR overrides the default path and is honored by every store operation\",\"A missing file produces the documented defaults and a created file\",\"A corrupt file returns a typed error without overwriting the user's file\",\"Writes are atomic and preserve unrelated fields\",\"Tests assert that credential-like fields are not part of the schema\"],\"constraints\":[\"Do not log config file contents\",\"Do not add a database or remote config source\",\"ARCH-04: Persist configuration, chains, and runs as versioned JSON files with atomic temp-file replacement. Do not introduce a database or a second persistence model in v1.\",\"SEC-02: Never read credential values, copy tokens, or log environment secrets. Authentication checks may inspect command output, credential-file presence, and environment-variable presence, but must redact values.\",\"PRIV-01: Persist configuration in the Slan config directory, chains and runs under the project .slan directory, and at most a 200-line or 32 KiB terminal tail per step. Never persist full transcripts.\"],\"references\":[\"docs/PRD.md#6. Technical Architecture\",\"docs/PRD.md#8. Security and Privacy\",\"docs/features/app-foundation.md#FOUND-FR-02\",\"docs/PRD.md#ARCH-04\",\"docs/PRD.md#SEC-02\",\"docs/PRD.md#PRIV-01\"]}},{\"id\":\"FOUND-03\",\"title\":\"Build the Fastify composition root and health API\",\"description\":\"Create src/server/app.ts as the composition root and src/server/index.ts as the process entry. Build a Fastify instance that refuses a non-loopback host, serves dist/web in production, registers a route plugin in src/server/routes/index.ts, and exposes GET /api/health with status, package version, config directory, and active-run summary placeholder. Define the shared API envelope and error types in src/shared/api.ts, and install a not-found and error handler that always returns the envelope. Add graceful shutdown for SIGINT and SIGTERM. Add tests/integration/server.test.ts using Fastify inject to assert health, envelope shape, non-loopback refusal, and static fallback behavior. Do not add project, catalog, chain, preflight, or run routes yet.\",\"ownerAgent\":\"backend-engineer\",\"required\":true,\"dependencies\":[\"FOUND-01\",\"FOUND-02\"],\"expectedOutputs\":[\"src/server/app.ts\",\"src/server/index.ts\",\"src/server/routes/index.ts\",\"src/server/routes/health.ts\",\"src/shared/api.ts\",\"tests/integration/server.test.ts\"],\"validationCommands\":[\"npx vitest run tests/integration/server.test.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"FOUND-FR-01: Provide a single local Node 24 server that binds 127.0.0.1, serves the built React UI and JSON API, exposes WebSocket endpoints, and shuts down cleanly on SIGINT and SIGTERM.\",\"FOUND-FR-03: Expose GET /api/health returning status, version, config directory, and active-run summary, and return a consistent JSON error envelope with error.code, error.message, and optional error.details for every API failure.\"],\"acceptanceCriteria\":[\"The app binds or is injectable on 127.0.0.1 and rejects a non-loopback host\",\"GET /api/health returns the documented fields through src/server/app.ts\",\"Unknown routes and thrown errors both return the shared error envelope\",\"SIGINT and SIGTERM close the server without leaving handles open\",\"The integration test exercises the route through the composition root\"],\"constraints\":[\"Do not expose a network-facing listener\",\"Do not add a second HTTP framework\",\"ARCH-01: Slan is a single-user local application. The server binds only to 127.0.0.1, refuses non-loopback addresses, has no authentication in v1, and must never be exposed to a network or remote host.\",\"ARCH-03: The server owns all filesystem traversal, config/chain/run persistence, CLI process spawning, and PTY handling. The browser performs no shell execution and receives only typed API and WebSocket data.\",\"ARCH-05: Every server route registers through src/server/app.ts, every web route mounts through src/web/App.tsx, and every new user-facing capability must be reachable through those composition roots with a test that exercises it there.\",\"SEC-04: Bind the Fastify server to 127.0.0.1 by default and reject any configured host that is not a loopback address. There is no authentication because there is no remote access.\"],\"references\":[\"docs/PRD.md#6.3 Key APIs and Interfaces\",\"docs/PRD.md#6. Technical Architecture\",\"docs/features/app-foundation.md#FOUND-FR-01\",\"docs/features/app-foundation.md#FOUND-FR-03\",\"docs/PRD.md#ARCH-01\",\"docs/PRD.md#ARCH-03\",\"docs/PRD.md#ARCH-05\",\"docs/PRD.md#SEC-04\"]}}]}",
-      "updatedAt": "2026-11-04T10:23:05.557Z"
+      "updatedAt": "2026-11-04T10:35:00.631Z",
+      "validationEvidence": [
+        "output exists: package.json",
+        "output exists: tsconfig.json",
+        "output exists: tsconfig.server.json",
+        "output exists: tsconfig.web.json",
+        "output exists: vite.config.ts",
+        "output exists: vitest.config.ts",
+        "output exists: playwright.config.ts",
+        "output exists: index.html",
+        "output exists: .gitignore",
+        "output exists: tests/unit/build-config.test.ts",
+        "output exists: src/server/config/schema.ts",
+        "output exists: src/server/config/store.ts",
+        "output exists: tests/unit/config.test.ts",
+        "output exists: src/server/app.ts",
+        "output exists: src/server/index.ts",
+        "output exists: src/server/routes/index.ts",
+        "output exists: src/server/routes/health.ts",
+        "output exists: src/shared/api.ts",
+        "output exists: tests/integration/server.test.ts"
+      ]
     },
     "APP-FOUNDATION-2": {
       "phaseId": "APP-FOUNDATION-2",
-      "status": "pending",
+      "status": "running",
       "contractFingerprint": "{\"title\":\"Phase 2: Web Shell and Terminal Transport\",\"description\":\"```forge-task {   \\\"id\\\": \\\"FOUND-04\\\",\",\"completionPolicy\":\"strict\",\"dependencies\":[\"APP-FOUNDATION-1\"],\"requiredOutputs\":[\"src/web/main.tsx\",\"src/web/App.tsx\",\"src/web/api/client.ts\",\"src/web/components/AppLayout.tsx\",\"src/web/components/StatusRegion.tsx\",\"src/web/routes/ProjectsPage.tsx\",\"src/web/routes/ChainBuilderPage.tsx\",\"src/web/routes/RunStartPage.tsx\",\"src/web/routes/RunPage.tsx\",\"src/web/routes/NotFoundPage.tsx\",\"src/web/styles/theme.css\",\"tests/e2e/shell.spec.ts\",\"src/server/terminal/pty.ts\",\"src/server/routes/terminal.ts\",\"src/server/app.ts\",\"tests/unit/pty.test.ts\",\"tests/integration/terminal-ws.test.ts\"],\"validationCommands\":[],\"tasks\":[{\"id\":\"FOUND-04\",\"title\":\"Build the routed React shell and API client\",\"description\":\"Create the Vite entry, React router, app layout, theme, typed API client, error boundary, status region, and placeholder route components for projects, chain authoring, run start, and run view. The layout must include a skip link, header with local-only badge, main landmark, and aria-live region. The API client must decode the shared error envelope and expose typed health calls. Add tests/e2e/shell.spec.ts covering direct route loads, the skip link, the local-only notice, a raw API failure rendered as an inline error, and a not-found route. Do not implement project, chain, catalog, or run business behavior.\",\"ownerAgent\":\"frontend-engineer\",\"required\":true,\"dependencies\":[\"FOUND-03\"],\"expectedOutputs\":[\"src/web/main.tsx\",\"src/web/App.tsx\",\"src/web/api/client.ts\",\"src/web/components/AppLayout.tsx\",\"src/web/components/StatusRegion.tsx\",\"src/web/routes/ProjectsPage.tsx\",\"src/web/routes/ChainBuilderPage.tsx\",\"src/web/routes/RunStartPage.tsx\",\"src/web/routes/RunPage.tsx\",\"src/web/routes/NotFoundPage.tsx\",\"src/web/styles/theme.css\",\"tests/e2e/shell.spec.ts\"],\"validationCommands\":[\"npx playwright test tests/e2e/shell.spec.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"FOUND-FR-04: Build a React shell with routes for projects, chain authoring, run start, and run view, including a skip link, visible keyboard focus, semantic landmarks, and an aria-live status region.\"],\"acceptanceCriteria\":[\"Every route renders through src/web/App.tsx without a console error\",\"The skip link moves focus to the main landmark\",\"The local-only badge is visible on every route\",\"The aria-live status region announces an API failure\",\"The not-found route offers a keyboard-reachable path back to projects\",\"The Playwright test exercises the shell through the real server and built app\"],\"constraints\":[\"Do not add a client-side state library\",\"Do not render raw HTML from server data\",\"ARCH-05: Every server route registers through src/server/app.ts, every web route mounts through src/web/App.tsx, and every new user-facing capability must be reachable through those composition roots with a test that exercises it there.\",\"A11Y-01: Every authoring action, including adding, removing, reordering, saving, preflight, and run control, must be reachable and executable with the keyboard alone, with move-up/move-down alternatives to drag-and-drop.\",\"A11Y-02: Provide visible focus indicators, semantic labels, a skip link, logical focus order, and aria-live announcements for step transitions, preflight results, and run state.\",\"SEC-03: Render terminal bytes only through xterm.js and render skill text through escaped React text. Do not use dangerouslySetInnerHTML for harness, skill, or run content.\"],\"references\":[\"docs/features/app-foundation.md#4. UI / Interaction Design\",\"docs/features/app-foundation.md#FOUND-FR-04\",\"docs/PRD.md#ARCH-05\",\"docs/PRD.md#A11Y-01\",\"docs/PRD.md#A11Y-02\",\"docs/PRD.md#SEC-03\"]}},{\"id\":\"FOUND-05\",\"title\":\"Implement the PTY WebSocket transport\",\"description\":\"Create the server-side terminal transport with node-pty. Spawn a command from an executable plus argument array, stream output as WebSocket messages, accept input and resize messages, cap buffered output per session, and terminate the child and socket on close or error. Register the WebSocket route through src/server/app.ts and expose a typed TerminalSession interface for later runners. Add tests/unit/pty.test.ts using a short node process and tests/integration/terminal-ws.test.ts using a real WebSocket client to assert output, resize, client input, cleanup, and one-subscriber enforcement. Do not implement run orchestration or the xterm view here.\",\"ownerAgent\":\"backend-engineer\",\"required\":true,\"dependencies\":[\"FOUND-03\"],\"expectedOutputs\":[\"src/server/terminal/pty.ts\",\"src/server/routes/terminal.ts\",\"src/server/app.ts\",\"tests/unit/pty.test.ts\",\"tests/integration/terminal-ws.test.ts\"],\"validationCommands\":[\"npx vitest run tests/unit/pty.test.ts tests/integration/terminal-ws.test.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"FOUND-FR-06: Provide a server-side PTY transport that streams terminal output and accepts input and resize messages over WebSocket, permits one active subscriber per PTY, and terminates the child process and socket when the session closes.\"],\"acceptanceCriteria\":[\"The unit test observes stdout from a spawned node process through the session interface\",\"The integration test connects through the registered WebSocket route\",\"Resize and input messages reach the PTY\",\"Closing the socket terminates the child process\",\"A second subscriber is rejected without disturbing the active one\"],\"constraints\":[\"Never build a shell command string from user input\",\"Do not use the web client to spawn processes\",\"ARCH-03: The server owns all filesystem traversal, config/chain/run persistence, CLI process spawning, and PTY handling. The browser performs no shell execution and receives only typed API and WebSocket data.\",\"SEC-01: Spawn harness CLIs with an executable plus argument array and no shell string interpolation. Canonicalize project and chain paths with realpath and reject traversal outside the intended project data directory.\",\"NFR-REL-02: Close PTY processes, WebSocket subscriptions, and child processes on disconnect, error, run completion, and SIGINT/SIGTERM; never leave an orphan harness process attached to a finished run.\"],\"references\":[\"docs/PRD.md#6.4 Execution Model\",\"docs/PRD.md#6.3 Key APIs and Interfaces\",\"docs/features/app-foundation.md#FOUND-FR-06\",\"docs/PRD.md#ARCH-03\",\"docs/PRD.md#SEC-01\",\"docs/PRD.md#NFR-REL-02\"]}}]}",
-      "updatedAt": "2026-11-04T10:23:05.185Z"
+      "updatedAt": "2026-11-04T10:35:00.634Z"
     },
     "PROJECT-WORKSPACE-1": {
       "phaseId": "PROJECT-WORKSPACE-1",
