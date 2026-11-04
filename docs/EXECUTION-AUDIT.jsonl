@@ -246,3 +246,8 @@
 {"timestamp":"2026-11-04T16:01:47.529Z","action":"run.started","runId":"25930d7e-150c-4ea9-a081-47fcf1941eb6","note":"harness=opencode"}
 {"timestamp":"2026-11-04T16:01:47.743Z","action":"phase.started","runId":"25930d7e-150c-4ea9-a081-47fcf1941eb6","phaseId":"V1-ACCEPTANCE-2"}
 {"timestamp":"2026-11-04T16:01:47.753Z","action":"task.complete","runId":"25930d7e-150c-4ea9-a081-47fcf1941eb6","taskId":"ACC-02","note":"Human attestation: docs/reviews/v1-primary-journey.json"}
+{"timestamp":"2026-11-04T16:01:47.799Z","action":"task.committed","runId":"25930d7e-150c-4ea9-a081-47fcf1941eb6","taskId":"ACC-02","commitSha":"de55a425c961f225079e4adcea887ce06b7923fd"}
+{"timestamp":"2026-11-04T16:01:47.804Z","action":"run.paused","runId":"25930d7e-150c-4ea9-a081-47fcf1941eb6","note":"Human review required for ACC-03. Record operator evidence with workflow-engine approve-task (or the Console), then resume. --yes does not approve human work."}
+{"timestamp":"2026-11-04T16:02:20.968Z","action":"run.started","runId":"25930d7e-150c-4ea9-a081-47fcf1941eb6","note":"harness=opencode"}
+{"timestamp":"2026-11-04T16:02:21.130Z","action":"phase.started","runId":"25930d7e-150c-4ea9-a081-47fcf1941eb6","phaseId":"V1-ACCEPTANCE-2"}
+{"timestamp":"2026-11-04T16:02:21.141Z","action":"task.complete","runId":"25930d7e-150c-4ea9-a081-47fcf1941eb6","taskId":"ACC-03","note":"Human attestation: docs/reviews/v1-accessibility.json"}
