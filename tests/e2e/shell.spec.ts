@@ -56,6 +56,73 @@ const DEMO_CHAIN_RESPONSE = {
   },
 };
 
+const DEMO_RUN_RESPONSE = {
+  run: {
+    version: 1,
+    id: 'demo-run',
+    projectId: 'demo-project',
+    chainId: 'demo-chain',
+    harness: 'opencode',
+    mode: 'supervised',
+    sessionMode: 'shared',
+    chainSnapshot: {
+      name: 'Demo chain',
+      harness: 'opencode',
+      sessionMode: 'shared',
+      steps: [
+        {
+          id: 'demo-step',
+          skillName: 'demo-skill',
+          instruction: 'Render the run view only.',
+        },
+      ],
+    },
+    resolvedInputs: {},
+    status: 'completed',
+    currentStepIndex: 0,
+    createdAt: '2026-11-04T00:00:00.000Z',
+    updatedAt: '2026-11-04T00:01:00.000Z',
+    startedAt: '2026-11-04T00:00:00.000Z',
+    finishedAt: '2026-11-04T00:01:00.000Z',
+    sessionId: null,
+    forkMechanism: 'none',
+    steps: [
+      {
+        id: 'demo-step',
+        index: 0,
+        skillName: 'demo-skill',
+        label: null,
+        status: 'done',
+        startedAt: '2026-11-04T00:00:00.000Z',
+        finishedAt: '2026-11-04T00:01:00.000Z',
+        exitCode: 0,
+        sessionId: null,
+        forkMechanism: 'none',
+        skillObservation: 'unknown',
+        tail: '',
+        reason: null,
+      },
+    ],
+    reason: null,
+  },
+  projectPath: '/tmp/demo-project',
+  terminalId: null,
+  actions: {
+    next: false,
+    retry: false,
+    skip: false,
+    abort: false,
+    pause: false,
+    resume: false,
+    runNext: false,
+    done: false,
+    failed: false,
+    continue: false,
+    restart: false,
+  },
+  recovery: null,
+};
+
 /** Keep the shell smoke route independent of a real registered project. */
 async function mockEmptyCatalog(page: Page): Promise<void> {
   await page.route(/\/api\/projects\/demo-project\/catalog(\?.*)?$/, async (route) => {
@@ -74,6 +141,17 @@ async function mockDemoChain(page: Page): Promise<void> {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(DEMO_CHAIN_RESPONSE),
+    });
+  });
+}
+
+/** The run view now loads a run record; the smoke route must not 404. */
+async function mockDemoRun(page: Page): Promise<void> {
+  await page.route(/\/api\/runs\/demo-run$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(DEMO_RUN_RESPONSE),
     });
   });
 }
@@ -112,6 +190,9 @@ test.describe('Slan shell', () => {
       if (route.path.endsWith('/demo-chain/run')) {
         await mockDemoChain(page);
       }
+      if (route.path === '/runs/demo-run') {
+        await mockDemoRun(page);
+      }
 
       await page.goto(route.path);
 
@@ -135,6 +216,9 @@ test.describe('Slan shell', () => {
       }
       if (route.path.endsWith('/demo-chain/run')) {
         await mockDemoChain(page);
+      }
+      if (route.path === '/runs/demo-run') {
+        await mockDemoRun(page);
       }
       await page.goto(route.path);
       await expect(page.getByRole('heading', { level: 1, name: route.heading })).toBeVisible();

@@ -60,6 +60,11 @@ export const terminalRoutes: FastifyPluginAsync<TerminalRouteOptions> = async (a
     (rawSocket, request) => {
       const socket = rawSocket as unknown as TerminalSocket;
       const subscriber = createSocketSubscriber(socket);
+      // Run terminals survive a browser detach so a reload can reattach to the
+      // live harness PTY. The orchestrator owns their lifecycle and closes them
+      // on completion, abort, and shutdown. Trust terminals keep the original
+      // behavior: leaving the trust panel ends the one-shot trust session.
+      const terminateOnDetach = !request.params.sessionId.startsWith('slan_run_');
 
       let attachment: TerminalAttachment;
       try {
@@ -75,7 +80,7 @@ export const terminalRoutes: FastifyPluginAsync<TerminalRouteOptions> = async (a
           return;
         }
         finalized = true;
-        attachment.detach({ terminate: true });
+        attachment.detach({ terminate: terminateOnDetach });
       };
 
       socket.on('close', finalize);

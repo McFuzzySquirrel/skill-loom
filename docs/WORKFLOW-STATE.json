@@ -1,12 +1,12 @@
 {
   "runId": "25930d7e-150c-4ea9-a081-47fcf1941eb6",
   "startedAt": "2026-11-04T10:23:05.184Z",
-  "lastUpdatedAt": "2026-11-04T13:49:59.400Z",
+  "lastUpdatedAt": "2026-11-04T14:08:17.310Z",
   "manifestPath": "/home/mcsquirrel/projects/personal/slan/docs/EXECUTION-MANIFEST.json",
   "manifestVersion": "1.0",
   "harness": "opencode",
   "status": "running",
-  "currentPhase": "RUN-EXECUTION-3",
+  "currentPhase": "RUN-EXECUTION-4",
   "tasks": {
     "FOUND-01": {
       "taskId": "FOUND-01",
@@ -1404,10 +1404,48 @@
     },
     "RUN-07": {
       "taskId": "RUN-07",
-      "status": "pending",
+      "status": "complete",
       "ownerAgent": "frontend-engineer",
-      "attempt": 0,
-      "outputFiles": []
+      "attempt": 1,
+      "outputFiles": [
+        "src/web/routes/RunPage.tsx",
+        "src/web/components/TerminalPane.tsx",
+        "src/web/components/StepRail.tsx",
+        "src/web/components/RunControls.tsx",
+        "src/web/hooks/useRunStream.ts",
+        "src/web/api/runs.ts",
+        "tests/e2e/run.spec.ts",
+        "src/server/routes/terminal.ts",
+        "src/web/styles/theme.css",
+        "tests/e2e/shell.spec.ts"
+      ],
+      "startedAt": "2026-11-04T13:50:00.058Z",
+      "usage": {
+        "source": "unavailable",
+        "note": "opencode usage unavailable: Unterminated string in JSON at position 621090 (line 2744 column 3117)"
+      },
+      "attemptHistory": [
+        {
+          "attempt": 1,
+          "outcome": "passed",
+          "resultPath": "docs/artifacts/RUN-07.2026-11-04T14-08-17-292Z.attempt-1.result.json",
+          "usage": {
+            "source": "unavailable",
+            "note": "opencode usage unavailable: Unterminated string in JSON at position 621090 (line 2744 column 3117)"
+          }
+        }
+      ],
+      "completedAt": "2026-11-04T14:08:17.297Z",
+      "agentOutput": "Implemented the terminal-dominant run view and verified the required browser flows.\n\n```forge-result\n{\n  \"summary\": \"Built the terminal-dominant run view with xterm.js (fit, web-links, Unicode 11, screen-reader mode), a text-status step rail, run metadata header, mode-specific supervised/automatic controls, failure pause choices, interrupted recovery actions, snapshot-plus-delta WebSocket recovery, reconnect after reload, and aria-live step announcements. Added isolated Playwright coverage for supervised, automatic, failure, reload/reconnect, and interrupted recovery flows.\",\n  \"decisions\": [\n    \"The run view fetches the run snapshot first and only then opens the run event WebSocket; reconnect repeats snapshot-first recovery and never sends an action.\",\n    \"Supervised controls include explicit Done/Failed/Skipped outcomes plus Next/Retry/Skip/Abort; automatic controls expose Pause/Resume/Run next/Abort and add Retry/Skip only for a failed or interrupted step. Unavailable controls remain visible but disabled from server action flags.\",\n    \"Run terminals now survive a browser detach so a reload can reattach to the live PTY; the orchestrator still owns completion, abort, and shutdown cleanup. Trust terminals keep their existing terminate-on-close behavior.\",\n    \"A finished run does not open an unnecessary event socket, avoiding a rejected WebSocket for completed, aborted, failed, or interrupted snapshots.\",\n    \"Step rail text shows 'Awaiting user' for the current running step when the run is awaiting confirmation, while still exposing the underlying step status data attribute.\",\n    \"The shell smoke test gained a mocked completed run so /runs/demo-run renders through App.tsx without a 404 console error.\"\n  ],\n  \"interfaces\": [\n    \"src/web/api/runs.ts: RunsApi, Run, RunView, RunActionResultView, RunActionAvailability, RunRecoveryOptions, RunStreamServerMessage, decodeRunStreamMessage, runsApi, runEventsPath, runTerminalPath\",\n    \"src/web/hooks/useRunStream.ts: useRunStream, RunStreamPhase, RunConnectionState\",\n    \"src/web/components/StepRail.tsx: StepRail, StatusText, stepDisplayName, STEP_STATUS_LABELS, RUN_STATUS_LABELS\",\n    \"src/web/components/RunControls.tsx: RunControls\",\n    \"src/web/components/TerminalPane.tsx: TerminalPane expanded with reconnectOnClose, test ids, focus button, web-links, and custom Escape handling\",\n    \"src/server/routes/terminal.ts: run terminal detach no longer terminates the server-owned run PTY\"\n  ],\n  \"tests\": [\n    \"npx playwright test tests/e2e/run.spec.ts: exit 0 (5 passed, run twice)\",\n    \"npx playwright test: exit 0 (48 passed)\",\n    \"npx playwright test tests/e2e/preflight.spec.ts: exit 0 (4 passed)\",\n    \"npx vitest run tests/integration/terminal-ws.test.ts tests/integration/run-routes.test.ts: exit 0 (15 passed)\",\n    \"npm test: exit 0 (489 passed on rerun)\",\n    \"npm run typecheck: exit 0 (server and web)\",\n    \"npm run build:web: exit 0; Playwright webServer also ran the full npm run build and npm run start\"\n  ],\n  \"warnings\": [\n    \"One full npm test run flaked once in tests/integration/run-routes.test.ts automatic-signal advancement; the immediate rerun passed all 489 tests and the focused run passed repeatedly.\",\n    \"npm ci was run because node_modules was absent; package-lock.json and dependency versions were unchanged.\",\n    \"docs/EXECUTION-AUDIT.jsonl and docs/WORKFLOW-STATE.json were already modified before this task and were left untouched.\",\n    \"No live OpenCode or Copilot process or paid model call was started; browser execution used an isolated fake harness with real OSC working/idle signals.\"\n  ],\n  \"validationLimitations\": [\n    \"Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed.\",\n    \"Live harness verification remains RUN-08 and was not performed here.\"\n  ],\n  \"unresolved\": []\n}\n```\n\nFiles created:\n- `src/web/api/runs.ts`\n- `src/web/hooks/useRunStream.ts`\n- `src/web/components/StepRail.tsx`\n- `src/web/components/RunControls.tsx`\n- `tests/e2e/run.spec.ts`\n\nFiles changed:\n- `src/web/routes/RunPage.tsx`\n- `src/web/components/TerminalPane.tsx`\n- `src/web/styles/theme.css`\n- `tests/e2e/shell.spec.ts`\n- `src/server/routes/terminal.ts`\n",
+      "validationLimitations": [
+        "Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed.",
+        "Live harness verification remains RUN-08 and was not performed here."
+      ],
+      "artifactId": "work-run-07-001",
+      "inputArtifactIds": [
+        "work-run-06-001",
+        "work-pre-04-001"
+      ]
     },
     "RUN-08": {
       "taskId": "RUN-08",
@@ -1661,15 +1699,21 @@
     },
     "RUN-EXECUTION-3": {
       "phaseId": "RUN-EXECUTION-3",
-      "status": "running",
+      "status": "complete",
       "contractFingerprint": "{\"title\":\"Phase 3: Run Orchestration and API\",\"description\":\"```forge-task {   \\\"id\\\": \\\"RUN-06\\\",\",\"completionPolicy\":\"strict\",\"dependencies\":[\"RUN-EXECUTION-2\"],\"requiredOutputs\":[\"src/server/runs/orchestrator.ts\",\"src/server/routes/runs.ts\",\"src/server/routes/index.ts\",\"tests/integration/run-routes.test.ts\"],\"validationCommands\":[],\"tasks\":[{\"id\":\"RUN-06\",\"title\":\"Implement run orchestration, actions, and event streaming\",\"description\":\"Implement the orchestrator and HTTP/WebSocket surface. POST /api/projects/:projectId/runs re-runs the blocking preflight, snapshots the chain, resolves inputs, creates the run, and starts the selected runner. GET /api/runs/:runId returns the record, GET /api/runs/active returns the current run summary, and POST /api/runs/:runId/actions handles next, retry, skip, abort, pause, resume, run-next, continue, and restart with mode-appropriate validation. Stream state events over WS /api/runs/:runId/events. On reconnect, send a full snapshot then deltas. Enforce one active run, clean up PTYs on completion/abort, and expose interrupted recovery. Register routes through src/server/routes/index.ts. Add tests/integration/run-routes.test.ts covering creation, preflight block, conflict, actions, event order, reconnect snapshot, recovery actions, and error envelopes through src/server/app.ts. Do not implement the run view.\",\"ownerAgent\":\"backend-engineer\",\"required\":true,\"dependencies\":[\"RUN-04\",\"RUN-05\",\"PRE-03\"],\"expectedOutputs\":[\"src/server/runs/orchestrator.ts\",\"src/server/routes/runs.ts\",\"src/server/routes/index.ts\",\"tests/integration/run-routes.test.ts\"],\"validationCommands\":[\"npx vitest run tests/integration/run-routes.test.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"RUN-FR-11: Stream run and step state over WebSocket, reconnect the UI after reload, and offer retry-interrupted-step, continue-from-next-pending-step, or restart after a server restart; never auto-replay a step.\"],\"acceptanceCriteria\":[\"Creating a run re-runs preflight and rejects a blocked report\",\"A second active run returns 409\",\"Mode-inappropriate actions return a typed error\",\"Events include run and step transitions in order and a full snapshot on reconnect\",\"Interrupted recovery offers retry, continue, and restart without auto-replay\",\"PTYs are cleaned up on completion and abort\",\"All routes are reachable through src/server/app.ts\"],\"constraints\":[\"Do not start a step without an explicit run or action\",\"Do not expose a second active run\",\"EXEC-03: At most one run may be active across the whole Slan server. A second start request must fail with a conflict while a run is starting, running, paused, or awaiting user input.\",\"NFR-REL-02: Close PTY processes, WebSocket subscriptions, and child processes on disconnect, error, run completion, and SIGINT/SIGTERM; never leave an orphan harness process attached to a finished run.\",\"ARCH-05: Every server route registers through src/server/app.ts, every web route mounts through src/web/App.tsx, and every new user-facing capability must be reachable through those composition roots with a test that exercises it there.\"],\"references\":[\"docs/PRD.md#6.3 Key APIs and Interfaces\",\"docs/PRD.md#10.5 Run\",\"docs/features/run-execution.md#RUN-FR-11\",\"docs/PRD.md#EXEC-03\",\"docs/PRD.md#NFR-REL-02\",\"docs/PRD.md#ARCH-05\"]}}]}",
-      "updatedAt": "2026-11-04T13:26:48.763Z"
+      "updatedAt": "2026-11-04T13:49:59.935Z",
+      "validationEvidence": [
+        "output exists: src/server/runs/orchestrator.ts",
+        "output exists: src/server/routes/runs.ts",
+        "output exists: src/server/routes/index.ts",
+        "output exists: tests/integration/run-routes.test.ts"
+      ]
     },
     "RUN-EXECUTION-4": {
       "phaseId": "RUN-EXECUTION-4",
-      "status": "pending",
+      "status": "running",
       "contractFingerprint": "{\"title\":\"Phase 4: Run View\",\"description\":\"```forge-task {   \\\"id\\\": \\\"RUN-07\\\",\",\"completionPolicy\":\"strict\",\"dependencies\":[\"RUN-EXECUTION-3\"],\"requiredOutputs\":[\"src/web/routes/RunPage.tsx\",\"src/web/components/TerminalPane.tsx\",\"src/web/components/StepRail.tsx\",\"src/web/components/RunControls.tsx\",\"src/web/hooks/useRunStream.ts\",\"src/web/api/runs.ts\",\"tests/e2e/run.spec.ts\"],\"validationCommands\":[],\"tasks\":[{\"id\":\"RUN-07\",\"title\":\"Build the terminal-dominant run view\",\"description\":\"Replace the run placeholder with the real run view. Implement xterm.js with fit, web-links, unicode11, and screen-reader mode, a step rail with text status, a header with run metadata, and mode-specific controls: Next/Retry/Skip/Abort for supervised; Pause/Resume/Run next/Abort for automatic. Handle terminal resize, focus-in/out, reconnect after reload, full-snapshot plus delta events, and interrupted recovery actions. Announce step transitions through aria-live. Add tests/e2e/run.spec.ts using a fake harness executable that emits OSC working/idle for automatic mode and waits for supervised Done; cover terminal output, step transitions, controls, failure pause, reconnect snapshot, recovery actions, and keyboard focus. Do not implement run creation or preflight.\",\"ownerAgent\":\"frontend-engineer\",\"required\":true,\"dependencies\":[\"RUN-06\",\"PRE-04\"],\"expectedOutputs\":[\"src/web/routes/RunPage.tsx\",\"src/web/components/TerminalPane.tsx\",\"src/web/components/StepRail.tsx\",\"src/web/components/RunControls.tsx\",\"src/web/hooks/useRunStream.ts\",\"src/web/api/runs.ts\",\"tests/e2e/run.spec.ts\"],\"validationCommands\":[\"npx playwright test tests/e2e/run.spec.ts\"],\"contract\":{\"version\":1,\"kind\":\"implementation\",\"requirements\":[\"RUN-FR-12: Provide a terminal-dominant run view with xterm.js, a step rail, status text not conveyed by color alone, keyboard-operable controls, and aria-live announcements for step transitions.\"],\"acceptanceCriteria\":[\"Terminal output is rendered through xterm.js and never as HTML\",\"The step rail shows text status not conveyed by color alone\",\"Supervised and automatic controls appear only where valid\",\"A failure pauses the chain and offers Retry, Skip, and Abort\",\"Reloading reconnects to a live session or shows interrupted recovery\",\"Screen-reader mode is enabled and focus can enter and leave the terminal\",\"The Playwright test drives the view through src/web/App.tsx\"],\"constraints\":[\"Do not auto-start a step after reload\",\"Do not hide the terminal behind a modal\",\"A11Y-01: Every authoring action, including adding, removing, reordering, saving, preflight, and run control, must be reachable and executable with the keyboard alone, with move-up/move-down alternatives to drag-and-drop.\",\"A11Y-03: Status must be readable as text or icon plus text; color must not be the only differentiator for pending, running, done, failed, skipped, or interrupted.\",\"A11Y-04: Enable xterm.js screen-reader mode, expose a labeled terminal region, and provide a keyboard method to move focus into and out of the terminal without trapping it.\",\"SEC-03: Render terminal bytes only through xterm.js and render skill text through escaped React text. Do not use dangerouslySetInnerHTML for harness, skill, or run content.\"],\"references\":[\"docs/features/run-execution.md#4. UI / Interaction Design\",\"docs/PRD.md#10.5 Run\",\"docs/features/run-execution.md#RUN-FR-12\",\"docs/PRD.md#A11Y-01\",\"docs/PRD.md#A11Y-03\",\"docs/PRD.md#A11Y-04\",\"docs/PRD.md#SEC-03\"]}}]}",
-      "updatedAt": "2026-11-04T10:23:05.185Z"
+      "updatedAt": "2026-11-04T13:49:59.942Z"
     },
     "RUN-EXECUTION-5": {
       "phaseId": "RUN-EXECUTION-5",

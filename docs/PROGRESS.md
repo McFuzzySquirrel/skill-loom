@@ -1,10 +1,10 @@
 # Project Progress
 
 ## Current State
-**Phase**: RUN-EXECUTION-3
+**Phase**: RUN-EXECUTION-4
 **Status**: In Progress
-**Validation Gaps**: 28 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T13:49:59.403Z
+**Validation Gaps**: 30 unverified check(s) - see "Validation Gaps"
+**Last Updated**: 2026-11-04T14:08:17.314Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -68,12 +68,13 @@
   - Files: src/server/runs/automatic.ts, tests/unit/automatic-runner.test.ts
 - [x] Phase RUN-EXECUTION-3, Task RUN-06: Implement run orchestration, actions, and event streaming (@backend-engineer)
   - Files: src/server/runs/orchestrator.ts, src/server/routes/runs.ts, src/server/routes/index.ts, tests/integration/run-routes.test.ts, src/server/app.ts
+- [x] Phase RUN-EXECUTION-4, Task RUN-07: Build the terminal-dominant run view (@frontend-engineer)
+  - Files: src/web/routes/RunPage.tsx, src/web/components/TerminalPane.tsx, src/web/components/StepRail.tsx, src/web/components/RunControls.tsx, src/web/hooks/useRunStream.ts, src/web/api/runs.ts, tests/e2e/run.spec.ts, src/server/routes/terminal.ts, src/web/styles/theme.css, tests/e2e/shell.spec.ts
 
 ## Current Task
 - None currently running
 
 ## Remaining
-- [ ] Phase RUN-EXECUTION-4: Phase 4: Run View
 - [ ] Phase RUN-EXECUTION-5: Phase 5: Live Harness Verification
 - [ ] Phase V1-ACCEPTANCE-1: Phase 1: Operator Documentation
 - [ ] Phase V1-ACCEPTANCE-2: Phase 2: Human Acceptance Reviews
@@ -110,6 +111,8 @@
 - Task RUN-04: npm ci was run because node_modules was absent in the sandbox worktree; no dependency versions or lockfile contents changed.
 - Task RUN-06: No Playwright run view or live CLI probe was performed; both are outside RUN-06 scope.
 - Task RUN-06: No human review was performed or claimed.
+- Task RUN-07: Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed.
+- Task RUN-07: Live harness verification remains RUN-08 and was not performed here.
 
 ## Notes
 - Workflow engine run 25930d7e-150c-4ea9-a081-47fcf1941eb6
