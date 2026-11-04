@@ -1950,3 +1950,418 @@ main:focus {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Run start and preflight report (PRE-04)
+ * ------------------------------------------------------------------------ */
+
+.preflight-header {
+  margin-bottom: var(--space-4);
+}
+
+.preflight-header .lede {
+  margin-bottom: 0;
+}
+
+.preflight-panel {
+  margin: var(--space-4) 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.preflight-section-title {
+  margin-top: 0;
+}
+
+.chain-summary__heading,
+.trust-panel__heading,
+.preflight-run__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.chain-summary__name {
+  margin: 0 0 var(--space-2);
+  font-size: 1.3rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.chain-summary .detail-grid {
+  margin-top: var(--space-3);
+}
+
+.preflight-inputs {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.preflight-inputs__legend {
+  margin-bottom: var(--space-3);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.preflight-input {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #0b1017;
+}
+
+.preflight-input__placeholder {
+  align-self: flex-start;
+  padding: 0.05rem 0.4rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.preflight-input__required {
+  color: var(--warning-text);
+  font-weight: 700;
+}
+
+.preflight-input__optional {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.preflight-mode {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.preflight-mode__options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: var(--space-3);
+}
+
+.preflight-mode__options .checkbox-field {
+  margin-bottom: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #0b1017;
+}
+
+.preflight-mode__options .checkbox-field:has(input:checked) {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.preflight-run__heading .field__hint {
+  max-width: 62ch;
+}
+
+.preflight-pending {
+  margin-top: var(--space-3);
+}
+
+.preflight-report {
+  margin: var(--space-5) 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, var(--surface-strong) 0%, var(--surface) 100%);
+}
+
+.preflight-summary {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-left-width: 6px;
+  border-radius: var(--radius);
+  font-weight: 600;
+}
+
+.preflight-summary--blocked {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+.preflight-summary--warning {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.preflight-summary--ok {
+  border-color: var(--ok-border);
+  background: var(--ok-bg);
+  color: var(--ok-text);
+}
+
+.preflight-group {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.preflight-group__title {
+  margin: 0 0 var(--space-2);
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+}
+
+.preflight-finding-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preflight-finding {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-left-width: 6px;
+  border-radius: var(--radius);
+  background: #0b1017;
+}
+
+.preflight-finding--block {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+.preflight-finding--warn {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.preflight-finding--acknowledge {
+  border-color: var(--warning-border);
+  border-style: dashed;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.preflight-finding__badge {
+  margin: 0 0 var(--space-1);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.preflight-finding__step {
+  color: inherit;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.preflight-finding__message {
+  margin: 0 0 var(--space-2);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.preflight-finding__remediation {
+  margin: 0;
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+
+.preflight-finding__meta {
+  margin: 0 0 var(--space-1);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.preflight-acknowledgements {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.preflight-acknowledgement {
+  margin-bottom: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.preflight-acknowledgement label {
+  color: var(--warning-text);
+}
+
+.preflight-acknowledgement .field__hint {
+  color: var(--warning-text);
+}
+
+.preflight-passed {
+  margin-top: var(--space-4);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.preflight-passed summary {
+  color: var(--text-muted);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.preflight-finding-list--passed {
+  margin-top: var(--space-2);
+}
+
+.preflight-passed__item {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.preflight-skills {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.preflight-skill-list {
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.preflight-skill {
+  padding: 0.25rem 0;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.preflight-skill[data-resolved='false'] {
+  color: var(--error-text);
+  font-weight: 600;
+}
+
+.preflight-skill__path {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.preflight-session,
+.preflight-permissions,
+.preflight-start {
+  margin-top: var(--space-4);
+}
+
+.preflight-permissions .trust-panel__command {
+  margin: var(--space-2) 0;
+}
+
+.preflight-opt-in {
+  margin-top: var(--space-3);
+}
+
+.preflight-opt-in__confirm {
+  margin-top: var(--space-3);
+}
+
+.preflight-opt-in__confirm-title {
+  margin: 0 0 var(--space-2);
+  font-size: 1.05rem;
+}
+
+.trust-panel__heading {
+  margin-bottom: var(--space-2);
+}
+
+.trust-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+}
+
+.trust-panel__confirm {
+  margin: var(--space-3) 0;
+}
+
+.trust-panel__confirm-title {
+  margin: 0 0 var(--space-2);
+  font-size: 1.05rem;
+}
+
+.trust-panel__fallback {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.trust-panel__fallback-title {
+  margin: 0 0 var(--space-1);
+  font-size: 1rem;
+}
+
+.trust-panel__command {
+  margin: var(--space-2) 0;
+  padding: var(--space-2);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #05080c;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.terminal-pane {
+  margin: var(--space-3) 0;
+}
+
+.terminal-pane__screen {
+  height: 18rem;
+  padding: var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: #05080c;
+}
+
+.terminal-pane__screen .xterm {
+  height: 100%;
+}
+
+.terminal-pane .field__hint {
+  margin-top: var(--space-1);
+}
+
+.preflight-note--ok {
+  color: var(--ok-text);
+  border: 1px solid var(--ok-border);
+  border-radius: var(--radius);
+  background: var(--ok-bg);
+  padding: 0.45rem 0.7rem;
+}
+
+@media (max-width: 720px) {
+  .preflight-panel,
+  .preflight-report {
+    padding: var(--space-3);
+  }
+
+  .chain-summary__heading,
+  .trust-panel__heading,
+  .preflight-run__heading {
+    display: block;
+  }
+}

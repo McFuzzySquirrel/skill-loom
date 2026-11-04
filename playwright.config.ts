@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 
 /**
  * Browser tests must never read or write the developer's real Slan state.
@@ -10,11 +10,13 @@ import { join } from 'node:path';
 const isolatedRoot = join(tmpdir(), `slan-playwright-${process.pid}`);
 const configDir = join(isolatedRoot, 'config');
 const homeDir = join(isolatedRoot, 'home');
+const fakeBinDir = join(isolatedRoot, 'bin');
 const port = 7373;
 const baseURL = `http://127.0.0.1:${port}`;
 
 mkdirSync(configDir, { recursive: true });
 mkdirSync(homeDir, { recursive: true });
+mkdirSync(fakeBinDir, { recursive: true });
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -46,6 +48,10 @@ export default defineConfig({
       SLAN_CONFIG_DIR: configDir,
       HOME: homeDir,
       SLAN_PORT: String(port),
+      // A spec may place deterministic harness executables here. The server
+      // resolves the default `opencode` / `copilot` names through PATH for
+      // catalog discovery, so a config-only override is not enough.
+      PATH: `${fakeBinDir}${delimiter}${process.env.PATH ?? ''}`,
     },
   },
 });

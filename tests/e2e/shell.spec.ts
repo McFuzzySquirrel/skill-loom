@@ -35,6 +35,27 @@ const EMPTY_CATALOG = {
   elapsedMs: 1,
 };
 
+const DEMO_CHAIN_RESPONSE = {
+  chain: {
+    version: 1,
+    id: 'demo-chain',
+    name: 'Demo chain',
+    harness: 'opencode',
+    sessionMode: 'shared',
+    steps: [
+      {
+        id: 'demo-step',
+        skillName: 'demo-skill',
+        instruction: 'Render the run-start screen only.',
+      },
+    ],
+    inputs: [],
+    automaticPermissionOptIn: false,
+    createdAt: '2026-11-04T00:00:00.000Z',
+    updatedAt: '2026-11-04T00:00:00.000Z',
+  },
+};
+
 /** Keep the shell smoke route independent of a real registered project. */
 async function mockEmptyCatalog(page: Page): Promise<void> {
   await page.route(/\/api\/projects\/demo-project\/catalog(\?.*)?$/, async (route) => {
@@ -42,6 +63,17 @@ async function mockEmptyCatalog(page: Page): Promise<void> {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(EMPTY_CATALOG),
+    });
+  });
+}
+
+/** The run-start screen now loads its chain; the smoke route must not 404. */
+async function mockDemoChain(page: Page): Promise<void> {
+  await page.route(/\/api\/projects\/demo-project\/chains\/demo-chain$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(DEMO_CHAIN_RESPONSE),
     });
   });
 }
@@ -77,6 +109,9 @@ test.describe('Slan shell', () => {
       if (route.path.includes('/chains/new')) {
         await mockEmptyCatalog(page);
       }
+      if (route.path.endsWith('/demo-chain/run')) {
+        await mockDemoChain(page);
+      }
 
       await page.goto(route.path);
 
@@ -97,6 +132,9 @@ test.describe('Slan shell', () => {
     test(`the skip link moves focus to the main landmark on ${route.path}`, async ({ page }) => {
       if (route.path.includes('/chains/new')) {
         await mockEmptyCatalog(page);
+      }
+      if (route.path.endsWith('/demo-chain/run')) {
+        await mockDemoChain(page);
       }
       await page.goto(route.path);
       await expect(page.getByRole('heading', { level: 1, name: route.heading })).toBeVisible();

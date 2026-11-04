@@ -1,10 +1,10 @@
 # Project Progress
 
 ## Current State
-**Phase**: RUN-PREFLIGHT-1
+**Phase**: RUN-PREFLIGHT-2
 **Status**: In Progress
-**Validation Gaps**: 20 unverified check(s) - see "Validation Gaps"
-**Last Updated**: 2026-11-04T12:30:45.394Z
+**Validation Gaps**: 22 unverified check(s) - see "Validation Gaps"
+**Last Updated**: 2026-11-04T12:51:44.961Z
 **Run ID**: 25930d7e-150c-4ea9-a081-47fcf1941eb6
 **Harness**: opencode
 **Execution Mode**: auto
@@ -54,12 +54,13 @@
   - Files: src/server/preflight/auth.ts, src/server/preflight/trust.ts, src/server/preflight/engine.ts, tests/unit/preflight-engine.test.ts
 - [x] Phase RUN-PREFLIGHT-1, Task PRE-03: Expose preflight and Copilot trust endpoints (@backend-engineer)
   - Files: src/server/routes/preflight.ts, src/server/preflight/trust-session.ts, src/server/routes/index.ts, tests/integration/preflight-routes.test.ts, src/server/app.ts
+- [x] Phase RUN-PREFLIGHT-2, Task PRE-04: Build the run-start and preflight report screen (@frontend-engineer)
+  - Files: src/web/routes/RunStartPage.tsx, src/web/components/PreflightReport.tsx, src/web/components/InputsForm.tsx, src/web/components/TrustPanel.tsx, src/web/hooks/usePreflight.ts, src/web/api/preflight.ts, tests/e2e/preflight.spec.ts, playwright.config.ts, src/web/styles/theme.css, tests/e2e/shell.spec.ts, src/web/components/TerminalPane.tsx
 
 ## Current Task
 - None currently running
 
 ## Remaining
-- [ ] Phase RUN-PREFLIGHT-2: Phase 2: Run-Start Screen
 - [ ] Phase RUN-EXECUTION-1: Phase 1: Run Model, Prompts, and Signal Parsing
 - [ ] Phase RUN-EXECUTION-2: Phase 2: Supervised and Automatic Runners
 - [ ] Phase RUN-EXECUTION-3: Phase 3: Run Orchestration and API
@@ -92,6 +93,8 @@
 - Task PRE-01: The declared unit suite uses fake executables in temporary directories and does not depend on installed OpenCode or Copilot binaries.
 - Task PRE-02: No live harness prompt, paid model call, or interactive trust session was started, by task constraint. Auth and trust behavior was exercised through injected command runners and config readers.
 - Task PRE-03: No live Copilot CLI trust dialog or paid model call was performed; trust behavior was exercised through the injected terminal manager and config reader, as required by the task constraints.
+- Task PRE-04: Human keyboard, screen-reader, and contrast acceptance review (ACC-02/ACC-03) is human-owned and was not performed; automated keyboard, focus, Escape, and browser coverage passed.
+- Task PRE-04: No live Copilot trust dialog or paid model call was performed; the trust flow used an isolated fake executable and a temporary Copilot config.
 
 ## Notes
 - Workflow engine run 25930d7e-150c-4ea9-a081-47fcf1941eb6
