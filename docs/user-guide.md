@@ -30,7 +30,7 @@ On first load you land on **Projects**. The header shows:
 
 - **Local-only**, a reminder that the server is loopback-bound.
 - **Server connected · v0.1.0**, the health indicator. If it changes to **Server connection error**, use **Retry**.
-- **Projects** and **Chain library** navigation.
+- **Projects**, **Scenario catalog**, and **Chain library** navigation.
 
 Register an existing folder with the folder browser or create a new project. Registering a project records it in the recent-projects list; removing a recent entry does not delete the folder.
 
@@ -49,7 +49,13 @@ Register an existing folder with the folder browser or create a new project. Reg
 3. Optionally add extra skill directories from the catalog settings dialog. Extra directories are global, not per project.
 4. A skill from a personal, plugin, custom, or extra source can be copied into the project with **Copy into this project**. OpenCode copies land in `<project>/.opencode/skills/`; Copilot copies land in `<project>/.github/skills/`. The copy is bounded, refuses symlinks, and never overwrites an existing package.
 
-Copilot's own discovery command runs in the project directory. The live discovery probe used Copilot's `.agents/skills/` project location; the `.github/skills/` copy destination is what Skill Loom writes, but it has not been verified end-to-end as a Copilot discovery location. Confirm the copied skill appears after the next catalog refresh, and see [Known limitations](admin-guide.md#known-limitations).
+Copilot's own discovery command runs in the project directory. Skill Loom writes project copies to `.github/skills/`, a project-skill location recognized by Copilot CLI; the CLI also supports `.agents/skills/`.
+
+### Start from a scenario example
+
+The [Scenario catalog](scenario-chains.md) provides illustrative starter chains for business, study, app development, and game development. Filter and review the steps, inputs, prerequisites, pinned revisions, and third-party skill sources, then copy an example into an open project to adapt it in the normal chain builder. Examples are not prescribed workflows or endorsements, and the catalog is not an exhaustive list.
+
+Copying a scenario creates only an ordinary independent project chain; it does not install skills or run a command. To copy an included third-party skill into the selected project's harness directory, use that skill's explicit **Add bundled skill to project** action. Review its source and license first. Skill Loom preserves supplied upstream license files and adds a `SKILL-LOOM-SOURCE.md` notice with the pinned source revision. It does not execute package scripts, fetch updates, or contact the upstream source. A same-name skill already visible to the selected harness must be resolved or renamed before a bundled copy can be added. Preflight blocks a run when a required skill is missing. Every copied chain is an ordinary independent project chain with a shared-session default and broad automatic permissions disabled.
 
 ### Build and save a chain
 

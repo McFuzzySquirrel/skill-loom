@@ -1,4 +1,14 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -9,6 +19,10 @@ import {
   projectSkillRootFor,
 } from '../../src/server/catalog/copy.js';
 import type { SkillEntry } from '../../src/server/catalog/types.js';
+import {
+  scenarioCatalog,
+  scenarioSkillPackagePath,
+} from '../../src/server/chains/presets.js';
 
 let root: string;
 let projectPath: string;
@@ -104,6 +118,102 @@ describe('copySkillIntoProject', () => {
     );
   });
 
+  it('can reject a duplicate package name without creating a suffixed copy', async () => {
+    await copySkillIntoProject({
+      projectPath,
+      harness: 'opencode',
+      entry: entry(),
+      allowNameSuffix: false,
+    });
+
+    await expectCopyError(
+      copySkillIntoProject({
+        projectPath,
+        harness: 'opencode',
+        entry: entry(),
+        allowNameSuffix: false,
+      }),
+      CATALOG_COPY_ERROR_CODES.SOURCE_ALREADY_PROJECT,
+    );
+  });
+
+  it('refuses symlink package roots and symlinked destination roots', async () => {
+    const sourceLink = join(root, 'linked-skill');
+    await symlink(sourcePath, sourceLink);
+    await expectCopyError(
+      copySkillIntoProject({
+        projectPath,
+        harness: 'opencode',
+        entry: entry({ packagePath: sourceLink, path: join(sourceLink, 'SKILL.md') }),
+      }),
+      CATALOG_COPY_ERROR_CODES.SYMLINK_UNSUPPORTED,
+    );
+
+    const outside = join(root, 'outside');
+    await mkdir(outside, { recursive: true });
+    await symlink(outside, join(projectPath, '.opencode'));
+    await expectCopyError(
+      copySkillIntoProject({
+        projectPath,
+        harness: 'opencode',
+        entry: entry(),
+      }),
+      CATALOG_COPY_ERROR_CODES.DESTINATION_UNAVAILABLE,
+    );
+    expect(await stat(outside).then((info) => info.isDirectory())).toBe(true);
+  });
+
+  it('preserves executable package-file permissions', async () => {
+    const script = join(sourcePath, 'scripts', 'check.sh');
+    await mkdir(join(sourcePath, 'scripts'), { recursive: true });
+    await writeFile(script, '#!/bin/sh\nexit 0\n', 'utf8');
+    await chmod(script, 0o755);
+
+    const result = await copySkillIntoProject({
+      projectPath,
+      harness: 'opencode',
+      entry: entry(),
+    });
+
+    expect((await stat(join(result.destinationPath, 'scripts', 'check.sh'))).mode & 0o111)
+      .toBe(0o111);
+  });
+
+  it('copies every bundled scenario package within the safe-copy contract', async () => {
+    const bundleProjectPath = join(root, 'bundled-project');
+    await mkdir(bundleProjectPath, { recursive: true });
+
+    for (const [index, source] of scenarioCatalog.skills.entries()) {
+      const packagePath = scenarioSkillPackagePath(source.name);
+      if (packagePath === undefined) {
+        throw new Error(`Missing bundled package path for ${source.name}.`);
+      }
+      const packageEntry: SkillEntry = {
+        id: `bundled-${String(index)}`,
+        harness: 'opencode',
+        source: 'builtin',
+        name: source.name,
+        description: '',
+        path: join(packagePath, 'SKILL.md'),
+        packagePath,
+        enabled: true,
+      };
+      const result = await copySkillIntoProject({
+        projectPath: bundleProjectPath,
+        harness: 'opencode',
+        entry: packageEntry,
+        allowNameSuffix: false,
+      });
+
+      expect(result.destinationPath).toBe(
+        join(bundleProjectPath, '.opencode', 'skills', source.name),
+      );
+      expect(await readFile(join(result.destinationPath, 'SKILL.md'), 'utf8')).toContain(
+        'name:',
+      );
+    }
+  });
+
   it('rejects a skill that is already a project entry', async () => {
     await expectCopyError(
       copySkillIntoProject({
@@ -127,5 +237,6 @@ describe('copySkillIntoProject', () => {
       CATALOG_COPY_ERROR_CODES.SYMLINK_UNSUPPORTED,
     );
     expect(error.details.path).toContain('outside-link');
+    expect(await readdir(join(projectPath, '.opencode', 'skills'))).toEqual([]);
   });
 });

@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import {
@@ -17,6 +18,7 @@ import {
 } from '../catalog/merge.js';
 import {
   CatalogCopyError,
+  copyBundledScenarioSkill,
   copySkillIntoProject,
   type CatalogCopyErrorCode,
 } from '../catalog/copy.js';
@@ -24,8 +26,14 @@ import {
   CATALOG_ERROR_CODES,
   CatalogError,
   SKILL_HARNESSES,
+  createSkillId,
   type CatalogErrorCode,
+  type SkillEntry,
 } from '../catalog/types.js';
+import {
+  scenarioCatalog,
+  scenarioSkillPackagePath,
+} from '../chains/presets.js';
 import { ConfigError } from '../config/store.js';
 import type { ConfigStore } from '../config/store.js';
 import {
@@ -60,6 +68,10 @@ const extraDirectoryBodySchema = z.strictObject({
 
 const extraDirectoryDeleteSchema = z.object({
   path: z.string().min(1).max(MAX_PATH_LENGTH),
+});
+
+const bundledSkillCopyBodySchema = z.strictObject({
+  harness: z.enum(SKILL_HARNESSES),
 });
 
 export interface CatalogRoutesOptions {
@@ -290,6 +302,147 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRoutesOptions> = async (
     },
   );
 
+  app.post<{
+    Params: ProjectRouteParams & { skillName: string };
+    Body: unknown;
+  }>(
+    '/api/projects/:projectId/catalog/scenario-skills/:skillName/copy',
+    async (request, reply) => {
+      const parsed = bundledSkillCopyBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(422).send(
+          createApiErrorEnvelope(
+            API_ERROR_CODES.VALIDATION_ERROR,
+            'The bundled skill copy request is not valid.',
+            { issues: toValidationIssues(parsed.error.issues) },
+          ),
+        );
+      }
+
+      try {
+        const project = await resolveRegisteredProject(registry, request.params.projectId);
+        const source = scenarioCatalog.skills.find(
+          (candidate) => candidate.name === request.params.skillName,
+        );
+        if (source === undefined || !source.bundled) {
+          return reply.code(404).send(
+            createApiErrorEnvelope(
+              'SCENARIO_SKILL_NOT_FOUND',
+              'No bundled scenario skill matches that name.',
+              { skillName: request.params.skillName },
+            ),
+          );
+        }
+
+        const harness = parsed.data.harness;
+        const beforeCopy = await service.getCatalog({
+          projectPath: project.canonicalPath,
+          harness,
+        });
+        const existing = beforeCopy.groups
+          .flatMap((group) => group.entries)
+          .filter(
+            (entry) =>
+              entry.name.toLocaleLowerCase('en-US') ===
+              source.name.toLocaleLowerCase('en-US'),
+          );
+        if (existing.length > 0) {
+          return reply.code(409).send(
+            createApiErrorEnvelope(
+              'SCENARIO_SKILL_ALREADY_AVAILABLE',
+              `A skill named "${source.name}" already exists for this project and harness. Resolve or rename it before adding another copy.`,
+              {
+                skillName: source.name,
+                harness,
+                existing: existing.map((entry) => ({
+                  source: entry.source,
+                  enabled: entry.enabled,
+                })),
+              },
+            ),
+          );
+        }
+
+        const packagePath = scenarioSkillPackagePath(source.name);
+        if (packagePath === undefined) {
+          return reply.code(404).send(
+            createApiErrorEnvelope(
+              'SCENARIO_SKILL_NOT_FOUND',
+              'The bundled scenario skill package is not available.',
+              { skillName: source.name },
+            ),
+          );
+        }
+        const skillFilePath = join(packagePath, 'SKILL.md');
+        const entry: SkillEntry = {
+          id: createSkillId({
+            harness,
+            source: 'builtin',
+            path: skillFilePath,
+            name: source.name,
+          }),
+          harness,
+          source: 'builtin',
+          name: source.name,
+          description: '',
+          path: skillFilePath,
+          packagePath,
+          enabled: true,
+        };
+        const copied = await copyBundledScenarioSkill({
+          projectPath: project.canonicalPath,
+          harness,
+          entry,
+          source,
+        });
+
+        let afterCopy: Awaited<ReturnType<CatalogService['getCatalog']>>;
+        try {
+          afterCopy = await service.getCatalog({
+            projectPath: project.canonicalPath,
+            harness,
+          });
+        } catch (error) {
+          await removeCopiedSkill(copied.destinationPath, entry.id);
+          throw error;
+        }
+        const matches = afterCopy.groups
+          .flatMap((group) => group.entries)
+          .filter(
+            (candidate) =>
+              candidate.name.toLocaleLowerCase('en-US') ===
+              source.name.toLocaleLowerCase('en-US'),
+          );
+        const installed = matches.find(
+          (candidate) =>
+            candidate.enabled &&
+            candidate.source === 'project' &&
+            candidate.packagePath === copied.destinationPath,
+        );
+        if (installed === undefined || matches.length !== 1) {
+          await removeCopiedSkill(copied.destinationPath, entry.id);
+          return reply.code(422).send(
+            createApiErrorEnvelope(
+              'SCENARIO_SKILL_NOT_DISCOVERABLE',
+              `The ${harness} catalog did not discover the copied skill. The package was removed; this scenario skill cannot currently be added for this harness.`,
+              { skillName: source.name, harness },
+            ),
+          );
+        }
+
+        return reply.code(201).send({
+          name: copied.name,
+          harness,
+          destinationPath: copied.destinationPath,
+          revision: source.revision,
+          catalogSkillId: installed.id,
+        });
+      } catch (error) {
+        return sendCatalogFailure(reply, error);
+      }
+    },
+  );
+
   app.get('/api/settings/extra-skill-directories', async (_request, reply) => {
     try {
       const extraSkillDirectories = await listExtraSkillDirectories(options.configStore);
@@ -368,6 +521,19 @@ async function resolveRegisteredProject(
   }
 
   return { canonicalPath: project.canonicalPath };
+}
+
+async function removeCopiedSkill(path: string, skillId: string): Promise<void> {
+  try {
+    await rm(path, { recursive: true, force: true });
+  } catch (error) {
+    throw new CatalogCopyError(
+      'SKILL_COPY_FAILED',
+      'The bundled skill could not be removed after discovery failed.',
+      { skillId, path, reason: errnoCode(error) },
+      { cause: error },
+    );
+  }
 }
 
 function sendCatalogFailure(reply: FastifyReply, error: unknown): FastifyReply {

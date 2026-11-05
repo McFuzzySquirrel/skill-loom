@@ -1,0 +1,2 @@
+# Keep upstream skill snapshots byte-for-byte; whitespace is maintained upstream.
+src/server/chains/scenario-skills/** -whitespace

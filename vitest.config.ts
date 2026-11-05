@@ -1,13 +1,17 @@
 import { defineConfig } from 'vitest/config';
 
 /**
- * Unit and integration suites run in Node. Browser coverage belongs to
- * Playwright (playwright.config.ts) and is intentionally excluded here.
+ * Unit, integration, and browser-client suites run in Node. App-level browser
+ * coverage belongs to Playwright (playwright.config.ts) and is excluded here.
  */
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['tests/unit/**/*.test.ts', 'tests/integration/**/*.test.ts'],
+    include: [
+      'tests/unit/**/*.test.ts',
+      'tests/integration/**/*.test.ts',
+      'tests/web/**/*.test.ts',
+    ],
     exclude: ['node_modules/**', 'dist/**', 'tests/e2e/**'],
     restoreMocks: true,
     clearMocks: true,
