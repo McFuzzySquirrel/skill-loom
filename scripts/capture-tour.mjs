@@ -324,7 +324,7 @@ async function openProjects(page, baseURL, projectsRoot) {
 }
 
 async function openWorkspace(page, baseURL, project) {
-  await goto(page, baseURL, `/projects/${project.id}`);
+  await goto(page, baseURL, `/projects/${project.id}/skills`);
   await page.getByRole('heading', { level: 1, name: project.displayName }).waitFor();
   const toggle = page.getByTestId('catalog-toggle');
   await toggle.waitFor();
@@ -339,7 +339,7 @@ async function openWorkspace(page, baseURL, project) {
 async function openBuilder(page, baseURL, project, chain) {
   await goto(page, baseURL, `/projects/${project.id}/chains/${chain.id}`);
   await page.getByRole('heading', { level: 1, name: 'Chain authoring' }).waitFor();
-  await page.getByTestId('builder-chain-name').waitFor();
+  await page.getByTestId('step-list-count').waitFor();
   await page.getByTestId('chain-draft-check').waitFor();
 }
 

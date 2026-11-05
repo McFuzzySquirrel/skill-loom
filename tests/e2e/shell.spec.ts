@@ -235,6 +235,75 @@ test.describe('Skill Loom shell', () => {
     });
   }
 
+  test('supports system and remembered appearance choices', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.goto('/projects');
+    const root = page.locator('html');
+    const appearance = page.getByLabel('Appearance');
+
+    await expect(root).toHaveAttribute('data-theme', 'light');
+    await appearance.selectOption('dark');
+    await expect(root).toHaveAttribute('data-theme', 'dark');
+    await page.reload();
+    await expect(root).toHaveAttribute('data-theme', 'dark');
+
+    await appearance.selectOption('system');
+    await expect(root).toHaveAttribute('data-theme', 'light');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect(root).toHaveAttribute('data-theme', 'dark');
+  });
+
+  test('announces when the browser cannot remember an appearance choice', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Storage.prototype.setItem = () => {
+        throw new DOMException('Storage is blocked.', 'SecurityError');
+      };
+    });
+    await page.goto('/projects');
+    await page.getByLabel('Appearance').selectOption('light');
+
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(page.getByRole('status')).toHaveText(
+      'Appearance changed, but this browser cannot save your preference.',
+    );
+    await expect(page.getByText('This browser cannot remember the appearance choice.')).toBeVisible();
+  });
+
+  test('uses compact keyboard-accessible navigation on narrow screens', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto('/projects');
+
+    const menu = page.getByRole('button', { name: 'Menu' });
+    const navigation = page.getByRole('navigation', { name: 'Primary' });
+    await expect(menu).toBeVisible();
+    await expect(navigation).toBeHidden();
+    await expect(page.getByText('Local-only')).toBeVisible();
+
+    await menu.click();
+    const closeMenu = page.getByRole('button', { name: 'Close navigation' });
+    await expect(closeMenu).toHaveAttribute('aria-expanded', 'true');
+    await expect(navigation).toBeVisible();
+    for (const width of [320, 360, 768, 1024, 1440, 1920]) {
+      await page.setViewportSize({ width, height: width > 1440 ? 1080 : 800 });
+      const horizontalOverflow = await page.locator('body').evaluate((body) => {
+        const viewport = document.documentElement.clientWidth;
+        return [...body.querySelectorAll('*')]
+          .map((element) => ({ element, rect: element.getBoundingClientRect() }))
+          .filter(({ rect }) => rect.right > viewport + 1)
+          .map(({ element, rect }) => ({
+            tag: element.tagName,
+            className: element.getAttribute('class'),
+            right: Math.round(rect.right),
+          }));
+      });
+      expect(horizontalOverflow, `horizontal overflow at ${width}px`).toEqual([]);
+    }
+
+    await expect(page.locator('main').evaluate((element) => element.clientWidth)).resolves.toBeGreaterThan(1216);
+  });
+
   test('an API failure renders inline and is announced', async ({ page }) => {
     // Fail only the first health request; Retry must reach the real server.
     let healthRequests = 0;

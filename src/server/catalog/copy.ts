@@ -10,6 +10,7 @@ import {
 } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import type { ScenarioSkillSource } from '../../shared/presets.js';
+import { SHARED_PROJECT_SKILLS_SEGMENTS, sharedProjectSkillRoot } from './project-paths.js';
 import type { SkillEntry, SkillHarness } from './types.js';
 
 /**
@@ -76,11 +77,9 @@ export interface CopySkillIntoProjectResult {
   destinationPath: string;
 }
 
-/** Project-local root the harness will discover on its next scan. */
-export function projectSkillRootFor(harness: SkillHarness, projectPath: string): string {
-  return harness === 'opencode'
-    ? join(projectPath, '.opencode', 'skills')
-    : join(projectPath, '.github', 'skills');
+/** Shared project-local root discovered by both supported harnesses. */
+export function projectSkillRootFor(_harness: SkillHarness, projectPath: string): string {
+  return sharedProjectSkillRoot(projectPath);
 }
 
 export async function copySkillIntoProject(
@@ -144,7 +143,7 @@ export async function copySkillIntoProject(
     );
   }
 
-  const destinationRoot = await createProjectSkillRoot(harness, projectPath);
+  const destinationRoot = await createProjectSkillRoot(projectPath);
 
   const destination = await reserveDestination(
     destinationRoot,
@@ -261,16 +260,10 @@ async function removePartialCopy(
   }
 }
 
-async function createProjectSkillRoot(
-  harness: SkillHarness,
-  projectPath: string,
-): Promise<string> {
-  const segments = harness === 'opencode'
-    ? ['.opencode', 'skills']
-    : ['.github', 'skills'];
+async function createProjectSkillRoot(projectPath: string): Promise<string> {
   let directory = projectPath;
 
-  for (const segment of segments) {
+  for (const segment of SHARED_PROJECT_SKILLS_SEGMENTS) {
     directory = join(directory, segment);
     try {
       await mkdir(directory, { mode: 0o755 });

@@ -164,10 +164,12 @@ describe('harness capability descriptors', () => {
     expect(opencode.discovery.command).toBeNull();
     expect(opencode.discovery.roots.map((rootEntry) => rootEntry.source)).toEqual([
       'project',
+      'project',
       'personal',
       'loom-extra',
     ]);
     expect(opencode.discovery.roots.map((rootEntry) => rootEntry.location)).toEqual([
+      '<project>/.agents/skills',
       '<project>/.opencode/skills',
       '~/.config/opencode/skills',
       '<loom-config>/extraSkillDirectories',

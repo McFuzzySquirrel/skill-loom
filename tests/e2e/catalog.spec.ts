@@ -127,7 +127,7 @@ async function expandCatalog(page: Page): Promise<void> {
 }
 
 async function gotoCatalog(page: Page, projectId: string): Promise<void> {
-  await page.goto(`/projects/${projectId}`);
+  await page.goto(`/projects/${projectId}/skills`);
   await expect(
     page.getByRole('heading', { level: 1, name: projectName }),
   ).toBeVisible();
@@ -140,29 +140,32 @@ function rowFor(page: Page, name: string) {
 }
 
 test.describe('Skill catalog', () => {
-  test('starts collapsed and expands on demand', async ({ page, request }) => {
+  test('opens on the skills workspace and can be collapsed on demand', async ({
+    page,
+    request,
+  }) => {
     const consoleErrors = collectConsoleErrors(page);
     const project = await openFixtureProject(request);
 
-    await page.goto(`/projects/${project.id}`);
+    await page.goto(`/projects/${project.id}/skills`);
     await expect(
       page.getByRole('heading', { level: 1, name: projectName }),
     ).toBeVisible();
 
     const toggle = page.getByTestId('catalog-toggle');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(toggle).toContainText('Hide catalog');
+    await expect(page.getByTestId('catalog-search')).toBeVisible();
+    await expect(page.getByTestId('catalog-summary')).toBeVisible();
+
+    await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await expect(toggle).toContainText('Show catalog');
     await expect(page.getByTestId('catalog-collapsed-summary')).toBeVisible();
     await expect(page.getByTestId('catalog-search')).toBeHidden();
 
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByTestId('catalog-search')).toBeVisible();
-    await expect(page.getByTestId('catalog-summary')).toBeVisible();
-
-    await toggle.click();
-    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await expect(page.getByTestId('catalog-search')).toBeHidden();
 
     expect(consoleErrors).toEqual([]);
   });
@@ -410,7 +413,7 @@ test.describe('Skill catalog', () => {
       await expect(copy).toBeVisible();
       await copy.click();
       await expect(extraRow.getByTestId('skill-copy-result')).toContainText(
-        '.opencode/skills/release-notes',
+        '.agents/skills/release-notes',
       );
 
       // The refresh picks up the new project-source entry.
@@ -457,8 +460,7 @@ test.describe('Skill catalog', () => {
       await route.continue();
     });
 
-    await page.goto(`/projects/${project.id}`);
-    await page.getByTestId('catalog-toggle').click();
+    await page.goto(`/projects/${project.id}/skills`);
     await expect(page.getByTestId('catalog-loading')).toBeVisible();
 
     const error = page.getByTestId('catalog-error').getByRole('alert');

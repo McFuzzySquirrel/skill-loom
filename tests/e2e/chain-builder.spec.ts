@@ -108,7 +108,7 @@ async function gotoNewBuilder(
   await expect(page.locator('.chain-builder__catalog')).toBeVisible();
   await expect(
     page.locator('[data-testid="chain-builder"] .chain-builder__catalog'),
-  ).toHaveCount(0);
+  ).toHaveCount(1);
   await expandCatalog(page);
 }
 
@@ -405,6 +405,9 @@ test.describe('Chain builder', () => {
       .click();
     await page.getByTestId('step-instruction').fill('Preserve this unsaved instruction.');
 
+    const dragHandle = rowForSkill(page, 'deploy-helper').locator('.step-row__handle');
+    await rowForSkill(page, 'write-docs').scrollIntoViewIfNeeded();
+    await dragHandle.scrollIntoViewIfNeeded();
     await rowForSkill(page, 'deploy-helper')
       .locator('.step-row__handle')
       .dragTo(rowForSkill(page, 'write-docs'));

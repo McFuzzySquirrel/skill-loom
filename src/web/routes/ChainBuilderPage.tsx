@@ -27,6 +27,7 @@ import {
   type ChainDraftIssue,
 } from '../hooks/useChainDraft';
 import { Link, useRouter } from '../router';
+import { useWorkspace } from '../WorkspaceContext';
 
 export interface ChainBuilderPageProps {
   projectId: string;
@@ -70,6 +71,7 @@ export function ChainBuilderPage({
   globalChainsApiClient = globalChainsApi,
 }: ChainBuilderPageProps) {
   const { search, navigate, setNavigationGuard } = useRouter();
+  const { setInfo } = useWorkspace();
   const { announce } = useStatusAnnouncer();
   const {
     state,
@@ -120,6 +122,16 @@ export function ChainBuilderPage({
   const duplicateHarness: ChainHarness =
     duplicateHarnessChoice ??
     (draftDocument?.harness === 'opencode' ? 'copilot' : 'opencode');
+
+  useEffect(() => {
+    if (draftDocument !== null) {
+      setInfo({
+        projectId,
+        chainId,
+        chainName: draftDocument.name,
+      });
+    }
+  }, [chainId, draftDocument, projectId, setInfo]);
 
   const handleCatalogChange = useCallback((entries: SkillEntry[]) => {
     setCatalogSkills(entries);
@@ -472,12 +484,6 @@ export function ChainBuilderPage({
             <span aria-hidden="true">{isDirty ? '●' : '✓'}</span> {dirtyLabel}
           </span>
           <div className="panel__actions builder-header__actions">
-            <button type="button" className="button button--secondary"
-              disabled={state.status !== 'ready'}
-              data-testid="chain-add-instruction"
-              onClick={() => { addInstruction(); setEditorFocusRequest((current) => current + 1); }}>
-              Add instruction
-            </button>
             <button
               type="button"
               className="button"
@@ -497,24 +503,29 @@ export function ChainBuilderPage({
             >
               {saving ? 'Saving…' : 'Save and run'}
             </button>
-            <button
-              type="button"
-              className="button button--secondary"
-              onClick={() => void handleSaveToLibrary()}
-              disabled={!canSave || libraryBusy}
-              data-testid="chain-save-to-library"
-            >
-              {libraryBusy ? 'Saving template…' : 'Save copy to library'}
-            </button>
-            {chainId === NEW_CHAIN_ID ? null : (
-              <Link
-                className="button button--secondary"
-                to={chainRunPath(projectId, chainId)}
-                data-testid="chain-run-from-builder"
-              >
-                Run saved chain
-              </Link>
-            )}
+            <details className="builder-header__more">
+              <summary className="button button--secondary">More actions</summary>
+              <div className="builder-header__more-menu">
+                <button
+                  type="button"
+                  className="button button--secondary"
+                  onClick={() => void handleSaveToLibrary()}
+                  disabled={!canSave || libraryBusy}
+                  data-testid="chain-save-to-library"
+                >
+                  {libraryBusy ? 'Saving template…' : 'Save copy to library'}
+                </button>
+                {chainId === NEW_CHAIN_ID ? null : (
+                  <Link
+                    className="button button--secondary"
+                    to={chainRunPath(projectId, chainId)}
+                    data-testid="chain-run-from-builder"
+                  >
+                    Run saved chain
+                  </Link>
+                )}
+              </div>
+            </details>
           </div>
           <p className="field__hint" id="chain-save-hint">
             {saveHint}
@@ -646,7 +657,15 @@ export function ChainBuilderPage({
 
       {draftDocument !== null ? (
         <>
-          <section className="builder-meta" aria-labelledby="builder-meta-title">
+          <details
+            className="builder-meta"
+            aria-labelledby="builder-meta-summary"
+            open={chainId === NEW_CHAIN_ID}
+          >
+            <summary className="builder-meta__summary" id="builder-meta-summary">
+              Harness and duplicate settings
+            </summary>
+            <div className="builder-meta__body">
             <h2 className="section-title builder-meta__title" id="builder-meta-title">
               Builder
             </h2>
@@ -769,7 +788,8 @@ export function ChainBuilderPage({
                 </div>
               )}
             </div>
-          </section>
+            </div>
+          </details>
 
           <section
             className="builder-panel draft-check"
@@ -839,8 +859,30 @@ export function ChainBuilderPage({
             ) : null}
           </section>
 
+          <nav className="builder-section-nav" aria-label="Chain editor sections">
+            <a href="#builder-steps">Steps</a>
+            <a href="#builder-editor">Step editor</a>
+            <a href="#builder-skills">Add a skill</a>
+            <a href="#builder-inputs">Inputs</a>
+          </nav>
+
           <div className="chain-builder" data-testid="chain-builder">
             <div className="chain-builder__column chain-builder__steps">
+              <div className="chain-builder__add-step" id="builder-steps" tabIndex={-1}>
+                <button
+                  type="button"
+                  className="button button--secondary"
+                  disabled={state.status !== 'ready'}
+                  data-testid="chain-add-instruction"
+                  onClick={() => {
+                    addInstruction();
+                    setEditorFocusRequest((current) => current + 1);
+                  }}
+                >
+                  Add instruction
+                </button>
+                <span className="field__hint">or choose a skill below</span>
+              </div>
               <StepList
                 steps={draftDocument.steps}
                 selectedStepId={selectedStep?.id ?? null}
@@ -851,9 +893,22 @@ export function ChainBuilderPage({
                 onRemove={removeStep}
                 onReorder={reorderStep}
               />
+              <div className="chain-builder__catalog" id="builder-skills" tabIndex={-1}>
+                <SkillCatalog
+                  projectId={projectId}
+                  context="builder"
+                  initialHarness={draftDocument.harness}
+                  onAddAsStep={handleAddAsStep}
+                  onCatalogChange={handleCatalogChange}
+                />
+              </div>
             </div>
 
-            <div className="chain-builder__column chain-builder__editor">
+            <div
+              className="chain-builder__column chain-builder__editor"
+              id="builder-editor"
+              tabIndex={-1}
+            >
               <StepEditor
                 step={selectedStep}
                 position={position === 0 ? null : position}
@@ -875,25 +930,23 @@ export function ChainBuilderPage({
             </div>
           </div>
 
-          <div className="chain-builder__catalog">
-            <SkillCatalog
-              projectId={projectId}
-              context="builder"
-              initialHarness={draftDocument.harness}
-              onAddAsStep={handleAddAsStep}
-              onCatalogChange={handleCatalogChange}
+          <section
+            className="builder-inputs"
+            id="builder-inputs"
+            aria-labelledby="builder-inputs-title"
+            tabIndex={-1}
+          >
+            <h2 className="section-title" id="builder-inputs-title">Inputs</h2>
+            <InputsEditor
+              inputs={draftDocument.inputs}
+              steps={draftDocument.steps}
+              disabled={saving}
+              onAdd={addInput}
+              onUpdate={updateInput}
+              onRename={renameInput}
+              onRemove={removeInput}
             />
-          </div>
-
-          <InputsEditor
-            inputs={draftDocument.inputs}
-            steps={draftDocument.steps}
-            disabled={saving}
-            onAdd={addInput}
-            onUpdate={updateInput}
-            onRename={renameInput}
-            onRemove={removeInput}
-          />
+          </section>
         </>
       ) : null}
     </section>

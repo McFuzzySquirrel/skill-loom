@@ -14,6 +14,7 @@ import { TerminalPane } from '../components/TerminalPane';
 import { useRunStream } from '../hooks/useRunStream';
 import { CHAIN_HARNESS_LABELS, CHAIN_SESSION_MODE_LABELS } from '../hooks/useChains';
 import { Link, useRouter } from '../router';
+import { useWorkspace } from '../WorkspaceContext';
 
 /**
  * Terminal-dominant run view (RUN-FR-12).
@@ -155,6 +156,7 @@ function RunFailurePanel({ run }: { run: Run }) {
 
 export function RunPage({ runId }: RunPageProps) {
   const { navigate } = useRouter();
+  const { setInfo } = useWorkspace();
   const stream = useRunStream({ runId });
   const controlsRef = useRef<HTMLDivElement>(null);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
@@ -163,6 +165,17 @@ export function RunPage({ runId }: RunPageProps) {
 
   const view = stream.view;
   const run = view?.run ?? null;
+
+  useEffect(() => {
+    if (run !== null) {
+      setInfo({
+        projectId: run.projectId,
+        chainId: run.chainId,
+        chainName: run.chainSnapshot.name,
+        runId: run.id,
+      });
+    }
+  }, [run, setInfo]);
 
   useEffect(() => {
     if (run === null) {
@@ -358,10 +371,6 @@ export function RunPage({ runId }: RunPageProps) {
 
       <RunFailurePanel run={run} />
 
-      <StepRail run={run} selectedStepId={selectedStepId} onSelect={setSelectedStepId} />
-
-      {selectedStep !== null ? <RunStepDetail run={run} step={selectedStep} /> : null}
-
       <RunControls
         mode={run.mode}
         status={run.status}
@@ -415,6 +424,10 @@ export function RunPage({ runId }: RunPageProps) {
           </div>
         )}
       </section>
+
+      <StepRail run={run} selectedStepId={selectedStepId} onSelect={setSelectedStepId} />
+
+      {selectedStep !== null ? <RunStepDetail run={run} step={selectedStep} /> : null}
 
       <p className="run-footer-note">
         <Link to="/projects">← Back to projects</Link>

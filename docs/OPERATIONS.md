@@ -60,7 +60,7 @@ Skill Loom v1 supports exactly two harnesses. A chain is bound to one harness; p
 
 | Harness | Verified version | Install | Authentication | Discovery |
 |---------|------------------|---------|----------------|-----------|
-| OpenCode | 2.2.5 | Install OpenCode and put `opencode` on `PATH`, or set `harnessCommands.opencode`. | Run `opencode auth login` in a terminal, or provide a supported provider credential through the environment. | Filesystem `.opencode/skills` packages under the project, `~/.config/opencode/skills`, and configured extra directories. |
+| OpenCode | 2.2.5 | Install OpenCode and put `opencode` on `PATH`, or set `harnessCommands.opencode`. | Run `opencode auth login` in a terminal, or provide a supported provider credential through the environment. | Filesystem `.agents/skills` and legacy `.opencode/skills` packages under the project, `~/.config/opencode/skills`, and configured extra directories. |
 | GitHub Copilot | CLI 1.0.105 | Install `@github/copilot` 1.0.105 and put `copilot` on `PATH`, or set `harnessCommands.copilot`. | Run `copilot login` in a terminal, or provide a supported GitHub token through the environment. | `copilot skill list --json` in the project directory. |
 
 Authentication is evidence-based: preflight may inspect command output, credential-file presence, or environment-variable **presence**, but it never reads credential values, copies tokens, or logs secrets. The supported login hints are:
@@ -68,7 +68,7 @@ Authentication is evidence-based: preflight may inspect command output, credenti
 - OpenCode: `opencode auth login`
 - Copilot: `copilot login`, or set `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`
 
-The skill catalog starts collapsed. Expanding an entry from a non-project source exposes **Copy into this project**, which copies the whole package into `<project>/.opencode/skills/` for OpenCode or `<project>/.github/skills/` for Copilot. The copy is bounded, refuses symlinks, and never overwrites an existing package; a numeric suffix is used instead. The original personal, plugin, custom, or extra skill is left untouched.
+The skill catalog starts collapsed. Expanding an entry from a non-project source exposes **Copy into this project**, which copies the whole package into `<project>/.agents/skills/` for either harness. The copy is bounded, refuses symlinks, and never overwrites an existing package; a numeric suffix is used instead. The original personal, plugin, custom, or extra skill is left untouched.
 
 The builder also offers **Add instruction** for an ordered standalone prompt without a catalog skill. It uses the same harness, inputs, session modes, and run controls as skill steps.
 
@@ -144,7 +144,6 @@ A handoff is not a byte-for-byte copy of the prior harness session. Treat it as 
 These are current gaps between the intended contract and what was observed with the verified CLIs. They are not shipped claims.
 
 - **Automatic OpenCode advancement:** `docs/evidence/live-execution.json` records `OSC7501_PRODUCT_PARSER_MISMATCH` and `OSC7501_CLEAR_BEFORE_IDLE`. OpenCode 2.2.5 emitted colon-separated `OSC 7501` parameters while the product parser splits on `;`, and emitted `clear` between `working` and `idle`. The probe's own parser recognized the sequence; the product parser did not. Supervised OpenCode runs are unaffected by this specific mismatch, but automatic OpenCode advancement is not proven end-to-end.
-- **Copilot project skill copy:** Skill Loom copies into `<project>/.github/skills/`, while the live Copilot discovery probe used `<project>/.agents/skills/`. Confirm the copied skill appears in Copilot's catalog after refresh.
 - **Health active-run field:** `GET /api/health` reports an inactive `activeRun` placeholder in the production composition. Use `GET /api/runs/active` or the UI active-run banner for live run state.
 - **Platform coverage:** the recorded live probes ran on Linux ARM64 with OpenCode 2.2.5 and Copilot CLI 1.0.105. Other platforms and CLI versions are unverified.
 - **Package release:** version `0.1.0` is declared in `package.json`, but the package is private and has no Git release tag or npm publication.

@@ -2,6 +2,8 @@ import { useEffect, useMemo, type ReactElement } from 'react';
 import { AppLayout } from './components/AppLayout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { StatusAnnouncerProvider } from './components/StatusRegion';
+import { ThemeProvider } from './ThemeProvider';
+import { WorkspaceProvider } from './WorkspaceContext';
 import { Redirect, RouterProvider, matchRoute, useRouter } from './router';
 import { ChainBuilderPage } from './routes/ChainBuilderPage';
 import { GlobalChainsPage } from './routes/GlobalChainsPage';
@@ -35,9 +37,16 @@ const ROUTES: RouteDefinition[] = [
     render: () => <ScenarioCatalogPage />,
   },
   {
+    pattern: '/projects/:projectId/skills',
+    title: 'Project skills',
+    render: (params) => (
+      <ProjectPage projectId={params.projectId ?? ''} view="skills" />
+    ),
+  },
+  {
     pattern: '/projects/:projectId',
     title: 'Project workspace',
-    render: (params) => <ProjectPage projectId={params.projectId ?? ''} />,
+    render: (params) => <ProjectPage projectId={params.projectId ?? ''} view="chains" />,
   },
   {
     pattern: '/projects/:projectId/chains/:chainId/run',
@@ -114,9 +123,13 @@ function RoutedShell() {
 export function App() {
   return (
     <RouterProvider>
-      <StatusAnnouncerProvider>
-        <RoutedShell />
-      </StatusAnnouncerProvider>
+      <ThemeProvider>
+        <WorkspaceProvider>
+          <StatusAnnouncerProvider>
+            <RoutedShell />
+          </StatusAnnouncerProvider>
+        </WorkspaceProvider>
+      </ThemeProvider>
     </RouterProvider>
   );
 }

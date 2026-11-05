@@ -77,6 +77,15 @@ async function openCurrentFolder(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/projects\/[^/]+$/);
 }
 
+async function expandProjectDetails(page: Page): Promise<void> {
+  const details = page.locator('.project-details');
+  if (!(await details.evaluate(
+    (element) => element instanceof HTMLDetailsElement && element.open,
+  ))) {
+    await details.getByText('Project details').click();
+  }
+}
+
 async function tabToFocused(page: Page, target: Locator, description: string): Promise<void> {
   for (let index = 0; index < 120; index += 1) {
     await page.keyboard.press('Tab');
@@ -147,6 +156,7 @@ test.describe('Project selection screen', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: 'existing-repo' }),
     ).toBeVisible();
+    await expandProjectDetails(page);
     await expect(page.getByTestId('project-canonical-path')).toHaveText(existingRepo);
     await expect(page.getByText('Repository initialized')).toBeVisible();
     await expect(page.getByTestId('project-loom-state')).toContainText('Initialized');
@@ -163,6 +173,7 @@ test.describe('Project selection screen', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: 'existing-repo' }),
     ).toBeVisible();
+    await expandProjectDetails(page);
     await expect(page.getByTestId('project-canonical-path')).toHaveText(existingRepo);
     await expect(page.getByTestId('project-git-state')).toContainText(
       'Repository initialized',
@@ -207,6 +218,7 @@ test.describe('Project selection screen', () => {
 
     await expect(page).toHaveURL(/\/projects\/[^/]+$/);
     await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+    await expandProjectDetails(page);
     await expect(page.getByTestId('project-canonical-path')).toHaveText(target);
     await expect(page.getByText('Repository initialized')).toBeVisible();
     await expect(page.getByTestId('project-loom-state')).toContainText('Initialized');
@@ -229,11 +241,32 @@ test.describe('Project selection screen', () => {
 
     await expect(page).toHaveURL(/\/projects\/[^/]+$/);
     await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+    await expandProjectDetails(page);
     await expect(page.getByText('Not a git repository')).toBeVisible();
     await expect(page.getByTestId('project-loom-state')).toContainText('Initialized');
 
     expect(existsSync(join(target, '.git'))).toBe(false);
     expect(existsSync(join(target, '.loom'))).toBe(true);
+  });
+
+  test('separates project chains and skills into linked workspace views', async ({
+    page,
+    request,
+  }) => {
+    const project = await openProjectViaApi(request, existingRepo);
+    await page.goto(`/projects/${project.id}`);
+
+    await expect(page.getByRole('heading', { level: 1, name: 'existing-repo' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Chains', level: 2 })).toBeVisible();
+    await page.getByRole('link', { name: 'Project skills' }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/skills$`));
+    await expect(page.getByTestId('skill-catalog')).toBeVisible();
+    await expect(page.getByTestId('catalog-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+    await page.getByRole('link', { name: 'Project chains' }).click();
+    await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
+    await expect(page.getByRole('heading', { name: 'Chains', level: 2 })).toBeVisible();
   });
 
   test('shows loading, empty, and server-error states distinctly', async ({ page }) => {

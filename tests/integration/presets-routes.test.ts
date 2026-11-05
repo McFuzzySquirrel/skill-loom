@@ -143,6 +143,7 @@ describe('scenario preset routes', () => {
     expect(
       await readFile(join(result.destinationPath, 'SKILL-LOOM-SOURCE.md'), 'utf8'),
     ).toContain(result.revision);
+    expect(result.destinationPath).toBe(join(projectPath, '.agents', 'skills', 'minimax-xlsx'));
 
     const catalog = await app.inject({
       method: 'GET',

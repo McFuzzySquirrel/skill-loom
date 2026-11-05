@@ -11,6 +11,7 @@ import { StatusText, stepDisplayName } from '../components/StepRail';
 import { TerminalPane } from '../components/TerminalPane';
 import { useRunStream } from '../hooks/useRunStream';
 import { Link, useRouter } from '../router';
+import { useWorkspace } from '../WorkspaceContext';
 
 export interface TerminalRunPageProps {
   runId: string;
@@ -47,12 +48,24 @@ function formatElapsed(run: Run, now: number): string {
  */
 export function TerminalRunPage({ runId }: TerminalRunPageProps) {
   const { navigate } = useRouter();
+  const { setInfo } = useWorkspace();
   const stream = useRunStream({ runId });
   const controlsRef = useRef<HTMLDivElement>(null);
   const [clock, setClock] = useState(() => Date.now());
 
   const view = stream.view;
   const run = view?.run ?? null;
+
+  useEffect(() => {
+    if (run !== null) {
+      setInfo({
+        projectId: run.projectId,
+        chainId: run.chainId,
+        chainName: run.chainSnapshot.name,
+        runId: run.id,
+      });
+    }
+  }, [run, setInfo]);
   const isActive =
     run !== null &&
     (run.status === 'starting' ||

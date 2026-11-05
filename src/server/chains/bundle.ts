@@ -1,9 +1,10 @@
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, realpath, rm, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { z } from 'zod';
 import type { BundlePreview, BundleSkill, ChainBundle } from '../../shared/bundles.js';
 import { projectSkillRootFor } from '../catalog/copy.js';
+import { SHARED_PROJECT_SKILLS_SEGMENTS, sharedProjectSkillRoot } from '../catalog/project-paths.js';
 import { frontmatterString, parseSkillFrontmatter } from '../catalog/frontmatter.js';
 import type { CatalogService } from '../catalog/merge.js';
 import { ChainSchema, parseChain, type Chain } from './model.js';
@@ -161,16 +162,52 @@ export async function exportBundle(
   if (names.length > MAX_BUNDLE_SKILLS) {
     throw new BundleError('BUNDLE_TOO_LARGE', 'Bundles are limited to 100 skill packages.');
   }
-  const entries = names.length === 0 ? [] :
-    (await catalog.getCatalog({ projectPath, harness: chain.harness })).groups.flatMap((group) => group.entries);
+  const catalogResult = names.length === 0
+    ? undefined
+    : await catalog.getCatalog({ projectPath, harness: chain.harness });
+  const entries = catalogResult?.groups.flatMap((group) => group.entries) ?? [];
   const skills: BundleSkill[] = [];
   const budget = { bytes: 0, files: 0 };
   for (const name of names) {
-    const matches = entries.filter((entry) => entry.enabled && entry.name === name);
-    if (matches.length !== 1 || !matches[0]?.packagePath) {
-      throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', `Skill "${name}" must resolve to exactly one available package before export.`);
+    const matches = entries.filter((entry) => entry.name === name);
+    const available = matches.filter((entry) => entry.enabled);
+    const projectPackages = uniquePackages(available.filter((entry) => entry.source === 'project'));
+    let candidates: typeof available;
+    if (projectPackages.length > 1) {
+      throw new BundleError(
+        'BUNDLE_SOURCE_UNAVAILABLE',
+        `Skill "${name}" has multiple project packages. Keep one project copy or rename the duplicates before export.`,
+      );
     }
-    const source = matches[0].packagePath;
+    if (projectPackages.length === 1) {
+      candidates = projectPackages;
+    } else {
+      candidates = uniquePackages(available.filter((entry) => entry.source !== 'project'));
+      if (candidates.length > 1) {
+        throw new BundleError(
+          'BUNDLE_SOURCE_UNAVAILABLE',
+          `Skill "${name}" has multiple non-project packages and no project copy to prefer. Keep one available package before export.`,
+        );
+      }
+    }
+    const selected = candidates[0];
+    if (!selected) {
+      const warnings = catalogResult?.warnings ?? [];
+      const discoveryNote = warnings.length === 0
+        ? ''
+        : ` Discovery reported ${String(warnings.length)} warning(s); review the catalog warnings before concluding the skill is missing.`;
+      const message = matches.length > 0
+        ? `Skill "${name}" is disabled in the ${chain.harness} catalog. Enable it or choose an available package before export.${discoveryNote}`
+        : `Skill "${name}" is not present in the ${chain.harness} catalog. Refresh discovery or add the skill to a supported location before export.${discoveryNote}`;
+      throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', message);
+    }
+    if (!selected.packagePath) {
+      throw new BundleError(
+        'BUNDLE_SOURCE_UNAVAILABLE',
+        `Skill "${name}" is listed in the ${chain.harness} catalog, but its package directory is unavailable. Check the package path and permissions before export.`,
+      );
+    }
+    const source = selected.packagePath;
     const skill: BundleSkill = { name, directory: basename(source), files: [] };
     async function collect(directory: string, prefix: string, depth: number): Promise<void> {
       if (depth > 32) invalid('The skill package exceeds the directory depth limit.');
@@ -247,9 +284,9 @@ export async function previewBundle(
   };
 }
 
-async function safeSkillRoot(projectPath: string, harness: Chain['harness']): Promise<string> {
-  const root = projectSkillRootFor(harness, projectPath);
-  for (const path of [join(projectPath, harness === 'opencode' ? '.opencode' : '.github'), root]) {
+async function safeSkillRoot(projectPath: string): Promise<string> {
+  const root = sharedProjectSkillRoot(projectPath);
+  for (const path of [join(projectPath, SHARED_PROJECT_SKILLS_SEGMENTS[0]), root]) {
     try {
       await mkdir(path, { mode: 0o755 });
     } catch (error) {
@@ -260,6 +297,15 @@ async function safeSkillRoot(projectPath: string, harness: Chain['harness']): Pr
     }
   }
   return root;
+}
+
+function uniquePackages<T extends { id: string; packagePath: string }>(entries: T[]): T[] {
+  const packages = new Map<string, T>();
+  for (const entry of entries) {
+    const key = entry.packagePath ? resolve(entry.packagePath) : `unresolved:${entry.id}`;
+    if (!packages.has(key)) packages.set(key, entry);
+  }
+  return [...packages.values()];
 }
 
 export async function importBundle(
@@ -283,7 +329,7 @@ export async function importBundle(
   const created: string[] = [];
   try {
     if (preview.bundle.skills.some((skill) => !reuse.has(skill.name))) {
-      const root = await safeSkillRoot(projectPath, preview.bundle.chain.harness);
+      const root = await safeSkillRoot(projectPath);
       for (const skill of preview.bundle.skills) {
         if (reuse.has(skill.name)) continue;
         const destination = join(root, skill.directory);

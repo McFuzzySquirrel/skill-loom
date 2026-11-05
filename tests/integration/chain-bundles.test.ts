@@ -9,6 +9,7 @@ import { scanOpenCodeSkills } from '../../src/server/catalog/opencode.js';
 import { MAX_BUNDLE_BYTES, MAX_BUNDLE_REQUEST_BYTES, parseBundle } from '../../src/server/chains/bundle.js';
 import { createChainService, type ChainService } from '../../src/server/chains/service.js';
 import { createConfigStore } from '../../src/server/config/store.js';
+import type { SkillEntry, SkillDiscoveryResult } from '../../src/server/catalog/types.js';
 import type { Chain } from '../../src/server/chains/model.js';
 import type { BundlePreview, ChainBundle } from '../../src/shared/bundles.js';
 
@@ -20,6 +21,7 @@ let sourceId: string;
 let targetId: string;
 let chain: Chain;
 let chains: ChainService;
+let discoveryOverride: SkillDiscoveryResult | undefined;
 
 const skillText = '---\nname: review\ndescription: Review changes\n---\nInspect the changes.\n';
 const binary = Buffer.from([0, 1, 128, 255]);
@@ -36,6 +38,7 @@ beforeEach(async () => {
   await chmod(join(packagePath, 'scripts', 'check.sh'), 0o755);
   await writeFile(join(packagePath, 'asset.bin'), binary);
   const configStore = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') }, homeDirectory: () => join(root, 'home') });
+  discoveryOverride = undefined;
   chains = createChainService();
   app = await buildApp({
     env: {},
@@ -48,7 +51,8 @@ beforeEach(async () => {
         {
           harness: 'opencode',
           usesExtraDirectories: false,
-          discover: ({ projectPath }) => scanOpenCodeSkills({ projectPath, homeDirectory: join(root, 'home') }),
+          discover: async ({ projectPath }) => discoveryOverride ??
+            await scanOpenCodeSkills({ projectPath, homeDirectory: join(root, 'home') }),
         },
         { harness: 'copilot', usesExtraDirectories: false, discover: async () => ({ entries: [], warnings: [] }) },
       ],
@@ -92,6 +96,21 @@ function request(action: 'preview' | 'import', bundle: unknown, extra: Record<st
   });
 }
 
+function catalogEntry(overrides: Partial<SkillEntry> = {}): SkillEntry {
+  const packagePath = join(source, '.opencode', 'skills', 'review');
+  return {
+    id: 'opencode-project-review',
+    harness: 'opencode',
+    source: 'project',
+    name: 'review',
+    description: 'Review changes',
+    path: join(packagePath, 'SKILL.md'),
+    packagePath,
+    enabled: true,
+    ...overrides,
+  };
+}
+
 describe('portable chain bundles', () => {
   it('round-trips full packages, binary files and script modes with fresh identity and consent', async () => {
     const bundle = await exported();
@@ -110,11 +129,14 @@ describe('portable chain bundles', () => {
     expect(imported.id).not.toBe(chain.id);
     expect(imported.automaticPermissionOptIn).toBe(false);
     expect(imported.steps).toEqual(chain.steps);
-    const destination = join(target, '.opencode', 'skills', 'review');
+    const destination = join(target, '.agents', 'skills', 'review');
     expect(await readFile(join(destination, 'SKILL.md'), 'utf8')).toBe(skillText);
     expect(await readFile(join(destination, 'asset.bin'))).toEqual(binary);
     expect((await lstat(join(destination, 'scripts', 'check.sh'))).mode & 0o111).not.toBe(0);
     expect((await chains.get(target, imported.id)).steps).toEqual(chain.steps);
+    expect(await scanOpenCodeSkills({ projectPath: target, homeDirectory: join(root, 'home') }).then(
+      (result) => result.entries.some((entry) => entry.name === 'review' && entry.packagePath === destination),
+    )).toBe(true);
   });
 
   it('requires explicit confirmation and never writes during preview', async () => {
@@ -123,19 +145,19 @@ describe('portable chain bundles', () => {
     expect(await readdir(target)).toEqual(['.loom']);
   });
 
-  it('installs Copilot bundles in the established project skill location', async () => {
+  it('installs Copilot bundles in the shared project skill location', async () => {
     const bundle = await exported();
     bundle.chain.harness = 'copilot';
     const response = await request('import', bundle, { confirmed: true });
     expect(response.statusCode, response.body).toBe(201);
-    expect(await readFile(join(target, '.github', 'skills', 'review', 'SKILL.md'), 'utf8')).toBe(skillText);
+    expect(await readFile(join(target, '.agents', 'skills', 'review', 'SKILL.md'), 'utf8')).toBe(skillText);
     expect(response.json<{ chain: Chain }>().chain.harness).toBe('copilot');
   });
 
   it('requires explicit reuse of conflicting skills and never overwrites', async () => {
     const bundle = await exported();
     expect((await request('import', bundle, { confirmed: true })).statusCode).toBe(201);
-    const path = join(target, '.opencode', 'skills', 'review', 'SKILL.md');
+    const path = join(target, '.agents', 'skills', 'review', 'SKILL.md');
     await writeFile(path, skillText + 'Local changes\n');
     const preview = await request('preview', bundle);
     expect(preview.json<BundlePreview>().skills[0]).toMatchObject({ conflict: true, directoryExists: true });
@@ -149,7 +171,7 @@ describe('portable chain bundles', () => {
   it('rejects stale/invalid reuse choices and physical directory conflicts', async () => {
     const bundle = await exported();
     expect((await request('import', bundle, { confirmed: true, reuseSkills: ['review'] })).statusCode).toBe(422);
-    await mkdir(join(target, '.opencode', 'skills', 'review'), { recursive: true });
+    await mkdir(join(target, '.agents', 'skills', 'review'), { recursive: true });
     expect((await request('import', bundle, { confirmed: true })).statusCode).toBe(409);
   });
 
@@ -157,13 +179,13 @@ describe('portable chain bundles', () => {
     vi.spyOn(chains, 'importChain').mockRejectedValueOnce(new Error('simulated store failure'));
     const response = await request('import', await exported(), { confirmed: true });
     expect(response.statusCode).toBe(500);
-    expect(await readdir(join(target, '.opencode', 'skills'))).toEqual([]);
+    expect(await readdir(join(target, '.agents', 'skills'))).toEqual([]);
   });
 
   it('refuses symlinked destination ancestors', async () => {
     const outside = join(root, 'outside');
     await mkdir(outside);
-    await symlink(outside, join(target, '.opencode'));
+    await symlink(outside, join(target, '.agents'));
     const response = await request('import', await exported(), { confirmed: true });
     expect(response.statusCode).toBe(422);
     expect(await readdir(outside)).toEqual([]);
@@ -183,6 +205,65 @@ describe('portable chain bundles', () => {
     await rm(join(packagePath, 'SKILL.md'));
     response = await app.inject({ method: 'GET', url: `/api/projects/${sourceId}/chains/${chain.id}/bundle` });
     expect(response.statusCode).toBe(422);
+    expect(response.json<{ error: { code: string; message: string } }>().error.message).toContain('not present');
+  });
+
+  it('prefers a unique project package over a same-name personal package', async () => {
+    const personal = join(root, 'home', '.config', 'opencode', 'skills', 'review');
+    await mkdir(personal, { recursive: true });
+    await writeFile(join(personal, 'SKILL.md'), '---\nname: review\n---\nPersonal copy.\n');
+
+    const response = await app.inject({ method: 'GET', url: `/api/projects/${sourceId}/chains/${chain.id}/bundle` });
+    expect(response.statusCode, response.body).toBe(200);
+    const bundle = response.json<{ bundle: ChainBundle }>().bundle;
+    expect(Buffer.from(bundle.skills[0]!.files.find((file) => file.path === 'SKILL.md')!.content, 'base64').toString()).toBe(skillText);
+  });
+
+  it('rejects multiple distinct project packages with an actionable ambiguity error', async () => {
+    const shared = join(source, '.agents', 'skills', 'review');
+    await mkdir(shared, { recursive: true });
+    await writeFile(join(shared, 'SKILL.md'), skillText);
+
+    const response = await app.inject({ method: 'GET', url: `/api/projects/${sourceId}/chains/${chain.id}/bundle` });
+    expect(response.statusCode).toBe(422);
+    expect(response.json<{ error: { code: string; message: string } }>().error).toMatchObject({
+      code: 'BUNDLE_SOURCE_UNAVAILABLE',
+      message: expect.stringContaining('multiple project packages'),
+    });
+  });
+
+  it('deduplicates repeated observations of one canonical project package', async () => {
+    const entry = catalogEntry();
+    discoveryOverride = {
+      entries: [entry, { ...entry, id: 'duplicate-observation' }],
+      warnings: [],
+    };
+
+    const response = await app.inject({ method: 'GET', url: `/api/projects/${sourceId}/chains/${chain.id}/bundle` });
+    expect(response.statusCode, response.body).toBe(200);
+  });
+
+  it('distinguishes disabled, unavailable, and ambiguous non-project packages', async () => {
+    discoveryOverride = { entries: [catalogEntry({ enabled: false })], warnings: [] };
+    let response = await app.inject({ method: 'GET', url: `/api/projects/${sourceId}/chains/${chain.id}/bundle` });
+    expect(response.statusCode).toBe(422);
+    expect(response.json<{ error: { message: string } }>().error.message).toContain('disabled');
+
+    discoveryOverride = { entries: [catalogEntry({ packagePath: '' })], warnings: [] };
+    response = await app.inject({ method: 'GET', url: `/api/projects/${sourceId}/chains/${chain.id}/bundle` });
+    expect(response.statusCode).toBe(422);
+    expect(response.json<{ error: { message: string } }>().error.message).toContain('package directory is unavailable');
+
+    discoveryOverride = {
+      entries: [
+        catalogEntry({ id: 'personal-review', source: 'personal', packagePath: join(root, 'personal') }),
+        catalogEntry({ id: 'extra-review', source: 'loom-extra', packagePath: join(root, 'extra') }),
+      ],
+      warnings: [],
+    };
+    response = await app.inject({ method: 'GET', url: `/api/projects/${sourceId}/chains/${chain.id}/bundle` });
+    expect(response.statusCode).toBe(422);
+    expect(response.json<{ error: { message: string } }>().error.message).toContain('multiple non-project packages');
   });
 
   it.each(['../escape', '/absolute', 'x\\escape', '.env', 'a/.git/config', 'a//b', 'CON', 'a/../b', 'space.'])(

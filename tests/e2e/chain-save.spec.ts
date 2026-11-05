@@ -366,6 +366,7 @@ test.describe('Chain inputs and save', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: 'Chain authoring' }),
     ).toBeVisible();
+    await page.getByText('Harness and duplicate settings').click();
     await expect(page.getByTestId('builder-chain-name')).toHaveText(name);
     await expect(page.getByTestId('builder-draft-state')).toHaveText('Saved chain');
     await expect(page.getByTestId('builder-chain-id')).toHaveText(savedId);
@@ -491,6 +492,7 @@ test.describe('Chain inputs and save', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: 'Chain authoring' }),
     ).toBeVisible();
+    await page.getByText('Harness and duplicate settings').click();
 
     const harnessSelect = page.getByTestId('builder-harness-select');
     await expect(harnessSelect).toHaveValue('opencode');

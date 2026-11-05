@@ -2,6 +2,7 @@ import type { Dirent, Stats } from 'node:fs';
 import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join } from 'node:path';
+import { SHARED_PROJECT_SKILLS_SEGMENTS } from './project-paths.js';
 import {
   FrontmatterError,
   frontmatterString,
@@ -27,7 +28,7 @@ export const OPENCODE_HARNESS = 'opencode' as const;
 /** The single file that identifies a skill package. */
 export const SKILL_FILE_NAME = 'SKILL.md';
 
-/** Project-local discovery root, relative to the canonical project directory. */
+/** Legacy OpenCode project-local discovery root. */
 export const OPENCODE_PROJECT_SKILLS_SEGMENTS = ['.opencode', 'skills'] as const;
 
 /** Personal discovery root, relative to the user's home directory. */
@@ -117,6 +118,11 @@ function buildRoots(
   extraDirectories: readonly string[],
 ): ScanRoot[] {
   const roots: ScanRoot[] = [
+    {
+      source: 'project',
+      path: join(projectPath, ...SHARED_PROJECT_SKILLS_SEGMENTS),
+      optional: true,
+    },
     {
       source: 'project',
       path: join(projectPath, ...OPENCODE_PROJECT_SKILLS_SEGMENTS),

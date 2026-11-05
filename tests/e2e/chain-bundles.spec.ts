@@ -70,7 +70,7 @@ test('shares mixed chains through a reviewed download and import with explicit c
   const cards = page.getByTestId('chain-card');
   await expect(cards).toHaveCount(1);
   await expect(cards).toContainText('2 steps');
-  expect(await readFile(join(target, '.opencode', 'skills', 'sharing-probe', 'SKILL.md'), 'utf8')).toBe(skill);
+  expect(await readFile(join(target, '.agents', 'skills', 'sharing-probe', 'SKILL.md'), 'utf8')).toBe(skill);
   const listing = await request.get(`/api/projects/${ids[1]}/chains`);
   const imported = (await listing.json() as { chains: Array<{ automaticPermissionOptIn: boolean; steps: Array<{ kind?: string }> }> }).chains[0]!;
   expect(imported.automaticPermissionOptIn).toBe(false);

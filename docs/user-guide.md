@@ -26,11 +26,13 @@ Skill Loom does not install or authenticate harnesses for you, and it does not s
 
 There is **no sign-in**. Skill Loom binds to loopback and has **no authentication** because it is not designed for remote access. Do not expose the port through a reverse proxy, tunnel, container port publish, or remote host.
 
-On first load you land on **Projects**. The header shows:
+On first load you land on **Projects**. The responsive workspace shell provides:
 
-- **Local-only**, a reminder that the server is loopback-bound.
-- **Server connected · v0.1.0**, the health indicator. If it changes to **Server connection error**, use **Retry**.
-- **Projects**, **Scenario catalog**, and **Chain library** navigation.
+- A desktop navigation sidebar, or a compact **Menu** on smaller screens.
+- Breadcrumbs for the current project, chain, and run workflow.
+- **Projects**, **Scenario catalog**, and the reusable **Chain library**. A selected project adds separate **Project chains** and **Project skills** destinations.
+- A **Local-only** reminder and **Server connected · v0.1.0** health indicator. If the indicator changes to **Server connection error**, use **Retry**.
+- An **Appearance** selector for **System**, **Light**, or **Dark**. System follows the operating-system preference; an explicit choice is remembered in this browser.
 
 Register an existing folder with the folder browser or create a new project. Registering a project records it in the recent-projects list; removing a recent entry does not delete the folder.
 
@@ -39,17 +41,17 @@ Register an existing folder with the folder browser or create a new project. Reg
 ### Register and open a project
 
 1. From **Projects**, choose an existing folder or create a new one. Creating a project can optionally initialize a Git repository.
-2. Open the project workspace. The project name appears in the header and the chain library is scoped to that project.
-3. The skill catalog starts collapsed. Expand it when you need it.
+2. Open the project's **Chains** workspace. The project name and project-specific navigation remain available while you work.
+3. Choose **Project skills** to search and inspect the project's skill catalog. Choose **Project chains** to build or run chains. Project metadata is available under **Project details**.
 
 ### Browse the skill catalog
 
-1. Choose the harness whose installed skills you want to inspect.
+1. Open **Project skills**, then choose the harness whose installed skills you want to inspect.
 2. Search, or expand a skill to read its `SKILL.md` metadata. Skill text is displayed as escaped text, never as raw HTML.
 3. Optionally add extra skill directories from the catalog settings dialog. Extra directories are global, not per project.
-4. A skill from a personal, plugin, custom, or extra source can be copied into the project with **Copy into this project**. OpenCode copies land in `<project>/.opencode/skills/`; Copilot copies land in `<project>/.github/skills/`. The copy is bounded, refuses symlinks, and never overwrites an existing package.
+4. A skill from a personal, plugin, custom, or extra source can be copied into the project with **Copy into this project**. Copies for both harnesses land in `<project>/.agents/skills/`. The copy is bounded, refuses symlinks, and never overwrites an existing package.
 
-Copilot's own discovery command runs in the project directory. Skill Loom writes project copies to `.github/skills/`, a project-skill location recognized by Copilot CLI; the CLI also supports `.agents/skills/`.
+OpenCode also discovers legacy project packages under `.opencode/skills/`. Copilot discovery remains authoritative through `copilot skill list --json`; Skill Loom does not move or migrate existing skill directories.
 
 ### Start from a scenario example
 
@@ -86,7 +88,7 @@ Instruction steps run through the chain's selected harness in the same order and
 
 The export excludes input default values, run records, terminal output, local catalog source paths, chain identity/timestamps, and automatic-permission consent. It refuses packages containing symbolic links, special files, `.env` files, credential-named files, `.git`, `.loom`, `.ssh`, or `node_modules` directories rather than silently exporting a partial package. This is not a secret scanner: secrets, private paths, or confidential material inside ordinary instructions and files must be removed before sharing.
 
-Every skill name must resolve to exactly one enabled, readable package. Missing, ambiguous, or non-filesystem skills block export. Bundles support up to 100 skill packages, 2,000 files, and 20 MiB of decoded file content; the JSON upload limit is 30 MiB. Directory names and file paths must be portable and safe, and directory nesting is bounded.
+Each skill must resolve to an enabled, readable package for the chain's selected harness. A single project-local package takes precedence over same-name personal or extra-directory copies; multiple distinct project packages remain ambiguous. If there is no project copy, only one available non-project package can be exported. Missing, disabled, ambiguous, or non-filesystem skills block export. Bundles support up to 100 skill packages, 2,000 files, and 20 MiB of decoded file content; the JSON upload limit is 30 MiB. Directory names and file paths must be portable and safe, and directory nesting is bounded.
 
 ### Import a shared chain
 
@@ -96,9 +98,9 @@ Every skill name must resolve to exactly one enabled, readable package. Missing,
 4. Confirm that you trust the instructions and packages, then choose **Import chain and skills**.
 5. Open the new chain, provide inputs, review automatic permissions, and run preflight before running it.
 
-Import creates an independent chain with a fresh id and timestamps, resets automatic-permission consent to off, and installs new packages under `.opencode/skills/` for OpenCode or `.github/skills/` for Copilot. It rechecks conflicts at import time and removes newly installed packages if saving the chain fails. Existing packages remain untouched. Import never executes bundled scripts, starts a run, authenticates a harness, or grants folder trust. Removing the imported chain later does not remove its installed skills.
+Import creates an independent chain with a fresh id and timestamps, resets automatic-permission consent to off, and installs new packages under `.agents/skills/` for both harnesses. It rechecks conflicts at import time and removes newly installed packages if saving the chain fails. Existing packages remain untouched. Import never executes bundled scripts, starts a run, authenticates a harness, or grants folder trust. Removing the imported chain later does not remove its installed skills.
 
-The recipient still needs the selected harness and any external tools, services, or dependencies used by the skills. For Copilot, confirm the imported skills appear in its catalog; the project copy destination has the same live-verification limitation described above. Bundles are not backups of project files or the global library, and exporting a global template requires first importing it into a project.
+The recipient still needs the selected harness and any external tools, services, or dependencies used by the skills. Bundles are not backups of project files or the global library, and exporting a global template requires first importing it into a project.
 
 ### Session modes
 
@@ -129,7 +131,7 @@ Supervised mode gives you the interactive terminal and explicit outcomes. A step
 - **Mark skipped** records the step as skipped with a reason and enables **Next**.
 - **Retry**, **Skip**, and **Abort** remain available according to the server-published action flags.
 
-The terminal page keeps the xterm surface and compact controls together. **Run details** opens `/runs/<runId>` for the step rail, full controls, and recovery guidance.
+The terminal page keeps the xterm surface and compact controls together and follows the selected appearance. **Run details** opens `/runs/<runId>` for the step rail, full controls, and recovery guidance.
 
 ### Automatic run controls
 
@@ -179,7 +181,7 @@ Skill Loom accepts portable chain bundle JSON through **Import bundle**; it has 
 - **Chain definitions** under `<project>/.loom/chains/`, including steps, inputs, harness, session mode, and the automatic-permission opt-in.
 - **Run records** under `<project>/.loom/runs/`, including the frozen chain snapshot, resolved inputs, statuses, actions, and at most a **200-line or 32 KiB** terminal tail per step.
 - **Global configuration and templates** under `~/.config/loom/` by default, including recent projects, executable overrides, extra skill directories, UI preferences, and global chain templates.
-- **Copied skill packages** under the project's `.opencode/skills/` or `.github/skills/` directory.
+- **Copied skill packages** under the project's `.agents/skills/` directory. Existing OpenCode `.opencode/skills/` packages are not migrated.
 - **Exported bundles** downloaded by your browser to its download location. These contain chain instructions and skill package contents; treat and share them accordingly.
 
 Run tails and copied skills are local data. Treat run records as sensitive because terminal output can contain source code, prompts, or tool output.

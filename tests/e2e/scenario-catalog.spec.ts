@@ -91,6 +91,7 @@ test('filters examples, discloses skill sources, copies to the builder, and pref
   });
   expect(copied?.steps.some((step) => step.skillName === 'fastapi-expert')).toBe(true);
 
+  await page.getByText('More actions').click();
   await page.getByTestId('chain-run-from-builder').click();
   await expect(page.getByTestId('run-start-page')).toBeVisible();
   await page.getByTestId('preflight-run').click();
