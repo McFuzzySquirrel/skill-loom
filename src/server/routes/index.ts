@@ -9,6 +9,7 @@ import {
 } from './global-chains.js';
 import { healthRoutes, type HealthRouteOptions } from './health.js';
 import { preflightRoutes, type PreflightRoutesOptions } from './preflight.js';
+import { portableSkillRoutes } from './portable-skill.js';
 import { projectRoutes, type ProjectRoutesOptions } from './projects.js';
 import { scenarioPresetRoutes } from './presets.js';
 import { runRoutes, type RunRoutesOptions } from './runs.js';
@@ -36,6 +37,7 @@ export const routes: FastifyPluginAsync<RouteRegistrationOptions> = async (app, 
   await app.register(catalogRoutes, options);
   await app.register(chainRoutes, options);
   await app.register(chainBundleRoutes, options);
+  await app.register(portableSkillRoutes);
   await app.register(globalChainRoutes, options);
   await app.register(preflightRoutes, options);
   await app.register(runRoutes, options);

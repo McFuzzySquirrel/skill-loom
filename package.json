@@ -14,16 +14,19 @@
   "files": [
     "dist/src",
     "dist/web",
+    "dist/skills",
     "dist/package.json",
     "docs/OPERATIONS.md"
   ],
   "scripts": {
+    "predev": "npm run build:portable-skill",
     "dev": "concurrently --kill-others --names server,web --prefix-colors blue,green \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "tsx watch src/server/index.ts",
     "dev:web": "vite",
-    "build": "npm run build:web && npm run build:server",
+    "build": "npm run build:portable-skill && npm run build:web && npm run build:server",
     "build:web": "vite build",
     "build:server": "tsc -p tsconfig.server.json && node scripts/copy-scenario-skills.mjs",
+    "build:portable-skill": "node scripts/build-portable-skill.mjs",
     "prepack": "npm run build",
     "start": "node dist/src/server/index.js",
     "typecheck": "npm run typecheck:server && npm run typecheck:web",
@@ -61,6 +64,7 @@
     "@xterm/xterm": "6.0.0",
     "concurrently": "10.0.6",
     "gifenc": "1.0.3",
+    "fflate": "^0.8.3",
     "pngjs": "7.0.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",

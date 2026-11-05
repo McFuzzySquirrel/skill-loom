@@ -1,6 +1,6 @@
 # Skill Loom Operations Guide
 
-This guide is the operator contract for the local Skill Loom v1 application. It covers configuration, on-disk data, harness prerequisites, Copilot trust and automatic permissions, the security model, backup and cleanup, known limitations, fork handoff behavior, and troubleshooting.
+This guide is the operator contract for the local Skill Loom v1 application and its standalone exported-chain skill. It covers configuration, on-disk data, harness prerequisites, Copilot trust and automatic permissions, the security model, backup and cleanup, known limitations, fork handoff behavior, and troubleshooting.
 
 Read [README.md](../README.md) first for install, development, build, start, and test commands. For task-oriented guidance, see the [user guide](user-guide.md) and [administrator guide](admin-guide.md). The durable decisions behind this contract are in the [ADR index](adr/README.md), and release validation is in [the 0.1.0 release notes](releases/0.1.0.md).
 
@@ -41,6 +41,10 @@ The CLI supports `--help`, `--version`, `--no-open`, `--port <number>`, and `--c
 
 Before publishing, flip `"private"` to `false`, add repository metadata, verify the package name is still available, run `npm run test:package`, and publish with `npm publish`. Once published, the invocation is `npx skill-loom-cli`.
 
+The build also creates the reusable `dist/skills/loom-run-bundle/` skill directory and `dist/skills/loom-run-bundle.zip`. The export dialog downloads the ZIP from the local server. To install manually from a checkout, run `npm run build:portable-skill`, then copy the generated directory into the target project's `.agents/skills/loom-run-bundle/`. The packaged helper bundles its JavaScript dependencies and runs on Node.js 24+ without the Skill Loom server, database, native PTY, or an installed Loom npm package. The standalone ZIP and files are included in the packed Skill Loom artifact. The development `npm run dev` lifecycle builds the skill before starting the server and UI.
+
+The helper is not the `skill-loom` server CLI and does not launch a nested Copilot or OpenCode process. Its `inspect`, `prepare`, `status`, `step`, `record`, and `resume` protocol is documented in the packaged `SKILL.md`; it receives state-changing options as JSON on stdin. The host agent uses its ordinary tools for each step, so recorded success is agent-reported rather than a verified CLI process exit or OpenCode OSC signal.
+
 ## Data locations
 
 | Path | Contents | Notes |
@@ -50,6 +54,7 @@ Before publishing, flip `"private"` to `false`, add repository metadata, verify 
 | `~/.config/loom/chains/*.json` | Global chain templates saved with **Save copy to library**. | Independent snapshots, not live links to project chains. Importing copies one into a project with a new id. |
 | `<project>/.loom/chains/*.json` | Saved chain definitions, including steps, inputs, harness, session mode, and the automatic-permission opt-in. | Versioned JSON written atomically. Chain files can be backed up or versioned if you want to keep recipes. |
 | `<project>/.loom/runs/*.json` | Run snapshots, statuses, actions, and a bounded terminal tail per step. | At most a **200-line or 32 KiB** tail per step; never a full transcript. `.loom/runs/` is **git-ignored** by this repository's `.gitignore`. |
+| `<project>/.loom/portable-runs/*.json` | Separate standalone-skill run snapshots, resolved input values, package fingerprints, attempts, and bounded summaries. | Contains local input values; created and Git-ignored by the portable helper. It does not use native run records or the global active-run pointer. |
 | `~/.copilot/config.json` | Copilot's own persistent folder-trust configuration. | Skill Loom only reads `trustedFolders`; it never writes this file. |
 
 A run freezes an immutable snapshot of the chain definition and resolved inputs at creation. Editing the saved chain later does not change an existing or in-flight run, and retry uses the snapshot. Chain and run writes are versioned JSON with atomic temp-file replacement; restarting the server marks records that were active as `interrupted` instead of assuming completion.
@@ -73,6 +78,10 @@ The skill catalog starts collapsed. Expanding an entry from a non-project source
 The builder also offers **Add instruction** for an ordered standalone prompt without a catalog skill. It uses the same harness, inputs, session modes, and run controls as skill steps.
 
 For cross-installation sharing, save the chain and choose **Export** on its project chain card. Review the instructions and complete skill package contents before downloading the `.loom.json` bundle. **Import bundle** previews the file, requires trust confirmation and explicit reuse choices for installed skill conflicts, then creates a fresh chain and installs new project-local packages without executing them. It never overwrites packages and resets automatic-permission consent. Input defaults, run history, and local catalog source paths are not exported; ordinary file contents are not secret-scanned. Limits are 100 packages, 2,000 files, 20 MiB decoded content, and 30 MiB JSON requests. See the [user guide](user-guide.md#share-a-chain-and-its-skills) for sharing restrictions and recipient prerequisites.
+
+The export dialog's **Download reusable runner skill** is a separate artifact and contains no chain-specific instructions or packages. Recipients install it in their project's `.agents/skills/`, refresh host discovery as needed, and pass the separately exported bundle to the skill. Package review/installation is separately confirmed before execution. Portable records persist resolved inputs locally; do not use credentials as chain inputs. The host's own tools and trust prompts remain authoritative.
+
+Copilot CLI and OpenCode project skills both use `.agents/skills/` in Skill Loom's current adapter contract. This does not establish that every host version exposes subagents, isolated sessions, native forks, or skill reload. The runner must verify capabilities in the active host and block unsupported behavior; a shared-session fallback or handoff requires explicit user consent. Host-reported completion is not guaranteed work verification.
 
 Preflight hard-blocks a missing harness executable, unauthenticated or ambiguously authenticated harness, unresolved Copilot trust, unresolved skills, missing required inputs, unsupported session modes, and a missing automatic-permission opt-in when Copilot automatic mode is selected. A dirty git tree is a warning, not a block. A non-git project skips the dirty-tree check.
 

@@ -1,142 +1,37 @@
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
-import { z } from 'zod';
 import type { BundlePreview, BundleSkill, ChainBundle } from '../../shared/bundles.js';
 import { projectSkillRootFor } from '../catalog/copy.js';
 import { SHARED_PROJECT_SKILLS_SEGMENTS, sharedProjectSkillRoot } from '../catalog/project-paths.js';
-import { frontmatterString, parseSkillFrontmatter } from '../catalog/frontmatter.js';
 import type { CatalogService } from '../catalog/merge.js';
-import { ChainSchema, parseChain, type Chain } from './model.js';
+import type { Chain } from './model.js';
 import type { ChainService } from './service.js';
+import {
+  BundleError,
+  MAX_BUNDLE_BYTES,
+  MAX_BUNDLE_FILES,
+  MAX_BUNDLE_SKILLS,
+  bundleSkillNames,
+  chainFromBundle,
+  decodeBundleFile,
+  parseBundle,
+  validatePackagePath,
+} from '../../portable/bundle.js';
+export { BundleError, MAX_BUNDLE_BYTES, parseBundle } from '../../portable/bundle.js';
 
-export const MAX_BUNDLE_BYTES = 20 * 1024 * 1024;
-export const MAX_BUNDLE_FILES = 2_000;
-export const MAX_BUNDLE_REQUEST_BYTES = 30 * 1024 * 1024;
-const MAX_BUNDLE_SKILLS = 100;
-
-export class BundleError extends Error {
-  constructor(
-    readonly code: 'BUNDLE_INVALID' | 'BUNDLE_CONFLICT' | 'BUNDLE_SOURCE_UNAVAILABLE' | 'BUNDLE_TOO_LARGE',
-    message: string,
-  ) {
-    super(message);
-    this.name = 'BundleError';
-  }
-}
-
-const forbiddenSegments = /^(?:\.env(?:\..*)?|\.git|\.loom|\.ssh|node_modules|credentials(?:\..*)?)$/i;
-const fileSchema = z.strictObject({
-  path: z.string().min(1).max(512),
-  content: z.string().max(Math.ceil(MAX_BUNDLE_BYTES / 3) * 4),
-  executable: z.boolean(),
-});
-const bundleSchema = z.strictObject({
-  format: z.literal('skill-loom-chain'),
-  version: z.literal(1),
-  chain: z.strictObject({
-    name: ChainSchema.shape.name,
-    harness: ChainSchema.shape.harness,
-    sessionMode: ChainSchema.shape.sessionMode,
-    steps: ChainSchema.shape.steps,
-    inputs: ChainSchema.shape.inputs,
-  }),
-  skills: z.array(z.strictObject({
-    name: z.string().trim().min(1).max(128),
-    directory: z.string().min(1).max(128).regex(/^[^/\\]+$/),
-    files: z.array(fileSchema).min(1).max(MAX_BUNDLE_FILES),
-  })).max(MAX_BUNDLE_SKILLS),
-});
+export { MAX_BUNDLE_REQUEST_BYTES } from '../../portable/bundle.js';
 
 function invalid(message: string): never {
   throw new BundleError('BUNDLE_INVALID', message);
 }
 
-function validatePath(path: string): void {
-  const parts = path.split('/');
-  if (parts.length > 32 || parts.some((part) =>
-    part === '.' || part === '..' || !/^[^\\/:*?"<>|\x00-\x1f]+$/.test(part) ||
-    /[. ]$/.test(part) || forbiddenSegments.test(part) ||
-    /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(part))) {
-    invalid('The bundle contains an unsafe or excluded package path.');
-  }
-}
-
-function decodeFile(content: string): Buffer {
-  if (content.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(content)) {
-    invalid('Package file contents must be canonical base64.');
-  }
-  const decoded = Buffer.from(content, 'base64');
-  if (decoded.toString('base64') !== content) invalid('Package file contents are not canonical base64.');
-  return decoded;
-}
-
 function skillNames(chain: Pick<Chain, 'steps'>): string[] {
-  return [...new Set(chain.steps.flatMap((step) =>
-    'skillName' in step && typeof step.skillName === 'string' ? [step.skillName] : []))];
+  return bundleSkillNames(chain);
 }
 
 function bundleChain(bundle: ChainBundle): Chain {
-  return parseChain({
-    ...bundle.chain,
-    version: 1,
-    id: 'bundle-preview',
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    automaticPermissionOptIn: false,
-  });
-}
-
-export function parseBundle(raw: unknown): ChainBundle {
-  const parsed = bundleSchema.safeParse(raw);
-  if (!parsed.success) invalid('The file is not a supported Skill Loom chain bundle.');
-  const bundle = parsed.data;
-  const chain = bundleChain(bundle);
-  const expected = new Set(skillNames(chain));
-  const names = new Set<string>();
-  const directories = new Set<string>();
-  let bytes = 0;
-  let files = 0;
-  for (const skill of bundle.skills) {
-    validatePath(skill.directory);
-    const directoryKey = skill.directory.toLowerCase();
-    if (names.has(skill.name) || directories.has(directoryKey) || !expected.has(skill.name)) {
-      invalid('The bundle contains duplicate or unreferenced skill packages.');
-    }
-    names.add(skill.name);
-    directories.add(directoryKey);
-    const paths = new Set<string>();
-    for (const file of skill.files) {
-      validatePath(file.path);
-      const key = file.path.toLowerCase();
-      if (paths.has(key)) invalid('The bundle contains duplicate package file paths.');
-      paths.add(key);
-      bytes += decodeFile(file.content).length;
-      files += 1;
-      if (bytes > MAX_BUNDLE_BYTES || files > MAX_BUNDLE_FILES) {
-        throw new BundleError('BUNDLE_TOO_LARGE', 'Bundles are limited to 20 MiB and 2,000 files.');
-      }
-    }
-    for (const path of paths) {
-      const segments = path.split('/');
-      while (segments.length > 1) {
-        segments.pop();
-        if (paths.has(segments.join('/'))) invalid('A package file conflicts with a directory.');
-      }
-    }
-    const entry = skill.files.find((file) => file.path === 'SKILL.md');
-    if (!entry) invalid('Each skill package must include SKILL.md.');
-    let name: string;
-    try {
-      name = frontmatterString(parseSkillFrontmatter(decodeFile(entry.content).toString('utf8')).data, 'name') ??
-        skill.directory;
-    } catch {
-      invalid('A bundled SKILL.md has invalid frontmatter.');
-    }
-    if (name !== skill.name) invalid('A bundled skill name does not match its SKILL.md or directory.');
-  }
-  if (names.size !== expected.size) invalid('The bundle is missing a referenced skill package.');
-  return bundle;
+  return chainFromBundle(bundle);
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -213,7 +108,7 @@ export async function exportBundle(
       if (depth > 32) invalid('The skill package exceeds the directory depth limit.');
       for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
         const path = prefix + entry.name;
-        validatePath(path);
+        validatePackagePath(path);
         const absolute = join(directory, entry.name);
         if (entry.isDirectory()) {
           await collect(absolute, `${path}/`, depth + 1);
@@ -279,7 +174,7 @@ export async function previewBundle(
       conflict: entries.some((entry) => entry.enabled && entry.name === skill.name),
       directoryExists: await exists(join(projectSkillRootFor(bundle.chain.harness, projectPath), skill.directory)),
       files: skill.files.length,
-      bytes: skill.files.reduce((sum, file) => sum + decodeFile(file.content).length, 0),
+      bytes: skill.files.reduce((sum, file) => sum + decodeBundleFile(file.content).length, 0),
     }))),
   };
 }
@@ -344,7 +239,7 @@ export async function importBundle(
           const segments = file.path.split('/');
           segments.pop();
           if (segments.length > 0) await mkdir(join(destination, ...segments), { recursive: true, mode: 0o755 });
-          await writeFile(join(destination, file.path), decodeFile(file.content), {
+          await writeFile(join(destination, file.path), decodeBundleFile(file.content), {
             flag: 'wx',
             mode: file.executable ? 0o755 : 0o644,
           });

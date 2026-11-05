@@ -102,6 +102,18 @@ Import creates an independent chain with a fresh id and timestamps, resets autom
 
 The recipient still needs the selected harness and any external tools, services, or dependencies used by the skills. Bundles are not backups of project files or the global library, and exporting a global template requires first importing it into a project.
 
+### Run an exported chain inside a harness
+
+The export dialog also offers **Download reusable runner skill**. This ZIP contains the generic `loom-run-bundle` Agent Skill, its references, a dependency-bundled helper, and license notices; it does not contain the exported chain. A recipient needs Node.js 24+ and a harness that can read project skills, invoke Node with arguments/stdin, and request confirmation. Skill Loom does not need to be installed or running during execution.
+
+Extract the ZIP and install its `loom-run-bundle/` directory into the target project's `.agents/skills/` directory, unless that skill already exists. Alternatively, in a Skill Loom checkout run `npm run build:portable-skill` and copy the generated `dist/skills/loom-run-bundle/` directory into that location. Do not merge over an existing runner package. Refresh or restart the host if it does not discover the new skill. The helper also needs to be invokable from the skill directory reported by the host; if the host cannot locate it or pass structured stdin, stop rather than guessing a global path.
+
+In the target project's harness session, invoke `loom-run-bundle` and provide an absolute path to the downloaded `.loom.json` bundle. The helper's read-only `inspect` command validates the complete bundle and reports instructions, inputs, package files, `SKILL.md` text, executable bits, and project skill conflicts before installation. Review the content as untrusted, confirm package installation/reuse separately from chain execution, resolve inputs, and review the current host and session plan. The helper installs packages under `<project>/.agents/skills/` without overwriting; changed existing packages require a separate explicit reuse choice. If the harness needs a refresh to see newly installed skills, do that before starting a step.
+
+The standalone workflow defaults to supervised execution: confirm each step, then record its outcome. Agent-driven progression is optional and needs separate consent. The helper persists a frozen bundle/input snapshot and bounded attempt summaries under `<project>/.loom/portable-runs/`, which it adds to the project's `.loom/.gitignore`; input values therefore remain local files and should not contain secrets unless you accept that storage. `status`, `pause`, `retry`, reasoned `skip`, `abort`, and explicit `resume` are available. An interrupted attempt is uncertain and is never replayed without a recovery choice. Retry does not roll back file changes.
+
+Portable execution is not Skill Loom's terminal runner. The helper never launches a harness CLI, grants tool permissions, changes trust settings, or runs package scripts. The host performs the work and reports completion, so outcomes are not verified process exits and do not prove a skill fired. `shared` uses the current conversation. `fresh` needs a verified isolated worker or explicit acceptance of a shared-conversation approximation; `fork` needs a verified native fork or explicit acceptance of a labelled handoff. A different host from the bundle's authored harness requires compatibility review. If the current host cannot supply a required capability or confirmation, execution must stop before dispatch.
+
 ### Session modes
 
 | Mode | Behavior |

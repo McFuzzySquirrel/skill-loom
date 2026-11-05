@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { unzipSync } from 'fflate';
 
 const execFileAsync = promisify(execFile);
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -29,6 +30,9 @@ function assertPackageContents(files) {
     'package/dist/src/server/chains/scenario-skills/minimax-xlsx/SKILL.md',
     'package/dist/src/server/chains/scenario-skills/minimax-xlsx/LICENSE',
     'package/dist/web/index.html',
+    'package/dist/skills/loom-run-bundle.zip',
+    'package/dist/skills/loom-run-bundle/SKILL.md',
+    'package/dist/skills/loom-run-bundle/scripts/loom-bundle.mjs',
   ];
   for (const path of required) {
     if (!files.includes(path)) {
@@ -107,6 +111,43 @@ async function stopProcess(child) {
   }
 }
 
+async function smokePortableSkill(temporaryRoot) {
+  const archive = await readFile(join(repoRoot, 'dist', 'skills', 'loom-run-bundle.zip'));
+  const files = unzipSync(archive);
+  const helper = files['loom-run-bundle/scripts/loom-bundle.mjs'];
+  if (!helper || !files['loom-run-bundle/SKILL.md'] ||
+    !files['loom-run-bundle/licenses/zod-LICENSE'] ||
+    !files['loom-run-bundle/licenses/yaml-LICENSE']) {
+    throw new Error('The portable skill archive is missing its helper, instructions, or dependency licenses.');
+  }
+  const extracted = join(temporaryRoot, 'standalone-skill');
+  await mkdir(join(extracted, 'scripts'), { recursive: true });
+  const helperPath = join(extracted, 'scripts', 'loom-bundle.mjs');
+  await writeFile(helperPath, helper, { mode: 0o755 });
+  const bundlePath = join(temporaryRoot, 'inspection.loom.json');
+  await writeFile(bundlePath, JSON.stringify({
+    format: 'skill-loom-chain',
+    version: 1,
+    chain: {
+      name: 'Package smoke',
+      harness: 'copilot',
+      sessionMode: 'shared',
+      steps: [{ id: 'step-1', kind: 'instruction', instruction: 'Verify the packaged helper.' }],
+      inputs: [],
+    },
+    skills: [],
+  }));
+  const inspected = await execFileAsync(
+    process.execPath,
+    [helperPath, 'inspect', '--bundle', bundlePath],
+    { cwd: temporaryRoot, maxBuffer: 2 * 1024 * 1024 },
+  );
+  const result = JSON.parse(inspected.stdout);
+  if (result.ok !== true || result.chain.name !== 'Package smoke') {
+    throw new Error('The standalone helper could not inspect a bundle outside the repository.');
+  }
+}
+
 async function main() {
   await mkdir(join(repoRoot, '.tmp'), { recursive: true });
   const temporaryRoot = await mkdtemp(join(repoRoot, '.tmp', 'package-smoke-'));
@@ -147,6 +188,7 @@ async function main() {
     });
     const files = listed.stdout.split(/\r?\n/).filter(Boolean);
     assertPackageContents(files);
+    await smokePortableSkill(temporaryRoot);
 
     const version = await execFileAsync(
       npxCommand,
@@ -212,7 +254,7 @@ async function main() {
     }
     const skill = await skillResponse.json();
     const sourceNotice = await readFile(
-      join(projectPath, '.opencode', 'skills', 'minimax-xlsx', 'SKILL-LOOM-SOURCE.md'),
+      join(projectPath, '.agents', 'skills', 'minimax-xlsx', 'SKILL-LOOM-SOURCE.md'),
       'utf8',
     );
     if (

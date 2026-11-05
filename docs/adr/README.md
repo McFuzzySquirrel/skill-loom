@@ -17,6 +17,7 @@
 | [ADR-0011](0011-shell-free-process-and-pty-transport.md) | Spawn harnesses without a shell and keep PTYs server-owned | Accepted | 2026-11-04 |
 | [ADR-0012](0012-shared-project-skill-installation-root.md) | Use a shared project skill installation root | Accepted | 2026-11-05 |
 | [ADR-0013](0013-deterministic-chain-bundle-skill-resolution.md) | Resolve bundle skills with project-local precedence | Accepted | 2026-11-05 |
+| [ADR-0014](0014-portable-agent-skill-execution.md) | Execute exported chains through a standalone agent skill | Accepted | 2026-11-05 |
 
 ## Rules
 
