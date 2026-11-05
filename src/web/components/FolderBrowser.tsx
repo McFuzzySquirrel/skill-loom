@@ -6,6 +6,7 @@ import {
   type ProjectsApi,
 } from '../api/projects';
 import type { ApiClientError } from '../api/client';
+import { isAbsolutePath } from '../../shared/paths';
 import { useDirectoryListing } from '../hooks/useDirectoryListing';
 import { InlineError } from './InlineError';
 
@@ -59,8 +60,8 @@ export function FolderBrowser({
       setPathError('Enter an absolute folder path.');
       return;
     }
-    if (!requested.startsWith('/')) {
-      setPathError('Folder paths must be absolute. Start the path with "/".');
+    if (!isAbsolutePath(requested)) {
+      setPathError('Enter an absolute POSIX or Windows folder path.');
       return;
     }
     navigateTo(requested);
@@ -71,7 +72,7 @@ export function FolderBrowser({
 
   const openCurrent = async () => {
     const target = currentPath;
-    if (target === '' || !target.startsWith('/')) {
+    if (target === '' || !isAbsolutePath(target)) {
       setPathError('Open an absolute folder before registering it as a project.');
       return;
     }
@@ -126,7 +127,8 @@ export function FolderBrowser({
           </button>
         </div>
         <p className="field__hint" id="folder-path-hint">
-          Enter an absolute path, for example <code>/home/you/code/project</code>.
+          Enter an absolute path, for example <code>/home/you/code/project</code> or{' '}
+          <code>C:\Users\you\code\project</code>.
         </p>
       </form>
 

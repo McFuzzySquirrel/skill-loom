@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   FRONTMATTER_ERROR_CODES,
@@ -126,7 +126,7 @@ describe('OpenCode skill discovery', () => {
 
     for (const entry of result.entries) {
       expect(entry.id).toMatch(/^opencode-[a-z-]+-[0-9a-f]{16}$/);
-      expect(entry.path.startsWith('/')).toBe(true);
+      expect(isAbsolute(entry.path)).toBe(true);
       expect(entry.packagePath).toBe(dirname(entry.path));
     }
   });

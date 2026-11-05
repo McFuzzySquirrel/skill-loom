@@ -6,6 +6,7 @@ import {
   type ProjectRegistration,
   type ProjectsApi,
 } from '../api/projects';
+import { isAbsolutePath } from '../../shared/paths';
 import { InlineError } from './InlineError';
 
 const MAX_NAME_LENGTH = 255;
@@ -40,8 +41,8 @@ function validateParent(value: string): string | null {
   if (value.trim() === '') {
     return 'Enter the parent folder for the new project.';
   }
-  if (!value.startsWith('/')) {
-    return 'The parent folder must be an absolute path starting with "/".';
+  if (!isAbsolutePath(value)) {
+    return 'The parent folder must be an absolute POSIX or Windows path.';
   }
   return null;
 }

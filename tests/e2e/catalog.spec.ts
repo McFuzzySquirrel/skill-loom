@@ -302,7 +302,7 @@ test.describe('Skill catalog', () => {
     const input = dialog.getByTestId('extra-directory-input');
     await input.fill('relative/skills');
     await dialog.getByTestId('extra-directory-add').click();
-    await expect(dialog).toContainText('Enter an absolute path beginning with "/".');
+    await expect(dialog).toContainText('Enter an absolute POSIX or Windows path.');
 
     await input.fill(join(fixtureRoot, 'does-not-exist'));
     await dialog.getByTestId('extra-directory-add').click();

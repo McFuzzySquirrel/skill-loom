@@ -9,6 +9,7 @@ import {
 import type { ApiClientError } from '../api/client';
 import { catalogApi, toApiClientError, type CatalogApi } from '../api/catalog';
 import { useExtraDirectories } from '../hooks/useCatalog';
+import { isAbsolutePath } from '../../shared/paths';
 import { useStatusAnnouncer } from './StatusRegion';
 import { InlineError } from './InlineError';
 
@@ -27,8 +28,8 @@ function validateAbsolutePath(value: string): string | null {
   if (trimmed.includes('\0')) {
     return 'The path contains an invalid character.';
   }
-  if (!trimmed.startsWith('/')) {
-    return 'Enter an absolute path beginning with "/".';
+  if (!isAbsolutePath(trimmed)) {
+    return 'Enter an absolute POSIX or Windows path.';
   }
   return null;
 }
@@ -171,7 +172,7 @@ export function ExtraDirectoriesDialog({
               }}
               aria-invalid={inputError !== null}
               aria-describedby={inputError === null ? undefined : inputErrorId}
-              placeholder="/home/user/skills"
+              placeholder="/home/user/skills or C:\\Users\\you\\skills"
               disabled={busy !== null}
               data-testid="extra-directory-input"
             />

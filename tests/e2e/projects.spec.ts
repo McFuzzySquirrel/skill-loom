@@ -2,7 +2,7 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from '@
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, parse } from 'node:path';
 
 /**
  * Browser coverage for PROJ-03.
@@ -138,7 +138,7 @@ test.describe('Project selection screen', () => {
 
     await enterFolder(page, 'existing-repo');
     await page.getByRole('button', { name: 'Home' }).click();
-    await expect(page.getByTestId('current-folder')).toHaveText('/');
+    await expect(page.getByTestId('current-folder')).toHaveText(parse(fixtureRoot).root);
 
     await browseTo(page, fixtureRoot);
     await enterFolder(page, 'existing-repo');
@@ -268,7 +268,7 @@ test.describe('Project selection screen', () => {
 
     await page.goto('/projects');
     await expect(page.getByText('Loading folders…')).toBeVisible();
-    await expect(page.getByTestId('current-folder')).toHaveText('/');
+    await expect(page.getByTestId('current-folder')).toHaveText(parse(fixtureRoot).root);
 
     await browseTo(page, emptyFolder);
     await expect(page.getByText('This folder is empty.', { exact: false })).toBeVisible();
@@ -352,7 +352,7 @@ test.describe('Project selection screen', () => {
     expect(existsSync(orderB)).toBe(true);
 
     await page.reload();
-    await expect(page.getByTestId('current-folder')).toHaveText('/');
+    await expect(page.getByTestId('current-folder')).toHaveText(parse(fixtureRoot).root);
     await expect(page.locator(`[data-project-id="${second.id}"]`)).toHaveCount(0);
     await expect(page.locator(`[data-project-id="${first.id}"]`)).toBeVisible();
   });
