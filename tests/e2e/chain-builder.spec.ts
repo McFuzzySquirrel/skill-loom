@@ -105,6 +105,10 @@ async function gotoNewBuilder(
     page.getByRole('heading', { level: 1, name: 'Chain authoring' }),
   ).toBeVisible();
   await expect(page.getByTestId('chain-builder')).toBeVisible();
+  await expect(page.locator('.chain-builder__catalog')).toBeVisible();
+  await expect(
+    page.locator('[data-testid="chain-builder"] .chain-builder__catalog'),
+  ).toHaveCount(0);
   await expandCatalog(page);
 }
 

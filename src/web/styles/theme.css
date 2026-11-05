@@ -1025,6 +1025,25 @@ main:focus {
   font-weight: 600;
 }
 
+.catalog-group__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.catalog-group__toggle:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
 .catalog-group__list {
   margin: 0;
   padding: 0;
@@ -1555,13 +1574,17 @@ main:focus {
 
 .chain-builder {
   display: grid;
-  grid-template-columns: minmax(17rem, 0.95fr) minmax(20rem, 1.15fr) minmax(20rem, 1.2fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--space-3);
   align-items: start;
 }
 
 .chain-builder__column {
   min-width: 0;
+}
+
+.chain-builder__catalog {
+  margin-top: var(--space-4);
 }
 
 .builder-panel {
@@ -1593,32 +1616,6 @@ main:focus {
   margin: var(--space-2) 0;
   color: var(--text-muted);
   font-size: 0.78rem;
-}
-
-.chain-builder__catalog .catalog {
-  margin: 0;
-  padding: var(--space-3);
-  border-top: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-
-.chain-builder__catalog .catalog__title {
-  font-size: 1rem;
-}
-
-.chain-builder__catalog .catalog__controls {
-  grid-template-columns: minmax(0, 1fr);
-  margin: var(--space-2) 0;
-  padding: var(--space-2);
-}
-
-.chain-builder__catalog .catalog__actions {
-  padding-top: 0;
-}
-
-.chain-builder__catalog .catalog__heading {
-  gap: var(--space-2);
 }
 
 .step-list {
@@ -1755,10 +1752,6 @@ main:focus {
 @media (max-width: 1200px) {
   .chain-builder {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-
-  .chain-builder__editor {
-    grid-column: 1 / -1;
   }
 }
 

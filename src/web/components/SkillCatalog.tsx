@@ -1,5 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { CatalogApi, CatalogHarness, CatalogWarning, SkillEntry } from '../api/catalog';
+import type {
+  CatalogApi,
+  CatalogHarness,
+  CatalogWarning,
+  SkillEntry,
+  SkillSource,
+} from '../api/catalog';
 import { CATALOG_HARNESSES } from '../api/catalog';
 import { HARNESS_LABELS, useCatalog } from '../hooks/useCatalog';
 import { InlineError } from './InlineError';
@@ -56,6 +62,9 @@ export function SkillCatalog({
       ...(api === undefined ? {} : { api }),
     });
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [collapsedSources, setCollapsedSources] = useState<Set<SkillSource>>(
+    () => new Set(),
+  );
   const [collapsed, setCollapsed] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsTrigger = useRef<HTMLButtonElement>(null);
@@ -271,6 +280,8 @@ export function SkillCatalog({
 
           {data.groups.map((group) => {
             const groupTitleId = `${baseId}-group-${group.source}`;
+            const groupListId = `${baseId}-group-list-${group.source}`;
+            const groupCollapsed = collapsedSources.has(group.source);
             return (
               <section
                 className="catalog-group"
@@ -287,8 +298,34 @@ export function SkillCatalog({
                   <span className="catalog-group__count">
                     {String(group.count)} skill{group.count === 1 ? '' : 's'}
                   </span>
+                  <button
+                    type="button"
+                    className="catalog-group__toggle"
+                    aria-label={`${groupCollapsed ? 'Expand' : 'Collapse'} ${SOURCE_LABELS[group.source]} skills`}
+                    aria-expanded={!groupCollapsed}
+                    aria-controls={groupListId}
+                    onClick={() =>
+                      setCollapsedSources((current) => {
+                        const next = new Set(current);
+                        if (next.has(group.source)) {
+                          next.delete(group.source);
+                        } else {
+                          next.add(group.source);
+                        }
+                        return next;
+                      })
+                    }
+                    data-testid={`catalog-group-toggle-${group.source}`}
+                  >
+                    <span aria-hidden="true">{groupCollapsed ? '▸' : '▾'}</span>
+                    {groupCollapsed ? 'Expand' : 'Collapse'}
+                  </button>
                 </h3>
-                <ul className="catalog-group__list">
+                <ul
+                  className="catalog-group__list"
+                  id={groupListId}
+                  hidden={groupCollapsed}
+                >
                   {group.entries.map((skill) => {
                     const expanded = expandedId === skill.id;
                     const detailId = `${baseId}-detail-${skill.id}`;

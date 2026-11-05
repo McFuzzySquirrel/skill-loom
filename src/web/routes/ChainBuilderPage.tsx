@@ -833,16 +833,6 @@ export function ChainBuilderPage({
           </section>
 
           <div className="chain-builder" data-testid="chain-builder">
-            <div className="chain-builder__column chain-builder__catalog">
-              <SkillCatalog
-                projectId={projectId}
-                context="builder"
-                initialHarness={draftDocument.harness}
-                onAddAsStep={handleAddAsStep}
-                onCatalogChange={handleCatalogChange}
-              />
-            </div>
-
             <div className="chain-builder__column chain-builder__steps">
               <StepList
                 steps={draftDocument.steps}
@@ -876,6 +866,16 @@ export function ChainBuilderPage({
                 </p>
               )}
             </div>
+          </div>
+
+          <div className="chain-builder__catalog">
+            <SkillCatalog
+              projectId={projectId}
+              context="builder"
+              initialHarness={draftDocument.harness}
+              onAddAsStep={handleAddAsStep}
+              onCatalogChange={handleCatalogChange}
+            />
           </div>
 
           <InputsEditor
