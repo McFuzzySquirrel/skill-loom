@@ -955,11 +955,11 @@ export class SupervisedRunner {
     step.sessionId = planned.sessionId;
     step.forkMechanism = planned.forkMechanism as ForkMechanism;
     step.skillObservation =
-      this.adapter.skillObservation === 'unobservable' ? 'not-observable' : 'unknown';
+      step.kind === 'instruction' || this.adapter.skillObservation === 'unobservable' ? 'not-observable' : 'unknown';
     step.tail = '';
     step.reason = null;
     this.tracker = new SkillObservationTracker({
-      capability: this.adapter.skillObservation,
+      capability: step.kind === 'instruction' ? 'unobservable' : this.adapter.skillObservation,
       expectedSkillName: step.skillName,
     });
   }

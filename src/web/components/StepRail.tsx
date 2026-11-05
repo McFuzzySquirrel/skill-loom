@@ -55,10 +55,10 @@ export function stepDisplayName(run: Run, stepId: string): string {
     return snapshotStep.label;
   }
   if (snapshotStep !== undefined) {
-    return snapshotStep.skillName;
+    return snapshotStep.kind === 'instruction' ? 'Instruction' : snapshotStep.skillName;
   }
   const record = run.steps.find((step) => step.id === stepId);
-  return record?.label ?? record?.skillName ?? 'Step';
+  return record?.label ?? record?.skillName ?? (record?.kind === 'instruction' ? 'Instruction' : 'Step');
 }
 
 export interface StatusTextProps {
@@ -129,7 +129,7 @@ export function StepRail({ run, selectedStepId, onSelect }: StepRailProps) {
                 </span>
                 <span className="step-rail__identity">
                   <span className="step-rail__label">{name}</span>
-                  <span className="step-rail__skill">{step.skillName}</span>
+                  <span className="step-rail__skill">{step.kind === 'instruction' ? 'Instruction' : step.skillName}</span>
                 </span>
                 <span
                   className="step-rail__status"

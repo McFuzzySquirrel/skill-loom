@@ -75,6 +75,22 @@ function captureError(operation: () => unknown): unknown {
 }
 
 describe('run creation and snapshot immutability', () => {
+  it('persists instruction records and validates them against the frozen step kind', () => {
+    const chain = makeChain({
+      steps: [{ id: 'plain', kind: 'instruction', instruction: 'Plan {{task}}.', label: 'Think' }],
+    });
+    const run = createRunRecord({
+      projectId: 'project-1', chain, mode: 'supervised',
+      inputs: { task: 'shipping' }, now: CREATED_AT,
+    });
+    expect(run.steps[0]).toMatchObject({ kind: 'instruction', label: 'Think', skillObservation: 'not-observable' });
+    expect(run.steps[0]).not.toHaveProperty('skillName');
+    expect(parseRunDocument(JSON.parse(JSON.stringify(run)))).toEqual(run);
+    expect(() => parseRun({
+      ...run, steps: [{ ...run.steps[0], kind: 'skill', skillName: 'review' }],
+    })).toThrow(RunValidationError);
+  });
+
   it('deep-clones the chain, resolves inputs, and freezes the snapshot', () => {
     const chain = makeChain();
     const run = createRunRecord({

@@ -48,6 +48,12 @@ Users want to reuse a chain across projects. A shared mutable template could cha
 
 Chosen option: "Independent snapshots copied on import", because it keeps project recipes stable and avoids a cross-project consistency problem.
 
+### Portable sharing extension
+
+The local template library remains unchanged. Cross-installation sharing uses a separate versioned `.loom.json` bundle containing a saved chain and complete referenced skill package files. Bundle export does not include chain identity, timestamps, input defaults, run records, local catalog source paths, or permission consent. Bundle import creates an independent project chain, installs only new project-local packages, requires an explicit choice to reuse installed skills, and resets permission consent rather than copying the sender's opt-in. It never executes a package or starts a run.
+
+Preview and import both validate the bundle, with bounded content and safe paths; existing package files are never overwritten and newly installed packages are rolled back if chain persistence fails. This boundary is implemented by `src/server/chains/bundle.ts` and `src/server/routes/chain-bundles.ts`; verify it with `npx vitest run tests/integration/chain-bundles.test.ts`. See the [user guide](../user-guide.md#share-a-chain-and-its-skills) for limits and review requirements.
+
 ### Positive Consequences
 
 - Editing or deleting a template never changes an imported project chain.

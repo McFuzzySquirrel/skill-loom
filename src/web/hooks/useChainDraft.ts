@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { chainStepName } from '../../shared/chain';
 import { isAbortError, type ApiClientError } from '../api/client';
 import {
   CHAIN_HARNESSES,
@@ -95,6 +96,7 @@ export interface UseChainDraftResult {
   selectedStep: ChainStep | null;
   selectStep: (stepId: string | null) => void;
   addStep: (skill: { name: string }) => string;
+  addInstruction: () => string;
   updateStep: (
     stepId: string,
     patch: Partial<Pick<ChainStep, 'skillName' | 'instruction' | 'label'>>,
@@ -192,8 +194,7 @@ export function toChainDraft(document: ChainDraftDocument): ChainDraft {
 
 /** Human name used in row actions and announcements. */
 export function stepDisplayName(step: ChainStep): string {
-  const label = step.label?.trim() ?? '';
-  return label === '' ? step.skillName : label;
+  return chainStepName(step);
 }
 
 /**
@@ -209,7 +210,9 @@ export function serializeChainDraft(document: ChainDraftDocument): string {
       const label = step.label?.trim() ?? '';
       return {
         id: step.id,
-        skillName: step.skillName,
+        ...(step.kind === 'instruction'
+          ? { kind: 'instruction' as const }
+          : { ...(step.kind === undefined ? {} : { kind: step.kind }), skillName: step.skillName }),
         instruction: step.instruction,
         ...(label === '' ? {} : { label }),
       };
@@ -620,6 +623,20 @@ export function useChainDraft({
     [announce],
   );
 
+  const addInstruction = useCallback((): string => {
+    const stepId = createLocalStepId();
+    const step: ChainStep = { id: stepId, kind: 'instruction', instruction: '' };
+    setState((previous) =>
+      updateReadyDocument(previous, (document) => ({
+        ...document,
+        steps: [...document.steps, step],
+      })),
+    );
+    setSelectedStepId(stepId);
+    announce('Added an instruction step. Write its instruction.');
+    return stepId;
+  }, [announce]);
+
   const updateStep = useCallback(
     (
       stepId: string,
@@ -629,7 +646,15 @@ export function useChainDraft({
         updateReadyDocument(previous, (document) => ({
           ...document,
           steps: document.steps.map((step) =>
-            step.id === stepId ? { ...step, ...patch } : step,
+            step.id === stepId
+              ? step.kind === 'instruction'
+                ? {
+                    ...step,
+                    instruction: patch.instruction ?? step.instruction,
+                    ...(patch.label === undefined ? {} : { label: patch.label }),
+                  }
+                : { ...step, ...patch, skillName: patch.skillName ?? step.skillName }
+              : step,
           ),
         })),
       );
@@ -903,6 +928,7 @@ export function useChainDraft({
     selectedStep,
     selectStep,
     addStep,
+    addInstruction,
     updateStep,
     removeStep,
     moveStep,

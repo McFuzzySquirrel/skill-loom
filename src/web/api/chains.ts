@@ -4,6 +4,8 @@ import {
   type FetchLike,
   type RequestJsonOptions,
 } from './client';
+import type { ChainStep } from '../../shared/chain';
+export type { ChainStep } from '../../shared/chain';
 
 /**
  * Typed client for the project chain library and authoring API.
@@ -32,15 +34,6 @@ export const CHAIN_INPUT_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
  * random suffix after the name slug.
  */
 export const NEW_CHAIN_ID = 'new';
-
-/** One ordered step inside a chain. */
-export interface ChainStep {
-  /** Stable within the chain; reordering never changes it. */
-  id: string;
-  skillName: string;
-  instruction: string;
-  label?: string;
-}
 
 /** One declared placeholder input. */
 export interface ChainInput {
@@ -188,11 +181,10 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-function decodeStep(value: unknown): ChainStep {
+export function decodeChainStep(value: unknown): ChainStep {
   if (
     !isRecord(value) ||
     !isNonEmptyString(value.id) ||
-    !isNonEmptyString(value.skillName) ||
     typeof value.instruction !== 'string' ||
     value.instruction.trim() === ''
   ) {
@@ -200,11 +192,24 @@ function decodeStep(value: unknown): ChainStep {
   }
 
   const label = optionalString(value.label);
-  return {
+  const content = {
     id: value.id,
-    skillName: value.skillName,
     instruction: value.instruction,
     ...(label === undefined ? {} : { label }),
+  };
+  if (value.kind === 'instruction') {
+    if (value.skillName !== undefined) {
+      throw invalidResponse('chain step');
+    }
+    return { ...content, kind: 'instruction' };
+  }
+  if ((value.kind !== undefined && value.kind !== 'skill') || !isNonEmptyString(value.skillName)) {
+    throw invalidResponse('chain step');
+  }
+  return {
+    ...content,
+    ...(value.kind === 'skill' ? { kind: 'skill' as const } : {}),
+    skillName: value.skillName,
   };
 }
 
@@ -248,7 +253,7 @@ export function decodeChain(value: unknown): Chain {
     name: value.name,
     harness: decodeHarness(value.harness),
     sessionMode: decodeSessionMode(value.sessionMode),
-    steps: value.steps.map(decodeStep),
+    steps: value.steps.map(decodeChainStep),
     inputs: value.inputs.map(decodeInput),
     automaticPermissionOptIn: value.automaticPermissionOptIn,
     createdAt: value.createdAt,
@@ -339,7 +344,9 @@ export function normalizeChainDraft(draft: ChainDraft): ChainDraft {
       const label = step.label?.trim() ?? '';
       return {
         id: step.id,
-        skillName: step.skillName,
+        ...(step.kind === 'instruction'
+          ? { kind: 'instruction' as const }
+          : { ...(step.kind === undefined ? {} : { kind: step.kind }), skillName: step.skillName }),
         instruction: step.instruction,
         ...(label === '' ? {} : { label }),
       };

@@ -17,7 +17,8 @@ status: Accepted
 
 ## Agent Rules
 
-- **MUST:** Assemble each step as explicit skill context plus the resolved instruction text, in chain order.
+- **MUST:** Assemble each skill step as explicit skill context plus the resolved instruction text, in chain order.
+- **MUST:** Assemble standalone instruction steps without a skill header, catalog requirement, or skill-observation signal. They remain ordinary prompts, not system instructions.
 - **MUST:** Describe chain order as deterministic prompt order only, never as proof that a harness loaded or executed a named skill.
 - **MUST NOT:** Block, fail, or advance a step because a skill observation is missing.
 - **MUST NOT:** Render harness or skill output as raw HTML or treat a `SKILL.md` as an executable command.
@@ -25,7 +26,7 @@ status: Accepted
 ## Verify
 
 - **Check:** `npx vitest run tests/unit/prompts.test.ts tests/unit/chain-model.test.ts`
-- **Expected:** Both suites pass, including prompt shape, placeholder resolution, and observation behavior. Review `formatStepPrompt` in `src/server/runs/prompts.ts`; it must emit `Skill: <name>` followed by `Instruction:` and resolved text.
+- **Expected:** Both suites pass, including prompt shape, placeholder resolution, and observation behavior. Review `formatStepPrompt` in `src/server/runs/prompts.ts`; skill steps must emit `Skill: <name>` followed by `Instruction:` and resolved text, while instruction steps emit only `Instruction:` and resolved text.
 
 ## Context and Problem Statement
 
@@ -47,6 +48,8 @@ Installed agent skills are instructions the model may choose to load; they are n
 ## Decision Outcome
 
 Chosen option: "Guarantee prompt order and label skill firing as model-invoked and best effort", because it is the strongest claim the harness interaction can support.
+
+Standalone `kind: "instruction"` steps extend this contract without inventing a generic catalog skill: the same harness receives a resolved prompt in the saved position and session mode, but there is no skill to resolve or observe. Legacy skill steps without `kind` remain valid.
 
 ### Positive Consequences
 

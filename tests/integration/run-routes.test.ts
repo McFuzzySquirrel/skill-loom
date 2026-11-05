@@ -940,7 +940,12 @@ describe('GET /api/runs and POST /api/runs/:runId/actions', () => {
     }, 'the first automatic step to advance');
 
     const secondTerminal = await waitFor(
-      async () => terminal.sessions.get(terminalIdFor(run.id)) ?? null,
+      async () => {
+        const session = terminal.sessions.get(terminalIdFor(run.id));
+        return session !== undefined && session !== firstTerminal && session.isRunning()
+          ? session
+          : null;
+      },
       'the second automatic step PTY',
     );
     secondTerminal.emitData(OSC_WORKING);

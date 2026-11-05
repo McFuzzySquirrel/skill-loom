@@ -1,5 +1,7 @@
 import { z } from 'zod';
+import { chainStepName } from '../../shared/chain.js';
 import { HARNESS_IDS, HarnessIdSchema, type HarnessId } from '../config/schema.js';
+export type { ChainStep } from '../../shared/chain.js';
 
 /**
  * Current on-disk chain version.
@@ -39,17 +41,26 @@ export const CHAIN_TOP_LEVEL_FIELDS = [
 const NonEmptyStringSchema = z.string().trim().min(1);
 const TimestampSchema = z.iso.datetime({ offset: true });
 
-export const ChainStepSchema = z.strictObject({
+const StepContent = {
   /** Stable within the chain; reordering must not change it. */
   id: NonEmptyStringSchema,
-  /** Catalog skill name. A chain never stores a per-step harness. */
-  skillName: NonEmptyStringSchema,
   /** Required and never whitespace-only. */
   instruction: NonEmptyStringSchema,
-  /** Optional human-facing name shown instead of the skill name. */
+  /** Optional human-facing name shown instead of the step's default name. */
   label: NonEmptyStringSchema.optional(),
-});
-export type ChainStep = z.infer<typeof ChainStepSchema>;
+};
+export const ChainStepSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    ...StepContent,
+    kind: z.literal('skill').optional(),
+    skillName: NonEmptyStringSchema,
+  }),
+  z.strictObject({
+    ...StepContent,
+    kind: z.literal('instruction'),
+    skillName: z.never().optional(),
+  }),
+]);
 
 export const ChainInputSchema = z.strictObject({
   name: z.string().regex(CHAIN_INPUT_NAME_PATTERN),
@@ -318,7 +329,7 @@ function validatePlaceholders(chain: Chain, issues: ChainValidationIssue[]): voi
         continue;
       }
 
-      const stepLabel = step.label ?? step.skillName;
+      const stepLabel = chainStepName(step);
       if (placeholder.name === '' || !CHAIN_INPUT_NAME_PATTERN.test(placeholder.name)) {
         reported.add(placeholder.name);
         issues.push({

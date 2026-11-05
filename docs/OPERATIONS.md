@@ -70,6 +70,10 @@ Authentication is evidence-based: preflight may inspect command output, credenti
 
 The skill catalog starts collapsed. Expanding an entry from a non-project source exposes **Copy into this project**, which copies the whole package into `<project>/.opencode/skills/` for OpenCode or `<project>/.github/skills/` for Copilot. The copy is bounded, refuses symlinks, and never overwrites an existing package; a numeric suffix is used instead. The original personal, plugin, custom, or extra skill is left untouched.
 
+The builder also offers **Add instruction** for an ordered standalone prompt without a catalog skill. It uses the same harness, inputs, session modes, and run controls as skill steps.
+
+For cross-installation sharing, save the chain and choose **Export** on its project chain card. Review the instructions and complete skill package contents before downloading the `.loom.json` bundle. **Import bundle** previews the file, requires trust confirmation and explicit reuse choices for installed skill conflicts, then creates a fresh chain and installs new project-local packages without executing them. It never overwrites packages and resets automatic-permission consent. Input defaults, run history, and local catalog source paths are not exported; ordinary file contents are not secret-scanned. Limits are 100 packages, 2,000 files, 20 MiB decoded content, and 30 MiB JSON requests. See the [user guide](user-guide.md#share-a-chain-and-its-skills) for sharing restrictions and recipient prerequisites.
+
 Preflight hard-blocks a missing harness executable, unauthenticated or ambiguously authenticated harness, unresolved Copilot trust, unresolved skills, missing required inputs, unsupported session modes, and a missing automatic-permission opt-in when Copilot automatic mode is selected. A dirty git tree is a warning, not a block. A non-git project skips the dirty-tree check.
 
 ## Copilot trust and automatic permissions

@@ -57,12 +57,7 @@ export const RUN_SESSION_MODES = ['shared', 'fresh', 'fork'] as const;
 export type RunSessionMode = (typeof RUN_SESSION_MODES)[number];
 
 /** One step inside the frozen chain snapshot. */
-export interface RunChainStep {
-  id: string;
-  skillName: string;
-  instruction: string;
-  label?: string;
-}
+export type RunChainStep = import('../../shared/chain').ChainStep;
 
 /** The parts of the frozen chain the run view displays. */
 export interface RunChainSnapshot {
@@ -73,10 +68,9 @@ export interface RunChainSnapshot {
 }
 
 /** One persisted step record. `tail` is bounded display text, not a transcript. */
-export interface RunStep {
+interface RunStepContent {
   id: string;
   index: number;
-  skillName: string;
   label: string | null;
   status: StepStatus;
   startedAt: string | null;
@@ -88,6 +82,10 @@ export interface RunStep {
   tail: string;
   reason: string | null;
 }
+export type RunStep = RunStepContent & (
+  | { kind?: 'skill'; skillName: string }
+  | { kind: 'instruction'; skillName?: never }
+);
 
 /** The run document the server returns. */
 export interface Run {
@@ -319,15 +317,22 @@ function decodeChainStep(value: unknown): RunChainStep {
   if (
     !isRecord(value) ||
     !isNonEmptyString(value.id) ||
-    !isNonEmptyString(value.skillName) ||
+    (value.kind === 'instruction' ? value.skillName !== undefined :
+      ((value.kind !== undefined && value.kind !== 'skill') || !isNonEmptyString(value.skillName))) ||
     typeof value.instruction !== 'string'
   ) {
     throw invalidResponse('run chain step');
   }
 
   const label = typeof value.label === 'string' ? value.label : undefined;
+  if (value.kind === 'instruction') {
+    return { id: value.id, kind: 'instruction', instruction: value.instruction,
+      ...(label === undefined ? {} : { label }) };
+  }
+  if (!isNonEmptyString(value.skillName)) throw invalidResponse('run chain step');
   return {
     id: value.id,
+    ...(value.kind === 'skill' ? { kind: 'skill' as const } : {}),
     skillName: value.skillName,
     instruction: value.instruction,
     ...(label === undefined ? {} : { label }),
@@ -356,7 +361,8 @@ function decodeStep(value: unknown): RunStep {
     !isRecord(value) ||
     !isNonEmptyString(value.id) ||
     typeof value.index !== 'number' ||
-    !isNonEmptyString(value.skillName) ||
+    (value.kind === 'instruction' ? value.skillName !== undefined :
+      ((value.kind !== undefined && value.kind !== 'skill') || !isNonEmptyString(value.skillName))) ||
     typeof value.tail !== 'string'
   ) {
     throw invalidResponse('run step');
@@ -365,7 +371,9 @@ function decodeStep(value: unknown): RunStep {
   return {
     id: value.id,
     index: value.index,
-    skillName: value.skillName,
+    ...(value.kind === 'instruction'
+      ? { kind: 'instruction' as const }
+      : { ...(value.kind === 'skill' ? { kind: 'skill' as const } : {}), skillName: value.skillName as string }),
     label: decodeNullableString(value.label, 'run step label'),
     status: decodeEnum(value.status, STEP_STATUSES, 'run step status'),
     startedAt: decodeNullableString(value.startedAt, 'run step started time'),

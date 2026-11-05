@@ -53,7 +53,8 @@ export interface HandoffSourceStep {
   readonly index: number;
   /** Optional human-facing label; falls back to the skill name. */
   readonly label?: string | null | undefined;
-  readonly skillName: string;
+  readonly skillName?: string;
+  readonly kind?: 'skill' | 'instruction';
   /** The previous step's instruction, already resolved for this run. */
   readonly instruction: string;
   readonly status: StepStatus;
@@ -121,7 +122,7 @@ export function buildHandoffNote(
     sanitizeHandoffText(source.skillName) || '(unknown skill)';
   const label =
     sanitizeHandoffText(source.label ?? '') ||
-    skillName ||
+    (source.kind === 'instruction' ? 'Instruction' : skillName) ||
     '(unknown step)';
   const instruction =
     sanitizeHandoffText(source.instruction) || '(no instruction recorded)';
@@ -131,7 +132,7 @@ export function buildHandoffNote(
 
   const header = [
     HANDOFF_HEADING,
-    `Previous step ${String(source.index + 1)}: ${label} (skill: ${skillName})`,
+    `Previous step ${String(source.index + 1)}: ${label} (${source.kind === 'instruction' ? 'instruction' : `skill: ${skillName}`})`,
     `Status: ${status}`,
     '',
     'Instruction:',

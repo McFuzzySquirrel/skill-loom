@@ -6,6 +6,7 @@ import {
   ChainError,
   validateChain,
   type Chain,
+  type ChainStep,
   type ChainSessionMode,
   type ChainValidationWarning,
 } from '../chains/model.js';
@@ -411,10 +412,12 @@ async function executePreflight(
 
     const [catalogOutcome, authOutcome, trustOutcome, gitOutcome] = await Promise.all([
       settle(
-        dependencies.catalogService.getCatalog({
-          projectPath: projectResult.path,
-          harness,
-        }),
+        chain.steps.some((step) => step.kind !== 'instruction')
+          ? dependencies.catalogService.getCatalog({
+              projectPath: projectResult.path,
+              harness,
+            })
+          : Promise.resolve(null),
       ),
       settle(
         collectAuthEvidence({
@@ -457,12 +460,12 @@ async function executePreflight(
       ),
     ]);
 
-    if (catalogOutcome.ok) {
+    if (catalogOutcome.ok && catalogOutcome.value !== null) {
       const catalogResult = evaluateCatalog(catalogOutcome.value, chain.steps);
       catalogWarnings = catalogResult.catalogWarnings;
       resolvedSkills = catalogResult.skills;
       checks.push(...catalogResult.checks);
-    } else {
+    } else if (!catalogOutcome.ok) {
       checks.push(catalogFailureCheck(catalogOutcome.error, harness));
     }
 
@@ -833,15 +836,9 @@ interface CatalogEvaluation {
   catalogWarnings: CatalogWarning[];
 }
 
-interface CatalogStepView {
-  readonly id: string;
-  readonly skillName: string;
-  readonly label?: string | undefined;
-}
-
 function evaluateCatalog(
   catalog: Awaited<ReturnType<CatalogService['getCatalog']>>,
-  steps: readonly CatalogStepView[],
+  steps: readonly ChainStep[],
 ): CatalogEvaluation {
   const checks: PreflightCheck[] = [];
   const entries = catalog.groups.flatMap((group) => group.entries);
@@ -874,6 +871,9 @@ function evaluateCatalog(
 
   const skills: PreflightResolvedSkill[] = [];
   for (const [stepIndex, step] of steps.entries()) {
+    if (step.kind === 'instruction') {
+      continue;
+    }
     const matches = findSkillMatches(entries, step.skillName);
     const first = matches[0];
     const stepLabel = step.label ?? step.skillName;
