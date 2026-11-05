@@ -49,6 +49,9 @@ test('shares mixed chains through a reviewed download and import with explicit c
   await expect(exportDialog.getByRole('button', { name: 'Download bundle' })).toBeDisabled();
   await exportDialog.getByText('sharing-probe — 2 files', { exact: true }).click();
   await expect(exportDialog.getByText('scripts/probe.sh', { exact: true })).toBeVisible();
+  const runnerDownload = page.waitForEvent('download');
+  await exportDialog.getByRole('button', { name: 'Download reusable runner skill' }).click();
+  expect((await runnerDownload).suggestedFilename()).toBe('loom-run-bundle.zip');
   await exportDialog.getByRole('checkbox').check();
   const downloaded = page.waitForEvent('download');
   await exportDialog.getByRole('button', { name: 'Download bundle' }).click();

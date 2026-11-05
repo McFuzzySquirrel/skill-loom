@@ -1,6 +1,6 @@
 import type { BundlePreview, ChainBundle } from '../../shared/bundles';
 import type { Chain } from './chains';
-import { requestJson } from './client';
+import { ApiClientError, requestJson } from './client';
 
 function base(projectId: string): string {
   return `/api/projects/${encodeURIComponent(projectId)}`;
@@ -25,13 +25,38 @@ export const bundlesApi = {
     );
     return result.chain;
   },
+  async downloadRunnerSkill(): Promise<void> {
+    let response: Response;
+    try {
+      response = await fetch('/api/portable-skill', { headers: { Accept: 'application/zip' } });
+    } catch {
+      throw new ApiClientError('Could not reach the Skill Loom server. Check that it is running, then retry.', {
+        code: 'NETWORK_ERROR',
+        status: 0,
+      });
+    }
+    if (!response.ok) {
+      throw new ApiClientError(
+        response.status === 503
+          ? 'The standalone runner skill is not built. Build it with npm run build:portable-skill and retry.'
+          : `The Skill Loom server returned HTTP ${response.status} while preparing the runner skill.`,
+        { code: 'PORTABLE_SKILL_UNAVAILABLE', status: response.status },
+      );
+    }
+    downloadFile(await response.blob(), 'loom-run-bundle.zip');
+  },
 };
 
 export function downloadBundle(bundle: ChainBundle): void {
-  const url = URL.createObjectURL(new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' }));
+  downloadFile(new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' }),
+    `${bundle.chain.name.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 64) || 'chain'}.loom.json`);
+}
+
+function downloadFile(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `${bundle.chain.name.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 64) || 'chain'}.loom.json`;
+  anchor.download = filename;
   document.body.append(anchor);
   anchor.click();
   anchor.remove();

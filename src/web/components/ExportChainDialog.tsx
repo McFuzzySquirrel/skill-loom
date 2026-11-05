@@ -16,6 +16,8 @@ export function ExportChainDialog({
   const [bundle, setBundle] = useState<ChainBundle | null>(null);
   const [error, setError] = useState<ApiClientError | null>(null);
   const [reviewed, setReviewed] = useState(false);
+  const [runnerError, setRunnerError] = useState<ApiClientError | null>(null);
+  const [runnerBusy, setRunnerBusy] = useState(false);
 
   useEffect(() => {
     heading.current?.focus();
@@ -40,11 +42,34 @@ export function ExportChainDialog({
         Review instructions and all package files for secrets, private data, and redistribution rights before sharing.
         Embedded paths or secrets in file contents cannot be detected automatically.
       </p>
+      <p>
+        The reusable runner skill is a separate download for Node.js 24+ Agent Skills-compatible hosts.
+        It does not contain this chain; install it in the target project and provide the downloaded bundle when invoking it.
+        Session isolation and completion reporting depend on the host and may be approximations.
+      </p>
       {error !== null ? <InlineError title="Export failed" message={error.message} code={error.code} httpStatus={error.status} /> : null}
+      {runnerError !== null ? <InlineError title="Runner skill download failed" message={runnerError.message} code={runnerError.code} httpStatus={runnerError.status} /> : null}
+      {runnerBusy ? <p role="status">Preparing the reusable runner skill…</p> : null}
       {bundle === null && error === null ? <p role="status">Preparing bundle…</p> : null}
       {bundle !== null ? (
         <>
           <BundleContents bundle={bundle} />
+          <button
+            type="button"
+            className="button button--secondary"
+            disabled={runnerBusy}
+            onClick={() => {
+              setRunnerBusy(true);
+              setRunnerError(null);
+              void bundlesApi.downloadRunnerSkill().then(() => {
+                announce('Downloaded the reusable Loom bundle runner skill.');
+              }).catch((caught: unknown) => {
+                setRunnerError(toApiClientError(caught, 'The runner skill could not be downloaded.'));
+              }).finally(() => setRunnerBusy(false));
+            }}
+          >
+            Download reusable runner skill
+          </button>
           <label className="field__label">
             <input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)} />
             {' '}I reviewed the contents and have permission to share these skills.

@@ -8,6 +8,8 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Added
 
+- Reusable `loom-run-bundle` Agent Skill package with a standalone Node.js helper for reviewed bundle installation, host-mediated chain execution, confirmation gates, and explicit interrupted-run recovery.
+- Separate portable run records, bundle fingerprints, no-overwrite skill installation, and an export-dialog download for the reusable runner skill.
 - Portable `.loom.json` chain export/import with complete skill packages, review previews, explicit reuse of installed skills, safe bounded file handling, and fresh permission consent.
 - Standalone agent instruction steps alongside skill steps, with labels, ordering, named inputs, preflight, and run lifecycle support.
 - Project skill copies and bundle imports use the shared `.agents/skills/` location for either harness.
