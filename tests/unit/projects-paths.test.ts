@@ -1,6 +1,6 @@
 import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, parse } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_MAX_DIRECTORY_ENTRIES,
@@ -67,9 +67,10 @@ describe('canonical directory resolution', () => {
   });
 
   it('returns a null parent for a filesystem root', async () => {
-    const resolved = await resolveCanonicalDirectory('/');
+    const filesystemRoot = parse(root).root;
+    const resolved = await resolveCanonicalDirectory(filesystemRoot);
 
-    expect(resolved.path).toBe('/');
+    expect(resolved.path).toBe(filesystemRoot);
     expect(resolved.parent).toBeNull();
   });
 

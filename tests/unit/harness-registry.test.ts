@@ -1,6 +1,6 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, isAbsolute, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   CHAIN_SESSION_MODES,
@@ -232,7 +232,7 @@ describe('executable resolution', () => {
     expect(resolved.executable).toBe(opencodePath);
     expect(resolved.source).toBe('path');
     expect(resolved.configuredOverride).toBeNull();
-    expect(resolved.executable.startsWith('/')).toBe(true);
+    expect(isAbsolute(resolved.executable)).toBe(true);
   });
 
   it('reads PATH from the injected environment seam', async () => {
@@ -386,7 +386,7 @@ describe('executable resolution', () => {
 
     expect(resolved.executable).toBe(expected);
     expect(candidates).toEqual([join(binA, 'opencode'), expected]);
-    expect(candidates.every((candidate) => candidate.startsWith('/'))).toBe(true);
+    expect(candidates.every((candidate) => isAbsolute(candidate))).toBe(true);
   });
 
   it('skips empty PATH segments instead of resolving from the current directory', () => {
