@@ -67,6 +67,38 @@ function expectInvalid(value: unknown): ChainValidationIssue[] {
 }
 
 describe('chain version', () => {
+  it('accepts mixed instruction and legacy skill steps without rewriting their kinds', () => {
+    const steps = [
+      { id: 'plain', kind: 'instruction', instruction: 'Plan {{task}}.', label: 'Plan' },
+      { id: 'skill', skillName: 'implement', instruction: 'Build {{task}}.' },
+      { id: 'explicit', kind: 'skill', skillName: 'review', instruction: 'Review.' },
+    ];
+    expect(parseChainDocument(validChain({ steps })).chain.steps).toEqual(steps);
+  });
+
+  it('rejects skills on instruction steps, missing kinds, and unknown step kinds', () => {
+    for (const step of [
+      { kind: 'instruction', skillName: 'review' },
+      {},
+      { kind: 'other', skillName: 'review' },
+    ]) {
+      expect(() => parseChain(validChain({
+        steps: [{ id: 'plain', instruction: 'Review.', ...step }],
+      }))).toThrow(ChainValidationError);
+    }
+  });
+
+  it('validates instruction step prompts and input references just like skills', () => {
+    expect(expectInvalid(validChain({
+      steps: [{ id: 'plain', kind: 'instruction', instruction: 'Use {{missing}}.' }],
+    }))).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: CHAIN_ISSUE_CODES.PLACEHOLDER_UNKNOWN, stepId: 'plain' }),
+    ]));
+    expect(() => parseChain(validChain({
+      steps: [{ id: 'plain', kind: 'instruction', instruction: '  ' }],
+    }))).toThrow(ChainValidationError);
+  });
+
   it('documents the current persisted version and field order', () => {
     expect(CHAIN_VERSION).toBe(1);
     expect(CHAIN_TOP_LEVEL_FIELDS).toEqual([

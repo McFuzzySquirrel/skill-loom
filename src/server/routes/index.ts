@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { catalogRoutes, type CatalogRoutesOptions } from './catalog.js';
 import { chainRoutes, type ChainRoutesOptions } from './chains.js';
+import { chainBundleRoutes } from './chain-bundles.js';
 import { fsRoutes, type FsRouteOptions } from './fs.js';
 import {
   globalChainRoutes,
@@ -9,6 +10,7 @@ import {
 import { healthRoutes, type HealthRouteOptions } from './health.js';
 import { preflightRoutes, type PreflightRoutesOptions } from './preflight.js';
 import { projectRoutes, type ProjectRoutesOptions } from './projects.js';
+import { scenarioPresetRoutes } from './presets.js';
 import { runRoutes, type RunRoutesOptions } from './runs.js';
 import { terminalRoutes, type TerminalRouteOptions } from './terminal.js';
 
@@ -33,8 +35,10 @@ export const routes: FastifyPluginAsync<RouteRegistrationOptions> = async (app, 
   await app.register(projectRoutes, options);
   await app.register(catalogRoutes, options);
   await app.register(chainRoutes, options);
+  await app.register(chainBundleRoutes, options);
   await app.register(globalChainRoutes, options);
   await app.register(preflightRoutes, options);
   await app.register(runRoutes, options);
+  await app.register(scenarioPresetRoutes);
   await app.register(terminalRoutes, options);
 };

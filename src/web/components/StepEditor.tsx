@@ -62,7 +62,7 @@ export function StepEditor({
         </div>
         <div className="empty-state" data-testid="step-editor-empty">
           <p>No step selected.</p>
-          <p>Select a step in the ordered list to edit its skill, instruction, and label.</p>
+          <p>Select a step in the ordered list to edit its instruction and label.</p>
         </div>
       </section>
     );
@@ -71,7 +71,7 @@ export function StepEditor({
   const instructionMissing = step.instruction.trim() === '';
   const hasPlaceholderIssues = placeholderIssues.length > 0;
   const options =
-    skillOptions.includes(step.skillName)
+    step.kind === 'instruction' ? [] : skillOptions.includes(step.skillName)
       ? skillOptions
       : [step.skillName, ...skillOptions];
 
@@ -99,7 +99,9 @@ export function StepEditor({
         </div>
       </dl>
 
-      <div className="field">
+      {step.kind === 'instruction' ? (
+        <p className="field__hint" data-testid="step-kind">Instruction step — no installed skill required.</p>
+      ) : <div className="field">
         <label className="field__label" htmlFor={skillId}>
           Skill
         </label>
@@ -120,7 +122,7 @@ export function StepEditor({
           One harness serves every step. Per-step harness switching is unsupported;
           duplicate the chain to use another harness.
         </p>
-      </div>
+      </div>}
 
       <div className="field">
         <label className="field__label" htmlFor={instructionId}>
@@ -141,7 +143,7 @@ export function StepEditor({
               : instructionHelpId
           }
           data-testid="step-instruction"
-          placeholder="Describe what the harness should do with this skill."
+          placeholder={step.kind === 'instruction' ? 'Describe what the agent should do.' : 'Describe what the harness should do with this skill.'}
         />
         <p className="field__hint" id={instructionHelpId}>
           Use <code>{'{{input}}'}</code> placeholders only for inputs declared on this
@@ -183,7 +185,9 @@ export function StepEditor({
           data-testid="step-label"
         />
         <p className="field__hint" id={labelHelpId}>
-          Shown in the step list instead of the skill name. The skill name stays visible.
+          {step.kind === 'instruction'
+            ? 'Shown in the step list instead of “Instruction”.'
+            : 'Shown in the step list instead of the skill name. The skill name stays visible.'}
         </p>
       </div>
     </section>

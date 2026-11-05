@@ -16,6 +16,8 @@ import {
 } from '../hooks/useChains';
 import { Link } from '../router';
 import { ImportChainDialog } from './ImportChainDialog';
+import { ImportBundleDialog } from './ImportBundleDialog';
+import { ExportChainDialog } from './ExportChainDialog';
 import { InlineError } from './InlineError';
 import { NewChainDialog } from './NewChainDialog';
 import { useStatusAnnouncer } from './StatusRegion';
@@ -98,6 +100,10 @@ export function ChainList({ projectId, api = chainsApi }: ChainListProps) {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [bundleImportOpen, setBundleImportOpen] = useState(false);
+  const [exportChainId, setExportChainId] = useState<string | null>(null);
+  const bundleTrigger = useRef<HTMLButtonElement>(null);
+  const exportTrigger = useRef<HTMLButtonElement | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [busy, setBusy] = useState<BusyState | null>(null);
   const [mutationFailure, setMutationFailure] = useState<MutationFailure | null>(null);
@@ -232,6 +238,15 @@ export function ChainList({ projectId, api = chainsApi }: ChainListProps) {
           <button
             type="button"
             className="button button--secondary"
+            ref={bundleTrigger}
+            onClick={() => { setBundleImportOpen(true); setExportChainId(null); }}
+            disabled={busy !== null || bundleImportOpen}
+          >
+            Import bundle
+          </button>
+          <button
+            type="button"
+            className="button button--secondary"
             onClick={() => {
               setMutationFailure(null);
               setImportOpen(true);
@@ -256,6 +271,29 @@ export function ChainList({ projectId, api = chainsApi }: ChainListProps) {
 
       {dialogOpen ? (
         <NewChainDialog projectId={projectId} onClose={closeNewChain} />
+      ) : null}
+
+      {exportChainId !== null ? (
+        <ExportChainDialog
+          projectId={projectId}
+          chainId={exportChainId}
+          onClose={() => {
+            setExportChainId(null);
+            exportTrigger.current?.focus();
+          }}
+        />
+      ) : null}
+
+      {bundleImportOpen ? (
+        <ImportBundleDialog
+          projectId={projectId}
+          onClose={() => { setBundleImportOpen(false); bundleTrigger.current?.focus(); }}
+          onImported={(chain) => {
+            setBundleImportOpen(false);
+            setFocusChainId(chain.id);
+            void reload();
+          }}
+        />
       ) : null}
 
       {importOpen ? (
@@ -399,6 +437,18 @@ export function ChainList({ projectId, api = chainsApi }: ChainListProps) {
                 </div>
 
                 <div className="chain-card__actions">
+                  <button
+                    type="button"
+                    className="button button--secondary button--small"
+                    disabled={busy !== null || bundleImportOpen}
+                    aria-label={`Export ${chain.name}`}
+                    onClick={(event) => {
+                      exportTrigger.current = event.currentTarget;
+                      setExportChainId(chain.id);
+                    }}
+                  >
+                    Export
+                  </button>
                   <Link
                     className="button button--small"
                     to={chainRunPath(projectId, chain.id)}

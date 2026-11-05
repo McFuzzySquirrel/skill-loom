@@ -78,7 +78,7 @@ function RunStepDetail({ run, step }: { run: Run; step: RunStep }) {
             Step {step.index + 1}: {name}
           </h2>
           <p className="field__hint">
-            Skill: <code>{step.skillName}</code>
+            {step.kind === 'instruction' ? 'Instruction step' : <>Skill: <code>{step.skillName}</code></>}
           </p>
         </div>
         <span className="badge" data-testid="run-step-detail-status">

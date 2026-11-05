@@ -76,6 +76,7 @@ export function ChainBuilderPage({
     selectedStep,
     selectStep,
     addStep,
+    addInstruction,
     updateStep,
     removeStep,
     moveStep,
@@ -388,7 +389,7 @@ export function ChainBuilderPage({
 
   const skillOptions = useMemo(() => {
     const names = new Set(catalogSkills.map((skill) => skill.name));
-    if (selectedStep !== null) {
+    if (selectedStep !== null && selectedStep.kind !== 'instruction') {
       names.add(selectedStep.skillName);
     }
     return [...names].sort((left, right) => left.localeCompare(right));
@@ -418,7 +419,7 @@ export function ChainBuilderPage({
       return 'The chain must load before it can be saved.';
     }
     if (draftDocument !== null && draftDocument.steps.length === 0) {
-      return 'Add at least one skill as a step before saving.';
+      return 'Add at least one skill or instruction step before saving.';
     }
     if (validation.issues.length > 0) {
       const count = validation.issues.length;
@@ -456,7 +457,7 @@ export function ChainBuilderPage({
             Chain authoring
           </h1>
           <p className="lede">
-            Assemble an ordered recipe from this project&apos;s skills. Skill Loom guarantees
+            Assemble an ordered recipe from skills and instructions. Skill Loom guarantees
             prompt order; it cannot guarantee that a harness loads a named skill.
           </p>
         </div>
@@ -471,6 +472,12 @@ export function ChainBuilderPage({
             <span aria-hidden="true">{isDirty ? '●' : '✓'}</span> {dirtyLabel}
           </span>
           <div className="panel__actions builder-header__actions">
+            <button type="button" className="button button--secondary"
+              disabled={state.status !== 'ready'}
+              data-testid="chain-add-instruction"
+              onClick={() => { addInstruction(); setEditorFocusRequest((current) => current + 1); }}>
+              Add instruction
+            </button>
             <button
               type="button"
               className="button"

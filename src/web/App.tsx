@@ -9,6 +9,7 @@ import { NotFoundPage } from './routes/NotFoundPage';
 import { ProjectPage, ProjectsPage } from './routes/ProjectsPage';
 import { RunPage } from './routes/RunPage';
 import { RunStartPage } from './routes/RunStartPage';
+import { ScenarioCatalogPage } from './routes/ScenarioCatalogPage';
 import { TerminalRunPage } from './routes/TerminalRunPage';
 
 interface RouteDefinition {
@@ -27,6 +28,11 @@ const ROUTES: RouteDefinition[] = [
     pattern: '/chains',
     title: 'Global chain library',
     render: () => <GlobalChainsPage />,
+  },
+  {
+    pattern: '/scenarios',
+    title: 'Scenario catalog',
+    render: () => <ScenarioCatalogPage />,
   },
   {
     pattern: '/projects/:projectId',

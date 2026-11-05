@@ -307,6 +307,27 @@ function captureRunnerError(operation: () => unknown | Promise<unknown>): Promis
 }
 
 describe('supervised runner start', () => {
+  it('runs instructions with the same user outcome gating and without skill observations', async () => {
+    const chain = makeChain({
+      steps: [
+        { id: 'plain', kind: 'instruction', instruction: 'Plan {{task}}.' },
+        { id: 'skill', skillName: 'implement', instruction: 'Implement {{task}}.' },
+      ],
+    });
+    const harness = makeHarness({ chain, adapter: copilotAdapter() });
+    await harness.runner.start();
+    expect(harness.ptys[0]!.lastSpec.args.join('\n')).toContain('Instruction:\nPlan ship the runner.');
+    expect(harness.ptys[0]!.lastSpec.args.join('\n')).not.toContain('Skill:');
+    harness.ptys[0]!.lastProcess.emitData('skill(unrelated)\n');
+    expect(harness.runner.getRun().steps[0]?.skillObservation).toBe('not-observable');
+    expect(harness.runner.getRun().currentStepIndex).toBe(0);
+    expect(harness.runner.canNext).toBe(false);
+    await harness.runner.markDone();
+    await harness.runner.next();
+    expect(harness.ptys[0]!.lastSpec.args.join('\n')).toContain('Skill: implement');
+    await harness.runner.abort();
+  });
+
   it('starts one fresh CLI process on a stable PTY with the session id and prompt', async () => {
     const harness = makeHarness();
     const run = await harness.runner.start();

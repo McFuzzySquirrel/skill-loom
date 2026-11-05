@@ -46,6 +46,9 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
           <Link to="/projects" aria-current={pathname === '/projects' ? 'page' : undefined}>
             Projects
           </Link>
+          <Link to="/scenarios" aria-current={pathname === '/scenarios' ? 'page' : undefined}>
+            Scenario catalog
+          </Link>
           <Link to="/chains" aria-current={pathname === '/chains' ? 'page' : undefined}>
             Chain library
           </Link>

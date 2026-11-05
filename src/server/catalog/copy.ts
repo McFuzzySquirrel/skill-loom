@@ -1,13 +1,15 @@
 import {
   copyFile,
+  chmod,
   lstat,
   mkdir,
   readdir,
   realpath,
   rm,
-  stat,
+  writeFile,
 } from 'node:fs/promises';
 import { basename, join } from 'node:path';
+import type { ScenarioSkillSource } from '../../shared/presets.js';
 import type { SkillEntry, SkillHarness } from './types.js';
 
 /**
@@ -64,6 +66,8 @@ export interface CopySkillIntoProjectInput {
   harness: SkillHarness;
   /** Entry from the fresh server-side catalog discovery. */
   entry: SkillEntry;
+  /** Whether to suffix the destination if the skill directory already exists. */
+  allowNameSuffix?: boolean;
 }
 
 export interface CopySkillIntoProjectResult {
@@ -82,7 +86,7 @@ export function projectSkillRootFor(harness: SkillHarness, projectPath: string):
 export async function copySkillIntoProject(
   input: CopySkillIntoProjectInput,
 ): Promise<CopySkillIntoProjectResult> {
-  const { entry, projectPath, harness } = input;
+  const { entry, projectPath, harness, allowNameSuffix = true } = input;
 
   if (entry.source === 'project') {
     throw new CatalogCopyError(
@@ -100,6 +104,34 @@ export async function copySkillIntoProject(
     );
   }
 
+  let sourceInfo;
+  try {
+    sourceInfo = await lstat(entry.packagePath);
+  } catch (error) {
+    throw new CatalogCopyError(
+      CATALOG_COPY_ERROR_CODES.SOURCE_UNAVAILABLE,
+      'The skill package directory could not be inspected.',
+      { skillId: entry.id, reason: errnoCode(error) },
+      { cause: error },
+    );
+  }
+
+  if (sourceInfo.isSymbolicLink()) {
+    throw new CatalogCopyError(
+      CATALOG_COPY_ERROR_CODES.SYMLINK_UNSUPPORTED,
+      'The skill package path is a symbolic link and was not copied.',
+      { path: entry.packagePath, reason: 'SYMLINK' },
+    );
+  }
+
+  if (!sourceInfo.isDirectory()) {
+    throw new CatalogCopyError(
+      CATALOG_COPY_ERROR_CODES.SOURCE_NOT_DIRECTORY,
+      'The skill package path is not a directory.',
+      { skillId: entry.id },
+    );
+  }
+
   let sourceDirectory: string;
   try {
     sourceDirectory = await realpath(entry.packagePath);
@@ -112,48 +144,24 @@ export async function copySkillIntoProject(
     );
   }
 
-  let sourceInfo;
-  try {
-    sourceInfo = await stat(sourceDirectory);
-  } catch (error) {
-    throw new CatalogCopyError(
-      CATALOG_COPY_ERROR_CODES.SOURCE_UNAVAILABLE,
-      'The skill package directory could not be inspected.',
-      { skillId: entry.id, reason: errnoCode(error) },
-      { cause: error },
-    );
-  }
-
-  if (!sourceInfo.isDirectory()) {
-    throw new CatalogCopyError(
-      CATALOG_COPY_ERROR_CODES.SOURCE_NOT_DIRECTORY,
-      'The skill package path is not a directory.',
-      { skillId: entry.id },
-    );
-  }
-
-  const destinationRoot = projectSkillRootFor(harness, projectPath);
-  try {
-    await mkdir(destinationRoot, { recursive: true, mode: 0o755 });
-  } catch (error) {
-    throw new CatalogCopyError(
-      CATALOG_COPY_ERROR_CODES.DESTINATION_UNAVAILABLE,
-      'The project skill directory could not be created.',
-      { path: destinationRoot, reason: errnoCode(error) },
-      { cause: error },
-    );
-  }
+  const destinationRoot = await createProjectSkillRoot(harness, projectPath);
 
   const destination = await reserveDestination(
     destinationRoot,
     safePackageName(entry.name || basename(sourceDirectory)),
+    allowNameSuffix,
   );
 
   const budget = { files: 0, bytes: 0 };
   try {
     await copyDirectory(sourceDirectory, destination, budget);
   } catch (error) {
-    await rm(destination, { recursive: true, force: true }).catch(() => undefined);
+    await removePartialCopy(
+      destination,
+      entry.id,
+      'A partial skill package could not be removed after copy failed.',
+      error,
+    );
     if (error instanceof CatalogCopyError) {
       throw error;
     }
@@ -172,8 +180,143 @@ export async function copySkillIntoProject(
   };
 }
 
-async function reserveDestination(root: string, baseName: string): Promise<string> {
+export async function copyBundledScenarioSkill(
+  input: CopySkillIntoProjectInput & { source: ScenarioSkillSource },
+): Promise<CopySkillIntoProjectResult> {
+  if (
+    !input.source.bundled ||
+    input.entry.source !== 'builtin' ||
+    input.entry.name !== input.source.name
+  ) {
+    throw new CatalogCopyError(
+      CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
+      'The bundled skill source does not match the allowlisted package.',
+      { skillId: input.entry.id, name: input.entry.name },
+    );
+  }
+
+  const result = await copySkillIntoProject({
+    ...input,
+    allowNameSuffix: false,
+  });
+  const notice = [
+    '# Skill source and attribution',
+    '',
+    `- Skill: ${input.source.name}`,
+    `- Upstream repository: ${input.source.repositoryUrl}`,
+    `- Source revision: ${input.source.revision}`,
+    `- Upstream skill listing: ${input.source.skillUrl}`,
+    `- Upstream skill file: ${input.source.skillFileUrl}`,
+    `- Upstream license declaration: ${input.source.license}`,
+    '',
+    'This package is a pinned snapshot copied by explicit user request. Skill Loom did not execute its scripts or contact the upstream source during this copy.',
+    'Upstream files and any license notices supplied with the package are retained. This attribution file was added by Skill Loom.',
+    '',
+  ].join('\n');
+
+  try {
+    await writeFile(join(result.destinationPath, 'SKILL-LOOM-SOURCE.md'), notice, {
+      encoding: 'utf8',
+      flag: 'wx',
+      mode: 0o644,
+    });
+  } catch (error) {
+    await removePartialCopy(
+      result.destinationPath,
+      input.entry.id,
+      'A bundled skill package could not be removed after its attribution notice failed.',
+      error,
+    );
+    throw new CatalogCopyError(
+      CATALOG_COPY_ERROR_CODES.COPY_FAILED,
+      'The bundled skill attribution notice could not be written.',
+      { skillId: input.entry.id, reason: errnoCode(error) },
+      { cause: error },
+    );
+  }
+
+  return result;
+}
+
+async function removePartialCopy(
+  destination: string,
+  skillId: string,
+  message: string,
+  cause: unknown,
+): Promise<void> {
+  try {
+    await rm(destination, { recursive: true, force: true });
+  } catch (error) {
+    throw new CatalogCopyError(
+      CATALOG_COPY_ERROR_CODES.COPY_FAILED,
+      message,
+      {
+        skillId,
+        path: destination,
+        copyFailure: errnoCode(cause),
+        cleanupFailure: errnoCode(error),
+      },
+      { cause: error },
+    );
+  }
+}
+
+async function createProjectSkillRoot(
+  harness: SkillHarness,
+  projectPath: string,
+): Promise<string> {
+  const segments = harness === 'opencode'
+    ? ['.opencode', 'skills']
+    : ['.github', 'skills'];
+  let directory = projectPath;
+
+  for (const segment of segments) {
+    directory = join(directory, segment);
+    try {
+      await mkdir(directory, { mode: 0o755 });
+    } catch (error) {
+      if (errnoCode(error) !== 'EEXIST') {
+        throw new CatalogCopyError(
+          CATALOG_COPY_ERROR_CODES.DESTINATION_UNAVAILABLE,
+          'The project skill directory could not be created.',
+          { path: directory, reason: errnoCode(error) },
+          { cause: error },
+        );
+      }
+    }
+
+    let info;
+    try {
+      info = await lstat(directory);
+    } catch (error) {
+      throw new CatalogCopyError(
+        CATALOG_COPY_ERROR_CODES.DESTINATION_UNAVAILABLE,
+        'The project skill directory could not be inspected.',
+        { path: directory, reason: errnoCode(error) },
+        { cause: error },
+      );
+    }
+    if (info.isSymbolicLink() || !info.isDirectory()) {
+      throw new CatalogCopyError(
+        CATALOG_COPY_ERROR_CODES.DESTINATION_UNAVAILABLE,
+        'A project skill directory component is not a real directory.',
+        { path: directory, reason: info.isSymbolicLink() ? 'SYMLINK' : 'NOT_DIRECTORY' },
+      );
+    }
+  }
+
+  return directory;
+}
+
+async function reserveDestination(
+  root: string,
+  baseName: string,
+  allowNameSuffix: boolean,
+): Promise<string> {
   for (let attempt = 0; attempt < MAX_NAME_ATTEMPTS; attempt += 1) {
+    if (attempt > 0 && !allowNameSuffix) {
+      break;
+    }
     const candidate = join(root, attempt === 0 ? baseName : `${baseName}-${String(attempt + 1)}`);
     try {
       await mkdir(candidate, { mode: 0o755 });
@@ -187,7 +330,22 @@ async function reserveDestination(root: string, baseName: string): Promise<strin
           { cause: error },
         );
       }
+      if (!allowNameSuffix) {
+        throw new CatalogCopyError(
+          CATALOG_COPY_ERROR_CODES.SOURCE_ALREADY_PROJECT,
+          'A skill package with this name already exists in the project.',
+          { path: candidate, name: baseName },
+        );
+      }
     }
+  }
+
+  if (!allowNameSuffix) {
+    throw new CatalogCopyError(
+      CATALOG_COPY_ERROR_CODES.SOURCE_ALREADY_PROJECT,
+      'A skill package with this name already exists in the project.',
+      { path: join(root, baseName), name: baseName },
+    );
   }
 
   throw new CatalogCopyError(
@@ -224,7 +382,11 @@ async function copyDirectory(
     }
 
     if (!entry.isFile()) {
-      continue;
+      throw new CatalogCopyError(
+        CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
+        'The skill package contains an unsupported filesystem entry and was not copied.',
+        { path: sourcePath, reason: 'UNSUPPORTED_FILE_TYPE' },
+      );
     }
 
     const info = await lstat(sourcePath);
@@ -244,6 +406,9 @@ async function copyDirectory(
     }
 
     await copyFile(sourcePath, destinationPath);
+    if ((info.mode & 0o111) !== 0) {
+      await chmod(destinationPath, info.mode & 0o777);
+    }
   }
 }
 

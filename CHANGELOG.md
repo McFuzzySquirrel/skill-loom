@@ -6,6 +6,8 @@ All notable changes are documented here. This project follows the [Keep a Change
 
 ### Added
 
+- Portable `.loom.json` chain export/import with complete skill packages, review previews, explicit reuse of installed skills, safe bounded file handling, and fresh permission consent.
+- Standalone agent instruction steps alongside skill steps, with labels, ordering, named inputs, preflight, and run lifecycle support.
 - Project documentation set: user guide, administrator guide, ADR index and records, release notes, and this changelog.
 - Documentation navigation from the README and the operations guide.
 

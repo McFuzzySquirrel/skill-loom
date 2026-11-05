@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { chainStepName } from '../../shared/chain.js';
 import {
   CHAIN_INPUT_NAME_PATTERN as INPUT_NAME_PATTERN,
   type Chain,
@@ -20,7 +21,7 @@ import {
 /**
  * Prompt assembly and session planning.
  *
- * A prompt names the skill explicitly and contains the resolved instruction.
+ * A prompt names the skill when present and contains the resolved instruction.
  * Skill loading itself remains model-invoked (EXEC-01): Skill Loom controls the text
  * and its order, not whether the harness chooses to load the skill.
  *
@@ -88,7 +89,8 @@ export interface SessionCapabilities {
 export interface PlannedStepSession {
   readonly stepId: string;
   readonly stepIndex: number;
-  readonly skillName: string;
+  readonly skillName?: string;
+  readonly kind?: 'skill' | 'instruction';
   /** Session id assigned to this step, including a native fork target. */
   readonly sessionId: string;
   readonly forkMechanism: ForkMechanism;
@@ -141,8 +143,11 @@ export interface BuildStepPromptInput extends AssembleStepPromptInput {
   readonly handoffOptions?: HandoffNoteOptions | undefined;
 }
 
-/** Exact prompt shape. The skill is explicit and the instruction follows. */
+/** Skill steps name their skill; instruction steps carry only the instruction. */
 export function formatStepPrompt(step: ChainStep, instruction: string): string {
+  if (step.kind === 'instruction') {
+    return `Instruction:\n${instruction}`;
+  }
   return `Skill: ${step.skillName}\n\nInstruction:\n${instruction}`;
 }
 
@@ -160,7 +165,7 @@ export function resolveStepInstruction(
   stepIndex = 0,
 ): string {
   const instruction = validateInstruction(step, stepIndex);
-  const stepLabel = step.label ?? step.skillName;
+  const stepLabel = chainStepName(step);
 
   return instruction.replace(/\{\{([^{}]*)\}\}/g, (raw, inner: string) => {
     const name = inner.trim();
@@ -301,7 +306,9 @@ export function planRunSessions(input: PlanRunSessionsInput): RunSessionPlan {
     steps.push({
       stepId: step.id,
       stepIndex: index,
-      skillName: step.skillName,
+      ...(step.kind === 'instruction'
+        ? { kind: 'instruction' as const }
+        : { skillName: step.skillName }),
       sessionId,
       forkMechanism,
       forkFromSessionId,
@@ -383,7 +390,9 @@ export function buildStepPrompt(input: BuildStepPromptInput): string {
   const handoffSource: HandoffSourceStep = {
     index: previous.stepIndex,
     label: previousChainStep.label ?? null,
-    skillName: previousChainStep.skillName,
+    ...(previousChainStep.kind === 'instruction'
+      ? { kind: 'instruction' as const }
+      : { skillName: previousChainStep.skillName }),
     instruction: previousInstruction,
     status: previous.status,
     tail: previous.tail ?? '',
@@ -398,7 +407,7 @@ export function buildStepPrompt(input: BuildStepPromptInput): string {
 }
 
 function validateInstruction(step: ChainStep, stepIndex: number): string {
-  const stepLabel = step.label ?? step.skillName;
+  const stepLabel = chainStepName(step);
   if (
     typeof step.instruction !== 'string' ||
     step.instruction.trim() === '' ||
@@ -419,7 +428,7 @@ function assertRequiredInputs(
   step: ChainStep,
   stepIndex: number,
 ): void {
-  const stepLabel = step.label ?? step.skillName;
+  const stepLabel = chainStepName(step);
   const missing: string[] = [];
 
   for (const input of chain.inputs) {

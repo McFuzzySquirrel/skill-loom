@@ -12,6 +12,7 @@
     "src/web/**/*.ts",
     "src/web/**/*.tsx",
     "tests/e2e/**/*.ts",
+    "tests/web/**/*.ts",
     "vite.config.ts",
     "playwright.config.ts"
   ],

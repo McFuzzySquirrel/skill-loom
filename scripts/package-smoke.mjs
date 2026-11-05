@@ -25,6 +25,9 @@ function assertPackageContents(files) {
     'package/dist/package.json',
     'package/dist/src/server/cli.js',
     'package/dist/src/server/index.js',
+    'package/dist/src/server/chains/scenario-skills/THIRD_PARTY_NOTICES.md',
+    'package/dist/src/server/chains/scenario-skills/minimax-xlsx/SKILL.md',
+    'package/dist/src/server/chains/scenario-skills/minimax-xlsx/LICENSE',
     'package/dist/web/index.html',
   ];
   for (const path of required) {
@@ -178,6 +181,46 @@ async function main() {
     const health = await waitForHealth(port);
     if (health.status !== 'ok') {
       throw new Error('Packaged server health response is not ok.');
+    }
+
+    const projectPath = join(temporaryRoot, 'scenario-project');
+    await mkdir(projectPath, { recursive: true });
+    const projectResponse = await fetch(`http://127.0.0.1:${String(port)}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'open', path: projectPath }),
+    });
+    if (!projectResponse.ok) {
+      throw new Error(`Could not register the packaged scenario project: HTTP ${projectResponse.status}.`);
+    }
+    const projectBody = await projectResponse.json();
+    const projectId = projectBody?.project?.id;
+    if (typeof projectId !== 'string' || projectId === '') {
+      throw new Error('Packaged server returned no project id for the scenario smoke test.');
+    }
+
+    const skillResponse = await fetch(
+      `http://127.0.0.1:${String(port)}/api/projects/${encodeURIComponent(projectId)}/catalog/scenario-skills/minimax-xlsx/copy`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ harness: 'opencode' }),
+      },
+    );
+    if (skillResponse.status !== 201) {
+      throw new Error(`Packaged server could not copy the bundled scenario skill: HTTP ${skillResponse.status}.`);
+    }
+    const skill = await skillResponse.json();
+    const sourceNotice = await readFile(
+      join(projectPath, '.opencode', 'skills', 'minimax-xlsx', 'SKILL-LOOM-SOURCE.md'),
+      'utf8',
+    );
+    if (
+      skill?.name !== 'minimax-xlsx' ||
+      typeof skill.revision !== 'string' ||
+      !sourceNotice.includes(skill.revision)
+    ) {
+      throw new Error('Packaged scenario copy is missing its source attribution.');
     }
 
     console.log(

@@ -123,6 +123,7 @@ export const RUN_TOP_LEVEL_FIELDS = [
 export const RUN_STEP_FIELDS = [
   'id',
   'index',
+  'kind',
   'skillName',
   'label',
   'status',
@@ -153,12 +154,11 @@ const TailSchema = z
   })
   .default('');
 
-export const RunStepRecordSchema = z.strictObject({
+const RunStepRecordContent = {
   /** Stable snapshot step id; reordering never changes it. */
   id: NonEmptyStringSchema,
   /** Position of this step in the frozen snapshot, zero based. */
   index: z.number().int().min(0),
-  skillName: NonEmptyStringSchema,
   label: NonEmptyStringSchema.nullable().default(null),
   status: StepStatusSchema,
   startedAt: TimestampSchema.nullable().default(null),
@@ -172,7 +172,19 @@ export const RunStepRecordSchema = z.strictObject({
   tail: TailSchema,
   /** Short, bounded explanation for the current status. Never a transcript. */
   reason: BoundedReasonSchema,
-});
+};
+export const RunStepRecordSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    ...RunStepRecordContent,
+    kind: z.literal('skill').optional(),
+    skillName: NonEmptyStringSchema,
+  }),
+  z.strictObject({
+    ...RunStepRecordContent,
+    kind: z.literal('instruction'),
+    skillName: z.never().optional(),
+  }),
+]);
 export type RunStepRecord = z.infer<typeof RunStepRecordSchema>;
 
 /**
@@ -406,7 +418,9 @@ export function createRunRecord(input: CreateRunInput): Run {
     steps: snapshot.steps.map((step, index) => ({
       id: step.id,
       index,
-      skillName: step.skillName,
+      ...(step.kind === 'instruction'
+        ? { kind: 'instruction' as const }
+        : { ...(step.kind === undefined ? {} : { kind: step.kind }), skillName: step.skillName }),
       label: step.label ?? null,
       status: 'pending' as const,
       startedAt: null,
@@ -414,7 +428,7 @@ export function createRunRecord(input: CreateRunInput): Run {
       exitCode: null,
       sessionId: null,
       forkMechanism,
-      skillObservation: 'unknown' as const,
+      skillObservation: step.kind === 'instruction' ? 'not-observable' as const : 'unknown' as const,
       tail: '',
       reason: null,
     })),
@@ -495,7 +509,8 @@ export function validateRun(value: unknown): Run {
         message: `Step record ${String(index)} does not match the frozen snapshot step id.`,
       });
     }
-    if (step.skillName !== snapshotStep.skillName) {
+    if (step.skillName !== snapshotStep.skillName ||
+      (step.kind === 'instruction') !== (snapshotStep.kind === 'instruction')) {
       issues.push({
         path: `steps.${String(index)}.skillName`,
         code: RUN_ISSUE_CODES.STEP_SKILL_MISMATCH,

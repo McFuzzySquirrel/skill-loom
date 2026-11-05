@@ -144,7 +144,7 @@ export function StepList({
           <p>No steps yet.</p>
           <p>
             Expand a skill in the catalog and choose <strong>Add as step</strong> to start
-            building the ordered recipe.
+            building the ordered recipe, or choose <strong>Add instruction</strong> without a skill.
           </p>
         </div>
       ) : (
@@ -213,11 +213,11 @@ export function StepList({
                     }}
                     onClick={() => onSelect(step.id)}
                     aria-current={selected ? 'step' : undefined}
-                    aria-label={`Select step ${String(index + 1)}: ${displayName} (${step.skillName})`}
+                    aria-label={`Select step ${String(index + 1)}: ${displayName} (${step.kind === 'instruction' ? 'Instruction' : step.skillName})`}
                     data-testid="step-select"
                   >
                     <span className="step-row__label">{displayName}</span>
-                    <span className="step-row__skill">{step.skillName}</span>
+                    <span className="step-row__skill">{step.kind === 'instruction' ? 'Instruction' : step.skillName}</span>
                     <span className="step-row__excerpt">{instructionExcerpt(step.instruction)}</span>
                     {invalid ? (
                       <span
@@ -268,7 +268,7 @@ export function StepList({
                       type="button"
                       className="button button--secondary button--small button--danger"
                       onClick={() => handleRemove(step.id)}
-                      aria-label={`Remove step ${String(index + 1)}: ${displayName} (${step.skillName})`}
+                      aria-label={`Remove step ${String(index + 1)}: ${displayName} (${step.kind === 'instruction' ? 'Instruction' : step.skillName})`}
                       data-testid="step-remove"
                     >
                       Remove

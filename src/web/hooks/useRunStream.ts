@@ -110,7 +110,7 @@ function describeTransition(view: RunView): { message: string; tone: Announcemen
   const index = run.currentStepIndex;
   const total = run.steps.length;
   const step = run.steps[index];
-  const stepLabel = step?.label ?? step?.skillName ?? `Step ${String(index + 1)}`;
+  const stepLabel = step?.label ?? step?.skillName ?? (step?.kind === 'instruction' ? 'Instruction' : `Step ${String(index + 1)}`);
   const position = `Step ${String(index + 1)} of ${String(total)}`;
 
   if (run.status === 'completed') {

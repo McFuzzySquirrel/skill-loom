@@ -132,6 +132,8 @@ If you need multi-user or remote access, this project does not provide it. Treat
 | `~/.config/loom/chains/*.json` | Global chain templates. | Independent snapshots; importing copies one into a project with a new id. |
 | `<project>/.loom/chains/*.json` | Saved project chains. | Versioned JSON, atomic writes. Back up or version these recipes. |
 | `<project>/.loom/runs/*.json` | Run snapshots, statuses, actions, and bounded tails. | At most 200 lines or 32 KiB per step. Never a full transcript. This repository git-ignores `.loom/runs/`. |
+| `<project>/.opencode/skills/` or `<project>/.github/skills/` | Copied and bundle-imported skill packages. | Independent project files; deleting a chain does not remove them. Include these in recipe backups when needed. |
+| Browser download location (`*.loom.json`) | Portable chain and skill bundles. | No run history or input defaults; review package contents and redistribution rights before sharing. Not a complete backup. |
 | `~/.copilot/config.json` | Copilot's own folder-trust configuration. | Skill Loom only reads `trustedFolders`; it never writes this file. |
 
 Back up the configuration and recipes:
@@ -143,6 +145,16 @@ cp -a ~/.config/loom ~/loom-config-backup
 Back up a project's recipes by copying `<project>/.loom/chains/`. Run records are optional history; because they can contain terminal output, treat backups as sensitive and keep them out of version control. This repository already ignores `.loom/runs/`.
 
 Restore by stopping the server, replacing the config or chain directory, and starting again. Validate the restored JSON before use; an unsupported version or corrupt document is rejected rather than migrated beyond the documented version 1 shape.
+
+### Portable bundle administration
+
+Users can export saved project chains with their referenced skill packages and import them into another local installation. See the [sharing workflow](user-guide.md#share-a-chain-and-its-skills). This does not add remote access, user accounts, or a hosted sharing service.
+
+The version 1 `skill-loom-chain` bundle is JSON with base64-encoded package files and executable flags. The server validates both preview and import, rejects unsupported versions, unsafe paths, symlinks, special files, excluded credential/dependency directories, duplicate paths, mismatched skill metadata, and incomplete packages. Limits are 100 packages, 2,000 files, 20 MiB decoded content, and 30 MiB per import request. Existing packages are never overwritten, and permission opt-in is reset. Ordinary file contents are not secret-scanned; review remains essential.
+
+The same-origin API exposes `GET /api/projects/:projectId/chains/:chainId/bundle`, `POST /api/projects/:projectId/chain-bundles/preview`, and `POST /api/projects/:projectId/chain-bundles/import`. POST bodies contain `bundle`; import additionally requires `confirmed: true` and an optional `reuseSkills` array of installed skill names. Preview is read-only. Import revalidates the bundle and conflicts and rolls back newly installed packages if chain persistence fails. A bundle does not install harness CLIs or external skill dependencies.
+
+Standalone instruction steps use `kind: "instruction"` and contain `id`, `instruction`, and an optional `label`, with no `skillName`. Existing skill steps remain valid without a `kind`; explicit `kind: "skill"` is also supported. Both persist under the existing versioned chain format. Older application builds that do not understand instruction steps will reject such chains; use a compatible build on the receiving installation.
 
 ## Health Checks and Monitoring
 

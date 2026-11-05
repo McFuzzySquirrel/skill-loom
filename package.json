@@ -23,7 +23,7 @@
     "dev:web": "vite",
     "build": "npm run build:web && npm run build:server",
     "build:web": "vite build",
-    "build:server": "tsc -p tsconfig.server.json",
+    "build:server": "tsc -p tsconfig.server.json && node scripts/copy-scenario-skills.mjs",
     "prepack": "npm run build",
     "start": "node dist/src/server/index.js",
     "typecheck": "npm run typecheck:server && npm run typecheck:web",

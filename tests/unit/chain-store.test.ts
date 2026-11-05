@@ -110,6 +110,18 @@ async function expectChainError(
 }
 
 describe('chain storage layout', () => {
+  it('round-trips mixed instruction and skill chains through storage', async () => {
+    const store = storeFor();
+    const chain = makeChain({
+      steps: [
+        { id: 'plain', kind: 'instruction', instruction: 'Plan {{task}}.', label: 'Think' },
+        { id: 'skill', skillName: 'review', instruction: 'Review {{task}}.' },
+      ],
+    });
+    await store.create(chain);
+    expect((await store.read(chain.id)).steps).toEqual(chain.steps);
+  });
+
   it('creates .loom/chains on demand and writes only inside the project directory', async () => {
     const store = storeFor();
 

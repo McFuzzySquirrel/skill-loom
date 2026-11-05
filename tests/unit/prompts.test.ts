@@ -80,6 +80,51 @@ const OPENCODE = createOpenCodeAdapter();
 const COPILOT = createCopilotAdapter();
 
 describe('step prompt assembly', () => {
+  it('assigns fresh sessions to instruction steps without adding a handoff', () => {
+    const chain = makeChain({
+      sessionMode: 'fresh',
+      steps: [
+        { id: 'plain', kind: 'instruction', instruction: 'Plan {{task}}.' },
+        { id: 'plain-next', kind: 'instruction', instruction: 'Implement {{task}}.' },
+      ],
+    });
+    const sessionPlan = planRunSessions({
+      chain, capabilities: OPENCODE, mode: 'automatic',
+      createSessionId: sequentialSessionIds().create,
+    });
+    expect(sessionPlan.steps.map((step) => step.sessionId)).toEqual(['ses_test_1', 'ses_test_2']);
+    expect(sessionPlan.steps.every((step) => !step.handoffRequired)).toBe(true);
+    expect(buildStepPrompt({ chain, stepIndex: 1, inputs: { task: 'shipping' }, sessionPlan }))
+      .toBe('Instruction:\nImplement shipping.');
+  });
+
+  it('resolves instruction-only steps without a skill directive and preserves handoff sessions', () => {
+    const chain = makeChain({
+      harness: 'copilot',
+      sessionMode: 'fork',
+      steps: [
+        { id: 'plain', kind: 'instruction', instruction: 'Plan {{task}}.', label: 'Think' },
+        { id: 'skill', skillName: 'review', instruction: 'Review {{task}}.' },
+      ],
+    });
+    expect(assembleStepPrompt({ chain, stepIndex: 0, inputs: { task: 'shipping' } }))
+      .toBe('Instruction:\nPlan shipping.');
+    const sessionPlan = planRunSessions({
+      chain, capabilities: COPILOT, mode: 'supervised',
+      createSessionId: sequentialSessionIds().create,
+    });
+    expect(sessionPlan.steps[0]).toMatchObject({ kind: 'instruction' });
+    expect(sessionPlan.steps[1]?.handoffRequired).toBe(true);
+    const prompt = buildStepPrompt({
+      chain, stepIndex: 1, inputs: { task: 'shipping' }, sessionPlan,
+      previousStep: { stepIndex: 0, status: 'done', tail: 'Plan ready' },
+    });
+    expect(prompt).toContain('Skill: review');
+    expect(prompt).toContain('Previous step 1: Think (instruction)');
+    expect(prompt).not.toContain('unknown skill');
+    expect(prompt).not.toContain('undefined');
+  });
+
   it('names the skill explicitly and includes the resolved instruction exactly', () => {
     const chain = makeChain({
       steps: [

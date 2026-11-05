@@ -329,6 +329,27 @@ async function advanceOscStep(harness: Harness, process: FakeProcess): Promise<v
 }
 
 describe('automatic OpenCode advancement', () => {
+  it('runs instruction steps with ordinary OSC advancement and no skill observation', async () => {
+    const chain = makeChain({
+      steps: [
+        { id: 'plain', kind: 'instruction', instruction: 'Plan {{task}}.' },
+        { id: 'skill', skillName: 'implement', instruction: 'Implement {{task}}.' },
+      ],
+    });
+    const harness = makeHarness({ chain });
+    await harness.runner.start();
+    expect(harness.spawner.lastSpec.args.join('\n')).toContain('Instruction:\nPlan ship the automatic runner.');
+    expect(harness.spawner.lastSpec.args.join('\n')).not.toContain('Skill:');
+    harness.spawner.lastProcess.emitData('skill(unrelated)\n');
+    await advanceOscStep(harness, harness.spawner.lastProcess);
+    expect(harness.runner.getRun().currentStepIndex).toBe(1);
+    expect(harness.runner.getRun().steps[0]).toMatchObject({
+      status: 'done', kind: 'instruction', skillObservation: 'not-observable',
+    });
+    expect(harness.spawner.lastSpec.args.join('\n')).toContain('Skill: implement');
+    await harness.runner.abort();
+  });
+
   it('advances only after working then idle and restarts the next step on the same session', async () => {
     const harness = makeHarness();
     const started = await harness.runner.start();

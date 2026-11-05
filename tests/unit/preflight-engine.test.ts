@@ -281,6 +281,34 @@ function expectBlocked(report: PreflightReport, key: string): void {
 }
 
 describe('preflight engine: passing report', () => {
+  it('does not require or read a skill catalog for instruction-only chains', async () => {
+    const chain = makeChain({
+      steps: [{ id: 'plain', kind: 'instruction', instruction: 'Plan {{task}}.' }],
+      inputs: [{ name: 'task', required: true }],
+    });
+    const report = await preflight({
+      chain, deps: engineOptions({ chain, catalog: failingCatalog(new Error('No skills installed')) }),
+    });
+    expect(report.startAllowed).toBe(true);
+    expect(report.skills).toEqual([]);
+    expect(report.resolvedInputs.task).toBe('ship it');
+    expect(report.checks.some((check) => check.id === 'skill' || check.id === 'catalog')).toBe(false);
+  });
+
+  it('resolves only skill steps in mixed chains without losing their original indices', async () => {
+    const chain = makeChain({
+      steps: [
+        { id: 'plain', kind: 'instruction', instruction: 'Plan {{task}}.' },
+        { id: 'skill', skillName: 'implement', instruction: 'Implement {{task}}.' },
+      ],
+      inputs: [{ name: 'task', required: true }],
+    });
+    const report = await preflight({ chain });
+    expect(report.startAllowed).toBe(true);
+    expect(report.skills).toHaveLength(1);
+    expect(report.skills[0]).toMatchObject({ stepId: 'skill', stepIndex: 1, resolved: true });
+  });
+
   it('resolves inputs, skills, auth, trust, session, and a clean tree', async () => {
     const runner = createRunner();
     const report = await preflight({ deps: engineOptions({ runner }) });

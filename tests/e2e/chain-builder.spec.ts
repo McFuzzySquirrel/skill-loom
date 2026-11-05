@@ -163,6 +163,37 @@ async function addSkillAsStep(
 }
 
 test.describe('Chain builder', () => {
+  test('adds instruction steps without skills, edits, orders, saves, and reloads them', async ({
+    page, request,
+  }) => {
+    const project = await openFixtureProject(request);
+    await gotoNewBuilder(page, project.id, `Instruction builder ${runSuffix}`);
+    await page.getByTestId('chain-add-instruction').click();
+    await expect(page.getByTestId('step-instruction')).toBeFocused();
+    await expect(page.getByTestId('step-skill')).toHaveCount(0);
+    await expect(page.getByTestId('step-kind')).toContainText('no installed skill required');
+    await expect(page.getByTestId('chain-save')).toBeDisabled();
+    await page.getByTestId('step-instruction').fill('Inspect the project and summarize its purpose.');
+    await page.getByTestId('step-label').fill('Inspect project');
+    const firstId = await page.getByTestId('step-id').textContent();
+    await page.getByTestId('chain-add-instruction').click();
+    await page.getByTestId('step-instruction').fill('Write an implementation checklist.');
+    await page.getByTestId('step-label').fill('Checklist');
+    const secondId = await page.getByTestId('step-id').textContent();
+    await stepRows(page).last().getByRole('button', { name: /Move up Checklist, step 2/ }).click();
+    await expect(stepRows(page).first()).toContainText('Checklist');
+    await page.getByTestId('chain-save').click();
+    await expect(page).not.toHaveURL(/\/chains\/new/);
+    await page.reload();
+    await expect(stepRows(page)).toHaveCount(2);
+    await expect(stepRows(page).first()).toHaveAttribute('data-step-id', secondId!);
+    await expect(stepRows(page).last()).toHaveAttribute('data-step-id', firstId!);
+    await stepRows(page).first().getByRole('button', { name: /Select step 1:/ }).click();
+    await expect(page.getByTestId('step-label')).toHaveValue('Checklist');
+    await expect(page.getByTestId('step-instruction')).toHaveValue('Write an implementation checklist.');
+    await expect(page.getByTestId('step-skill')).toHaveCount(0);
+  });
+
   test('adds catalog skills as steps, edits instruction and label, and searches the catalog', async ({
     page,
     request,
