@@ -57,7 +57,8 @@ The product promise is deliberately narrow:
 | Capability | What it does |
 |---|---|
 | Projects | Register existing folders or create new ones, browse the filesystem, optionally initialize Git, and keep a recent-project list. Removing a recent entry never deletes project files. |
-| Skill catalog | Discover OpenCode filesystem skills and Copilot CLI skills, read `SKILL.md` metadata, search, add extra global directories, and copy a non-project skill package into the project. |
+| Skill catalog | Discover OpenCode filesystem skills and Copilot CLI skills, read `SKILL.md` metadata, search, add extra global directories, and copy non-project packages into the shared `.agents/skills/` root. |
+| Workspace and appearance | Navigate project skills, chains, and details separately; choose system, light, or dark appearance. |
 | Scenario catalog | Browse illustrative starter chains for business, student, app developer, and game developer workflows; inspect pinned third-party skill sources, copy examples into the builder, and explicitly add bundled skills to a project when needed. See the [scenario chain guide](docs/scenario-chains.md). |
 | Chain builder | Create a chain bound to one harness, add skill or standalone instruction steps, reorder with drag or **Move up**/**Move down**, declare named inputs, and use `{{name}}` placeholders. |
 | Portable chain bundles | Export a saved chain with complete referenced skill packages as `.loom.json`; preview and import into another project or installation with a fresh chain id, explicit conflict choices, and permission consent reset. |
@@ -123,6 +124,8 @@ Key boundaries and the decisions behind them:
 - Copilot trust is read-only and broad permissions need an opt-in — [ADR-0009](docs/adr/0009-read-only-copilot-trust-and-explicit-permissions.md).
 - The global library stores independent snapshots — [ADR-0010](docs/adr/0010-global-chain-library-snapshots.md).
 - Processes are spawned without a shell and PTYs are server-owned — [ADR-0011](docs/adr/0011-shell-free-process-and-pty-transport.md).
+- New project skill copies share `.agents/skills/`, with legacy OpenCode discovery preserved — [ADR-0012](docs/adr/0012-shared-project-skill-installation-root.md).
+- Bundle export prefers one project-local package and rejects remaining ambiguity — [ADR-0013](docs/adr/0013-deterministic-chain-bundle-skill-resolution.md).
 
 The full decision directory is in [docs/adr/README.md](docs/adr/README.md).
 
@@ -137,7 +140,9 @@ The full decision directory is in [docs/adr/README.md](docs/adr/README.md).
 - `tests/e2e/` — Playwright browser journeys against an isolated app instance.
 - `scripts/` — Documentation gate, package smoke test, and live harness probes.
 - `docs/` — User, administrator, and operations guides, ADRs, release notes, support ownership, and live evidence.
-- `.opencode/` — Repository agent definitions and skills used to maintain the project.
+- `.github/skills/` — Project-maintained Copilot skills and their references.
+- `.opencode/agents/` and `.opencode/skills/` — OpenCode agent definitions and mirrored project skills.
+- `<project>/.agents/skills/` — Shared destination for new project skill copies and bundle imports; OpenCode also discovers legacy `.opencode/skills/`.
 - `dist/` — Build output for the server and web UI; generated, not source.
 
 ## Getting Started
@@ -145,8 +150,8 @@ The full decision directory is in [docs/adr/README.md](docs/adr/README.md).
 The short path is:
 
 ```bash
-git clone https://github.com/McFuzzySquirrel/slan.git
-cd slan
+git clone https://github.com/McFuzzySquirrel/skill-loom.git
+cd skill-loom
 npm install
 npm run dev
 ```
@@ -247,7 +252,7 @@ The live probes exercise real OpenCode and Copilot CLIs. They fail with a clear 
 
 1. Start the development app with `npm run dev` and open `http://127.0.0.1:5173`, or build and run production with `npm run build && npm start` and open `http://127.0.0.1:7373`.
 2. On the Projects screen, open an existing folder or create a new project. Registering a project records it in the recent-projects list; removing a recent entry does not delete project files.
-3. Open the project workspace and expand the skill catalog (it starts collapsed). Choose the harness, search or expand a skill's `SKILL.md`, and optionally add extra skill directories in the settings dialog. A skill discovered from a personal, plugin, custom, or extra source can be copied into the project with **Copy into this project**; OpenCode copies land in `.opencode/skills/` and Copilot copies in `.github/skills/` (confirm Copilot discovers the copied skill; the live probe used `.agents/skills/`).
+3. Open **Project skills**, choose the harness, and search or expand a skill's `SKILL.md`. You can add extra skill directories in the settings dialog. A skill from a personal, plugin, custom, or extra source can be copied into the project with **Copy into this project**; new copies for either harness go to `.agents/skills/`. OpenCode also discovers legacy `.opencode/skills/` packages, while Copilot discovery remains authoritative through its CLI.
 4. Create a chain, add at least one step, choose the harness, give every step an instruction, declare any named inputs, and save. A saved chain is stored under `<project>/.loom/chains/`. **Save and run** saves the chain and opens its run-start screen.
 5. On run start, choose supervised or automatic mode, provide required inputs, and run preflight. Preflight never makes a model call.
 6. Resolve every blocking finding and acknowledge every required warning, then choose **Start run**. Skill Loom creates the run through `POST /api/projects/<projectId>/runs`, re-runs the blocking preflight on the server, and opens the dedicated terminal page at `/runs/<runId>/terminal`.
@@ -299,12 +304,11 @@ Skill Loom is released under the [MIT License](LICENSE). Contributions are accep
 
 ## What's Next
 
-These are known gaps and planned work, not shipped behavior:
+There is no committed roadmap. These are known gaps and possible follow-up work, not shipped behavior:
 
 - Fix the OpenCode `OSC 7501` parser to accept the live colon-separated parameter form and handle the live `clear` ordering, then rerun the live execution probe before claiming automatic OpenCode advancement.
-- Verify that a Copilot skill copied into `.github/skills/` is discovered by the installed Copilot CLI; the live probe used `.agents/skills/`.
 - Wire live active-run state into `GET /api/health` (currently a placeholder in production) or remove the field in favor of `GET /api/runs/active`.
-- Expand live evidence beyond Linux ARM64 and the pinned OpenCode 2.2.5 / Copilot 1.0.105 versions.
+- Expand live evidence beyond Linux ARM64 and the pinned OpenCode 2.2.5 / Copilot CLI 1.0.105 versions.
 - Decide whether to publish `skill-loom-cli`; add repository/release metadata and a published upgrade path.
 - Consider per-step model or harness selection only as a new product decision; it is not supported today.
 
@@ -328,6 +332,6 @@ Maintained by **McFuzzySquirrel** ([GitHub](https://github.com/McFuzzySquirrel))
 - [Administrator guide](docs/admin-guide.md) — install, configure, back up, upgrade, monitor, and harden.
 - [Operations guide](docs/OPERATIONS.md) — the full operator contract: data locations, harness prerequisites, Copilot trust, permissions, fork behavior, and troubleshooting.
 - [Architecture decision records](docs/adr/README.md) — one record per durable decision, with agent rules and verification.
-- [Release notes for 0.1.0](docs/releases/0.1.0.md) — highlights, compatibility, limitations, and validation status.
+- [Draft release notes for package version 0.1.0](docs/releases/0.1.0.md) — highlights, compatibility, limitations, and validation status; not a published release.
 - [Changelog](CHANGELOG.md) — Keep a Changelog history.
 - [Support](docs/SUPPORT.md) — ownership, intake, and escalation.

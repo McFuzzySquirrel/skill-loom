@@ -4,55 +4,42 @@ All notable changes are documented here. This project follows the [Keep a Change
 
 ## [Unreleased]
 
+The package version `0.1.0` is private and has no Git release tag or npm publication; all listed changes remain unreleased.
+
 ### Added
 
 - Portable `.loom.json` chain export/import with complete skill packages, review previews, explicit reuse of installed skills, safe bounded file handling, and fresh permission consent.
 - Standalone agent instruction steps alongside skill steps, with labels, ordering, named inputs, preflight, and run lifecycle support.
+- Project skill copies and bundle imports use the shared `.agents/skills/` location for either harness.
+- Project workspace navigation and selectable system, light, and dark appearance modes.
 - Project documentation set: user guide, administrator guide, ADR index and records, release notes, and this changelog.
 - Documentation navigation from the README and the operations guide.
-
-### Changed
-
-- Documented the live-verification gaps in automatic OpenCode advancement and Copilot's project-skill copy destination.
-
-### Fixed
-
-- No product fixes are recorded in this documentation refresh.
-
-### Security
-
-- Documented the loopback-only boundary, the absence of authentication and TLS, the read-only Copilot trust model, and the explicit automatic-permission opt-in.
-
-## [0.1.0] - 2026-11-04
-
-This is the initial local development version. The package is named `skill-loom-cli`, remains `"private": true`, and has not been published to npm or tagged as a Git release.
-
-### Added
-
 - Loopback-only Fastify server with a React web UI, typed JSON API, and WebSocket terminal transport.
 - Project registration, recent projects, folder browser, optional `git init`, and canonical path handling.
-- Skill catalog for OpenCode filesystem discovery and Copilot `copilot skill list --json`, including extra directories, warnings, and bounded copy-into-project.
+- Skill catalogs for OpenCode filesystem discovery and Copilot `copilot skill list --json`, including extra directories, warnings, and bounded copy-into-project.
 - Chain model, builder, step reordering, named inputs and `{{name}}` placeholders, session modes, per-chain automatic-permission opt-in, and project-local persistence.
 - Global chain library with independent template snapshots and import-with-new-id.
 - Deterministic preflight for harness executable resolution, authentication evidence, Copilot folder trust, catalog resolution, inputs, session mode, permissions, and Git state.
 - Supervised and automatic run modes with a frozen chain snapshot, resolved inputs, bounded tails, one global active run, and startup recovery.
 - OpenCode and Copilot adapters with shell-free command construction, session planning, native fork where available, and deterministic handoff elsewhere.
-- Terminal-dominant run view, run details view, recovery controls, keyboard focus exit from xterm, and live status announcements.
+- Terminal run view, run details, recovery controls, keyboard focus exit from xterm, and live status announcements.
 - Local `skill-loom` CLI with `--help`, `--version`, `--no-open`, `--port`, and `--config-dir`.
 - Unit, integration, Playwright end-to-end, package smoke, and live discovery/execution probes.
 
 ### Changed
 
-- None recorded for the initial version.
+- OpenCode discovery includes the shared `.agents/skills/` directory while retaining legacy `.opencode/skills/` discovery. Copilot discovery remains CLI-authoritative.
+- Bundle export prefers one enabled project-local package over same-named personal or extra-directory packages, while rejecting distinct project duplicates and other ambiguous sources.
+- README, user, administrator, and release documentation now distinguish supported behavior, limitations, and unpublished status.
 
 ### Fixed
 
-- None recorded for the initial version.
+- Chain bundle export no longer rejects a valid project package merely because another enabled package with the same name exists outside the project.
+- Missing, disabled, ambiguous, and unavailable bundle sources now have distinct actionable diagnostics.
 
 ### Security
 
-- Server binds to loopback, rejects non-loopback hosts, and has no authentication because it is not designed for remote access.
-- Credential-like configuration fields are rejected; authentication checks use presence evidence only.
+- The server is loopback-only with no authentication; credential-like fields are rejected, and authentication checks use presence evidence only.
 - Harness processes are spawned with an executable and argument array, never a shell string.
 - Copilot trust is read-only, and broad automatic flags require an explicit per-chain opt-in.
 - No telemetry, crash reporting, remote logging, or outbound application requests are sent by Skill Loom.

@@ -34,8 +34,8 @@ Harness CLIs are deliberately not dependencies of this package. Install them wit
 ### From a checkout
 
 ```bash
-git clone https://github.com/McFuzzySquirrel/slan.git
-cd slan
+git clone https://github.com/McFuzzySquirrel/skill-loom.git
+cd skill-loom
 npm install
 npm run build
 npm start
