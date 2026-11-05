@@ -334,6 +334,15 @@ test.describe('Skill catalog', () => {
     await expect(extraGroup.getByText('Loom extra', { exact: true }).first()).toBeVisible();
     await expect(rowFor(page, 'release-notes')).toBeVisible();
 
+    const extraGroupToggle = page.getByTestId('catalog-group-toggle-loom-extra');
+    await expect(extraGroupToggle).toHaveAttribute('aria-expanded', 'true');
+    await extraGroupToggle.click();
+    await expect(extraGroupToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(rowFor(page, 'release-notes')).toBeHidden();
+    await extraGroupToggle.click();
+    await expect(extraGroupToggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(rowFor(page, 'release-notes')).toBeVisible();
+
     const projectShared = page.locator(
       '[data-testid="skill-row"][data-source="project"][data-name="shared-name"]',
     );
