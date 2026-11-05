@@ -20,6 +20,7 @@ import { TrustPanel } from '../components/TrustPanel';
 import { CHAIN_HARNESS_LABELS, CHAIN_SESSION_MODE_LABELS } from '../hooks/useChains';
 import { usePreflight } from '../hooks/usePreflight';
 import { Link, useRouter } from '../router';
+import { useWorkspace } from '../WorkspaceContext';
 import type { PreflightRunMode } from '../api/preflight';
 
 /**
@@ -114,6 +115,7 @@ export function RunStartPage({
   runsApiClient = runsApi,
 }: RunStartPageProps) {
   const { navigate } = useRouter();
+  const { setInfo } = useWorkspace();
   const { announce } = useStatusAnnouncer();
   const startHintId = useId();
   const inputHintId = useId();
@@ -184,6 +186,15 @@ export function RunStartPage({
   }, [loadChain]);
 
   const chain = chainState.chain;
+  useEffect(() => {
+    if (chain !== null) {
+      setInfo({
+        projectId,
+        chainId,
+        chainName: chain.name,
+      });
+    }
+  }, [chain, chainId, projectId, setInfo]);
 
   const preflight = usePreflight({
     projectId,

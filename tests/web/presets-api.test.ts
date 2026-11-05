@@ -33,7 +33,7 @@ describe('scenario catalog API client', () => {
       return new Response(JSON.stringify({
         name: 'minimax-xlsx',
         harness: 'opencode',
-        destinationPath: '/project/.opencode/skills/minimax-xlsx',
+        destinationPath: '/project/.agents/skills/minimax-xlsx',
         revision: '60aaae52bb2af8162732751a4332f62a5fef518b',
         catalogSkillId: 'opencode-project-skill',
       }), {

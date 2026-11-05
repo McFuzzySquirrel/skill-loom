@@ -12,11 +12,11 @@ The screenshots use an isolated demo project and a scripted fixture harness. The
 
 Register an existing folder or create a new one. The recent-project list never deletes project files when an entry is removed.
 
-## Project workspace
+## Project skills
 
-![Project workspace with the skill catalog open](assets/tour/02-project-workspace.png)
+![Project skills workspace with the skill catalog open](assets/tour/02-project-workspace.png)
 
-The workspace shows the canonical path, Git state, and local `.loom` state. The skill catalog reads `SKILL.md` metadata and shows exactly what it finds; it never adds a model summary.
+Project chains and skills have separate destinations. The Skills view makes harness selection, search, and source-grouped results easy to reach. It reads `SKILL.md` metadata and shows exactly what it finds; it never adds a model summary. Project path and Git details are available on demand under **Project details**.
 
 ## Chain builder
 

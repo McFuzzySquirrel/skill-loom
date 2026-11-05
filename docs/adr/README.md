@@ -15,6 +15,8 @@
 | [ADR-0009](0009-read-only-copilot-trust-and-explicit-permissions.md) | Read Copilot trust and require explicit automatic permissions | Accepted | 2026-11-04 |
 | [ADR-0010](0010-global-chain-library-snapshots.md) | Store the global chain library as independent snapshots | Accepted | 2026-11-04 |
 | [ADR-0011](0011-shell-free-process-and-pty-transport.md) | Spawn harnesses without a shell and keep PTYs server-owned | Accepted | 2026-11-04 |
+| [ADR-0012](0012-shared-project-skill-installation-root.md) | Use a shared project skill installation root | Accepted | 2026-11-05 |
+| [ADR-0013](0013-deterministic-chain-bundle-skill-resolution.md) | Resolve bundle skills with project-local precedence | Accepted | 2026-11-05 |
 
 ## Rules
 

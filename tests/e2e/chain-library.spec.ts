@@ -155,7 +155,10 @@ test.describe('Project chain library', () => {
     const empty = page.getByTestId('chain-library-empty');
     await expect(empty).toBeVisible();
     await expect(empty).toContainText('No chains yet.');
+
+    await page.getByRole('link', { name: 'Project skills' }).click();
     await expect(page.getByTestId('skill-catalog')).toBeVisible();
+    await page.getByRole('link', { name: 'Project chains' }).click();
 
     await page.getByTestId('new-chain-open').click();
     const dialog = page.getByTestId('new-chain-dialog');

@@ -19,6 +19,7 @@ import { RecentProjects } from '../components/RecentProjects';
 import { SkillCatalog } from '../components/SkillCatalog';
 import { useStatusAnnouncer } from '../components/StatusRegion';
 import { useRecentProjects } from '../hooks/useRecentProjects';
+import { useWorkspace } from '../WorkspaceContext';
 
 /**
  * Project selection screen (PROJ-03).
@@ -199,7 +200,14 @@ function summaryFromListing(
  * reload, the same facts are reconstructed from the recent list plus a
  * metadata-only directory listing; file contents are never requested.
  */
-export function ProjectPage({ projectId }: { projectId: string }) {
+export function ProjectPage({
+  projectId,
+  view = 'chains',
+}: {
+  projectId: string;
+  view?: 'chains' | 'skills';
+}) {
+  const { setInfo } = useWorkspace();
   const cached = recallProject(projectId);
   const [state, setState] = useState<ProjectViewState>(() =>
     cached === undefined
@@ -259,11 +267,15 @@ export function ProjectPage({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     if (state.status === 'ready') {
+      setInfo({
+        projectId: state.summary.id,
+        projectName: state.summary.displayName,
+      });
       announce(`Project ${state.summary.displayName} loaded.`);
     } else if (state.status === 'error') {
       announce(`Project could not be loaded: ${state.error.message}`);
     }
-  }, [announce, state]);
+  }, [announce, setInfo, state]);
 
   if (state.status === 'loading') {
     return (
@@ -327,21 +339,40 @@ export function ProjectPage({ projectId }: { projectId: string }) {
   const { summary } = state;
 
   return (
-    <section className="panel project-summary" aria-labelledby="project-title">
-      <p className="breadcrumb">
-        <Link to="/projects">← Projects</Link>
-      </p>
-      <h1 className="panel__title" id="project-title">
-        {summary.displayName}
-      </h1>
-      <p className="lede">
-        This project is registered locally. Browse its chains and skill catalog below.
-        Nothing leaves this machine.
-      </p>
+    <section className="project-workspace" aria-labelledby="project-title">
+      <header className="project-workspace__header">
+        <div>
+          <p className="eyebrow">{view === 'chains' ? 'Project chains' : 'Project skills'}</p>
+          <h1 className="panel__title" id="project-title">
+            {summary.displayName}
+          </h1>
+          <p className="lede">
+            {view === 'chains'
+              ? 'Build, organize, and run repeatable skill workflows for this project.'
+              : 'Browse the skills available to this project and inspect their source.'}
+          </p>
+        </div>
+        <nav className="workspace-tabs" aria-label="Project views">
+          <Link
+            to={`/projects/${summary.id}`}
+            aria-current={view === 'chains' ? 'page' : undefined}
+          >
+            Chains
+          </Link>
+          <Link
+            to={`/projects/${summary.id}/skills`}
+            aria-current={view === 'skills' ? 'page' : undefined}
+          >
+            Skills
+          </Link>
+        </nav>
+      </header>
 
-      <ActiveRunBanner projectId={summary.id} />
+      {view === 'chains' ? <ActiveRunBanner projectId={summary.id} /> : null}
 
-      <dl className="detail-grid project-facts">
+      <details className="project-details">
+        <summary>Project details</summary>
+        <dl className="detail-grid project-facts">
         <div>
           <dt>Canonical path</dt>
           <dd>
@@ -405,16 +436,17 @@ export function ProjectPage({ projectId }: { projectId: string }) {
                 : `${String(summary.chainCount)} chain file${summary.chainCount === 1 ? '' : 's'}`}
           </dd>
         </div>
-      </dl>
+        </dl>
+      </details>
 
-      <ChainList projectId={summary.id} />
+      {view === 'chains' ? (
+        <ChainList projectId={summary.id} />
+      ) : (
+        <SkillCatalog projectId={summary.id} context="project" initiallyExpanded />
+      )}
 
-      <SkillCatalog projectId={summary.id} context="project" />
-
-      <p className="panel__actions">
-        <Link className="button button--secondary" to="/projects">
-          Open another project
-        </Link>
+      <p className="project-workspace__secondary-link">
+        <Link to="/projects">Open another project</Link>
       </p>
     </section>
   );

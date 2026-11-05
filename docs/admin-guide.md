@@ -34,8 +34,8 @@ Harness CLIs are deliberately not dependencies of this package. Install them wit
 ### From a checkout
 
 ```bash
-git clone https://github.com/McFuzzySquirrel/slan.git
-cd slan
+git clone https://github.com/McFuzzySquirrel/skill-loom.git
+cd skill-loom
 npm install
 npm run build
 npm start
@@ -132,7 +132,7 @@ If you need multi-user or remote access, this project does not provide it. Treat
 | `~/.config/loom/chains/*.json` | Global chain templates. | Independent snapshots; importing copies one into a project with a new id. |
 | `<project>/.loom/chains/*.json` | Saved project chains. | Versioned JSON, atomic writes. Back up or version these recipes. |
 | `<project>/.loom/runs/*.json` | Run snapshots, statuses, actions, and bounded tails. | At most 200 lines or 32 KiB per step. Never a full transcript. This repository git-ignores `.loom/runs/`. |
-| `<project>/.opencode/skills/` or `<project>/.github/skills/` | Copied and bundle-imported skill packages. | Independent project files; deleting a chain does not remove them. Include these in recipe backups when needed. |
+| `<project>/.agents/skills/` | Newly copied and bundle-imported skill packages for either harness. | Independent project files; deleting a chain does not remove them. Include these in recipe backups when needed. Existing packages are not migrated. |
 | Browser download location (`*.loom.json`) | Portable chain and skill bundles. | No run history or input defaults; review package contents and redistribution rights before sharing. Not a complete backup. |
 | `~/.copilot/config.json` | Copilot's own folder-trust configuration. | Skill Loom only reads `trustedFolders`; it never writes this file. |
 
@@ -150,7 +150,7 @@ Restore by stopping the server, replacing the config or chain directory, and sta
 
 Users can export saved project chains with their referenced skill packages and import them into another local installation. See the [sharing workflow](user-guide.md#share-a-chain-and-its-skills). This does not add remote access, user accounts, or a hosted sharing service.
 
-The version 1 `skill-loom-chain` bundle is JSON with base64-encoded package files and executable flags. The server validates both preview and import, rejects unsupported versions, unsafe paths, symlinks, special files, excluded credential/dependency directories, duplicate paths, mismatched skill metadata, and incomplete packages. Limits are 100 packages, 2,000 files, 20 MiB decoded content, and 30 MiB per import request. Existing packages are never overwritten, and permission opt-in is reset. Ordinary file contents are not secret-scanned; review remains essential.
+The version 1 `skill-loom-chain` bundle is JSON with base64-encoded package files and executable flags. Export prefers one enabled project-local package to same-name personal or extra-directory packages, but rejects multiple distinct project packages. The server validates both preview and import, rejects unsupported versions, unsafe paths, symlinks, special files, excluded credential/dependency directories, duplicate paths, mismatched skill metadata, and incomplete packages. Limits are 100 packages, 2,000 files, 20 MiB decoded content, and 30 MiB per import request. Existing packages are never overwritten, and permission opt-in is reset. Ordinary file contents are not secret-scanned; review remains essential.
 
 The same-origin API exposes `GET /api/projects/:projectId/chains/:chainId/bundle`, `POST /api/projects/:projectId/chain-bundles/preview`, and `POST /api/projects/:projectId/chain-bundles/import`. POST bodies contain `bundle`; import additionally requires `confirmed: true` and an optional `reuseSkills` array of installed skill names. Preview is read-only. Import revalidates the bundle and conflicts and rolls back newly installed packages if chain persistence fails. A bundle does not install harness CLIs or external skill dependencies.
 
@@ -207,7 +207,6 @@ Config, chain, run, and active-run documents carry explicit versions. An unknown
 ## Known Limitations
 
 - **Automatic OpenCode advancement is not proven end-to-end.** The live execution evidence records `OSC7501_PRODUCT_PARSER_MISMATCH`: OpenCode 2.2.5 emitted colon-separated `OSC 7501` parameters while the product parser splits on `;`. The probe's own parser recognized the signal; the product parser did not. Supervised OpenCode runs are unaffected by this specific mismatch. Do not rely on automatic OpenCode chains until the parser is fixed and the live probe is rerun.
-- **Copilot copy destination is not live-verified.** Skill Loom copies skills into `<project>/.github/skills/`, while the live Copilot discovery probe used `.agents/skills/`. Confirm that a copied skill appears in Copilot's catalog after refresh.
 - **`/api/health` activeRun is a placeholder in production.** Use `GET /api/runs/active` for live run state.
 - **One harness per chain; no per-step harness or model selection.**
 - **Native fork is available only on OpenCode's headless surface.** Supervised OpenCode and all Copilot forks use a deterministic handoff note, not a native session fork.

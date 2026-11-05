@@ -77,7 +77,7 @@ async function expectCopyError(
 }
 
 describe('copySkillIntoProject', () => {
-  it('copies the whole package into the OpenCode project root', async () => {
+  it('copies the whole package into the shared project root for OpenCode', async () => {
     const result = await copySkillIntoProject({
       projectPath,
       harness: 'opencode',
@@ -85,7 +85,7 @@ describe('copySkillIntoProject', () => {
     });
 
     expect(result.destinationPath).toBe(
-      join(projectPath, '.opencode', 'skills', 'release-notes'),
+      join(projectPath, '.agents', 'skills', 'release-notes'),
     );
     expect(await readFile(join(result.destinationPath, 'SKILL.md'), 'utf8')).toContain(
       'BODY',
@@ -95,7 +95,7 @@ describe('copySkillIntoProject', () => {
     ).toBe('TEMPLATE\n');
   });
 
-  it('uses the Copilot project skill root and suffixes an existing name', async () => {
+  it('uses the shared project skill root for Copilot and suffixes an existing name', async () => {
     const first = await copySkillIntoProject({
       projectPath,
       harness: 'copilot',
@@ -108,13 +108,13 @@ describe('copySkillIntoProject', () => {
     });
 
     expect(projectSkillRootFor('copilot', projectPath)).toBe(
-      join(projectPath, '.github', 'skills'),
+      join(projectPath, '.agents', 'skills'),
     );
     expect(first.destinationPath).toBe(
-      join(projectPath, '.github', 'skills', 'release-notes'),
+      join(projectPath, '.agents', 'skills', 'release-notes'),
     );
     expect(second.destinationPath).toBe(
-      join(projectPath, '.github', 'skills', 'release-notes-2'),
+      join(projectPath, '.agents', 'skills', 'release-notes-2'),
     );
   });
 
@@ -151,7 +151,7 @@ describe('copySkillIntoProject', () => {
 
     const outside = join(root, 'outside');
     await mkdir(outside, { recursive: true });
-    await symlink(outside, join(projectPath, '.opencode'));
+    await symlink(outside, join(projectPath, '.agents'));
     await expectCopyError(
       copySkillIntoProject({
         projectPath,
@@ -206,7 +206,7 @@ describe('copySkillIntoProject', () => {
       });
 
       expect(result.destinationPath).toBe(
-        join(bundleProjectPath, '.opencode', 'skills', source.name),
+        join(bundleProjectPath, '.agents', 'skills', source.name),
       );
       expect(await readFile(join(result.destinationPath, 'SKILL.md'), 'utf8')).toContain(
         'name:',
@@ -237,6 +237,6 @@ describe('copySkillIntoProject', () => {
       CATALOG_COPY_ERROR_CODES.SYMLINK_UNSUPPORTED,
     );
     expect(error.details.path).toContain('outside-link');
-    expect(await readdir(join(projectPath, '.opencode', 'skills'))).toEqual([]);
+    expect(await readdir(join(projectPath, '.agents', 'skills'))).toEqual([]);
   });
 });

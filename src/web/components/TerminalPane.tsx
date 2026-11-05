@@ -2,9 +2,10 @@ import { useEffect, useRef, type MouseEvent } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { Terminal } from '@xterm/xterm';
+import { Terminal, type ITheme } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import type { TerminalServerMessage } from '../../shared/terminal';
+import { useAppearance } from '../ThemeProvider';
 
 /**
  * xterm.js pane for a server-owned PTY.
@@ -41,6 +42,53 @@ export interface TerminalPaneProps {
 
 const WS_OPEN = 1;
 
+const TERMINAL_THEMES: Record<'light' | 'dark', ITheme> = {
+  dark: {
+    background: '#05080c',
+    foreground: '#eef3f8',
+    cursor: '#8be9a8',
+    selectionBackground: '#213f60',
+    black: '#151b22',
+    red: '#ff8a80',
+    green: '#8be9a8',
+    yellow: '#ffd166',
+    blue: '#8fc7ff',
+    magenta: '#d7a8ff',
+    cyan: '#73e6df',
+    white: '#dbe4ed',
+    brightBlack: '#647384',
+    brightRed: '#ffaaa3',
+    brightGreen: '#b8f5c8',
+    brightYellow: '#ffe09c',
+    brightBlue: '#b4d9ff',
+    brightMagenta: '#e6c8ff',
+    brightCyan: '#a2f1ec',
+    brightWhite: '#ffffff',
+  },
+  light: {
+    background: '#f7f9fb',
+    foreground: '#15212d',
+    cursor: '#16743f',
+    selectionBackground: '#c7d9ec',
+    black: '#15212d',
+    red: '#a5251c',
+    green: '#176a35',
+    yellow: '#765300',
+    blue: '#175995',
+    magenta: '#76439a',
+    cyan: '#0a6767',
+    white: '#596675',
+    brightBlack: '#526171',
+    brightRed: '#7d1b14',
+    brightGreen: '#0b4e25',
+    brightYellow: '#583f00',
+    brightBlue: '#104471',
+    brightMagenta: '#5e307d',
+    brightCyan: '#075252',
+    brightWhite: '#3e4a57',
+  },
+};
+
 export function TerminalPane({
   sessionId,
   terminalPath,
@@ -53,6 +101,7 @@ export function TerminalPane({
   reconnectOnClose = false,
   dense = false,
 }: TerminalPaneProps) {
+  const { resolved } = useAppearance();
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const onExitFocusRef = useRef(onExitFocus);
@@ -73,12 +122,7 @@ export function TerminalPane({
       fontFamily:
         "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
       fontSize: 13,
-      theme: {
-        background: '#05080c',
-        foreground: '#eef3f8',
-        cursor: '#8be9a8',
-        selectionBackground: '#2b4a36',
-      },
+      theme: TERMINAL_THEMES[resolved],
     });
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
@@ -228,6 +272,13 @@ export function TerminalPane({
       terminal.dispose();
     };
   }, [sessionId, terminalPath, reconnectOnClose]);
+
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (terminal !== null) {
+      terminal.options.theme = TERMINAL_THEMES[resolved];
+    }
+  }, [resolved]);
 
   const handleFocus = (event: MouseEvent<HTMLButtonElement>): void => {
     event.preventDefault();

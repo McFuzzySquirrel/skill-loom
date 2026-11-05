@@ -17,6 +17,7 @@ export interface SkillCatalogProps {
   projectId: string;
   /** Project route omits Add as step; the chain builder passes a handler. */
   context?: 'project' | 'builder';
+  initiallyExpanded?: boolean;
   initialHarness?: CatalogHarness;
   onAddAsStep?: (skill: SkillEntry) => void;
   /**
@@ -29,7 +30,7 @@ export interface SkillCatalogProps {
 
 function harnessDescription(harness: CatalogHarness): string {
   return harness === 'opencode'
-    ? 'Scans the project .opencode/skills directory, the personal OpenCode skills directory, and Loom extra directories.'
+    ? 'Scans shared project .agents/skills and legacy .opencode/skills directories, personal OpenCode skills, and Loom extra directories.'
     : 'Runs the Copilot CLI command "copilot skill list --json" in this project and merges the reported sources.';
 }
 
@@ -44,6 +45,7 @@ function harnessDescription(harness: CatalogHarness): string {
 export function SkillCatalog({
   projectId,
   context = 'project',
+  initiallyExpanded = context === 'project',
   initialHarness = 'opencode',
   onAddAsStep,
   onCatalogChange,
@@ -65,7 +67,7 @@ export function SkillCatalog({
   const [collapsedSources, setCollapsedSources] = useState<Set<SkillSource>>(
     () => new Set(),
   );
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(!initiallyExpanded);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsTrigger = useRef<HTMLButtonElement>(null);
   const restoreSettingsFocus = useRef(false);

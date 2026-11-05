@@ -211,6 +211,9 @@ test.describe('Chain to run flow', () => {
     await expect(terminalScreen).toContainText('FAKE_RUN_FLOW_HOLDING', {
       timeout: 15_000,
     });
+    await page.getByLabel('Appearance').selectOption('light');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(terminalScreen).toContainText('FAKE_RUN_FLOW_HOLDING');
 
     // The pane must stay a fixed, viewport-bounded size while output arrives.
     // Regression guard: an auto-height xterm container used to grow on every
@@ -259,6 +262,7 @@ test.describe('Chain to run flow', () => {
     const chain = await createChain(request, source.id);
 
     await page.goto(`/projects/${source.id}/chains/${chain.id}`);
+    await page.getByText('More actions').click();
     await page.getByTestId('chain-save-to-library').click();
     await expect(page.getByTestId('chain-library-saved')).toBeVisible();
 

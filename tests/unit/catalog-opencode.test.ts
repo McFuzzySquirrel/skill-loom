@@ -131,6 +131,26 @@ describe('OpenCode skill discovery', () => {
     }
   });
 
+  it('scans shared and legacy project roots without hiding same-name packages', async () => {
+    const sharedFile = await writeSkill(
+      join(project, '.agents', 'skills'),
+      'market-sizing-analysis',
+      'name: market-sizing-analysis\ndescription: Shared package',
+    );
+    const legacyFile = await writeSkill(
+      projectSkills(),
+      'market-sizing-analysis',
+      'name: market-sizing-analysis\ndescription: Legacy OpenCode package',
+    );
+
+    const result = await scanOpenCodeSkills({ projectPath: project, homeDirectory: home });
+
+    expect(result.entries.filter((entry) => entry.name === 'market-sizing-analysis')).toEqual([
+      expect.objectContaining({ source: 'project', description: 'Shared package', path: await realpath(sharedFile) }),
+      expect.objectContaining({ source: 'project', description: 'Legacy OpenCode package', path: await realpath(legacyFile) }),
+    ]);
+  });
+
   it('discovers nested SKILL.md packages and records canonical paths', async () => {
     const nestedFile = await writeSkill(
       projectSkills(),

@@ -46,7 +46,7 @@ beforeEach(async () => {
     'Ships a release',
   );
   await writeSkill(
-    join(project, '.opencode', 'skills', 'shared-name'),
+    join(project, '.agents', 'skills', 'shared-name'),
     'shared-name',
     'Project copy',
   );
@@ -57,7 +57,7 @@ beforeEach(async () => {
   );
   await writeSkill(join(extraDirectory, 'extra-skill'), 'extra-skill', 'Deploys the RELEASE pipeline');
 
-  const copilotProjectDirectory = join(root, 'copilot', 'project-skill');
+  const copilotProjectDirectory = join(project, '.agents', 'skills', 'copilot-project');
   const copilotPersonalDirectory = join(root, 'copilot', 'personal-skill');
   await writeSkill(copilotProjectDirectory, 'copilot-project', 'Copilot project skill');
   await writeSkill(copilotPersonalDirectory, 'copilot-personal', 'Copilot personal skill');
@@ -217,9 +217,9 @@ describe('GET /api/projects/:projectId/catalog', () => {
     const catalog = catalogOf(result.body);
     expect(catalog.harness).toBe('opencode');
     expect(catalog.query).toBe('');
-    expect(catalog.total).toBe(3);
+    expect(catalog.total).toBe(4);
     expect(catalog.groups.map((group) => group.source)).toEqual(['project', 'personal']);
-    expect(catalog.groups.map((group) => group.count)).toEqual([2, 1]);
+    expect(catalog.groups.map((group) => group.count)).toEqual([3, 1]);
 
     const shared = catalog.groups
       .flatMap((group) => group.entries)
@@ -307,19 +307,19 @@ describe('POST /api/projects/:projectId/catalog/skills/:skillId/copy', () => {
     expect(response.statusCode).toBe(201);
     const copied = response.json<{ destinationPath: string; name: string }>();
     expect(copied.name).toBe('shared-name');
-    // The project already has a shared-name package, so the copy is suffixed.
+    // The project already has a shared-name package in the shared root, so the copy is suffixed.
     expect(copied.destinationPath).toBe(
-      join(project, '.opencode', 'skills', 'shared-name-2'),
+      join(project, '.agents', 'skills', 'shared-name-2'),
     );
     expect(await readFile(join(copied.destinationPath, 'SKILL.md'), 'utf8')).toContain(
       'Personal copy',
     );
 
     const after = catalogOf((await getCatalog(app, registered.id, 'opencode')).body);
-    expect(after.groups.find((group) => group.source === 'project')?.count).toBe(3);
+    expect(after.groups.find((group) => group.source === 'project')?.count).toBe(4);
   });
 
-  it('copies a Copilot personal skill into the documented project root', async () => {
+  it('copies a Copilot personal skill into the shared project root', async () => {
     const app = await buildTestApp();
     const registered = await openProject(app);
     const catalog = catalogOf((await getCatalog(app, registered.id, 'copilot')).body);
@@ -336,7 +336,7 @@ describe('POST /api/projects/:projectId/catalog/skills/:skillId/copy', () => {
     });
     expect(response.statusCode).toBe(201);
     const copied = response.json<{ destinationPath: string }>();
-    expect(copied.destinationPath.startsWith(join(project, '.github', 'skills'))).toBe(
+    expect(copied.destinationPath.startsWith(join(project, '.agents', 'skills'))).toBe(
       true,
     );
   });
@@ -381,7 +381,7 @@ describe('extra skill directory settings', () => {
     expect(initial.body).toEqual({ extraSkillDirectories: [] });
 
     const beforeAdd = await getCatalog(app, registered.id, 'opencode');
-    expect(catalogOf(beforeAdd.body).total).toBe(3);
+    expect(catalogOf(beforeAdd.body).total).toBe(4);
 
     const added = await postExtraDirectory(app, extraDirectory);
     expect(added.statusCode).toBe(201);
@@ -396,7 +396,7 @@ describe('extra skill directory settings', () => {
     const withExtra = await getCatalog(app, registered.id, 'opencode');
     expect(withExtra.statusCode).toBe(200);
     const extraCatalog = catalogOf(withExtra.body);
-    expect(extraCatalog.total).toBe(4);
+    expect(extraCatalog.total).toBe(5);
     expect(extraCatalog.groups.map((group) => group.source)).toEqual([
       'project',
       'personal',
@@ -415,7 +415,7 @@ describe('extra skill directory settings', () => {
     });
 
     const afterRemove = await getCatalog(app, registered.id, 'opencode');
-    expect(catalogOf(afterRemove.body).total).toBe(3);
+    expect(catalogOf(afterRemove.body).total).toBe(4);
     expect(names(catalogOf(afterRemove.body))).not.toContain('extra-skill');
   });
 
