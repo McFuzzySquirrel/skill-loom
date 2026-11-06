@@ -66,7 +66,7 @@ test('filters examples, discloses skill sources, copies to the builder, and pref
   await page.getByTestId('scenario-project').selectOption(project.project.id);
   await card.getByTestId('scenario-copy').click();
   await expect(page.getByTestId('chain-builder-page')).toBeVisible();
-  await expect(page.getByRole('heading', { level: 1, name: 'Chain authoring' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Workflow designer' })).toBeVisible();
   await expect(page.getByTestId('step-list-count')).toHaveText('5 steps');
   await expect(page.getByTestId('chain-dirty-indicator')).toContainText('All changes saved');
 

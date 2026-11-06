@@ -1,10 +1,10 @@
 # Skill Loom User Guide
 
-This guide is for the person using Skill Loom to browse installed skills, build a chain, and run it against a local OpenCode or GitHub Copilot CLI. Installation and machine administration are covered in the [administrator guide](admin-guide.md).
+This guide is for the person using Skill Loom to design reusable skill workflows, save them in the chain library, and share portable bundles. Optional local testing with OpenCode or GitHub Copilot CLI is also covered. Installation and machine administration are in the [administrator guide](admin-guide.md).
 
 ## Who This Is For
 
-Skill Loom is a **single-user, local** application. The person at the browser is the only user: there are no accounts, roles, sharing links, or remote collaborators. It is intended for a developer or operator who already uses a supported harness and wants to assemble repeatable skill prompts without writing a script.
+Skill Loom is a **single-user, local** application. The person at the browser is the only user: there are no accounts, roles, sharing links, or remote collaborators. Use the chain library to keep reusable workflow templates, then export a reviewed bundle and move it into a project repository using your own Git or file-sharing workflow. Local execution is optional; a portable runner skill can also run a reviewed bundle in a compatible CLI harness.
 
 If you need to install Node.js, build `node-pty`, install a harness CLI, or choose a config directory, start with the [administrator guide](admin-guide.md).
 
@@ -26,7 +26,7 @@ Skill Loom does not install or authenticate harnesses for you, and it does not s
 
 There is **no sign-in**. Skill Loom binds to loopback and has **no authentication** because it is not designed for remote access. Do not expose the port through a reverse proxy, tunnel, container port publish, or remote host.
 
-On first load you land on **Projects**. The responsive workspace shell provides:
+On first load you land on the **Chain library**, the home for reusable workflow templates. The responsive workspace shell provides:
 
 - A desktop navigation sidebar, or a compact **Menu** on smaller screens.
 - Breadcrumbs for the current project, chain, and run workflow.
@@ -34,7 +34,7 @@ On first load you land on **Projects**. The responsive workspace shell provides:
 - A **Local-only** reminder and **Server connected · v0.1.0** health indicator. If the indicator changes to **Server connection error**, use **Retry**.
 - An **Appearance** selector for **System**, **Light**, or **Dark**. System follows the operating-system preference; an explicit choice is remembered in this browser.
 
-Register an existing folder with the folder browser or create a new project. Registering a project records it in the recent-projects list; removing a recent entry does not delete the folder.
+Choose **Projects** to register an existing folder or create a new project for authoring, adapting, importing, or locally testing a chain. Registering a project records it in the recent-projects list; removing a recent entry does not delete the folder.
 
 ## Main Workflows
 
@@ -48,7 +48,7 @@ Register an existing folder with the folder browser or create a new project. Reg
 
 1. Open **Project skills**, then choose the harness whose installed skills you want to inspect.
 2. Search, or expand a skill to read its `SKILL.md` metadata. Skill text is displayed as escaped text, never as raw HTML.
-3. Optionally add extra skill directories from the catalog settings dialog. Extra directories are global, not per project.
+3. Optionally add extra skill directories from the catalog settings dialog. Extra directories are global, not per project; each configured directory appears as its own collapsed catalog group.
 4. A skill from a personal, plugin, custom, or extra source can be copied into the project with **Copy into this project**. Copies for both harnesses land in `<project>/.agents/skills/`. The copy is bounded, refuses symlinks, and never overwrites an existing package.
 
 OpenCode also discovers legacy project packages under `.opencode/skills/`. Copilot discovery remains authoritative through `copilot skill list --json`; Skill Loom does not move or migrate existing skill directories.
@@ -59,15 +59,17 @@ The [Scenario catalog](scenario-chains.md) provides illustrative starter chains 
 
 Copying a scenario creates only an ordinary independent project chain; it does not install skills or run a command. To copy an included third-party skill into the selected project's harness directory, use that skill's explicit **Add bundled skill to project** action. Review its source and license first. Skill Loom preserves supplied upstream license files and adds a `SKILL-LOOM-SOURCE.md` notice with the pinned source revision. It does not execute package scripts, fetch updates, or contact the upstream source. A same-name skill already visible to the selected harness must be resolved or renamed before a bundled copy can be added. Preflight blocks a run when a required skill is missing. Every copied chain is an ordinary independent project chain with a shared-session default and broad automatic permissions disabled.
 
-### Build and save a chain
+### Design and save a chain
 
-1. Create a chain and choose one harness. A chain is bound to that harness; per-step harness selection is not supported.
+The **Workflow designer** keeps the skill catalog, ordered steps, and selected-step editor in separate panes on wider screens. The layout adapts to two panes and then a single column on smaller screens; chain inputs remain below the design area.
+
+1. Choose a project to provide a skill catalog and workspace for authoring. Create a chain and choose one harness. A chain is bound to that harness; per-step harness selection is not supported.
 2. Add at least one step. Choose a catalog skill with **Add as step**, or use **Add instruction** for a standalone agent prompt without an installed skill. Both require a non-whitespace instruction and support an optional label.
 3. Reorder steps by dragging or with **Move up** and **Move down**. The visible order is the prompt order.
 4. Optionally declare named inputs and reference them from instructions as `{{name}}`. Input names use identifier syntax; required inputs must resolve before a run starts.
 5. Choose a session mode: **shared**, **fresh**, or **fork**. See [Session modes](#session-modes).
 6. For Copilot automatic mode, explicitly enable the automatic-permission opt-in. It is off by default and grants broad filesystem and tool access.
-7. Choose **Save and run** to save under `<project>/.loom/chains/` and open the run-start screen, or save without running.
+7. Save the chain under `<project>/.loom/chains/`. Choose **Save and run** only when you want to test it locally.
 
 An unsaved chain shows a dirty indicator. Navigating away or closing the tab prompts before discarding unsaved changes.
 
@@ -75,7 +77,7 @@ Instruction steps run through the chain's selected harness in the same order and
 
 ### Reuse a chain
 
-- **Save copy to library** stores an independent snapshot in the global library at **Chain library** (`/chains`).
+- **Save copy to library** stores an independent snapshot in the global **Chain library** (`/chains`), which is the home for reusable templates.
 - Importing a library template into a project copies it with a new chain id. The project copy is independent; later edits to the template do not affect it.
 - Duplicating a project chain also creates a separate chain id.
 - Deleting a chain or a global template removes only that file. It does not remove the other copies.

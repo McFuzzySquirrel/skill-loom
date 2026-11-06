@@ -39,6 +39,8 @@ export interface SkillEntry {
   path: string;
   /** Canonical absolute path to the package directory. */
   packagePath: string;
+  /** Canonical Loom-configured root for entries discovered from an extra directory. */
+  sourceDirectory?: string;
   /** Copilot can report disabled entries; filesystem discovery is enabled. */
   enabled: boolean;
 }
@@ -191,6 +193,9 @@ function decodeSkillEntry(value: unknown): SkillEntry {
     description: value.description,
     path: value.path,
     packagePath: value.packagePath,
+    ...(typeof value.sourceDirectory === 'string'
+      ? { sourceDirectory: value.sourceDirectory }
+      : {}),
     enabled: value.enabled,
   };
 }

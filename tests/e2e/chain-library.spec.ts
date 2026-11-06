@@ -181,7 +181,7 @@ test.describe('Project chain library', () => {
     expect(search.get('sessionMode')).toBe('shared');
 
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Chain authoring' }),
+      page.getByRole('heading', { level: 1, name: 'Workflow designer' }),
     ).toBeVisible();
     await expect(page.getByText('new', { exact: true })).toBeVisible();
 
@@ -308,7 +308,7 @@ test.describe('Project chain library', () => {
       ),
     );
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Chain authoring' }),
+      page.getByRole('heading', { level: 1, name: 'Workflow designer' }),
     ).toBeVisible();
 
     await gotoProject(page, project);
@@ -443,7 +443,7 @@ test.describe('Project chain library', () => {
       new RegExp(`/projects/${escapeRegExp(project.id)}/chains/[^/]+$`),
     );
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Chain authoring' }),
+      page.getByRole('heading', { level: 1, name: 'Workflow designer' }),
     ).toBeVisible();
   });
 

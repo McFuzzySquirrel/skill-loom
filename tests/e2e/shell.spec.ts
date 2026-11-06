@@ -11,7 +11,7 @@ const shellRoutes: ShellRoute[] = [
   // The builder now loads live catalog data. Use the unsaved-draft route so the
   // shell check does not depend on a registered chain, and fulfill the catalog
   // request with an empty isolated result below.
-  { path: '/projects/demo-project/chains/new', heading: 'Chain authoring' },
+  { path: '/projects/demo-project/chains/new', heading: 'Workflow designer' },
   { path: '/projects/demo-project/chains/demo-chain/run', heading: 'Run start' },
   { path: '/runs/demo-run/terminal', heading: 'Run terminal' },
   { path: '/runs/demo-run', heading: 'Run view' },
@@ -175,11 +175,11 @@ function collectConsoleErrors(page: Page): string[] {
 }
 
 test.describe('Skill Loom shell', () => {
-  test('redirects the initial route to /projects', async ({ page }) => {
+  test('redirects the initial route to /chains', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page).toHaveURL(/\/projects$/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+    await expect(page).toHaveURL(/\/chains$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Global chain library' })).toBeVisible();
   });
 
   for (const route of shellRoutes) {

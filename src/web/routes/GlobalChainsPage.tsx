@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { useRouter } from '../router';
+import { Link, useRouter } from '../router';
 import { chainBuilderPath, type Chain } from '../api/chains';
 import {
   globalChainsApi,
@@ -112,8 +112,14 @@ export function GlobalChainsPage({ api = globalChainsApi }: GlobalChainsPageProp
           Global chain library
         </h1>
         <p className="lede">
-          Templates are snapshots you can copy into any project. Saving a chain here does not
-          link it: later edits to the project chain or the template do not sync.
+          Keep reusable workflow templates here. Design chains in a project workspace, then
+          save a copy here to reuse elsewhere. Project copies stay independent; changes do not
+          sync. Export a project chain as a portable bundle to share it with another repository.
+        </p>
+        <p className="panel__actions">
+          <Link className="button" to="/projects">
+            Choose a project to design a chain
+          </Link>
         </p>
       </header>
 

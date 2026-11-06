@@ -102,7 +102,7 @@ async function gotoNewBuilder(
   });
   await page.goto(`/projects/${projectId}/chains/new?${search.toString()}`);
   await expect(
-    page.getByRole('heading', { level: 1, name: 'Chain authoring' }),
+    page.getByRole('heading', { level: 1, name: 'Workflow designer' }),
   ).toBeVisible();
   await expect(page.getByTestId('chain-builder')).toBeVisible();
   await expect(page.locator('.chain-builder__catalog')).toBeVisible();
@@ -192,6 +192,29 @@ test.describe('Chain builder', () => {
     await expect(page.getByTestId('step-label')).toHaveValue('Checklist');
     await expect(page.getByTestId('step-instruction')).toHaveValue('Write an implementation checklist.');
     await expect(page.getByTestId('step-skill')).toHaveCount(0);
+  });
+
+  test('uses a responsive multi-pane workflow design layout', async ({ page, request }) => {
+    const project = await openFixtureProject(request);
+    await page.setViewportSize({ width: 1600, height: 1000 });
+    await gotoNewBuilder(page, project.id, `Responsive builder ${runSuffix}`);
+
+    const builder = page.getByTestId('chain-builder');
+    const columnCount = () =>
+      builder.evaluate((element) =>
+        getComputedStyle(element).gridTemplateColumns.split(' ').filter(Boolean).length,
+      );
+
+    await expect.poll(columnCount).toBe(3);
+    await expect(page.getByTestId('builder-skills-column')).toBeVisible();
+    await expect(page.getByTestId('builder-steps-column')).toBeVisible();
+    await expect(page.getByTestId('builder-editor-column')).toBeVisible();
+
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await expect.poll(columnCount).toBe(2);
+
+    await page.setViewportSize({ width: 640, height: 800 });
+    await expect.poll(columnCount).toBe(1);
   });
 
   test('adds catalog skills as steps, edits instruction and label, and searches the catalog', async ({
@@ -326,7 +349,7 @@ test.describe('Chain builder', () => {
 
     await page.goto(`/projects/${project.id}/chains/${body.chain.id}`);
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Chain authoring' }),
+      page.getByRole('heading', { level: 1, name: 'Workflow designer' }),
     ).toBeVisible();
     await expect(page.getByTestId('builder-chain-name')).toHaveText(name);
     await expect(page.getByTestId('builder-chain-id')).toHaveText(body.chain.id);
@@ -405,12 +428,8 @@ test.describe('Chain builder', () => {
       .click();
     await page.getByTestId('step-instruction').fill('Preserve this unsaved instruction.');
 
-    const dragHandle = rowForSkill(page, 'deploy-helper').locator('.step-row__handle');
     await rowForSkill(page, 'write-docs').scrollIntoViewIfNeeded();
-    await dragHandle.scrollIntoViewIfNeeded();
-    await rowForSkill(page, 'deploy-helper')
-      .locator('.step-row__handle')
-      .dragTo(rowForSkill(page, 'write-docs'));
+    await rowForSkill(page, 'deploy-helper').dragTo(rowForSkill(page, 'write-docs'));
     await expect
       .poll(() => orderedSkillNames(page))
       .toEqual(['review-helper', 'write-docs', 'deploy-helper']);

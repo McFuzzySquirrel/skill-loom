@@ -18,6 +18,7 @@ const projectName = `catalog-project-${runSuffix}`;
 let fixtureRoot: string;
 let projectPath: string;
 let extraDirectory: string;
+let secondExtraDirectory: string;
 let brokenSkillPath: string;
 let freshSkillPath: string;
 
@@ -39,6 +40,7 @@ test.beforeAll(async () => {
   fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'loom-catalog-e2e-')));
   projectPath = join(fixtureRoot, projectName);
   extraDirectory = join(fixtureRoot, 'extra-skills');
+  secondExtraDirectory = join(fixtureRoot, 'team-skills');
   brokenSkillPath = join(projectPath, '.opencode', 'skills', 'broken');
   freshSkillPath = join(projectPath, '.opencode', 'skills', 'fresh-skill');
 
@@ -81,6 +83,12 @@ test.beforeAll(async () => {
     'release-notes',
     'Writes release notes from a changelog',
     'EXTRA_RELEASE_BODY',
+  );
+  await writeSkill(
+    join(secondExtraDirectory, 'quality-check'),
+    'quality-check',
+    'Runs an independent quality check',
+    'QUALITY_CHECK_BODY',
   );
 });
 
@@ -323,6 +331,12 @@ test.describe('Skill catalog', () => {
     });
     await expect(item).toBeVisible();
 
+    await input.fill(secondExtraDirectory);
+    await dialog.getByTestId('extra-directory-add').click();
+    await expect(
+      dialog.getByTestId('extra-directory-item').filter({ hasText: secondExtraDirectory }),
+    ).toBeVisible();
+
     await dialog.getByRole('button', { name: 'Close settings' }).click();
     await expect(dialog).toHaveCount(0);
     await expect(page.getByTestId('catalog-settings-open')).toBeFocused();
@@ -330,27 +344,45 @@ test.describe('Skill catalog', () => {
     // Adding the directory refreshes the catalog automatically; the explicit
     // Refresh control must also show the change.
     await page.getByTestId('catalog-refresh').click();
-    const extraGroup = page.locator(
+    const extraGroups = page.locator(
       '[data-testid="catalog-group"][data-source="loom-extra"]',
     );
-    await expect(extraGroup).toBeVisible();
-    await expect(extraGroup.getByText('Loom extra', { exact: true }).first()).toBeVisible();
-    await expect(rowFor(page, 'release-notes')).toBeVisible();
+    await expect(extraGroups).toHaveCount(2);
+    const firstExtraGroup = page.locator(
+      `[data-testid="catalog-group"][data-source="loom-extra"][data-source-directory="${extraDirectory}"]`,
+    );
+    const secondExtraGroup = page.locator(
+      `[data-testid="catalog-group"][data-source="loom-extra"][data-source-directory="${secondExtraDirectory}"]`,
+    );
+    await expect(firstExtraGroup).toBeVisible();
+    await expect(firstExtraGroup).toContainText('Loom extra skills');
+    await expect(firstExtraGroup).toContainText(extraDirectory);
+    await expect(secondExtraGroup).toContainText(secondExtraDirectory);
 
-    const extraGroupToggle = page.getByTestId('catalog-group-toggle-loom-extra');
+    const extraGroupToggle = firstExtraGroup.locator('.catalog-group__toggle');
+    const secondExtraGroupToggle = secondExtraGroup.locator('.catalog-group__toggle');
+    await expect(extraGroupToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(secondExtraGroupToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(rowFor(page, 'release-notes')).toBeHidden();
+    await expect(rowFor(page, 'quality-check')).toBeHidden();
+    await extraGroupToggle.click();
     await expect(extraGroupToggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(rowFor(page, 'release-notes')).toBeVisible();
+    await expect(rowFor(page, 'quality-check')).toBeHidden();
     await extraGroupToggle.click();
     await expect(extraGroupToggle).toHaveAttribute('aria-expanded', 'false');
+    await secondExtraGroupToggle.click();
+    await expect(rowFor(page, 'quality-check')).toBeVisible();
     await expect(rowFor(page, 'release-notes')).toBeHidden();
+    await secondExtraGroupToggle.click();
     await extraGroupToggle.click();
-    await expect(extraGroupToggle).toHaveAttribute('aria-expanded', 'true');
     await expect(rowFor(page, 'release-notes')).toBeVisible();
 
     const projectShared = page.locator(
       '[data-testid="skill-row"][data-source="project"][data-name="shared-name"]',
     );
-    const extraShared = page.locator(
-      '[data-testid="skill-row"][data-source="loom-extra"][data-name="shared-name"]',
+    const extraShared = firstExtraGroup.locator(
+      '[data-testid="skill-row"][data-name="shared-name"]',
     );
     await expect(projectShared).toHaveCount(1);
     await expect(extraShared).toHaveCount(1);
@@ -387,8 +419,10 @@ test.describe('Skill catalog', () => {
     await expect(reopened).toHaveCount(0);
 
     await page.getByTestId('catalog-refresh').click();
-    await expect(extraGroup).toHaveCount(0);
+    await expect(firstExtraGroup).toHaveCount(0);
+    await expect(secondExtraGroup).toHaveCount(1);
     await expect(rowFor(page, 'release-notes')).toHaveCount(0);
+    await expect(rowFor(page, 'quality-check')).toHaveCount(1);
     await expect(extraShared).toHaveCount(0);
     await expect(projectShared).toHaveCount(1);
   });
@@ -403,6 +437,12 @@ test.describe('Skill catalog', () => {
 
     try {
       await gotoCatalog(page, project.id);
+      await page
+        .locator(
+          `[data-testid="catalog-group"][data-source="loom-extra"][data-source-directory="${extraDirectory}"]`,
+        )
+        .locator('.catalog-group__toggle')
+        .click();
       const extraRow = page.locator(
         '[data-testid="skill-row"][data-source="loom-extra"][data-name="release-notes"]',
       );

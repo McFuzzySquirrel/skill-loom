@@ -109,7 +109,7 @@ async function gotoNewBuilder(
   });
   await page.goto(`/projects/${projectId}/chains/new?${search.toString()}`);
   await expect(
-    page.getByRole('heading', { level: 1, name: 'Chain authoring' }),
+    page.getByRole('heading', { level: 1, name: 'Workflow designer' }),
   ).toBeVisible();
   await expect(page.getByTestId('chain-builder')).toBeVisible();
   await expandCatalog(page);
@@ -364,7 +364,7 @@ test.describe('Chain inputs and save', () => {
     // A reload must load the persisted document, not replay the URL draft.
     await page.reload();
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Chain authoring' }),
+      page.getByRole('heading', { level: 1, name: 'Workflow designer' }),
     ).toBeVisible();
     await page.getByText('Harness and duplicate settings').click();
     await expect(page.getByTestId('builder-chain-name')).toHaveText(name);
@@ -490,7 +490,7 @@ test.describe('Chain inputs and save', () => {
 
     await page.goto(`/projects/${project.id}/chains/${original.id}`);
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Chain authoring' }),
+      page.getByRole('heading', { level: 1, name: 'Workflow designer' }),
     ).toBeVisible();
     await page.getByText('Harness and duplicate settings').click();
 

@@ -190,7 +190,7 @@ test.describe('Chain to run flow', () => {
 
     await page.goto(`/projects/${project.id}/chains/${chain.id}`);
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Chain authoring' }),
+      page.getByRole('heading', { level: 1, name: 'Workflow designer' }),
     ).toBeVisible();
 
     await page.getByTestId('chain-save-and-run').click();
@@ -288,7 +288,7 @@ test.describe('Chain to run flow', () => {
       .click();
 
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Chain authoring' }),
+      page.getByRole('heading', { level: 1, name: 'Workflow designer' }),
     ).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`/projects/${target.id}/chains/`));
 

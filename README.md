@@ -6,7 +6,7 @@
 
 [![Node.js >=24](https://img.shields.io/badge/Node.js-%3E%3D24-339933?logo=nodedotjs&logoColor=white)](package.json)
 
-Skill Loom is a single-user local web application for assembling, saving, sharing, and running ordered chains of installed agent skills and standalone agent instructions. It inventories the skills a selected CLI harness can load, lets you inspect them and build a reusable recipe, preflights the run, and executes the chain in a real interactive terminal.
+Skill Loom is a local workspace for designing, saving, and bundling reusable workflows built from agent skills and standalone instructions. Its chain library keeps reusable templates in one place; portable `.loom.json` bundles can be reviewed and moved into other repositories. Optional local testing is available, and portable bundles can be run by a compatible agent CLI.
 
 Skill Loom does not author skills and does not execute a skill as a callable command. Each chain step is sent to a local harness as a prompt; skills are **model-invoked** context. The chain order is prompt order, **not a guarantee** that a harness loads or fires a named skill. A harness may decline to load a skill even when preflight resolved it.
 
@@ -14,7 +14,7 @@ Skill Loom does not author skills and does not execute a skill as a callable com
 
 See the [visual tour](docs/visual-tour.md) for captions and full-size screenshots.
 
-Start with the [user guide](docs/user-guide.md) to build and run a chain, or the [administrator guide](docs/admin-guide.md) to install, configure, back up, and upgrade the application.
+Start with the [user guide](docs/user-guide.md) to design and share a workflow, or the [administrator guide](docs/admin-guide.md) to install, configure, back up, and upgrade the application.
 
 ## Table of Contents
 
@@ -43,33 +43,30 @@ Start with the [user guide](docs/user-guide.md) to build and run a chain, or the
 
 ## About
 
-Agent CLIs such as OpenCode and GitHub Copilot can load installed skills, but turning a set of skills into a repeatable, ordered workflow is manual and easy to get wrong. Skill Loom provides a local workspace to register a project, inspect the skills that harness can see, assemble an ordered chain with named inputs, preflight the prerequisites, and run the chain in a terminal without leaving the machine.
+Agent CLIs such as OpenCode and GitHub Copilot can load installed skills, but turning a set of skills into a repeatable, ordered workflow is manual and easy to get wrong. Skill Loom provides a local workspace to inspect available skills, assemble and save chains, keep reusable templates in a library, and export reviewed bundles for use in other repositories. Register a project when you want its skill catalog for authoring or optional local tests.
 
 The product promise is deliberately narrow:
 
-- **Deterministic prompt order.** Skill Loom builds the prompt for each step and sends steps in the saved order.
+- **Portable workflow design.** Skill Loom organizes steps and named inputs into reusable chains, with a global library for templates and reviewable bundles for sharing.
+- **Deterministic prompt order.** When a chain is run, Skill Loom builds the prompt for each step and sends steps in the saved order.
 - **Model-invoked skills.** The harness decides whether to load a named skill. Skill Loom reports skill observation only when the harness exposes evidence, and never blocks a step on it.
 - **Local by construction.** The server binds to loopback, owns all filesystem and process access, and has no telemetry or hosted backend.
-- **Reproducible runs.** A run freezes the chain definition, resolved inputs, harness, mode, and session plan at creation. Editing the saved chain later does not change an existing run.
+- **Optional local testing.** A run freezes the chain definition, resolved inputs, harness, mode, and session plan at creation. Editing the saved chain later does not change an existing run.
 
 ## Features
 
 | Capability | What it does |
 |---|---|
+| Global chain library | Keep reusable chain templates outside any project, then copy them into a project to adapt or test. |
+| Portable chain bundles | Export a saved chain with complete referenced skill packages as `.loom.json`; review, download, and move it into another repository or installation. |
+| Chain builder | Create a chain bound to one harness, add skill or standalone instruction steps, reorder with drag or **Move up**/**Move down**, declare named inputs, and use `{{name}}` placeholders. |
 | Projects | Register existing folders or create new ones, browse the filesystem, optionally initialize Git, and keep a recent-project list. Removing a recent entry never deletes project files. |
 | Skill catalog | Discover OpenCode filesystem skills and Copilot CLI skills, read `SKILL.md` metadata, search, add extra global directories, and copy non-project packages into the shared `.agents/skills/` root. |
 | Workspace and appearance | Navigate project skills, chains, and details separately; choose system, light, or dark appearance. |
 | Scenario catalog | Browse illustrative starter chains for business, student, app developer, and game developer workflows; inspect pinned third-party skill sources, copy examples into the builder, and explicitly add bundled skills to a project when needed. See the [scenario chain guide](docs/scenario-chains.md). |
-| Chain builder | Create a chain bound to one harness, add skill or standalone instruction steps, reorder with drag or **Move up**/**Move down**, declare named inputs, and use `{{name}}` placeholders. |
-| Portable chain bundles | Export a saved chain with complete referenced skill packages as `.loom.json`; preview and import into another project or installation with a fresh chain id, explicit conflict choices, and permission consent reset. |
-| Session modes | Reuse one session (`shared`), start each step clean (`fresh`), or derive a new session (`fork`) with native fork where supported and a labelled handoff otherwise. |
-| Preflight | Check the chain, harness executable, authentication evidence, Copilot trust, catalog resolution, inputs, session mode, permissions, and Git state without making a model call. |
-| Supervised runs | Keep the interactive terminal in view and record explicit **Mark done**, **Mark failed**, or **Mark skipped** outcomes with retry, skip, and abort controls. |
-| Automatic runs | Advance only on the adapter's declared signal: OpenCode's `OSC 7501` working-to-idle edge or Copilot's process exit. A missing signal pauses the run. |
-| Run recovery | Enforce one global active run, mark stale records `interrupted` on restart, and offer retry, continue, or restart without silent replay. |
-| Global chain library | Save reusable chain snapshots outside any project and import them with a new chain id. |
+| Optional local testing | Preflight the chain and CLI, choose a session mode, and test in an interactive terminal with supervised or adapter-signaled progression, recovery, and retry controls. |
 | Terminal and accessibility | Serve a server-owned PTY to xterm.js with screen-reader mode, Escape-to-leave focus, skip links, keyboard reordering, and polite/assertive status announcements. |
-| Local CLI | Run the packaged production server as `skill-loom` with `--help`, `--version`, `--no-open`, `--port`, and `--config-dir`. |
+| Local CLI | Run the packaged local design workspace as `skill-loom` with `--help`, `--version`, `--no-open`, `--port`, and `--config-dir`. |
 
 ## Tech Stack
 

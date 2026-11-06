@@ -60,7 +60,7 @@ const ROUTES: RouteDefinition[] = [
   },
   {
     pattern: '/projects/:projectId/chains/:chainId',
-    title: 'Chain authoring',
+    title: 'Workflow designer',
     render: (params) => (
       <ChainBuilderPage
         projectId={params.projectId ?? ''}
@@ -87,7 +87,7 @@ interface Screen {
 
 export function resolveScreen(pathname: string): Screen {
   if (pathname === '/' || pathname === '') {
-    return { title: 'Projects', element: <Redirect to="/projects" /> };
+    return { title: 'Chain library', element: <Redirect to="/chains" /> };
   }
 
   for (const route of ROUTES) {

@@ -201,11 +201,20 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
           id="workspace-navigation"
         >
           <div className="workspace-brand">
-            <Link to="/projects" className="wordmark" onClick={() => setMobileNavOpen(false)}>
+            <Link to="/chains" className="wordmark" onClick={() => setMobileNavOpen(false)}>
               Skill Loom
             </Link>
           </div>
           <nav className="app-nav" aria-label="Primary">
+            <Link
+              to="/chains"
+              aria-current={
+                pathname === '/chains' ? 'page' : undefined
+              }
+              onClick={() => setMobileNavOpen(false)}
+            >
+              Chain library
+            </Link>
             <Link
               to="/projects"
               aria-current={
@@ -223,13 +232,6 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
               onClick={() => setMobileNavOpen(false)}
             >
               Scenario catalog
-            </Link>
-            <Link
-              to="/chains"
-              aria-current={pathname === '/chains' ? 'page' : undefined}
-              onClick={() => setMobileNavOpen(false)}
-            >
-              Chain library
             </Link>
           </nav>
           {isProjectArea || projectNavId !== undefined ? (

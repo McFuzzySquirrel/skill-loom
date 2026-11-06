@@ -458,7 +458,11 @@ export function ChainBuilderPage({
   })();
 
   return (
-    <section aria-labelledby="chain-builder-title" data-testid="chain-builder-page">
+    <section
+      className="chain-builder-page"
+      aria-labelledby="chain-builder-title"
+      data-testid="chain-builder-page"
+    >
       <p className="breadcrumb">
         <Link to={`/projects/${projectId}`}>← Project</Link>
       </p>
@@ -466,7 +470,7 @@ export function ChainBuilderPage({
       <header className="builder-header">
         <div className="builder-header__identity">
           <h1 className="panel__title" id="chain-builder-title">
-            Chain authoring
+            Workflow designer
           </h1>
           <p className="lede">
             Assemble an ordered recipe from skills and instructions. Skill Loom guarantees
@@ -860,15 +864,35 @@ export function ChainBuilderPage({
           </section>
 
           <nav className="builder-section-nav" aria-label="Chain editor sections">
+            <a href="#builder-skills">Skills</a>
             <a href="#builder-steps">Steps</a>
             <a href="#builder-editor">Step editor</a>
-            <a href="#builder-skills">Add a skill</a>
             <a href="#builder-inputs">Inputs</a>
           </nav>
 
           <div className="chain-builder" data-testid="chain-builder">
-            <div className="chain-builder__column chain-builder__steps">
-              <div className="chain-builder__add-step" id="builder-steps" tabIndex={-1}>
+            <div
+              className="chain-builder__column chain-builder__skills chain-builder__catalog"
+              id="builder-skills"
+              tabIndex={-1}
+              data-testid="builder-skills-column"
+            >
+              <SkillCatalog
+                projectId={projectId}
+                context="builder"
+                initialHarness={draftDocument.harness}
+                onAddAsStep={handleAddAsStep}
+                onCatalogChange={handleCatalogChange}
+              />
+            </div>
+
+            <div
+              className="chain-builder__column chain-builder__steps"
+              id="builder-steps"
+              tabIndex={-1}
+              data-testid="builder-steps-column"
+            >
+              <div className="chain-builder__add-step">
                 <button
                   type="button"
                   className="button button--secondary"
@@ -881,7 +905,7 @@ export function ChainBuilderPage({
                 >
                   Add instruction
                 </button>
-                <span className="field__hint">or choose a skill below</span>
+                <span className="field__hint">or choose a skill</span>
               </div>
               <StepList
                 steps={draftDocument.steps}
@@ -893,21 +917,13 @@ export function ChainBuilderPage({
                 onRemove={removeStep}
                 onReorder={reorderStep}
               />
-              <div className="chain-builder__catalog" id="builder-skills" tabIndex={-1}>
-                <SkillCatalog
-                  projectId={projectId}
-                  context="builder"
-                  initialHarness={draftDocument.harness}
-                  onAddAsStep={handleAddAsStep}
-                  onCatalogChange={handleCatalogChange}
-                />
-              </div>
             </div>
 
             <div
               className="chain-builder__column chain-builder__editor"
               id="builder-editor"
               tabIndex={-1}
+              data-testid="builder-editor-column"
             >
               <StepEditor
                 step={selectedStep}
