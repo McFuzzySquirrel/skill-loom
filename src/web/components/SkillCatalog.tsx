@@ -12,6 +12,7 @@ import { InlineError } from './InlineError';
 import { SkillDetail } from './SkillDetail';
 import { SkillSourceBadge, SOURCE_LABELS } from './SkillSourceBadge';
 import { ExtraDirectoriesDialog } from './ExtraDirectoriesDialog';
+import { HelpPopover } from './HelpPopover';
 
 export interface SkillCatalogProps {
   projectId: string;
@@ -102,9 +103,12 @@ export function SkillCatalog({
     <section className="catalog" aria-labelledby={titleId} data-testid="skill-catalog">
       <div className="catalog__heading">
         <div>
+          <div className="catalog__title-row">
           <h2 className="section-title catalog__title" id={titleId}>
             Skill catalog
           </h2>
+          <HelpPopover topic="skills" />
+          </div>
           <p className="field__hint">
             Descriptions come from each SKILL.md frontmatter. Skill Loom never adds a model
             summary or recommendation.

@@ -55,7 +55,6 @@ const verifiedVersions: Record<string, string> = {
   vitest: '5.1.0',
   '@playwright/test': '1.64.1',
   tsx: '4.23.15',
-  concurrently: '10.0.6',
 };
 
 const requiredScripts = [
@@ -91,11 +90,11 @@ describe('package contract', () => {
   });
 
   it('wires the required scripts to the documented tools', () => {
-    expect(pkg.scripts?.dev).toContain('concurrently');
+    expect(pkg.scripts?.dev).toBe('node scripts/dev-supervisor.mjs');
     expect(pkg.scripts?.build).toContain('build:web');
     expect(pkg.scripts?.build).toContain('build:server');
     expect(pkg.scripts?.['build:web']).toBe('vite build');
-    expect(pkg.scripts?.['build:server']).toBe('tsc -p tsconfig.server.json');
+    expect(pkg.scripts?.['build:server']).toContain('tsc -p tsconfig.server.json');
     expect(pkg.scripts?.start).toContain('dist/src/server/index.js');
     expect(pkg.scripts?.['test:unit']).toContain('tests/unit');
     expect(pkg.scripts?.['test:integration']).toContain('tests/integration');
@@ -116,6 +115,7 @@ describe('package contract', () => {
     expect(pkg.files).toEqual([
       'dist/src',
       'dist/web',
+      'dist/skills',
       'dist/package.json',
       'docs/OPERATIONS.md',
     ]);

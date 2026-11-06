@@ -89,9 +89,7 @@ export function ProjectsPage() {
   return (
     <section aria-labelledby="projects-title">
       <header className="projects-header">
-        <h1 className="panel__title" id="projects-title">
-          Projects
-        </h1>
+        <h1 className="panel__title" id="projects-title">Projects</h1>
         <p className="lede">
           Choose a local project folder to browse its skills and chains. Nothing leaves
           this machine.

@@ -53,8 +53,10 @@ function locationKey(): string {
 
 function subscribeToHistory(onChange: () => void): () => void {
   window.addEventListener('popstate', onChange);
+  window.addEventListener('hashchange', onChange);
   return () => {
     window.removeEventListener('popstate', onChange);
+    window.removeEventListener('hashchange', onChange);
   };
 }
 

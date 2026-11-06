@@ -14,8 +14,10 @@ import { projectRoutes, type ProjectRoutesOptions } from './projects.js';
 import { scenarioPresetRoutes } from './presets.js';
 import { runRoutes, type RunRoutesOptions } from './runs.js';
 import { terminalRoutes, type TerminalRouteOptions } from './terminal.js';
+import { serverRoutes, type ServerRoutesOptions } from './server.js';
 
 export type RouteRegistrationOptions = HealthRouteOptions &
+  ServerRoutesOptions &
   TerminalRouteOptions &
   FsRouteOptions &
   ProjectRoutesOptions &
@@ -32,6 +34,7 @@ export type RouteRegistrationOptions = HealthRouteOptions &
  */
 export const routes: FastifyPluginAsync<RouteRegistrationOptions> = async (app, options) => {
   await app.register(healthRoutes, options);
+  await app.register(serverRoutes, options);
   await app.register(fsRoutes, options);
   await app.register(projectRoutes, options);
   await app.register(catalogRoutes, options);

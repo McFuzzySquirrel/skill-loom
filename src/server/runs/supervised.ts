@@ -21,6 +21,7 @@ import type {
   ForkMechanism,
 } from '../harness/types.js';
 import type { TerminalExit } from '../terminal/pty.js';
+import { disposeAndWait } from './process-cleanup.js';
 import {
   MAX_TAIL_BYTES,
   MAX_TAIL_LINES,
@@ -776,6 +777,11 @@ export class SupervisedRunner {
     this.detachCurrent({ kill: true });
     this.closePty();
     this.emit('disposed', this.currentStepOrNull());
+  }
+
+  async shutdown(): Promise<void> {
+    const process = this.current?.process ?? null;
+    await disposeAndWait(process, () => this.dispose());
   }
 
   private async startCurrentStep(mode: 'start' | 'retry'): Promise<void> {

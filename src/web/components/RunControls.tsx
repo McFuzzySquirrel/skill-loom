@@ -7,6 +7,7 @@ import type {
   RunStatus,
   StepStatus,
 } from '../api/runs';
+import { HelpPopover } from './HelpPopover';
 
 /**
  * Mode-specific run controls.
@@ -97,9 +98,10 @@ export function RunControls({
         data-testid="run-controls"
       >
         <section className="run-recovery" aria-labelledby="run-recovery-title" data-testid="run-recovery">
-          <h2 className="section-title" id="run-recovery-title">
-            Interrupted run recovery
-          </h2>
+          <div className="page-title-row">
+            <h2 className="section-title" id="run-recovery-title">Interrupted run recovery</h2>
+            <HelpPopover topic="recovery" />
+          </div>
           <p className="state-note state-note--warning" data-testid="run-recovery-note">
             <span aria-hidden="true">⚠</span> This run is interrupted. Nothing replays until you
             choose an action, and no step starts automatically after a reload.
@@ -304,7 +306,10 @@ export function RunControls({
 
       {outcomes.length > 0 ? (
         <div className="run-controls__group" data-testid="run-outcomes">
-          <h2 className="section-title">Mark the current step</h2>
+          <div className="page-title-row">
+            <h2 className="section-title">Mark the current step</h2>
+            <HelpPopover topic="runControls" />
+          </div>
           <div className="run-controls__buttons">
             {outcomes.map((definition) => controlButton(definition, busyAction, onAction))}
           </div>
@@ -313,9 +318,12 @@ export function RunControls({
 
       {controls.length > 0 ? (
         <div className="run-controls__group" data-testid="run-mode-controls">
-          <h2 className="section-title">
-            {mode === 'supervised' ? 'Supervised controls' : 'Automatic controls'}
-          </h2>
+          <div className="page-title-row">
+            <h2 className="section-title">
+              {mode === 'supervised' ? 'Supervised controls' : 'Automatic controls'}
+            </h2>
+            <HelpPopover topic="runControls" />
+          </div>
           <div className="run-controls__buttons">
             {controls.map((definition) => controlButton(definition, busyAction, onAction))}
           </div>

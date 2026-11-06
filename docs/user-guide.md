@@ -116,6 +116,19 @@ The standalone workflow defaults to supervised execution: confirm each step, the
 
 Portable execution is not Skill Loom's terminal runner. The helper never launches a harness CLI, grants tool permissions, changes trust settings, or runs package scripts. The host performs the work and reports completion, so outcomes are not verified process exits and do not prove a skill fired. `shared` uses the current conversation. `fresh` needs a verified isolated worker or explicit acceptance of a shared-conversation approximation; `fork` needs a verified native fork or explicit acceptance of a labelled handoff. A different host from the bundle's authored harness requires compatibility review. If the current host cannot supply a required capability or confirmation, execution must stop before dispatch.
 
+### Discover and package project workflows
+
+The `scenario-discovery` Agent Skill can turn skills already available to a project into a reviewed chain bundle. Install the skill in a location your current host discovers (for example, `.agents/skills/scenario-discovery/` in the project), or use the copy provided by this Skill Loom checkout. The host may need a refresh or restart after installation.
+
+In the project session, ask for a specific outcome, for example: **"Use scenario-discovery to propose a workflow for reviewing our API changes."** The skill:
+
+1. Inventories enabled **project-local** skills and inspects their instructions as untrusted data; it does not run package scripts.
+2. Proposes supported scenarios, ordered prompt steps, and any named inputs. Review the skill evidence and choose a proposal.
+3. Shows the target harness, session mode, complete chain draft, and every selected package file. Review and explicitly confirm these before bundle creation.
+4. Writes a new `.loom.json` bundle. It does **not** import or run the bundle. To use it in Skill Loom, open a project, choose **Import bundle**, and follow the separate preview, trust, and package-conflict review.
+
+The builder helper requires Node.js 24+ and safe structured tool access to the manifest and output path. If your host cannot resolve the installed helper or pass arguments safely, stop rather than guessing a global path. `scenario-discovery` does not install itself, grant permissions, or guarantee that a harness will invoke any named skill.
+
 ### Session modes
 
 | Mode | Behavior |
@@ -175,7 +188,11 @@ Skill Loom is a local application. The UI and API work without an internet conne
 - If the browser loses the server, the header shows **Server connection error** with a **Retry** action and a short screen-reader announcement.
 - Run and terminal routes request a snapshot on connect and then receive ordered deltas. Reopening the run page does not start, advance, or replay a step.
 - Closing the browser does not stop the server or a live harness process. Run terminals are server-owned and survive a browser detach so you can reattach. If the server itself exits, recovery marks active records `interrupted`.
+- **Stop server** intentionally stops Skill Loom on this machine and interrupts its active local runs; every browser tab connected to that server is affected. If a chain has unsaved edits, explicitly confirm that they may be discarded. Restart Skill Loom using the same launch method, then choose a recovery action on the interrupted run. No step replays automatically.
+- Stopping Skill Loom cannot stop work independently performed by a separate host agent using `loom-run-bundle`; use that host's explicit pause/abort controls. Closing a browser tab is not a server shutdown.
 - A dropped terminal WebSocket retries a bounded number of times. After the retry budget, the terminal shows a disconnected notice.
+
+Small question-mark buttons explain the current page or workflow section. Open **Help and user guide** in the sidebar for the complete guide and offline administrator, operations, scenario, and support articles. Links from contextual help open the guide in a new tab so you can keep your current draft or run visible.
 
 ## Statuses and Notifications
 

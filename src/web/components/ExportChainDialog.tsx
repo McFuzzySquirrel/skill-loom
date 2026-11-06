@@ -6,6 +6,7 @@ import type { ApiClientError } from '../api/client';
 import { BundleContents } from './BundleContents';
 import { InlineError } from './InlineError';
 import { useStatusAnnouncer } from './StatusRegion';
+import { HelpPopover } from './HelpPopover';
 
 export function ExportChainDialog({
   projectId, chainId, onClose,
@@ -34,6 +35,7 @@ export function ExportChainDialog({
     <section className="new-chain" role="dialog" aria-modal="false" aria-labelledby={titleId}>
       <div className="new-chain__header">
         <h3 id={titleId} ref={heading} tabIndex={-1}>Export chain bundle</h3>
+        <HelpPopover topic="exportBundle" />
         <button type="button" className="button button--secondary" onClick={onClose}>Close</button>
       </div>
       <p>

@@ -9,6 +9,7 @@ import type { ApiClientError } from '../api/client';
 import { isAbsolutePath } from '../../shared/paths';
 import { useDirectoryListing } from '../hooks/useDirectoryListing';
 import { InlineError } from './InlineError';
+import { HelpPopover } from './HelpPopover';
 
 /** The browser API exposes no server home directory, so Home is the root. */
 export const FOLDER_BROWSER_HOME = '/';
@@ -93,9 +94,10 @@ export function FolderBrowser({
 
   return (
     <section className="panel project-browser" aria-labelledby="folder-browser-title">
-      <h2 className="section-title" id="folder-browser-title">
-        Folder browser
-      </h2>
+      <div className="page-title-row">
+        <h2 className="section-title" id="folder-browser-title">Folder browser</h2>
+        <HelpPopover topic="folderBrowser" />
+      </div>
       <p className="field__hint">
         Browse any readable folder on this machine. The path is resolved by the Skill Loom
         server; the browser never reads file contents.

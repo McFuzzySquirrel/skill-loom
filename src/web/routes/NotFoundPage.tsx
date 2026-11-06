@@ -6,9 +6,7 @@ export function NotFoundPage() {
 
   return (
     <section className="panel panel--not-found" aria-labelledby="not-found-title">
-      <h1 className="panel__title" id="not-found-title">
-        Page not found
-      </h1>
+      <h1 className="panel__title" id="not-found-title">Page not found</h1>
       <p>
         No Skill Loom screen matches <code>{pathname}</code>.
       </p>

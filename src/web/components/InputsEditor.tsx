@@ -16,6 +16,7 @@ import {
   type InputReference,
 } from '../hooks/useChainDraft';
 import { useStatusAnnouncer } from './StatusRegion';
+import { HelpPopover } from './HelpPopover';
 
 export interface InputsEditorProps {
   inputs: ChainInput[];
@@ -251,9 +252,12 @@ export function InputsEditor({
         <h2 className="section-title builder-panel__title" id={titleId}>
           Inputs
         </h2>
-        <span className="builder-panel__count" data-testid="inputs-count">
-          {String(inputs.length)} input{inputs.length === 1 ? '' : 's'}
-        </span>
+        <div className="builder-panel__heading-actions">
+          <span className="builder-panel__count" data-testid="inputs-count">
+            {String(inputs.length)} input{inputs.length === 1 ? '' : 's'}
+          </span>
+          <HelpPopover topic="inputs" />
+        </div>
       </div>
       <p className="field__hint" id={hintId}>
         Declare reusable values once, then reference them as{' '}

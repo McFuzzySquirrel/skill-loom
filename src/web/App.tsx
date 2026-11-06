@@ -1,6 +1,7 @@
-import { useEffect, useMemo, type ReactElement } from 'react';
+import { Suspense, lazy, useEffect, useMemo, type ReactElement } from 'react';
 import { AppLayout } from './components/AppLayout';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { HelpPopoverProvider } from './components/HelpPopover';
 import { StatusAnnouncerProvider } from './components/StatusRegion';
 import { ThemeProvider } from './ThemeProvider';
 import { WorkspaceProvider } from './WorkspaceContext';
@@ -14,6 +15,11 @@ import { RunStartPage } from './routes/RunStartPage';
 import { ScenarioCatalogPage } from './routes/ScenarioCatalogPage';
 import { TerminalRunPage } from './routes/TerminalRunPage';
 
+const HelpPage = lazy(async () => {
+  const module = await import('./routes/HelpPage');
+  return { default: module.HelpPage };
+});
+
 interface RouteDefinition {
   pattern: string;
   title: string;
@@ -21,6 +27,11 @@ interface RouteDefinition {
 }
 
 const ROUTES: RouteDefinition[] = [
+  {
+    pattern: '/help',
+    title: 'Help and user guide',
+    render: () => <HelpPage />,
+  },
   {
     pattern: '/projects',
     title: 'Projects',
@@ -110,8 +121,10 @@ function RoutedShell() {
 
   return (
     <AppLayout>
-      {/* Keying by pathname resets a route-level render failure on navigation. */}
-      <ErrorBoundary key={pathname}>{screen.element}</ErrorBoundary>
+      <Suspense fallback={<p role="status">Loading help content…</p>}>
+        {/* Keying by pathname resets a route-level render failure on navigation. */}
+        <ErrorBoundary key={pathname}>{screen.element}</ErrorBoundary>
+      </Suspense>
     </AppLayout>
   );
 }
@@ -126,7 +139,9 @@ export function App() {
       <ThemeProvider>
         <WorkspaceProvider>
           <StatusAnnouncerProvider>
-            <RoutedShell />
+            <HelpPopoverProvider>
+              <RoutedShell />
+            </HelpPopoverProvider>
           </StatusAnnouncerProvider>
         </WorkspaceProvider>
       </ThemeProvider>

@@ -8,16 +8,30 @@ export interface WorkspaceInfo {
   runId?: string;
 }
 
+export interface DraftStatus {
+  dirty: boolean;
+  saving: boolean;
+}
+
 interface WorkspaceContextValue {
   info: WorkspaceInfo | null;
   setInfo: (info: WorkspaceInfo | null) => void;
+  draftStatus: DraftStatus;
+  setDraftStatus: (status: DraftStatus) => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [info, setInfo] = useState<WorkspaceInfo | null>(null);
-  const value = useMemo(() => ({ info, setInfo }), [info]);
+  const [draftStatus, setDraftStatus] = useState<DraftStatus>({
+    dirty: false,
+    saving: false,
+  });
+  const value = useMemo(
+    () => ({ info, setInfo, draftStatus, setDraftStatus }),
+    [draftStatus, info],
+  );
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 

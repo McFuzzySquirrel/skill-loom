@@ -11,6 +11,7 @@ import { toApiClientError } from '../api/projects';
 import { InlineError } from './InlineError';
 import { useStatusAnnouncer } from './StatusRegion';
 import { TerminalPane } from './TerminalPane';
+import { HelpPopover } from './HelpPopover';
 
 /**
  * Copilot folder-trust panel.
@@ -143,6 +144,7 @@ export function TrustPanel({
           <h2 className="section-title preflight-section-title" id={`${prefix}-title`}>
             Copilot folder trust
           </h2>
+          <HelpPopover topic="preflight" />
           <p className="field__hint">
             The first Copilot prompt can be swallowed by a folder-trust dialog. Skill Loom starts an
             unseeded interactive session so you can accept that dialog before the run.

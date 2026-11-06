@@ -6,6 +6,7 @@ import { ApiClientError } from '../api/client';
 import { BundleContents } from './BundleContents';
 import { InlineError } from './InlineError';
 import { useStatusAnnouncer } from './StatusRegion';
+import { HelpPopover } from './HelpPopover';
 
 export function ImportBundleDialog({
   projectId, onImported, onClose,
@@ -79,6 +80,7 @@ export function ImportBundleDialog({
     <section className="new-chain" role="dialog" aria-modal="false" aria-labelledby={titleId}>
       <div className="new-chain__header">
         <h3 id={titleId} ref={heading} tabIndex={-1}>Import chain bundle</h3>
+        <HelpPopover topic="importBundle" />
         <button type="button" className="button button--secondary" onClick={onClose} disabled={busy}>Close</button>
       </div>
       <label className="field__label">

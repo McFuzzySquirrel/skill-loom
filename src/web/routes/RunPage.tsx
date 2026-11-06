@@ -8,6 +8,7 @@ import {
   type RunView,
 } from '../api/runs';
 import { InlineError } from '../components/InlineError';
+import { HelpPopover } from '../components/HelpPopover';
 import { RunControls } from '../components/RunControls';
 import { StatusText, StepRail, stepDisplayName } from '../components/StepRail';
 import { TerminalPane } from '../components/TerminalPane';
@@ -75,9 +76,12 @@ function RunStepDetail({ run, step }: { run: Run; step: RunStep }) {
     <section className="run-step-detail" aria-labelledby="run-step-detail-title" data-testid="run-step-detail">
       <div className="run-step-detail__heading">
         <div>
-          <h2 className="section-title" id="run-step-detail-title">
-            Step {step.index + 1}: {name}
-          </h2>
+          <div className="page-title-row">
+            <h2 className="section-title" id="run-step-detail-title">
+              Step {step.index + 1}: {name}
+            </h2>
+            <HelpPopover topic="runControls" />
+          </div>
           <p className="field__hint">
             {step.kind === 'instruction' ? 'Instruction step' : <>Skill: <code>{step.skillName}</code></>}
           </p>

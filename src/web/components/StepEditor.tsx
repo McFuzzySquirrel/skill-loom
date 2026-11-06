@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef } from 'react';
 import type { ChainStep } from '../api/chains';
+import { HelpPopover } from './HelpPopover';
 
 export interface StepEditorProps {
   step: ChainStep | null;
@@ -59,6 +60,7 @@ export function StepEditor({
           <h2 className="section-title builder-panel__title" id={titleId}>
             Step editor
           </h2>
+          <HelpPopover topic="stepEditor" />
         </div>
         <div className="empty-state" data-testid="step-editor-empty">
           <p>No step selected.</p>
@@ -85,9 +87,12 @@ export function StepEditor({
         <h2 className="section-title builder-panel__title" id={titleId}>
           Step editor
         </h2>
-        <span className="builder-panel__count" data-testid="step-position">
-          Step {String(position ?? '')} of {String(totalSteps)}
-        </span>
+        <div className="builder-panel__heading-actions">
+          <span className="builder-panel__count" data-testid="step-position">
+            Step {String(position ?? '')} of {String(totalSteps)}
+          </span>
+          <HelpPopover topic="stepEditor" />
+        </div>
       </div>
 
       <dl className="step-editor__meta">

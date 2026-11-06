@@ -15,6 +15,7 @@ import {
 } from '../api/chains';
 import { globalChainsApi, type GlobalChainsApi } from '../api/globalChains';
 import { InlineError } from '../components/InlineError';
+import { HelpPopover } from '../components/HelpPopover';
 import { InputsEditor } from '../components/InputsEditor';
 import { SkillCatalog } from '../components/SkillCatalog';
 import { StepEditor } from '../components/StepEditor';
@@ -71,7 +72,7 @@ export function ChainBuilderPage({
   globalChainsApiClient = globalChainsApi,
 }: ChainBuilderPageProps) {
   const { search, navigate, setNavigationGuard } = useRouter();
-  const { setInfo } = useWorkspace();
+  const { setDraftStatus, setInfo } = useWorkspace();
   const { announce } = useStatusAnnouncer();
   const {
     state,
@@ -122,6 +123,11 @@ export function ChainBuilderPage({
   const duplicateHarness: ChainHarness =
     duplicateHarnessChoice ??
     (draftDocument?.harness === 'opencode' ? 'copilot' : 'opencode');
+
+  useEffect(() => {
+    setDraftStatus({ dirty: isDirty, saving });
+    return () => setDraftStatus({ dirty: false, saving: false });
+  }, [isDirty, saving, setDraftStatus]);
 
   useEffect(() => {
     if (draftDocument !== null) {
@@ -670,9 +676,12 @@ export function ChainBuilderPage({
               Harness and duplicate settings
             </summary>
             <div className="builder-meta__body">
-            <h2 className="section-title builder-meta__title" id="builder-meta-title">
-              Builder
-            </h2>
+            <div className="builder-meta__heading">
+              <h2 className="section-title builder-meta__title" id="builder-meta-title">
+                Builder settings
+              </h2>
+              <HelpPopover topic="builderSettings" />
+            </div>
             <p className="builder-meta__name" data-testid="builder-chain-name">
               {draftDocument.name}
             </p>
@@ -892,26 +901,15 @@ export function ChainBuilderPage({
               tabIndex={-1}
               data-testid="builder-steps-column"
             >
-              <div className="chain-builder__add-step">
-                <button
-                  type="button"
-                  className="button button--secondary"
-                  disabled={state.status !== 'ready'}
-                  data-testid="chain-add-instruction"
-                  onClick={() => {
-                    addInstruction();
-                    setEditorFocusRequest((current) => current + 1);
-                  }}
-                >
-                  Add instruction
-                </button>
-                <span className="field__hint">or choose a skill</span>
-              </div>
               <StepList
                 steps={draftDocument.steps}
                 selectedStepId={selectedStep?.id ?? null}
                 invalidStepIds={validation.invalidStepIds}
                 stepIssueLabels={stepIssueLabels}
+                onAddInstruction={() => {
+                  addInstruction();
+                  setEditorFocusRequest((current) => current + 1);
+                }}
                 onSelect={selectStep}
                 onMove={moveStep}
                 onRemove={removeStep}

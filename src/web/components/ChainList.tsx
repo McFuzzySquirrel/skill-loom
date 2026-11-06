@@ -21,6 +21,7 @@ import { ExportChainDialog } from './ExportChainDialog';
 import { InlineError } from './InlineError';
 import { NewChainDialog } from './NewChainDialog';
 import { useStatusAnnouncer } from './StatusRegion';
+import { HelpPopover } from './HelpPopover';
 
 export interface ChainListProps {
   projectId: string;
@@ -225,9 +226,12 @@ export function ChainList({ projectId, api = chainsApi }: ChainListProps) {
     >
       <div className="chain-library__heading">
         <div className="chain-library__intro">
-          <h2 className="section-title chain-library__title" id="chain-library-title" ref={heading} tabIndex={-1}>
-            Chains
-          </h2>
+          <div className="page-title-row">
+            <h2 className="section-title chain-library__title" id="chain-library-title" ref={heading} tabIndex={-1}>
+              Chains
+            </h2>
+            <HelpPopover topic="projectChains" />
+          </div>
           <p className="field__hint">
             Chains are saved as project-local JSON inside <code>.loom/chains</code>. Skills
             are model-invoked context: Skill Loom guarantees prompt order, not that a harness
