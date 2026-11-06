@@ -120,6 +120,16 @@ async function smokePortableSkill(temporaryRoot) {
     !files['loom-run-bundle/licenses/yaml-LICENSE']) {
     throw new Error('The portable skill archive is missing its helper, instructions, or dependency licenses.');
   }
+  for (const skillDirectory of [
+    join(repoRoot, '.github', 'skills', 'loom-run-bundle'),
+    join(repoRoot, 'skill', 'loom-run-bundle'),
+  ]) {
+    const sourceHelper = await readFile(join(skillDirectory, 'scripts', 'loom-bundle.mjs'));
+    if (!sourceHelper.equals(helper)) {
+      throw new Error(`The repository skill helper is missing or out of sync: ${skillDirectory}`);
+    }
+  }
+
   const extracted = join(temporaryRoot, 'standalone-skill');
   await mkdir(join(extracted, 'scripts'), { recursive: true });
   const helperPath = join(extracted, 'scripts', 'loom-bundle.mjs');
