@@ -11,6 +11,7 @@ import {
   type ScenarioCatalogApi,
 } from '../api/presets';
 import { InlineError } from '../components/InlineError';
+import { HelpPopover } from '../components/HelpPopover';
 import { useStatusAnnouncer } from '../components/StatusRegion';
 import { CHAIN_HARNESS_LABELS } from '../hooks/useChains';
 import { useRecentProjects } from '../hooks/useRecentProjects';
@@ -500,7 +501,12 @@ export function ScenarioCatalogPage({
       ) : null}
 
       <section className="panel scenario-controls" aria-labelledby="scenario-controls-title">
-        <h2 className="section-title" id="scenario-controls-title">Explore examples</h2>
+        <div className="section-heading">
+          <h2 className="section-title" id="scenario-controls-title">
+            Explore examples
+          </h2>
+          <HelpPopover topic="scenarios" />
+        </div>
         <div className="scenario-controls__grid">
           <div className="field">
             <label className="field__label" htmlFor="scenario-audience">Audience</label>

@@ -48,6 +48,8 @@ export interface SkillEntry {
   path: string;
   /** Canonical absolute path to the skill package directory. */
   packagePath: string;
+  /** Canonical Loom-configured root for entries discovered from an extra directory. */
+  sourceDirectory?: string;
   /** Copilot can report disabled entries; filesystem discovery is enabled. */
   enabled: boolean;
 }

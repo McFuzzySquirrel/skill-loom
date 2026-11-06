@@ -9,7 +9,10 @@ import {
 import { Link, useRouter } from '../router';
 import { useAppearance } from '../ThemeProvider';
 import { useWorkspace } from '../WorkspaceContext';
+import { getPageHelpTopic } from '../help/topics';
+import { HelpPopover } from './HelpPopover';
 import { ServerStatus } from './ServerStatus';
+import { StopServerDialog } from './StopServerDialog';
 import { StatusRegion } from './StatusRegion';
 import { useStatusAnnouncer } from './StatusRegion';
 
@@ -28,10 +31,38 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
   const { pathname } = useRouter();
   const mainRef = useRef<HTMLElement>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const { info } = useWorkspace();
+  const [stopDialogOpen, setStopDialogOpen] = useState(false);
+  const [serverStopped, setServerStopped] = useState(false);
+  const [otherTabStopping, setOtherTabStopping] = useState(false);
+  const stopServerTrigger = useRef<HTMLButtonElement>(null);
+  const restoreStopFocus = useRef(false);
+  const { draftStatus, info } = useWorkspace();
   const { choice, persistenceError, setChoice } = useAppearance();
   const { announce } = useStatusAnnouncer();
   const persistenceAnnounced = useRef(false);
+
+  useEffect(() => {
+    if (!stopDialogOpen && restoreStopFocus.current) {
+      restoreStopFocus.current = false;
+      stopServerTrigger.current?.focus();
+    }
+  }, [stopDialogOpen]);
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const channel = new BroadcastChannel('skill-loom-server-lifecycle');
+    channel.onmessage = (event: MessageEvent<unknown>) => {
+      if (
+        typeof event.data === 'object' &&
+        event.data !== null &&
+        'state' in event.data &&
+        event.data.state === 'stopping'
+      ) {
+        setOtherTabStopping(true);
+      }
+    };
+    return () => channel.close();
+  }, []);
 
   const routeContext = useMemo(() => {
     const projectId = pathname.match(/^\/projects\/([^/]+)/)?.[1];
@@ -68,6 +99,9 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
     }
     if (pathname === '/scenarios') {
       return [{ label: 'Scenario catalog' }];
+    }
+    if (pathname === '/help') {
+      return [{ label: 'Help and user guide' }];
     }
     if (routeContext.projectId !== undefined) {
       const projectLabel = routeContext.projectName ?? 'Project';
@@ -147,6 +181,39 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
     mainRef.current?.focus();
   };
 
+  if (serverStopped) {
+    return (
+      <div className="app-shell">
+        <a className="skip-link" href="#main-content" onClick={handleSkip}>
+          Skip to main content
+        </a>
+        <header className="app-header">
+          <strong>Skill Loom stopped</strong>
+          <span className="local-badge">Local-only</span>
+        </header>
+        <StatusRegion />
+        <main className="app-main shutdown-screen" id="main-content" ref={mainRef} tabIndex={-1}>
+          <section className="panel" aria-labelledby="shutdown-complete-title">
+            <h1 className="panel__title" id="shutdown-complete-title">
+              Skill Loom server stopped
+            </h1>
+            <p>
+              The local server is no longer available. You can close this tab and restart Skill
+              Loom with the same command you used to launch it.
+            </p>
+            <p>
+              Any active run was saved as interrupted. After restarting, open its run view and
+              choose an explicit recovery action; no step will replay automatically.
+            </p>
+          </section>
+        </main>
+        <footer className="app-footer">
+          <p>Skill Loom runs on this machine only.</p>
+        </footer>
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content" onClick={handleSkip}>
@@ -191,9 +258,27 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
           ) : null}
         </div>
         <ServerStatus />
+        <HelpPopover topic={getPageHelpTopic(pathname)} />
       </header>
 
       <StatusRegion />
+      {otherTabStopping ? (
+        <p className="shutdown-notice" role="status">
+          Another tab requested server shutdown. This tab will lose its connection when shutdown
+          completes.
+        </p>
+      ) : null}
+      {stopDialogOpen ? (
+        <StopServerDialog
+          dirty={draftStatus.dirty}
+          saving={draftStatus.saving}
+          onClose={() => {
+            restoreStopFocus.current = true;
+            setStopDialogOpen(false);
+          }}
+          onStopped={() => setServerStopped(true)}
+        />
+      ) : null}
 
       <div className="workspace-frame">
         <aside
@@ -201,11 +286,20 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
           id="workspace-navigation"
         >
           <div className="workspace-brand">
-            <Link to="/projects" className="wordmark" onClick={() => setMobileNavOpen(false)}>
+            <Link to="/chains" className="wordmark" onClick={() => setMobileNavOpen(false)}>
               Skill Loom
             </Link>
           </div>
           <nav className="app-nav" aria-label="Primary">
+            <Link
+              to="/chains"
+              aria-current={
+                pathname === '/chains' ? 'page' : undefined
+              }
+              onClick={() => setMobileNavOpen(false)}
+            >
+              Chain library
+            </Link>
             <Link
               to="/projects"
               aria-current={
@@ -225,11 +319,11 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
               Scenario catalog
             </Link>
             <Link
-              to="/chains"
-              aria-current={pathname === '/chains' ? 'page' : undefined}
+              to="/help"
+              aria-current={pathname === '/help' ? 'page' : undefined}
               onClick={() => setMobileNavOpen(false)}
             >
-              Chain library
+              Help and user guide
             </Link>
           </nav>
           {isProjectArea || projectNavId !== undefined ? (
@@ -268,6 +362,17 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
             </nav>
           ) : null}
           <div className="workspace-sidebar__bottom">
+            <button
+              ref={stopServerTrigger}
+              type="button"
+              className="button button--danger button--small"
+              onClick={() => {
+                restoreStopFocus.current = false;
+                setStopDialogOpen(true);
+              }}
+            >
+              Stop server
+            </button>
             <label className="field__label" htmlFor="appearance-choice">
               Appearance
             </label>

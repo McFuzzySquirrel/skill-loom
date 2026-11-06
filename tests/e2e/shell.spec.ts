@@ -8,10 +8,11 @@ interface ShellRoute {
 const shellRoutes: ShellRoute[] = [
   { path: '/projects', heading: 'Projects' },
   { path: '/chains', heading: 'Global chain library' },
+  { path: '/help', heading: 'Help and user guide' },
   // The builder now loads live catalog data. Use the unsaved-draft route so the
   // shell check does not depend on a registered chain, and fulfill the catalog
   // request with an empty isolated result below.
-  { path: '/projects/demo-project/chains/new', heading: 'Chain authoring' },
+  { path: '/projects/demo-project/chains/new', heading: 'Workflow designer' },
   { path: '/projects/demo-project/chains/demo-chain/run', heading: 'Run start' },
   { path: '/runs/demo-run/terminal', heading: 'Run terminal' },
   { path: '/runs/demo-run', heading: 'Run view' },
@@ -175,11 +176,11 @@ function collectConsoleErrors(page: Page): string[] {
 }
 
 test.describe('Skill Loom shell', () => {
-  test('redirects the initial route to /projects', async ({ page }) => {
+  test('redirects the initial route to /chains', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page).toHaveURL(/\/projects$/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+    await expect(page).toHaveURL(/\/chains$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Global chain library' })).toBeVisible();
   });
 
   for (const route of shellRoutes) {
@@ -200,8 +201,8 @@ test.describe('Skill Loom shell', () => {
 
       await expect(page).toHaveURL(new RegExp(`${escapeRegExp(route.path)}$`));
       await expect(page.getByRole('heading', { level: 1, name: route.heading })).toBeVisible();
-      await expect(page.getByText(/Local-only/)).toBeVisible();
-      await expect(page.getByText(/Server connected · v/)).toBeVisible();
+      await expect(page.getByRole('banner').getByText('Local-only')).toBeVisible();
+      await expect(page.getByRole('banner').getByText(/Server connected · v/)).toBeVisible();
       expect(consoleErrors).toEqual([]);
     });
   }
@@ -224,7 +225,7 @@ test.describe('Skill Loom shell', () => {
       }
       await page.goto(route.path);
       await expect(page.getByRole('heading', { level: 1, name: route.heading })).toBeVisible();
-      await expect(page.getByText(/Server connected · v/)).toBeVisible();
+      await expect(page.getByRole('banner').getByText(/Server connected · v/)).toBeVisible();
 
       await page.keyboard.press('Tab');
       const skipLink = page.getByRole('link', { name: 'Skip to main content' });
@@ -251,6 +252,137 @@ test.describe('Skill Loom shell', () => {
     await expect(root).toHaveAttribute('data-theme', 'light');
     await page.emulateMedia({ colorScheme: 'dark' });
     await expect(root).toHaveAttribute('data-theme', 'dark');
+  });
+
+  test('opens contextual help and the full guide in a new tab', async ({ page }) => {
+    await page.goto('/projects');
+
+    await page.getByRole('banner').getByRole('button', { name: 'Help: Projects' }).click();
+    const helpPanel = page.getByRole('region', { name: 'Help: Projects' });
+    await expect(helpPanel).toBeVisible();
+    await expect(helpPanel).toContainText('recent project');
+
+    const popupPromise = page.waitForEvent('popup');
+    await helpPanel.getByRole('link', { name: /Read the full guide/ }).click();
+    const popup = await popupPromise;
+    await expect(popup).toHaveURL(/\/help#user-guide-register-and-open-a-project$/);
+    await expect(page).toHaveURL(/\/projects$/);
+  });
+
+  test('renders the user guide and workflow skill instructions offline', async ({ page }) => {
+    await page.goto('/help');
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Help and user guide' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Discover and package project workflows' })).toBeVisible();
+    await expect(page.getByText('scenario-discovery', { exact: true }).last()).toBeVisible();
+    await expect(page.getByText('loom-run-bundle', { exact: true }).last()).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Administrator guide' }).first()).toHaveAttribute(
+      'href',
+      '#article-administrator-guide',
+    );
+  });
+
+  test('keeps catalog and steps aligned and opens the step editor as a dialog', async ({ page }) => {
+    await page.setViewportSize({ width: 1720, height: 1100 });
+    await mockEmptyCatalog(page);
+    await page.goto('/projects/demo-project/chains/new');
+
+    const stepsPanel = page.locator('.step-panel');
+    await expect(stepsPanel.getByTestId('chain-add-instruction')).toBeVisible();
+    await expect(page.getByTestId('chain-add-instruction')).toHaveCount(1);
+
+    const boxes = await Promise.all([
+      page.getByTestId('skill-catalog').boundingBox(),
+      stepsPanel.boundingBox(),
+    ]);
+    expect(boxes.every((box) => box !== null)).toBe(true);
+    const topEdges = boxes.map((box) => box?.y ?? 0);
+    expect(Math.max(...topEdges) - Math.min(...topEdges)).toBeLessThanOrEqual(1);
+    await expect(page.getByTestId('step-editor-dialog')).toBeHidden();
+
+    await stepsPanel.getByTestId('chain-add-instruction').click();
+    await expect(page.getByTestId('step-instruction')).toBeFocused();
+    await expect(page.getByRole('dialog', { name: 'Step editor' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('step-editor-dialog')).toBeHidden();
+    await expect(stepsPanel.getByTestId('chain-add-instruction')).toBeFocused();
+  });
+
+  test('requires explicit draft-discard consent and verifies server shutdown', async ({ page }) => {
+    await mockEmptyCatalog(page);
+    await page.route('**/api/runs/active', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          active: false,
+          runId: null,
+          status: null,
+          run: null,
+          terminalId: null,
+          actions: null,
+          recovery: null,
+        }),
+      });
+    });
+
+    let shutdownAccepted = false;
+    let postShutdownReads = 0;
+    await page.route('**/api/server/lifecycle', async (route) => {
+      if (!shutdownAccepted) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ state: 'running', token: 'test-token-'.padEnd(43, 'x') }),
+        });
+        return;
+      }
+      postShutdownReads += 1;
+      if (postShutdownReads === 1) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ state: 'stopping', token: 'test-token-'.padEnd(43, 'x') }),
+        });
+        return;
+      }
+      await route.abort('failed');
+    });
+    await page.route('**/api/server/shutdown', async (route) => {
+      shutdownAccepted = true;
+      await route.fulfill({
+        status: 202,
+        contentType: 'application/json',
+        body: JSON.stringify({ state: 'stopping' }),
+      });
+    });
+
+    await page.goto('/projects/demo-project/chains/new');
+    await page.getByTestId('chain-add-instruction').click();
+    const instruction = page.getByTestId('step-instruction');
+    await instruction.fill('Keep this draft unless I confirm discard.');
+    await page.getByRole('dialog', { name: 'Step editor' })
+      .getByRole('button', { name: 'Done editing' })
+      .click();
+    await page.getByRole('button', { name: 'Stop server' }).first().click();
+
+    const dialog = page.getByRole('dialog', { name: 'Stop Skill Loom server' });
+    const confirmStop = dialog.getByRole('button', { name: 'Stop server', exact: true });
+    const discardLabel = 'I understand that stopping will discard this unsaved chain draft.';
+    await expect(confirmStop).toBeDisabled();
+    await dialog.getByLabel(discardLabel).check();
+    await expect(confirmStop).toBeEnabled();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(instruction).toHaveValue('Keep this draft unless I confirm discard.');
+
+    await page.getByRole('button', { name: 'Stop server' }).first().click();
+    const reopenedDialog = page.getByRole('dialog', { name: 'Stop Skill Loom server' });
+    await reopenedDialog.getByLabel(discardLabel).check();
+    await reopenedDialog.getByRole('button', { name: 'Stop server', exact: true }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Skill Loom server stopped' }),
+    ).toBeVisible();
   });
 
   test('announces when the browser cannot remember an appearance choice', async ({

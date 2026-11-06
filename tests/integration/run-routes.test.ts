@@ -32,6 +32,7 @@ import type {
   RunView,
 } from '../../src/server/runs/orchestrator.js';
 import type { Run } from '../../src/server/runs/model.js';
+import { createRunStore } from '../../src/server/runs/store.js';
 import type {
   CreateTerminalSessionOptions,
   TerminalExit,
@@ -769,6 +770,25 @@ describe('POST /api/projects/:projectId/runs', () => {
     const missingChainId = await postRun(harness.app, harness.projectId, {});
     expect(missingChainId.statusCode).toBe(422);
     expect(envelope(missingChainId.body).error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('persists active work as interrupted and releases its pointer on shutdown', async () => {
+    const harness = await buildTestApp();
+    const chain = await createChain(harness.app, harness.projectId);
+    const run = await createRun(harness.app, harness.projectId, chain);
+    const store = createRunStore({
+      projectPath: harness.projectPath,
+      configDirectory,
+    });
+
+    await harness.app.close();
+
+    const interrupted = await store.read(run.id);
+    expect(interrupted.status).toBe('interrupted');
+    expect(interrupted.reason).toBe('SERVER_SHUTDOWN');
+    expect(interrupted.steps[0]?.status).toBe('interrupted');
+    expect(await store.getActiveRun()).toBeNull();
+    expect(terminal.closed).toContain(terminalIdFor(run.id));
   });
 });
 

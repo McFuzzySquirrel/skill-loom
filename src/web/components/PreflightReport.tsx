@@ -5,6 +5,7 @@ import type {
   PreflightCheckStatus,
   PreflightReport as PreflightReportData,
 } from '../api/preflight';
+import { HelpPopover } from './HelpPopover';
 
 /**
  * Structured preflight findings.
@@ -182,9 +183,12 @@ export function PreflightReport({
       data-testid="preflight-report"
       data-status={report.status}
     >
-      <h2 className="section-title preflight-section-title" id={`${prefix}-title`}>
-        Preflight results
-      </h2>
+      <div className="page-title-row">
+        <h2 className="section-title preflight-section-title" id={`${prefix}-title`}>
+          Preflight results
+        </h2>
+        <HelpPopover topic="preflight" />
+      </div>
 
       <p
         className={`preflight-summary preflight-summary--${summary.tone}`}

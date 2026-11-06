@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type DragEvent } from 'react';
 import type { ChainStep } from '../api/chains';
 import { stepDisplayName } from '../hooks/useChainDraft';
+import { HelpPopover } from './HelpPopover';
 
 export interface StepListProps {
   steps: ChainStep[];
@@ -8,6 +9,7 @@ export interface StepListProps {
   invalidStepIds: ReadonlySet<string>;
   /** Per-step text label for a blocking issue; defaults to "Needs instruction". */
   stepIssueLabels?: ReadonlyMap<string, string>;
+  onAddInstruction: () => void;
   onSelect: (stepId: string) => void;
   onMove: (stepId: string, direction: 'up' | 'down') => void;
   onRemove: (stepId: string) => void;
@@ -37,6 +39,7 @@ export function StepList({
   selectedStepId,
   invalidStepIds,
   stepIssueLabels,
+  onAddInstruction,
   onSelect,
   onMove,
   onRemove,
@@ -129,14 +132,25 @@ export function StepList({
         <h2 className="section-title builder-panel__title" id={titleId} ref={heading} tabIndex={-1}>
           Steps
         </h2>
-        <span className="builder-panel__count" data-testid="step-list-count">
-          {String(steps.length)} step{steps.length === 1 ? '' : 's'}
-        </span>
+        <div className="builder-panel__heading-actions">
+          <span className="builder-panel__count" data-testid="step-list-count">
+            {String(steps.length)} step{steps.length === 1 ? '' : 's'}
+          </span>
+          <button
+            type="button"
+            className="button button--secondary button--small"
+            onClick={onAddInstruction}
+            data-testid="chain-add-instruction"
+          >
+            Add instruction
+          </button>
+          <HelpPopover topic="steps" />
+        </div>
       </div>
 
       <p className="field__hint" id={hintId}>
-        Drag a step to reorder, or use Move up and Move down. Selecting a step opens it
-        in the editor. Reordering never discards unsaved text.
+        Choose Add instruction or add a skill from the catalog. Drag a step to reorder, or use
+        Move up and Move down. Reordering never discards unsaved text.
       </p>
 
       {steps.length === 0 ? (
@@ -144,7 +158,7 @@ export function StepList({
           <p>No steps yet.</p>
           <p>
             Expand a skill in the catalog and choose <strong>Add as step</strong> to start
-            building the ordered recipe, or choose <strong>Add instruction</strong> without a skill.
+            building the ordered recipe.
           </p>
         </div>
       ) : (

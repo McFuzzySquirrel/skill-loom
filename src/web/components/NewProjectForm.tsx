@@ -8,6 +8,7 @@ import {
 } from '../api/projects';
 import { isAbsolutePath } from '../../shared/paths';
 import { InlineError } from './InlineError';
+import { HelpPopover } from './HelpPopover';
 
 const MAX_NAME_LENGTH = 255;
 
@@ -116,9 +117,10 @@ export function NewProjectForm({
 
   return (
     <section className="panel new-project" aria-labelledby="new-project-title">
-      <h2 className="section-title" id="new-project-title">
-        New project
-      </h2>
+      <div className="page-title-row">
+        <h2 className="section-title" id="new-project-title">New project</h2>
+        <HelpPopover topic="newProject" />
+      </div>
       <p className="field__hint">
         Skill Loom creates one empty folder. Optionally initialize a git repository; no
         templates or scaffolding files are added.

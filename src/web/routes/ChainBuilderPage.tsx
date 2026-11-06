@@ -15,6 +15,7 @@ import {
 } from '../api/chains';
 import { globalChainsApi, type GlobalChainsApi } from '../api/globalChains';
 import { InlineError } from '../components/InlineError';
+import { HelpPopover } from '../components/HelpPopover';
 import { InputsEditor } from '../components/InputsEditor';
 import { SkillCatalog } from '../components/SkillCatalog';
 import { StepEditor } from '../components/StepEditor';
@@ -23,7 +24,6 @@ import { useStatusAnnouncer } from '../components/StatusRegion';
 import { CHAIN_HARNESS_LABELS, CHAIN_SESSION_MODE_LABELS } from '../hooks/useChains';
 import {
   useChainDraft,
-  stepDisplayName,
   type ChainDraftIssue,
 } from '../hooks/useChainDraft';
 import { Link, useRouter } from '../router';
@@ -57,12 +57,12 @@ function placeholderIssuesFor(
 }
 
 /**
- * Three-region chain builder (CHAIN-FR-05, CHAIN-FR-06, CHAIN-FR-07).
+ * Chain builder with a modal step editor (CHAIN-FR-05, CHAIN-FR-06, CHAIN-FR-07).
  *
  * The catalog adds steps, the ordered list reorders them, the editor edits one
- * step, and the inputs panel owns placeholder reconciliation and save. The
- * harness is fixed after the first save; another harness requires a duplicate,
- * because a chain never stores a per-step harness.
+ * selected step in a dialog, and the inputs panel owns placeholder reconciliation
+ * and save. The harness is fixed after the first save; another harness requires a
+ * duplicate, because a chain never stores a per-step harness.
  */
 export function ChainBuilderPage({
   projectId,
@@ -71,7 +71,7 @@ export function ChainBuilderPage({
   globalChainsApiClient = globalChainsApi,
 }: ChainBuilderPageProps) {
   const { search, navigate, setNavigationGuard } = useRouter();
-  const { setInfo } = useWorkspace();
+  const { setDraftStatus, setInfo } = useWorkspace();
   const { announce } = useStatusAnnouncer();
   const {
     state,
@@ -101,6 +101,7 @@ export function ChainBuilderPage({
 
   const [catalogSkills, setCatalogSkills] = useState<SkillEntry[]>([]);
   const [editorFocusRequest, setEditorFocusRequest] = useState(0);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<ApiClientError | null>(null);
   const [libraryBusy, setLibraryBusy] = useState(false);
@@ -115,13 +116,21 @@ export function ChainBuilderPage({
   const pendingNavigationRef = useRef<string | null>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const leaveHeading = useRef<HTMLHeadingElement>(null);
+  const stepEditorDialog = useRef<HTMLDialogElement>(null);
+  const lastFocusedEditorRequest = useRef(0);
   const dirtyRef = useRef(false);
   dirtyRef.current = isDirty;
 
   const draftDocument = state.status === 'ready' ? state.document : null;
+  const selectedStepId = selectedStep?.id ?? null;
   const duplicateHarness: ChainHarness =
     duplicateHarnessChoice ??
     (draftDocument?.harness === 'opencode' ? 'copilot' : 'opencode');
+
+  useEffect(() => {
+    setDraftStatus({ dirty: isDirty, saving });
+    return () => setDraftStatus({ dirty: false, saving: false });
+  }, [isDirty, saving, setDraftStatus]);
 
   useEffect(() => {
     if (draftDocument !== null) {
@@ -140,9 +149,18 @@ export function ChainBuilderPage({
   const handleAddAsStep = useCallback(
     (skill: SkillEntry) => {
       addStep({ name: skill.name });
+      setEditorOpen(true);
       setEditorFocusRequest((current) => current + 1);
     },
     [addStep],
+  );
+
+  const handleSelectStep = useCallback(
+    (stepId: string) => {
+      selectStep(stepId);
+      setEditorOpen(true);
+    },
+    [selectStep],
   );
 
   const handleStepChange = useCallback(
@@ -182,6 +200,33 @@ export function ChainBuilderPage({
       leaveHeading.current?.focus();
     }
   }, [pendingNavigation]);
+
+  useEffect(() => {
+    const dialog = stepEditorDialog.current;
+    if (dialog === null) {
+      return;
+    }
+    if (!editorOpen || selectedStepId === null) {
+      if (dialog.open) {
+        dialog.close();
+      }
+      if (editorOpen) {
+        setEditorOpen(false);
+      }
+      return;
+    }
+    if (!dialog.open) {
+      dialog.showModal();
+    }
+    if (editorFocusRequest > lastFocusedEditorRequest.current) {
+      lastFocusedEditorRequest.current = editorFocusRequest;
+      dialog
+        .querySelector<HTMLTextAreaElement>('[data-testid="step-instruction"]')
+        ?.focus();
+    } else {
+      dialog.querySelector('h2')?.focus();
+    }
+  }, [editorFocusRequest, editorOpen, selectedStepId]);
 
   useEffect(() => {
     if (!isDirty) {
@@ -458,7 +503,11 @@ export function ChainBuilderPage({
   })();
 
   return (
-    <section aria-labelledby="chain-builder-title" data-testid="chain-builder-page">
+    <section
+      className="chain-builder-page"
+      aria-labelledby="chain-builder-title"
+      data-testid="chain-builder-page"
+    >
       <p className="breadcrumb">
         <Link to={`/projects/${projectId}`}>← Project</Link>
       </p>
@@ -466,7 +515,7 @@ export function ChainBuilderPage({
       <header className="builder-header">
         <div className="builder-header__identity">
           <h1 className="panel__title" id="chain-builder-title">
-            Chain authoring
+            Workflow designer
           </h1>
           <p className="lede">
             Assemble an ordered recipe from skills and instructions. Skill Loom guarantees
@@ -666,9 +715,12 @@ export function ChainBuilderPage({
               Harness and duplicate settings
             </summary>
             <div className="builder-meta__body">
-            <h2 className="section-title builder-meta__title" id="builder-meta-title">
-              Builder
-            </h2>
+            <div className="builder-meta__heading">
+              <h2 className="section-title builder-meta__title" id="builder-meta-title">
+                Builder settings
+              </h2>
+              <HelpPopover topic="builderSettings" />
+            </div>
             <p className="builder-meta__name" data-testid="builder-chain-name">
               {draftDocument.name}
             </p>
@@ -860,75 +912,79 @@ export function ChainBuilderPage({
           </section>
 
           <nav className="builder-section-nav" aria-label="Chain editor sections">
+            <a href="#builder-skills">Skills</a>
             <a href="#builder-steps">Steps</a>
-            <a href="#builder-editor">Step editor</a>
-            <a href="#builder-skills">Add a skill</a>
             <a href="#builder-inputs">Inputs</a>
           </nav>
 
           <div className="chain-builder" data-testid="chain-builder">
-            <div className="chain-builder__column chain-builder__steps">
-              <div className="chain-builder__add-step" id="builder-steps" tabIndex={-1}>
-                <button
-                  type="button"
-                  className="button button--secondary"
-                  disabled={state.status !== 'ready'}
-                  data-testid="chain-add-instruction"
-                  onClick={() => {
-                    addInstruction();
-                    setEditorFocusRequest((current) => current + 1);
-                  }}
-                >
-                  Add instruction
-                </button>
-                <span className="field__hint">or choose a skill below</span>
-              </div>
+            <div
+              className="chain-builder__column chain-builder__skills chain-builder__catalog"
+              id="builder-skills"
+              tabIndex={-1}
+              data-testid="builder-skills-column"
+            >
+              <SkillCatalog
+                projectId={projectId}
+                context="builder"
+                initialHarness={draftDocument.harness}
+                onAddAsStep={handleAddAsStep}
+                onCatalogChange={handleCatalogChange}
+              />
+            </div>
+
+            <div
+              className="chain-builder__column chain-builder__steps"
+              id="builder-steps"
+              tabIndex={-1}
+              data-testid="builder-steps-column"
+            >
               <StepList
                 steps={draftDocument.steps}
-                selectedStepId={selectedStep?.id ?? null}
+                selectedStepId={selectedStepId}
                 invalidStepIds={validation.invalidStepIds}
                 stepIssueLabels={stepIssueLabels}
-                onSelect={selectStep}
+                onAddInstruction={() => {
+                  addInstruction();
+                  setEditorOpen(true);
+                  setEditorFocusRequest((current) => current + 1);
+                }}
+                onSelect={handleSelectStep}
                 onMove={moveStep}
                 onRemove={removeStep}
                 onReorder={reorderStep}
               />
-              <div className="chain-builder__catalog" id="builder-skills" tabIndex={-1}>
-                <SkillCatalog
-                  projectId={projectId}
-                  context="builder"
-                  initialHarness={draftDocument.harness}
-                  onAddAsStep={handleAddAsStep}
-                  onCatalogChange={handleCatalogChange}
-                />
-              </div>
-            </div>
-
-            <div
-              className="chain-builder__column chain-builder__editor"
-              id="builder-editor"
-              tabIndex={-1}
-            >
-              <StepEditor
-                step={selectedStep}
-                position={position === 0 ? null : position}
-                totalSteps={draftDocument.steps.length}
-                skillOptions={skillOptions}
-                focusRequest={editorFocusRequest}
-                placeholderIssues={placeholderIssuesFor(
-                  validation.issues,
-                  selectedStep?.id ?? null,
-                )}
-                onChange={handleStepChange}
-              />
-              {selectedStep === null ? null : (
-                <p className="field__hint builder-editor-note">
-                  Editing {stepDisplayName(selectedStep)}. Selection never reorders the
-                  chain; use Move up and Move down in the list.
-                </p>
-              )}
             </div>
           </div>
+
+          <dialog
+            ref={stepEditorDialog}
+            className="step-editor-dialog"
+            aria-label="Step editor"
+            data-testid="step-editor-dialog"
+            onClose={() => setEditorOpen(false)}
+          >
+            <div className="step-editor-dialog__actions">
+              <button
+                type="button"
+                className="button button--secondary"
+                onClick={() => stepEditorDialog.current?.close()}
+              >
+                Done editing
+              </button>
+            </div>
+            <StepEditor
+              step={selectedStep}
+              position={position === 0 ? null : position}
+              totalSteps={draftDocument.steps.length}
+              skillOptions={skillOptions}
+              placeholderIssues={placeholderIssuesFor(
+                validation.issues,
+                selectedStepId,
+              )}
+              onChange={handleStepChange}
+            />
+          </dialog>
 
           <section
             className="builder-inputs"

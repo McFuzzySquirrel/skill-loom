@@ -3,6 +3,7 @@ import type { ApiClientError } from '../api/client';
 import type { RecentProject } from '../api/projects';
 import type { RecentProjectsState } from '../hooks/useRecentProjects';
 import { InlineError } from './InlineError';
+import { HelpPopover } from './HelpPopover';
 
 export interface RecentProjectsProps {
   state: RecentProjectsState;
@@ -74,9 +75,12 @@ export function RecentProjects({
 
   return (
     <section className="panel project-recent" aria-labelledby="recent-projects-title">
-      <h2 className="section-title" id="recent-projects-title" ref={heading} tabIndex={-1}>
-        Recent projects
-      </h2>
+      <div className="page-title-row">
+        <h2 className="section-title" id="recent-projects-title" ref={heading} tabIndex={-1}>
+          Recent projects
+        </h2>
+        <HelpPopover topic="recentProjects" />
+      </div>
 
       {state.status === 'loading' ? (
         <p className="state-note">

@@ -13,6 +13,7 @@ import {
 } from '../api/preflight';
 import { runsApi, type RunsApi } from '../api/runs';
 import { InlineError } from '../components/InlineError';
+import { HelpPopover } from '../components/HelpPopover';
 import { InputsForm, validateRequiredInputs } from '../components/InputsForm';
 import { PreflightReport } from '../components/PreflightReport';
 import { useStatusAnnouncer } from '../components/StatusRegion';
@@ -440,6 +441,7 @@ export function RunStartPage({
                 <h2 className="section-title preflight-section-title" id="chain-summary-title">
                   Chain summary
                 </h2>
+                <HelpPopover topic="runStart" />
                 <p className="chain-summary__name" data-testid="chain-summary-name">
                   {chain.name}
                 </p>
@@ -495,6 +497,7 @@ export function RunStartPage({
               <legend className="section-title preflight-section-title" id="run-mode-title">
                 Run mode
               </legend>
+              <HelpPopover topic="runMode" />
               <div className="preflight-mode__options">
                 <div className="checkbox-field">
                   <input
@@ -533,9 +536,12 @@ export function RunStartPage({
 
           <section className="preflight-run" aria-labelledby="preflight-run-title">
             <div className="preflight-run__heading">
-              <h2 className="section-title preflight-section-title" id="preflight-run-title">
-                Preflight
-              </h2>
+              <div className="page-title-row">
+                <h2 className="section-title preflight-section-title" id="preflight-run-title">
+                  Preflight
+                </h2>
+                <HelpPopover topic="preflight" />
+              </div>
               <p className="field__hint" id={inputHintId}>
                 Required inputs block Start even before preflight. Preflight re-checks skills,
                 the CLI, authentication, trust, permissions, and git state.

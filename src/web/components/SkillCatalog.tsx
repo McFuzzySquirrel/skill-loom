@@ -12,6 +12,7 @@ import { InlineError } from './InlineError';
 import { SkillDetail } from './SkillDetail';
 import { SkillSourceBadge, SOURCE_LABELS } from './SkillSourceBadge';
 import { ExtraDirectoriesDialog } from './ExtraDirectoriesDialog';
+import { HelpPopover } from './HelpPopover';
 
 export interface SkillCatalogProps {
   projectId: string;
@@ -37,10 +38,11 @@ function harnessDescription(harness: CatalogHarness): string {
 /**
  * Skill catalog panel (CAT-FR-05).
  *
- * Entries are grouped by server-reported source, duplicate names stay separate,
- * search filters on name and description after a 150 ms debounce, and warnings
- * render above results instead of replacing them. The panel never invents a
- * summary and never renders harness text as HTML.
+ * Entries are grouped by source, with each Loom extra directory shown in its
+ * own collapsed group. Duplicate names stay separate, search filters on name
+ * and description after a 150 ms debounce, and warnings render above results
+ * instead of replacing them. The panel never invents a summary and never
+ * renders harness text as HTML.
  */
 export function SkillCatalog({
   projectId,
@@ -64,7 +66,10 @@ export function SkillCatalog({
       ...(api === undefined ? {} : { api }),
     });
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [collapsedSources, setCollapsedSources] = useState<Set<SkillSource>>(
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [expandedExtraGroups, setExpandedExtraGroups] = useState<Set<string>>(
     () => new Set(),
   );
   const [collapsed, setCollapsed] = useState(!initiallyExpanded);
@@ -85,6 +90,7 @@ export function SkillCatalog({
   };
 
   const data = state.data;
+  const displayedGroups = data === null ? [] : displayGroups(data.groups);
 
   useEffect(() => {
     if (onCatalogChange === undefined || state.status !== 'ready' || data === null) {
@@ -97,9 +103,12 @@ export function SkillCatalog({
     <section className="catalog" aria-labelledby={titleId} data-testid="skill-catalog">
       <div className="catalog__heading">
         <div>
+          <div className="catalog__title-row">
           <h2 className="section-title catalog__title" id={titleId}>
             Skill catalog
           </h2>
+          <HelpPopover topic="skills" />
+          </div>
           <p className="field__hint">
             Descriptions come from each SKILL.md frontmatter. Skill Loom never adds a model
             summary or recommendation.
@@ -137,8 +146,8 @@ export function SkillCatalog({
       {collapsed && data !== null ? (
         <p className="catalog__summary" data-testid="catalog-collapsed-summary">
           <span aria-hidden="true">●</span> {String(data.total)} skill
-          {data.total === 1 ? '' : 's'} in {String(data.groups.length)} source
-          {data.groups.length === 1 ? '' : 's'} · expand to search and inspect
+          {data.total === 1 ? '' : 's'} in {String(displayedGroups.length)} source
+          {displayedGroups.length === 1 ? '' : 's'} · expand to search and inspect
         </p>
       ) : null}
 
@@ -229,8 +238,8 @@ export function SkillCatalog({
 
           <p className="catalog__summary" data-testid="catalog-summary">
             <span aria-hidden="true">●</span> {String(data.total)} skill
-            {data.total === 1 ? '' : 's'} in {String(data.groups.length)} source
-            {data.groups.length === 1 ? '' : 's'} · scanned in {String(data.elapsedMs)} ms
+            {data.total === 1 ? '' : 's'} in {String(displayedGroups.length)} source
+            {displayedGroups.length === 1 ? '' : 's'} · scanned in {String(data.elapsedMs)} ms
           </p>
 
           {data.warnings.length > 0 ? (
@@ -280,44 +289,60 @@ export function SkillCatalog({
             </div>
           ) : null}
 
-          {data.groups.map((group) => {
-            const groupTitleId = `${baseId}-group-${group.source}`;
-            const groupListId = `${baseId}-group-list-${group.source}`;
-            const groupCollapsed = collapsedSources.has(group.source);
+          {displayedGroups.map((group, index) => {
+            const groupTitleId = `${baseId}-group-${index}`;
+            const groupListId = `${baseId}-group-list-${index}`;
+            const groupCollapsed =
+              group.source === 'loom-extra'
+                ? !expandedExtraGroups.has(group.key)
+                : collapsedGroups.has(group.key);
+            const groupLabel =
+              group.sourceDirectory === undefined
+                ? `${SOURCE_LABELS[group.source]} skills`
+                : `${SOURCE_LABELS[group.source]} skills from ${group.sourceDirectory}`;
             return (
               <section
                 className="catalog-group"
-                key={group.source}
+                key={group.key}
                 aria-labelledby={groupTitleId}
                 data-testid="catalog-group"
                 data-source={group.source}
+                {...(group.sourceDirectory === undefined
+                  ? {}
+                  : { 'data-source-directory': group.sourceDirectory })}
               >
                 <h3 className="catalog-group__header" id={groupTitleId}>
                   <SkillSourceBadge source={group.source} />
                   <span className="catalog-group__label">
-                    {SOURCE_LABELS[group.source]} skills
+                    {groupLabel}
                   </span>
                   <span className="catalog-group__count">
-                    {String(group.count)} skill{group.count === 1 ? '' : 's'}
+                    {String(group.entries.length)} skill{group.entries.length === 1 ? '' : 's'}
                   </span>
                   <button
                     type="button"
                     className="catalog-group__toggle"
-                    aria-label={`${groupCollapsed ? 'Expand' : 'Collapse'} ${SOURCE_LABELS[group.source]} skills`}
+                    aria-label={`${groupCollapsed ? 'Expand' : 'Collapse'} ${groupLabel}`}
                     aria-expanded={!groupCollapsed}
                     aria-controls={groupListId}
-                    onClick={() =>
-                      setCollapsedSources((current) => {
-                        const next = new Set(current);
-                        if (next.has(group.source)) {
-                          next.delete(group.source);
-                        } else {
-                          next.add(group.source);
-                        }
-                        return next;
-                      })
-                    }
-                    data-testid={`catalog-group-toggle-${group.source}`}
+                    onClick={() => {
+                      if (group.source === 'loom-extra') {
+                        setExpandedExtraGroups((current) => {
+                          const next = new Set(current);
+                          if (next.has(group.key)) next.delete(group.key);
+                          else next.add(group.key);
+                          return next;
+                        });
+                      } else {
+                        setCollapsedGroups((current) => {
+                          const next = new Set(current);
+                          if (next.has(group.key)) next.delete(group.key);
+                          else next.add(group.key);
+                          return next;
+                        });
+                      }
+                    }}
+                    data-testid={`catalog-group-toggle-${group.source}-${String(index)}`}
                   >
                     <span aria-hidden="true">{groupCollapsed ? '▸' : '▾'}</span>
                     {groupCollapsed ? 'Expand' : 'Collapse'}
@@ -414,6 +439,48 @@ export function SkillCatalog({
       </div>
     </section>
   );
+}
+
+interface DisplayGroup {
+  key: string;
+  source: SkillSource;
+  sourceDirectory?: string;
+  entries: SkillEntry[];
+}
+
+function displayGroups(
+  groups: Array<{ source: SkillSource; entries: SkillEntry[] }>,
+): DisplayGroup[] {
+  const result: DisplayGroup[] = [];
+  for (const group of groups) {
+    if (group.source !== 'loom-extra') {
+      result.push({
+        key: group.source,
+        source: group.source,
+        entries: group.entries,
+      });
+      continue;
+    }
+
+    const directories = new Map<string, SkillEntry[]>();
+    for (const entry of group.entries) {
+      const directory = entry.sourceDirectory ?? '';
+      const entries = directories.get(directory) ?? [];
+      entries.push(entry);
+      directories.set(directory, entries);
+    }
+    for (const [sourceDirectory, entries] of [...directories].sort(([a], [b]) =>
+      a.localeCompare(b),
+    )) {
+      result.push({
+        key: `loom-extra:${sourceDirectory}`,
+        source: 'loom-extra',
+        ...(sourceDirectory === '' ? {} : { sourceDirectory }),
+        entries,
+      });
+    }
+  }
+  return result;
 }
 
 function WarningRow({ warning }: { warning: CatalogWarning }) {

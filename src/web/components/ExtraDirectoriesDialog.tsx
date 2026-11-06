@@ -12,6 +12,7 @@ import { useExtraDirectories } from '../hooks/useCatalog';
 import { isAbsolutePath } from '../../shared/paths';
 import { useStatusAnnouncer } from './StatusRegion';
 import { InlineError } from './InlineError';
+import { HelpPopover } from './HelpPopover';
 
 export interface ExtraDirectoriesDialogProps {
   onClose: () => void;
@@ -136,6 +137,7 @@ export function ExtraDirectoriesDialog({
         <h3 className="catalog-settings__title" id={titleId} ref={heading} tabIndex={-1}>
           Extra skill directories
         </h3>
+        <HelpPopover topic="projectSkills" />
         <button
           type="button"
           className="button button--secondary button--small"

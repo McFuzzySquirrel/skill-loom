@@ -6,6 +6,7 @@ import { useGlobalChains } from '../hooks/useGlobalChains';
 import { CHAIN_HARNESS_LABELS, CHAIN_SESSION_MODE_LABELS } from '../hooks/useChains';
 import { InlineError } from './InlineError';
 import { useStatusAnnouncer } from './StatusRegion';
+import { HelpPopover } from './HelpPopover';
 
 export interface ImportChainDialogProps {
   projectId: string;
@@ -69,6 +70,7 @@ export function ImportChainDialog({
         <h3 className="new-chain__title" id={titleId} ref={heading} tabIndex={-1}>
           Import a chain template
         </h3>
+        <HelpPopover topic="projectChains" />
         <button
           type="button"
           className="button button--secondary button--small"

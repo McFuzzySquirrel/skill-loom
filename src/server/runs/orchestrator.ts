@@ -24,6 +24,7 @@ import {
   createRunRecord,
   isActiveRunStatus,
   isFinalRunStatus,
+  markRunInterrupted,
   toTimestamp,
   trimTail,
   truncateReason,
@@ -374,6 +375,7 @@ class RunOrchestratorService implements RunOrchestrator {
   private readonly subscribers = new Map<string, Set<Subscription>>();
   private readonly persistQueues = new Map<string, Promise<void>>();
   private readonly reconnectBufferSize: number;
+  private shuttingDown = false;
   private registryPromise: Promise<HarnessRegistry> | null = null;
   private enginePromise: Promise<PreflightEngine> | null = null;
 
@@ -392,6 +394,7 @@ class RunOrchestratorService implements RunOrchestrator {
   }
 
   async createRun(request: CreateRunRequest): Promise<Run> {
+    this.assertRunning();
     const projectPath = await this.resolveProjectPath(request.projectId);
     const chain = await this.options.chainService.get(projectPath, request.chainId);
 
@@ -504,6 +507,7 @@ class RunOrchestratorService implements RunOrchestrator {
   }
 
   async applyAction(runId: string, request: RunActionRequest): Promise<RunActionResult> {
+    this.assertRunning();
     const action = assertActionName(request.action);
     const located = await this.locateRun(runId);
 
@@ -712,16 +716,46 @@ class RunOrchestratorService implements RunOrchestrator {
   }
 
   async shutdown(): Promise<void> {
-    for (const runId of [...this.liveRuns.keys()]) {
-      this.finalizeRun(runId);
+    this.shuttingDown = true;
+    const entries = [...this.liveRuns.entries()];
+    const failures: unknown[] = [];
+
+    for (const [runId, entry] of entries) {
+      this.finalized.add(runId);
+      this.liveRuns.delete(runId);
+      this.subscribers.delete(runId);
+
+      try {
+        await entry.runner.shutdown();
+        this.options.terminalManager.closeSession(entry.terminalId);
+        await this.awaitPersistQueue(runId);
+        const latest = await entry.store.read(runId);
+        if (isActiveRunStatus(latest.status)) {
+          const interrupted = markRunInterrupted(
+            latest,
+            this.timestamp(),
+            'SERVER_SHUTDOWN',
+          );
+          await entry.store.update(interrupted);
+          await entry.store.releaseActiveRun(runId);
+        }
+      } catch (error) {
+        failures.push(error);
+      }
     }
-    await Promise.all([...this.persistQueues.values()]);
+
+    await Promise.all(this.persistQueues.values());
     this.liveRuns.clear();
     this.subscribers.clear();
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'One or more active runs could not be shut down cleanly.');
+    }
   }
 
   private async startRun(run: Run, projectPath: string): Promise<Run> {
+    this.assertRunning();
     const registry = await this.harnessRegistry();
+    this.assertRunning();
     const adapter = registry.get(run.harness);
     const store = this.storeFor(projectPath);
     const terminalId = runTerminalIdFor(run.id);
@@ -963,6 +997,15 @@ class RunOrchestratorService implements RunOrchestrator {
     const pending = this.persistQueues.get(runId);
     if (pending !== undefined) {
       await pending;
+    }
+  }
+
+  private assertRunning(): void {
+    if (this.shuttingDown) {
+      throw new RunOrchestratorError(
+        RUN_ORCHESTRATOR_ERROR_CODES.NOT_LIVE,
+        'The server is shutting down and cannot start or change runs.',
+      );
     }
   }
 

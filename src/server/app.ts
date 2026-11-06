@@ -26,6 +26,7 @@ import type {
 } from './preflight/auth.js';
 import type { PreflightEngine } from './preflight/engine.js';
 import type { TrustSessionService } from './preflight/trust-session.js';
+import { ServerLifecycle } from './lifecycle.js';
 import type { GitInitRunner } from './projects/registry.js';
 import type { AutomaticSpawner } from './runs/automatic.js';
 import type {
@@ -150,6 +151,8 @@ export interface BuildAppOptions {
   runCreateAutomaticSpawner?: (context: RunAutomaticSpawnerContext) => AutomaticSpawner;
   /** Automatic step timeout forwarded to the default run orchestrator. */
   runStepTimeoutMs?: number;
+  /** Additional loopback-only browser origins, used by a development proxy. */
+  allowedWebOrigins?: readonly string[];
 }
 
 /** Strip IPv6 brackets and compare case-insensitively. */
@@ -278,11 +281,26 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     logger: options.logger ?? false,
   });
 
+  const lifecycle = new ServerLifecycle();
   const terminalManager = options.terminalManager ?? createTerminalManager();
 
   app.decorate('loomSettings', { host, port });
   app.decorate('loomVersion', options.version ?? LOOM_VERSION);
   app.decorate('loomTerminalManager', terminalManager);
+  app.decorate('loomLifecycle', lifecycle);
+
+  app.addHook('onRequest', (request, reply, done) => {
+    if (
+      lifecycle.state === 'running' ||
+      request.url.split('?', 1)[0] === '/api/server/lifecycle'
+    ) {
+      done();
+      return;
+    }
+    void reply.code(503).send(
+      createApiErrorEnvelope('SERVER_STOPPING', 'Skill Loom is shutting down and no longer accepts requests.'),
+    );
+  });
 
   await app.register(fastifyWebsocket);
 
@@ -369,7 +387,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(routes, {
     configStore: options.configStore ?? createConfigStore({ env }),
     version: options.version ?? LOOM_VERSION,
+    host,
     port,
+    lifecycle,
+    allowedOrigins: options.allowedWebOrigins ?? [
+      'http://127.0.0.1:5173',
+      'http://localhost:5173',
+    ],
     terminalManager,
     ...(options.getActiveRun === undefined ? {} : { getActiveRun: options.getActiveRun }),
     ...(options.projectGitInit === undefined ? {} : { gitInit: options.projectGitInit }),
@@ -430,5 +454,6 @@ declare module 'fastify' {
     loomSettings: ServerSettings;
     loomVersion: string;
     loomTerminalManager: TerminalManager;
+    loomLifecycle: ServerLifecycle;
   }
 }

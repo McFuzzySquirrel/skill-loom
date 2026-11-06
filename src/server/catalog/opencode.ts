@@ -55,6 +55,7 @@ export interface OpenCodeScanOptions {
 interface ScanRoot {
   source: SkillSource;
   path: string;
+  canonicalPath?: string;
   /**
    * True for the two documented native roots. A missing native root is a
    * normal empty source; a missing configured extra directory is a warning.
@@ -210,7 +211,7 @@ async function scanRoot(
     return;
   }
 
-  await walkDirectory(canonicalRoot, root, 0, maxDepth, entries, warnings);
+  await walkDirectory(canonicalRoot, { ...root, canonicalPath: canonicalRoot }, 0, maxDepth, entries, warnings);
 }
 
 async function walkDirectory(
@@ -365,6 +366,9 @@ async function readSkillPackage(
     description,
     path: canonicalFile,
     packagePath,
+    ...(root.source === 'loom-extra' && root.canonicalPath !== undefined
+      ? { sourceDirectory: root.canonicalPath }
+      : {}),
     enabled: true,
   };
 }

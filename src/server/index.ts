@@ -95,15 +95,54 @@ export async function startServer(options: BuildAppOptions = {}): Promise<Starte
     throw error;
   }
 
-  const removeSignalHandlers = installShutdownHandlers(app);
+  let removeSignalHandlers: () => void = () => undefined;
+  let supervisorExitIntent: 'stop' | 'restart' = 'stop';
+  const handleSupervisorMessage = (message: unknown): void => {
+    if (
+      typeof message === 'object' &&
+      message !== null &&
+      'type' in message &&
+      message.type === 'loom:prepare-restart'
+    ) {
+      supervisorExitIntent = 'restart';
+      process.send?.({ type: 'loom:restart-ready' });
+    }
+  };
+  if (process.env.LOOM_DEV_SUPERVISOR === '1') {
+    process.on('message', handleSupervisorMessage);
+  }
+  app.loomLifecycle.setShutdownHandler(async () => {
+    removeSignalHandlers();
+    await app.close();
+    if (
+      process.env.LOOM_DEV_SUPERVISOR === '1' &&
+      process.send !== undefined &&
+      process.connected
+    ) {
+      await new Promise<void>((resolveSend, rejectSend) => {
+        process.send?.(
+          { type: 'loom:server-stopped', intent: supervisorExitIntent },
+          (error) => {
+            if (error !== null) {
+              rejectSend(error);
+              return;
+            }
+            process.removeListener('message', handleSupervisorMessage);
+            process.disconnect();
+            resolveSend();
+          },
+        );
+      });
+    }
+  });
+  removeSignalHandlers = installShutdownHandlers({
+    close: () => app.loomLifecycle.stop(),
+  });
 
   return {
     app,
     settings,
-    async stop(): Promise<void> {
-      removeSignalHandlers();
-      await app.close();
-    },
+    stop: () => app.loomLifecycle.stop(),
   };
 }
 

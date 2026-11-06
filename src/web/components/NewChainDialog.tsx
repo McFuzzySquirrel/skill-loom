@@ -15,6 +15,7 @@ import {
 import { CHAIN_HARNESS_LABELS } from '../hooks/useChains';
 import { useRouter } from '../router';
 import { useStatusAnnouncer } from './StatusRegion';
+import { HelpPopover } from './HelpPopover';
 
 export interface NewChainDialogProps {
   projectId: string;
@@ -99,6 +100,7 @@ export function NewChainDialog({ projectId, onClose }: NewChainDialogProps) {
         <h3 className="new-chain__title" id={titleId} ref={heading} tabIndex={-1}>
           New chain
         </h3>
+        <HelpPopover topic="builder" />
         <button
           type="button"
           className="button button--secondary button--small"

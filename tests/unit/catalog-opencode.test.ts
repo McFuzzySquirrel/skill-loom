@@ -122,6 +122,7 @@ describe('OpenCode skill discovery', () => {
     expect(byName.get('gamma-skill')).toMatchObject({
       source: 'loom-extra',
       path: await realpath(extraFile),
+      sourceDirectory: await realpath(extra),
     });
 
     for (const entry of result.entries) {
