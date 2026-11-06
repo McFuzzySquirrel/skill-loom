@@ -7,6 +7,7 @@ import { build } from 'vite';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const source = join(root, '.github', 'skills', 'loom-run-bundle');
+const mirroredSource = join(root, 'skill', 'loom-run-bundle');
 const output = join(root, 'dist', 'skills', 'loom-run-bundle');
 const archive = join(root, 'dist', 'skills', 'loom-run-bundle.zip');
 const fixedTime = new Date('2000-01-01T00:00:00.000Z');
@@ -16,6 +17,16 @@ await rm(archive, { force: true });
 await mkdir(join(output, 'scripts'), { recursive: true });
 await build({ configFile: join(root, 'vite.portable.config.ts'), root });
 await rename(join(output, 'scripts', 'loom-bundle.js'), join(output, 'scripts', 'loom-bundle.mjs'));
+await mkdir(join(source, 'scripts'), { recursive: true });
+await mkdir(join(mirroredSource, 'scripts'), { recursive: true });
+await cp(
+  join(output, 'scripts', 'loom-bundle.mjs'),
+  join(source, 'scripts', 'loom-bundle.mjs'),
+);
+await cp(
+  join(output, 'scripts', 'loom-bundle.mjs'),
+  join(mirroredSource, 'scripts', 'loom-bundle.mjs'),
+);
 await cp(join(source, 'SKILL.md'), join(output, 'SKILL.md'));
 await cp(join(source, 'THIRD_PARTY_NOTICES.md'), join(output, 'THIRD_PARTY_NOTICES.md'));
 await cp(join(source, 'references'), join(output, 'references'), { recursive: true });
