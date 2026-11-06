@@ -61,7 +61,7 @@ Copying a scenario creates only an ordinary independent project chain; it does n
 
 ### Design and save a chain
 
-The **Workflow designer** keeps the skill catalog, ordered steps, and selected-step editor in separate panes on wider screens. The layout adapts to two panes and then a single column on smaller screens; chain inputs remain below the design area.
+The **Workflow designer** places the skill catalog and ordered steps side by side on wider screens, with chain inputs below the design area. Select a step to open its editor in a dialog; choose **Done editing** or press Escape to close it. On smaller screens the catalog and steps stack in one column.
 
 1. Choose a project to provide a skill catalog and workspace for authoring. Create a chain and choose one harness. A chain is bound to that harness; per-step harness selection is not supported.
 2. Add at least one step. Choose a catalog skill with **Add as step**, or use **Add instruction** for a standalone agent prompt without an installed skill. Both require a non-whitespace instruction and support an optional label.

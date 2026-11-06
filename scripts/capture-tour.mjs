@@ -342,6 +342,8 @@ async function openBuilder(page, baseURL, project, chain) {
   await page.getByRole('heading', { level: 1, name: 'Workflow designer' }).waitFor();
   await page.getByTestId('step-list-count').waitFor();
   await page.getByTestId('chain-draft-check').waitFor();
+  await page.getByTestId('step-row').first().getByTestId('step-select').click();
+  await page.getByRole('dialog', { name: 'Step editor' }).waitFor();
 }
 
 async function openPreflight(page, baseURL, project, chain) {
@@ -552,7 +554,7 @@ async function main() {
 
     await openBuilder(page, baseURL, atlas, chain);
     await page.setViewportSize(designerViewport);
-    await capturePng(page, '03-workflow-designer.png');
+    await capturePng(page, '03-workflow-designer.png', false);
     await page.setViewportSize(pngViewport);
 
     await openPreflight(page, baseURL, atlas, chain);

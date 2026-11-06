@@ -20,9 +20,9 @@ Project chains and skills have separate destinations. The Skills view makes harn
 
 ## Workflow designer
 
-![Three-pane workflow designer with skills, ordered steps, and the step editor](assets/tour/03-workflow-designer.png)
+![Workflow designer with the skill catalog, ordered steps, and the selected-step editor dialog](assets/tour/03-workflow-designer.png)
 
-The wide-screen designer keeps the skill catalog, ordered steps, and selected-step editor together. Steps keep their visible order as prompt order, named inputs use `{{name}}` placeholders, and the session mode is chosen before an optional local test.
+The wide-screen designer gives the skill catalog and ordered steps the main workspace. Selecting a step opens its editor in a dialog, which closes with **Done editing** or Escape. Steps keep their visible order as prompt order, named inputs use `{{name}}` placeholders, and the session mode is chosen before an optional local test.
 
 ## Preflight
 

@@ -30,6 +30,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Changed
 
+- The workflow designer now gives the skill catalog and ordered steps a two-column layout on wider screens and opens selected-step editing in a dialog.
 - OpenCode discovery includes the shared `.agents/skills/` directory while retaining legacy `.opencode/skills/` discovery. Copilot discovery remains CLI-authoritative.
 - Bundle export prefers one enabled project-local package over same-named personal or extra-directory packages, while rejecting distinct project duplicates and other ambiguous sources.
 - README, user, administrator, and release documentation now distinguish supported behavior, limitations, and unpublished status.
