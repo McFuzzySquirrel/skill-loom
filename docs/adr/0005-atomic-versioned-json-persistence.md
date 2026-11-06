@@ -6,6 +6,7 @@ applies_to:
   - "src/server/chains/store.ts"
   - "src/server/chains/library.ts"
   - "src/server/runs/store.ts"
+  - "src/portable/runtime.ts"
 status: Accepted
 ---
 
@@ -19,14 +20,15 @@ status: Accepted
 ## Agent Rules
 
 - **MUST:** Write JSON through a temporary file in the same directory, flush it, then rename it over the target.
+- **MUST:** Attempt to flush the containing directory after rename, but tolerate documented unsupported-directory-fsync errors, including `EPERM`; propagate other errors.
 - **MUST:** Include an explicit integer `version` in every persisted config, chain, and run document and reject an unknown version with a typed error.
 - **MUST:** Serialize read-modify-write cycles for the same target within the server process.
 - **MUST NOT:** Delete, rewrite, or silently reset a corrupt record; report it and leave the original bytes intact so the user can inspect or remove it deliberately.
 
 ## Verify
 
-- **Check:** `npx vitest run tests/unit/config.test.ts tests/unit/chain-store.test.ts tests/unit/run-store.test.ts`
-- **Expected:** All suites pass, including atomic-write failure, concurrent update, corrupt-file, and unsupported-version cases. A failed write must leave the previous target contents unchanged.
+- **Check:** `npx vitest run tests/unit/config.test.ts tests/unit/chain-store.test.ts tests/unit/run-store.test.ts tests/unit/portable-runtime.test.ts`
+- **Expected:** The storage suites pass, including atomic-write failure, concurrent update, corrupt-file, and unsupported-version cases. Portable state writes must also complete when directory fsync returns a documented unsupported-operation error. A failed write must leave the previous target contents unchanged.
 
 ## Context and Problem Statement
 
@@ -80,6 +82,6 @@ Chosen option: "Versioned JSON with same-directory temporary-file rename and typ
 
 ## Links
 
-- Implemented by `atomicWriteJson` in `src/server/config/store.ts`, reused by chain and run stores.
+- Implemented by `atomicWriteJson` in `src/server/config/store.ts`, reused by chain and run stores, and by the portable helper's atomic writer in `src/portable/runtime.ts`.
 - Schemas: `src/server/config/schema.ts`, `src/server/chains/model.ts`, `src/server/runs/model.ts`.
 - Related: [ADR-0004](0004-frozen-run-snapshots-and-bounded-tails.md) and [ADR-0010](0010-global-chain-library-snapshots.md).

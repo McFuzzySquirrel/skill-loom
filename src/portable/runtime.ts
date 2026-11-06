@@ -376,11 +376,26 @@ async function atomicWrite(target: string, value: unknown, exclusive = false): P
     } else {
       await rename(temporary, target);
     }
-    const directory = await open(dirname(target), constants.O_RDONLY);
-    try { await directory.sync(); } finally { await directory.close(); }
+    await syncDirectory(dirname(target));
   } catch (error) {
     await rm(temporary, { force: true });
     throw error;
+  }
+}
+
+async function syncDirectory(path: string): Promise<void> {
+  const directory = await open(path, constants.O_RDONLY);
+  try {
+    try {
+      await directory.sync();
+    } catch (error) {
+      if (!isErrno(error, 'EINVAL') && !isErrno(error, 'EISDIR') &&
+        !isErrno(error, 'EPERM') && !isErrno(error, 'ENOTSUP')) {
+        throw error;
+      }
+    }
+  } finally {
+    await directory.close();
   }
 }
 

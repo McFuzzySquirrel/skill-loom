@@ -38,6 +38,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 - Chain bundle export no longer rejects a valid project package merely because another enabled package with the same name exists outside the project.
 - Missing, disabled, ambiguous, and unavailable bundle sources now have distinct actionable diagnostics.
+- Portable run-state writes now succeed on platforms such as Windows that reject directory fsync after an atomic replacement.
 
 ### Security
 
