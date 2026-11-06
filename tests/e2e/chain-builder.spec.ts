@@ -139,6 +139,7 @@ async function addSkillAsStep(
   skillName: string,
   expectedCount: number,
 ): Promise<string> {
+  await closeStepEditor(page);
   const search = page.getByTestId('catalog-search');
   await search.fill(skillName);
 
@@ -162,6 +163,14 @@ async function addSkillAsStep(
   return stepId ?? '';
 }
 
+async function closeStepEditor(page: Page): Promise<void> {
+  const dialog = page.getByTestId('step-editor-dialog');
+  if (await dialog.isVisible()) {
+    await dialog.getByRole('button', { name: 'Done editing' }).click();
+  }
+  await expect(dialog).toBeHidden();
+}
+
 test.describe('Chain builder', () => {
   test('adds instruction steps without skills, edits, orders, saves, and reloads them', async ({
     page, request,
@@ -176,12 +185,15 @@ test.describe('Chain builder', () => {
     await page.getByTestId('step-instruction').fill('Inspect the project and summarize its purpose.');
     await page.getByTestId('step-label').fill('Inspect project');
     const firstId = await page.getByTestId('step-id').textContent();
+    await closeStepEditor(page);
     await page.getByTestId('chain-add-instruction').click();
     await page.getByTestId('step-instruction').fill('Write an implementation checklist.');
     await page.getByTestId('step-label').fill('Checklist');
     const secondId = await page.getByTestId('step-id').textContent();
+    await closeStepEditor(page);
     await stepRows(page).last().getByRole('button', { name: /Move up Checklist, step 2/ }).click();
     await expect(stepRows(page).first()).toContainText('Checklist');
+    await closeStepEditor(page);
     await page.getByTestId('chain-save').click();
     await expect(page).not.toHaveURL(/\/chains\/new/);
     await page.reload();
@@ -205,10 +217,10 @@ test.describe('Chain builder', () => {
         getComputedStyle(element).gridTemplateColumns.split(' ').filter(Boolean).length,
       );
 
-    await expect.poll(columnCount).toBe(3);
+    await expect.poll(columnCount).toBe(2);
     await expect(page.getByTestId('builder-skills-column')).toBeVisible();
     await expect(page.getByTestId('builder-steps-column')).toBeVisible();
-    await expect(page.getByTestId('builder-editor-column')).toBeVisible();
+    await expect(page.getByTestId('step-editor-dialog')).toBeHidden();
 
     await page.setViewportSize({ width: 1024, height: 900 });
     await expect.poll(columnCount).toBe(2);
@@ -226,7 +238,7 @@ test.describe('Chain builder', () => {
     await gotoNewBuilder(page, project.id, `Builder add ${runSuffix}`);
 
     await expect(page.getByTestId('step-list-empty')).toBeVisible();
-    await expect(page.getByTestId('step-editor-empty')).toBeVisible();
+    await expect(page.getByTestId('step-editor-dialog')).toBeHidden();
 
     const firstId = await addSkillAsStep(page, 'deploy-helper', 1);
     expect(firstId).toMatch(/^step-/);
@@ -252,6 +264,7 @@ test.describe('Chain builder', () => {
 
     // Selecting an earlier row opens that step in the editor and keeps the
     // unsaved instruction and label.
+    await closeStepEditor(page);
     await stepRows(page)
       .first()
       .getByRole('button', { name: /Select step 1:/ })
@@ -263,6 +276,7 @@ test.describe('Chain builder', () => {
     await expect(page.getByTestId('step-label')).toHaveValue('Deploy release');
 
     // Catalog search filters the builder panel without touching the steps.
+    await closeStepEditor(page);
     await page.getByTestId('catalog-search').fill('deploy');
     await expect(
       page.locator('[data-testid="skill-row"][data-name="deploy-helper"]'),
@@ -304,6 +318,7 @@ test.describe('Chain builder', () => {
     await expect(save).toBeEnabled();
     await expect(page.getByTestId('step-needs-instruction')).toHaveCount(0);
 
+    await closeStepEditor(page);
     await save.click();
     await expect(page).toHaveURL(
       new RegExp(`/projects/${escapeRegExp(project.id)}/chains/(?!new)[^/]+$`),
@@ -313,6 +328,7 @@ test.describe('Chain builder', () => {
       'All changes saved',
     );
 
+    await stepRows(page).first().getByTestId('step-select').click();
     await instruction.fill('   ');
     await expect(page.getByTestId('step-instruction-error')).toBeVisible();
     await expect(save).toBeDisabled();
@@ -357,17 +373,23 @@ test.describe('Chain builder', () => {
     await expect(stepRows(page)).toHaveCount(2);
     expect(await orderedSkillNames(page)).toEqual(['deploy-helper', 'review-helper']);
 
-    // The first step opens in the editor with its saved content intact.
+    // The selected step opens in the editor dialog with its saved content intact.
+    await rowForSkill(page, 'deploy-helper').getByTestId('step-select').click();
+    const editorDialog = page.getByRole('dialog', { name: 'Step editor' });
+    await expect(editorDialog).toBeVisible();
+    await expect(editorDialog.getByRole('heading', { name: 'Step editor' })).toBeFocused();
     await expect(page.getByTestId('step-id')).toHaveText('step-a');
     await expect(page.getByTestId('step-instruction')).toHaveValue(
       'Saved deploy instruction.',
     );
     await expect(page.getByTestId('step-label')).toHaveValue('Saved deploy');
 
+    await closeStepEditor(page);
     await rowForSkill(page, 'review-helper').getByTestId('step-move-up').click();
     await expect
       .poll(() => orderedSkillNames(page))
       .toEqual(['review-helper', 'deploy-helper']);
+    await rowForSkill(page, 'deploy-helper').getByTestId('step-select').click();
     await expect(page.getByTestId('step-id')).toHaveText('step-a');
   });
 
@@ -382,12 +404,14 @@ test.describe('Chain builder', () => {
     const secondId = await addSkillAsStep(page, 'review-helper', 2);
     const thirdId = await addSkillAsStep(page, 'write-docs', 3);
 
+    await closeStepEditor(page);
     await stepRows(page)
       .nth(1)
       .getByRole('button', { name: /Select step 2:/ })
       .click();
     await expect(page.getByTestId('step-id')).toHaveText(secondId);
 
+    await closeStepEditor(page);
     await stepRows(page)
       .nth(1)
       .getByRole('button', { name: /Remove step 2:/ })
@@ -404,10 +428,11 @@ test.describe('Chain builder', () => {
     ).toHaveCount(0);
 
     // The neighbor becomes selected and keeps keyboard focus in the list.
-    await expect(page.getByTestId('step-id')).toHaveText(thirdId);
     await expect(
       page.getByTestId('step-row').nth(1).getByTestId('step-select'),
     ).toBeFocused();
+    await page.getByTestId('step-row').nth(1).getByTestId('step-select').click();
+    await expect(page.getByTestId('step-id')).toHaveText(thirdId);
   });
 
   test('drag-and-drop and Move up/Move down produce the same order and keep unsaved text', async ({
@@ -422,12 +447,14 @@ test.describe('Chain builder', () => {
     await addSkillAsStep(page, 'write-docs', 3);
 
     // Type into the middle step, then drag the first step onto the last one.
+    await closeStepEditor(page);
     await stepRows(page)
       .nth(1)
       .getByRole('button', { name: /Select step 2:/ })
       .click();
     await page.getByTestId('step-instruction').fill('Preserve this unsaved instruction.');
 
+    await closeStepEditor(page);
     await rowForSkill(page, 'write-docs').scrollIntoViewIfNeeded();
     await rowForSkill(page, 'deploy-helper').dragTo(rowForSkill(page, 'write-docs'));
     await expect
@@ -445,11 +472,13 @@ test.describe('Chain builder', () => {
     const dragOrder = await orderedSkillNames(page);
 
     // Repeat from a clean draft using only the keyboard alternative.
+    await closeStepEditor(page);
     await gotoNewBuilder(page, project.id, `Builder keyboard ${runSuffix}`);
     await addSkillAsStep(page, 'deploy-helper', 1);
     await addSkillAsStep(page, 'review-helper', 2);
     await addSkillAsStep(page, 'write-docs', 3);
 
+    await closeStepEditor(page);
     const moveReviewUp = rowForSkill(page, 'review-helper').getByTestId('step-move-up');
     await moveReviewUp.focus();
     await page.keyboard.press('Enter');

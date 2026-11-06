@@ -136,6 +136,7 @@ async function addSkillAsStep(
   skillName: string,
   expectedCount: number,
 ): Promise<void> {
+  await closeStepEditor(page);
   const search = page.getByTestId('catalog-search');
   await search.fill(skillName);
 
@@ -161,6 +162,7 @@ async function addInput(
     defaultValue?: string;
   },
 ): Promise<void> {
+  await closeStepEditor(page);
   await page.getByTestId('input-add-name').fill(input.name);
   if (input.label !== undefined) {
     await page.getByTestId('input-add-label').fill(input.label);
@@ -173,6 +175,19 @@ async function addInput(
   }
   await page.getByTestId('input-add-submit').click();
   await expect(inputRow(page, input.name)).toBeVisible();
+}
+
+async function closeStepEditor(page: Page): Promise<void> {
+  const dialog = page.getByTestId('step-editor-dialog');
+  if (await dialog.isVisible()) {
+    await dialog.getByRole('button', { name: 'Done editing' }).click();
+  }
+  await expect(dialog).toBeHidden();
+}
+
+async function openFirstStepEditor(page: Page): Promise<void> {
+  await stepRows(page).first().getByTestId('step-select').click();
+  await expect(page.getByTestId('step-editor-dialog')).toBeVisible();
 }
 
 function chainIdFromUrl(value: string): string {
@@ -208,10 +223,12 @@ test.describe('Chain inputs and save', () => {
       defaultValue: 'staging',
     });
 
+    await openFirstStepEditor(page);
     await expect(page.getByTestId('builder-input-count')).toHaveText('2 inputs');
     await expect(page.getByTestId('inputs-count')).toHaveText('2 inputs');
 
     // Inline edits update the draft without touching instruction text.
+    await closeStepEditor(page);
     const taskRow = inputRow(page, 'task');
     await expect(taskRow.getByTestId('input-label')).toHaveValue('Task description');
     await expect(taskRow.getByTestId('input-required')).toBeChecked();
@@ -222,6 +239,7 @@ test.describe('Chain inputs and save', () => {
     );
 
     // Removing an input reports every instruction that references it first.
+    await closeStepEditor(page);
     await inputRow(page, 'target_env').getByTestId('input-remove').click();
     const removalReport = page.getByTestId('input-reconciliation');
     await expect(removalReport).toBeVisible();
@@ -238,10 +256,12 @@ test.describe('Chain inputs and save', () => {
     await removalReport.getByTestId('input-remove-confirm').click();
     await expect(inputRow(page, 'target_env')).toHaveCount(0);
     await expect(page.getByTestId('builder-input-count')).toHaveText('1 input');
+    await openFirstStepEditor(page);
     await expect(page.getByTestId('step-instruction')).not.toHaveValue(
       /target_env/,
     );
     await expect(page.getByTestId('step-instruction')).toHaveValue(/\{\{task\}\}/);
+    await closeStepEditor(page);
 
     // Renaming reports the affected step before rewriting its placeholder.
     await inputRow(page, 'task').getByTestId('input-rename').click();
@@ -257,11 +277,13 @@ test.describe('Chain inputs and save', () => {
     await expect(renameSteps.first()).toContainText('{{task}}');
 
     await renameReport.getByTestId('input-rename-apply').click();
+    await openFirstStepEditor(page);
     await expect(inputRow(page, 'request_title')).toBeVisible();
     await expect(inputRow(page, 'task')).toHaveCount(0);
     await expect(page.getByTestId('step-instruction')).toHaveValue(
       /\{\{request_title\}\}/,
     );
+    await closeStepEditor(page);
     await expect(page.getByTestId('input-label')).toHaveValue('Task to perform');
     await expect(page.getByTestId('input-required')).toBeChecked();
     await expect(page.getByTestId('input-default')).toHaveValue('Release notes');
@@ -301,6 +323,7 @@ test.describe('Chain inputs and save', () => {
 
     await addInput(page, { name: 'missing_value', label: 'Missing value' });
 
+    await openFirstStepEditor(page);
     await expect(page.getByTestId('placeholder-issue')).toHaveCount(0);
     await expect(page.getByTestId('chain-issues-none')).toBeVisible();
     await expect(save).toBeEnabled();
@@ -378,6 +401,7 @@ test.describe('Chain inputs and save', () => {
     );
     await expect(page.getByTestId('builder-step-count')).toHaveText('1 step');
     await expect(page.getByTestId('builder-input-count')).toHaveText('2 inputs');
+    await openFirstStepEditor(page);
     await expect(page.getByTestId('step-instruction')).toHaveValue(
       'Deploy {{release}} for {{ticket}} using the checklist.',
     );
@@ -421,6 +445,7 @@ test.describe('Chain inputs and save', () => {
 
     await addSkillAsStep(page, 'deploy-helper', 1);
     await page.getByTestId('step-instruction').fill('Deploy the release.');
+    await closeStepEditor(page);
 
     const dirtyUrl = page.url();
     const projectBreadcrumb = page.getByRole('link', { name: '← Project' });
@@ -521,6 +546,7 @@ test.describe('Chain inputs and save', () => {
     );
     await expect(page.getByTestId('builder-harness-select')).toHaveValue('copilot');
     await expect(page.getByTestId('builder-harness-select')).toBeDisabled();
+    await openFirstStepEditor(page);
     await expect(page.getByTestId('step-instruction')).toHaveValue(
       'Deploy {{release}} to the target environment.',
     );

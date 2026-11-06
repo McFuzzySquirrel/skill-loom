@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useId } from 'react';
 import type { ChainStep } from '../api/chains';
 import { HelpPopover } from './HelpPopover';
 
@@ -8,11 +8,6 @@ export interface StepEditorProps {
   totalSteps: number;
   /** Skill names discovered in the chain's catalog, plus the current skill. */
   skillOptions: string[];
-  /**
-   * Increment to move focus into the instruction field. The builder raises it
-   * after Add as step so the keyboard path lands where work is needed.
-   */
-  focusRequest?: number;
   /** Placeholder problems for this step, already naming the input. */
   placeholderIssues?: string[];
   onChange: (
@@ -33,7 +28,6 @@ export function StepEditor({
   position,
   totalSteps,
   skillOptions,
-  focusRequest,
   placeholderIssues = [],
   onChange,
 }: StepEditorProps) {
@@ -45,19 +39,11 @@ export function StepEditor({
   const instructionErrorId = `${baseId}-instruction-error`;
   const labelId = `${baseId}-label`;
   const labelHelpId = `${baseId}-label-help`;
-  const instructionRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (focusRequest !== undefined && focusRequest > 0) {
-      instructionRef.current?.focus();
-    }
-  }, [focusRequest]);
-
   if (step === null) {
     return (
       <section className="builder-panel step-editor" aria-labelledby={titleId}>
         <div className="builder-panel__heading">
-          <h2 className="section-title builder-panel__title" id={titleId}>
+          <h2 className="section-title builder-panel__title" id={titleId} tabIndex={-1}>
             Step editor
           </h2>
           <HelpPopover topic="stepEditor" />
@@ -84,7 +70,7 @@ export function StepEditor({
       data-testid="step-editor"
     >
       <div className="builder-panel__heading">
-        <h2 className="section-title builder-panel__title" id={titleId}>
+        <h2 className="section-title builder-panel__title" id={titleId} tabIndex={-1}>
           Step editor
         </h2>
         <div className="builder-panel__heading-actions">
@@ -136,7 +122,6 @@ export function StepEditor({
         <textarea
           className="input step-editor__instruction"
           id={instructionId}
-          ref={instructionRef}
           value={step.instruction}
           onChange={(event) => onChange({ instruction: event.target.value })}
           rows={7}

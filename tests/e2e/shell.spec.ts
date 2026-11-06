@@ -282,7 +282,7 @@ test.describe('Skill Loom shell', () => {
     );
   });
 
-  test('keeps the three designer panels aligned with Add instruction inside Steps', async ({ page }) => {
+  test('keeps catalog and steps aligned and opens the step editor as a dialog', async ({ page }) => {
     await page.setViewportSize({ width: 1720, height: 1100 });
     await mockEmptyCatalog(page);
     await page.goto('/projects/demo-project/chains/new');
@@ -294,14 +294,18 @@ test.describe('Skill Loom shell', () => {
     const boxes = await Promise.all([
       page.getByTestId('skill-catalog').boundingBox(),
       stepsPanel.boundingBox(),
-      page.locator('.step-editor').boundingBox(),
     ]);
     expect(boxes.every((box) => box !== null)).toBe(true);
     const topEdges = boxes.map((box) => box?.y ?? 0);
     expect(Math.max(...topEdges) - Math.min(...topEdges)).toBeLessThanOrEqual(1);
+    await expect(page.getByTestId('step-editor-dialog')).toBeHidden();
 
     await stepsPanel.getByTestId('chain-add-instruction').click();
     await expect(page.getByTestId('step-instruction')).toBeFocused();
+    await expect(page.getByRole('dialog', { name: 'Step editor' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('step-editor-dialog')).toBeHidden();
+    await expect(stepsPanel.getByTestId('chain-add-instruction')).toBeFocused();
   });
 
   test('requires explicit draft-discard consent and verifies server shutdown', async ({ page }) => {
@@ -357,6 +361,9 @@ test.describe('Skill Loom shell', () => {
     await page.getByTestId('chain-add-instruction').click();
     const instruction = page.getByTestId('step-instruction');
     await instruction.fill('Keep this draft unless I confirm discard.');
+    await page.getByRole('dialog', { name: 'Step editor' })
+      .getByRole('button', { name: 'Done editing' })
+      .click();
     await page.getByRole('button', { name: 'Stop server' }).first().click();
 
     const dialog = page.getByRole('dialog', { name: 'Stop Skill Loom server' });
