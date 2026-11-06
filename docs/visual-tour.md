@@ -18,11 +18,11 @@ Register an existing folder or create a new one. The recent-project list never d
 
 Project chains and skills have separate destinations. The Skills view makes harness selection, search, and source-grouped results easy to reach. It reads `SKILL.md` metadata and shows exactly what it finds; it never adds a model summary. Project path and Git details are available on demand under **Project details**.
 
-## Chain builder
+## Workflow designer
 
-![Chain builder with four ordered steps and one input](assets/tour/03-chain-builder.png)
+![Three-pane workflow designer with skills, ordered steps, and the step editor](assets/tour/03-workflow-designer.png)
 
-A chain is bound to one harness. Steps keep their visible order as prompt order, named inputs use `{{name}}` placeholders, and the session mode is chosen before the run starts.
+The wide-screen designer keeps the skill catalog, ordered steps, and selected-step editor together. Steps keep their visible order as prompt order, named inputs use `{{name}}` placeholders, and the session mode is chosen before an optional local test.
 
 ## Preflight
 

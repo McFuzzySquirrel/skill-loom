@@ -36,6 +36,7 @@ const gifPath = join(repoRoot, 'docs', 'assets', 'skill-loom-tour.gif');
 const skipBuild = process.argv.includes('--skip-build');
 const pngViewport = { width: 1440, height: 900 };
 const gifViewport = { width: 960, height: 600 };
+const designerViewport = { width: 1680, height: 1050 };
 const frameDelayMs = 1_300;
 
 const SKILLS = [
@@ -338,7 +339,7 @@ async function openWorkspace(page, baseURL, project) {
 
 async function openBuilder(page, baseURL, project, chain) {
   await goto(page, baseURL, `/projects/${project.id}/chains/${chain.id}`);
-  await page.getByRole('heading', { level: 1, name: 'Chain authoring' }).waitFor();
+  await page.getByRole('heading', { level: 1, name: 'Workflow designer' }).waitFor();
   await page.getByTestId('step-list-count').waitFor();
   await page.getByTestId('chain-draft-check').waitFor();
 }
@@ -550,7 +551,9 @@ async function main() {
     await capturePng(page, '02-project-workspace.png');
 
     await openBuilder(page, baseURL, atlas, chain);
-    await capturePng(page, '03-chain-builder.png');
+    await page.setViewportSize(designerViewport);
+    await capturePng(page, '03-workflow-designer.png');
+    await page.setViewportSize(pngViewport);
 
     await openPreflight(page, baseURL, atlas, chain);
     await capturePng(page, '04-preflight.png');
