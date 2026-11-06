@@ -313,7 +313,6 @@ export function createTerminalSession(
         cwd: validated.cwd,
         cols: validated.cols,
         rows: validated.rows,
-        encoding: 'utf8',
         env: {
           ...process.env,
           TERM: validated.name,
