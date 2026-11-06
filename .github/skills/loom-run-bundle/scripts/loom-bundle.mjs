@@ -8722,18 +8722,24 @@ async function Sp(e, n, i = !1) {
 		} finally {
 			await r.close();
 		}
-		i ? (await u(a, e), await ee(a)) : await _(a, e);
-		let o = await p(t(e), c.O_RDONLY);
-		try {
-			await o.sync();
-		} finally {
-			await o.close();
-		}
+		i ? (await u(a, e), await ee(a)) : await _(a, e), await Cp(t(e));
 	} catch (e) {
 		throw await v(a, { force: !0 }), e;
 	}
 }
-async function Cp(e, t) {
+async function Cp(e) {
+	let t = await p(e, c.O_RDONLY);
+	try {
+		try {
+			await t.sync();
+		} catch (e) {
+			if (!gp(e, "EINVAL") && !gp(e, "EISDIR") && !gp(e, "EPERM") && !gp(e, "ENOTSUP")) throw e;
+		}
+	} finally {
+		await t.close();
+	}
+}
+async function wp(e, t) {
 	let n = r(e, ".lock"), i;
 	try {
 		i = await p(n, c.O_WRONLY | c.O_CREAT | c.O_EXCL | c.O_NOFOLLOW, 384);
@@ -8746,7 +8752,7 @@ async function Cp(e, t) {
 		await i.close(), await v(n, { force: !0 });
 	}
 }
-async function wp(e, t) {
+async function Tp(e, t) {
 	let n = await d(e);
 	(!n.isFile() || n.isSymbolicLink() || n.size > 31457280) && Q("RUN_FILE_INVALID", "The portable run record is unsafe or exceeds its size limit.");
 	let r = lp.safeParse(JSON.parse(await m(e, "utf8")));
@@ -8754,23 +8760,23 @@ async function wp(e, t) {
 	let i = ep(r.data.bundle);
 	return (up(JSON.stringify(i)) !== r.data.bundleFingerprint || i.chain.steps.length !== r.data.steps.length || i.chain.steps.some((e, t) => r.data.steps[t]?.id !== e.id)) && Q("RUN_FILE_INVALID", "The portable run snapshot does not match its stored fingerprint or step list."), r.data;
 }
-async function Tp(e, t) {
+async function Ep(e, t) {
 	for (let n of e.installedSkills) {
 		let e = r(t, ".agents", "skills", n.directory), i = await d(e);
 		(!i.isDirectory() || i.isSymbolicLink() || await yp(e) !== n.fingerprint) && Q("PACKAGE_CHANGED", `Installed skill "${n.name}" changed since this run was prepared; review it and prepare a new run.`);
 	}
 }
-function Ep(e, t) {
+function Dp(e, t) {
 	return op.test(t) || Q("RUN_ID_INVALID", "The run id is not safe."), r(e, `${t}.json`);
 }
-async function Dp(e) {
+async function Op(e) {
 	return e === void 0 ? {} : ((typeof e != "object" || !e || Array.isArray(e)) && Q("REQUEST_INVALID", "The request must be a JSON object."), e);
 }
-async function Op(e, t, n = !1) {
+async function kp(e, t, n = !1) {
 	let r = lp.safeParse(t);
-	r.success || Q("RUN_STATE_INVALID", "The portable run transition would produce invalid state."), Buffer.byteLength(JSON.stringify(r.data), "utf8") > 31457280 && Q("RUN_TOO_LARGE", "The portable run record exceeds the 30 MiB safety limit."), await Sp(Ep(e, t.id), r.data, n);
+	r.success || Q("RUN_STATE_INVALID", "The portable run transition would produce invalid state."), Buffer.byteLength(JSON.stringify(r.data), "utf8") > 31457280 && Q("RUN_TOO_LARGE", "The portable run record exceeds the 30 MiB safety limit."), await Sp(Dp(e, t.id), r.data, n);
 }
-async function kp(e) {
+async function Ap(e) {
 	if (e.command === "inspect") {
 		e.bundlePath && n(e.bundlePath) || Q("BUNDLE_PATH_INVALID", "Provide an absolute bundle file path.");
 		let t = await d(e.bundlePath);
@@ -8810,7 +8816,7 @@ async function kp(e) {
 		};
 	}
 	e.projectPath && n(e.projectPath) || Q("PROJECT_INVALID", "Provide an absolute project path.");
-	let t = await _p(e.projectPath), i = await Dp(e.input);
+	let t = await _p(e.projectPath), i = await Op(e.input);
 	if (e.command === "prepare") {
 		e.bundlePath && n(e.bundlePath) || Q("BUNDLE_PATH_INVALID", "Provide an absolute bundle file path."), i.installConfirmed !== !0 && Q("INSTALL_CONFIRMATION_REQUIRED", "Review and explicitly confirm package installation first.");
 		let r = await d(e.bundlePath);
@@ -8832,7 +8838,7 @@ async function kp(e) {
 		let _ = i.reuseSkills === void 0 ? [] : i.reuseSkills;
 		(!Array.isArray(_) || _.some((e) => typeof e != "string")) && Q("REUSE_INVALID", "Reuse choices must be a list of skill names.");
 		let y = await xp(t);
-		return Cp(y, async () => {
+		return wp(y, async () => {
 			let { installedSkills: e, createdDirectories: n } = await bp(a, t, _, i.differingReuseConfirmed === !0), r = $(), d = s(), p = {
 				version: tp,
 				id: d,
@@ -8859,7 +8865,7 @@ async function kp(e) {
 				updatedAt: r
 			};
 			try {
-				await Op(y, p, !0);
+				await kp(y, p, !0);
 			} catch (e) {
 				throw await Promise.all(n.map((e) => v(e, {
 					recursive: !0,
@@ -8877,7 +8883,7 @@ async function kp(e) {
 	}
 	let a = await xp(t);
 	e.runId || Q("RUN_ID_INVALID", "Provide a run id.");
-	let o = Ep(a, e.runId), c = await wp(o, t);
+	let o = Dp(a, e.runId), c = await Tp(o, t);
 	if (e.command === "status") return {
 		ok: !0,
 		run: {
@@ -8898,9 +8904,9 @@ async function kp(e) {
 			updatedAt: c.updatedAt
 		}
 	};
-	if (e.command === "step") return Cp(a, async () => {
-		let e = await wp(o, t);
-		i.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), (e.status !== "ready" || e.resumeRequired) && Q("RUN_NOT_READY", "The run is not ready to start another step."), await Tp(e, t), e.progression === "supervised" && i.confirmed !== !0 && Q("STEP_CONFIRMATION_REQUIRED", "Confirm this step before execution.");
+	if (e.command === "step") return wp(a, async () => {
+		let e = await Tp(o, t);
+		i.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), (e.status !== "ready" || e.resumeRequired) && Q("RUN_NOT_READY", "The run is not ready to start another step."), await Ep(e, t), e.progression === "supervised" && i.confirmed !== !0 && Q("STEP_CONFIRMATION_REQUIRED", "Confirm this step before execution.");
 		let n = e.bundle.chain.steps[e.currentStepIndex], s = e.steps[e.currentStepIndex];
 		n && s || Q("RUN_STATE_INVALID", "The current step is missing."), s.attempts.length >= ap && Q("ATTEMPTS_EXHAUSTED", `A step can have at most ${String(ap)} attempts.`), s.attempts.at(-1)?.status === "running" && Q("STEP_ALREADY_RUNNING", "The current step already has an unresolved attempt.");
 		let c = {
@@ -8911,7 +8917,7 @@ async function kp(e) {
 			summary: null,
 			reason: null
 		};
-		s.attempts.push(c), e.status = "running", e.revision += 1, e.updatedAt = $(), await Op(a, e);
+		s.attempts.push(c), e.status = "running", e.revision += 1, e.updatedAt = $(), await kp(a, e);
 		let l = mp(e.bundle, e.currentStepIndex, e.resolvedInputs), u = null;
 		if (e.bundle.chain.sessionMode === "fork" && e.sessionDecision.mechanism === "handoff" && e.currentStepIndex > 0) {
 			let t = e.bundle.chain.steps[e.currentStepIndex - 1], n = e.steps[e.currentStepIndex - 1]?.attempts.at(-1), r = mp(e.bundle, e.currentStepIndex - 1, e.resolvedInputs);
@@ -8944,9 +8950,9 @@ async function kp(e) {
 			sessionDecision: e.sessionDecision
 		};
 	});
-	if (e.command === "record") return Cp(a, async () => {
-		let e = await wp(o, t);
-		if (i.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), i.action === "pause" || i.action === "abort") return e.status !== "ready" && e.status !== "paused" && Q("RUN_ACTION_INVALID", "Pause or abort is only available between steps."), e.status = i.action === "pause" ? "paused" : "aborted", e.revision += 1, e.updatedAt = $(), await Op(a, e), {
+	if (e.command === "record") return wp(a, async () => {
+		let e = await Tp(o, t);
+		if (i.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), i.action === "pause" || i.action === "abort") return e.status !== "ready" && e.status !== "paused" && Q("RUN_ACTION_INVALID", "Pause or abort is only available between steps."), e.status = i.action === "pause" ? "paused" : "aborted", e.revision += 1, e.updatedAt = $(), await kp(a, e), {
 			ok: !0,
 			runId: e.id,
 			revision: e.revision,
@@ -8954,7 +8960,7 @@ async function kp(e) {
 		};
 		if (i.action === "retry") {
 			let t = e.steps[e.currentStepIndex]?.attempts.at(-1);
-			return (e.status !== "paused" || t?.status !== "failed") && Q("RETRY_NOT_AVAILABLE", "Retry is available only for the current failed step."), e.status = "ready", e.revision += 1, e.updatedAt = $(), await Op(a, e), {
+			return (e.status !== "paused" || t?.status !== "failed") && Q("RETRY_NOT_AVAILABLE", "Retry is available only for the current failed step."), e.status = "ready", e.revision += 1, e.updatedAt = $(), await kp(a, e), {
 				ok: !0,
 				runId: e.id,
 				revision: e.revision,
@@ -8970,7 +8976,7 @@ async function kp(e) {
 				finishedAt: $(),
 				summary: null,
 				reason: i.reason.slice(0, 2e3)
-			}), e.currentStepIndex += 1, e.status = e.currentStepIndex >= e.steps.length ? "completed" : "ready", e.revision += 1, e.updatedAt = $(), await Op(a, e), {
+			}), e.currentStepIndex += 1, e.status = e.currentStepIndex >= e.steps.length ? "completed" : "ready", e.revision += 1, e.updatedAt = $(), await kp(a, e), {
 				ok: !0,
 				runId: e.id,
 				revision: e.revision,
@@ -8982,7 +8988,7 @@ async function kp(e) {
 		let s = i.outcome;
 		s !== "done" && s !== "failed" && s !== "skipped" && Q("OUTCOME_INVALID", "Record done, failed, or skipped."), s === "skipped" && (typeof i.reason != "string" || i.reason.trim() === "") && Q("SKIP_REASON_REQUIRED", "Skipping a step requires a reason."), s === "done" && e.progression === "supervised" && i.confirmed !== !0 && Q("COMPLETION_CONFIRMATION_REQUIRED", "Confirm the step outcome before marking it done.");
 		let c = typeof i.summary == "string" ? i.summary : "";
-		return Buffer.byteLength(c, "utf8") > np && Q("SUMMARY_TOO_LARGE", "Step summaries are limited to 8 KiB; do not store a transcript."), r.status = s, r.finishedAt = $(), r.summary = c || null, r.reason = s === "skipped" ? i.reason.slice(0, 2e3) : null, s === "failed" ? e.status = "paused" : (e.currentStepIndex += 1, e.status = e.currentStepIndex >= e.steps.length ? "completed" : "ready"), e.revision += 1, e.updatedAt = $(), await Op(a, e), {
+		return Buffer.byteLength(c, "utf8") > np && Q("SUMMARY_TOO_LARGE", "Step summaries are limited to 8 KiB; do not store a transcript."), r.status = s, r.finishedAt = $(), r.summary = c || null, r.reason = s === "skipped" ? i.reason.slice(0, 2e3) : null, s === "failed" ? e.status = "paused" : (e.currentStepIndex += 1, e.status = e.currentStepIndex >= e.steps.length ? "completed" : "ready"), e.revision += 1, e.updatedAt = $(), await kp(a, e), {
 			ok: !0,
 			runId: e.id,
 			revision: e.revision,
@@ -8990,9 +8996,9 @@ async function kp(e) {
 			currentStepIndex: e.currentStepIndex
 		};
 	});
-	if (e.command === "resume") return Cp(a, async () => {
-		let e = await wp(o, t);
-		if (i.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), e.status === "paused" && !e.resumeRequired && i.decision === "continue") return e.status = "ready", e.revision += 1, e.updatedAt = $(), await Op(a, e), {
+	if (e.command === "resume") return wp(a, async () => {
+		let e = await Tp(o, t);
+		if (i.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), e.status === "paused" && !e.resumeRequired && i.decision === "continue") return e.status = "ready", e.revision += 1, e.updatedAt = $(), await kp(a, e), {
 			ok: !0,
 			runId: e.id,
 			revision: e.revision,
@@ -9000,7 +9006,7 @@ async function kp(e) {
 		};
 		if (e.status === "running") {
 			let t = e.steps[e.currentStepIndex]?.attempts.at(-1);
-			return t?.status !== "running" && Q("RUN_STATE_INVALID", "The active run has no in-flight attempt."), t.status = "interrupted", t.finishedAt = $(), e.status = "interrupted", e.resumeRequired = !0, e.revision += 1, e.updatedAt = $(), await Op(a, e), {
+			return t?.status !== "running" && Q("RUN_STATE_INVALID", "The active run has no in-flight attempt."), t.status = "interrupted", t.finishedAt = $(), e.status = "interrupted", e.resumeRequired = !0, e.revision += 1, e.updatedAt = $(), await kp(a, e), {
 				ok: !0,
 				runId: e.id,
 				revision: e.revision,
@@ -9016,7 +9022,7 @@ async function kp(e) {
 			let t = typeof i.summary == "string" ? i.summary : "";
 			Buffer.byteLength(t, "utf8") > np && Q("SUMMARY_TOO_LARGE", "Step summaries are limited to 8 KiB."), r.status = "done", r.summary = t || null, e.currentStepIndex += 1;
 		} else n === "failed" ? r.status = "failed" : Q("RESUME_DECISION_REQUIRED", "Choose retry, done, or failed for the interrupted attempt.");
-		return e.resumeRequired = !1, e.status = n === "failed" ? "paused" : e.currentStepIndex >= e.steps.length ? "completed" : "ready", e.revision += 1, e.updatedAt = $(), await Op(a, e), {
+		return e.resumeRequired = !1, e.status = n === "failed" ? "paused" : e.currentStepIndex >= e.steps.length ? "completed" : "ready", e.revision += 1, e.updatedAt = $(), await kp(a, e), {
 			ok: !0,
 			runId: e.id,
 			revision: e.revision,
@@ -9026,7 +9032,7 @@ async function kp(e) {
 	Q("COMMAND_INVALID", "Unknown portable run command.");
 }
 // src/portable/cli.ts
-var Ap = [
+var jp = [
 	"inspect",
 	"prepare",
 	"status",
@@ -9034,9 +9040,9 @@ var Ap = [
 	"record",
 	"resume"
 ];
-function jp(e) {
+function Mp(e) {
 	let t = e[0];
-	if (!Ap.includes(t)) throw new Z("USAGE", `Usage: loom-bundle <${Ap.join("|")}> [--bundle PATH] [--project PATH] [--run-id ID]`);
+	if (!jp.includes(t)) throw new Z("USAGE", `Usage: loom-bundle <${jp.join("|")}> [--bundle PATH] [--project PATH] [--run-id ID]`);
 	let n = { command: t };
 	for (let t = 1; t < e.length; t += 1) {
 		let r = e[t];
@@ -9054,12 +9060,12 @@ function jp(e) {
 	].includes(n.command) && n.runId === void 0) throw new Z("USAGE", "This command needs --run-id ID.");
 	return n;
 }
-async function Mp(e = process.argv.slice(2), t = {}) {
+async function Np(e = process.argv.slice(2), t = {}) {
 	let n = t.stdout ?? process.stdout, r = t.stderr ?? process.stderr;
 	try {
-		let r = jp(e), i = r.command === "inspect" ? "" : await Np(t.stdin ?? process.stdin);
+		let r = Mp(e), i = r.command === "inspect" ? "" : await Pp(t.stdin ?? process.stdin);
 		i.trim() !== "" && (r.input = JSON.parse(i));
-		let a = await kp(r);
+		let a = await Ap(r);
 		return n.write(`${JSON.stringify(a)}\n`), 0;
 	} catch (e) {
 		let t = e instanceof Z || e instanceof Kf ? e.code : e instanceof SyntaxError ? "JSON_INVALID" : "REQUEST_FAILED", n = e instanceof Z || e instanceof Kf ? e.message : e instanceof SyntaxError ? "Structured helper input is not valid JSON." : "The portable helper could not complete the request. Check file permissions and retry.";
@@ -9072,7 +9078,7 @@ async function Mp(e = process.argv.slice(2), t = {}) {
 		})}\n`), 1;
 	}
 }
-async function Np(e) {
+async function Pp(e) {
 	if (e === void 0 || "isTTY" in e && e.isTTY === !0) return "";
 	let t = [], n = 0;
 	for await (let r of e) {
@@ -9082,7 +9088,7 @@ async function Np(e) {
 	}
 	return Buffer.concat(t).toString("utf8");
 }
-process.argv[1] !== void 0 && ["loom-bundle.mjs", "cli.js"].includes(e(process.argv[1])) && Mp().then((e) => {
+process.argv[1] !== void 0 && ["loom-bundle.mjs", "cli.js"].includes(e(process.argv[1])) && Np().then((e) => {
 	e !== 0 && (process.exitCode = e);
 });
-export { jp as parsePortableArgs, Mp as runPortableCli };
+export { Mp as parsePortableArgs, Np as runPortableCli };
