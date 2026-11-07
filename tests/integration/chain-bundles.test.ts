@@ -269,7 +269,7 @@ describe('portable chain bundles', () => {
     expect(response.json<{ error: { code: string; message: string } }>().error.message).toContain('not present');
   });
 
-  it('prefers a unique project package over a same-name personal package', async () => {
+  it('imports the unique project package despite a same-name personal package', async () => {
     const personal = join(root, 'home', '.config', 'opencode', 'skills', 'review');
     await mkdir(personal, { recursive: true });
     await writeFile(join(personal, 'SKILL.md'), '---\nname: review\n---\nPersonal copy.\n');
@@ -278,6 +278,19 @@ describe('portable chain bundles', () => {
     expect(response.statusCode, response.body).toBe(200);
     const bundle = response.json<{ bundle: ChainBundle }>().bundle;
     expect(Buffer.from(bundle.skills[0]!.files.find((file) => file.path === 'SKILL.md')!.content, 'base64').toString()).toBe(skillText);
+
+    const preview = await request('preview', bundle);
+    expect(preview.statusCode, preview.body).toBe(200);
+    expect(preview.json<BundlePreview>().skills[0]).toMatchObject({
+      name: 'review',
+      conflict: false,
+      directoryExists: false,
+    });
+
+    const imported = await request('import', bundle, { confirmed: true });
+    expect(imported.statusCode, imported.body).toBe(201);
+    expect(await readFile(join(target, '.agents', 'skills', 'review', 'SKILL.md'), 'utf8'))
+      .toBe(skillText);
   });
 
   it('rejects multiple distinct project packages with an actionable ambiguity error', async () => {

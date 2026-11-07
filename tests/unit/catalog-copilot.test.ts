@@ -196,6 +196,34 @@ describe('Copilot skill discovery', () => {
     }
   });
 
+  it('maps newer personal source labels to the personal catalog source', async () => {
+    const agentsPackage = await writePackage('personal-agents', 'agents-personal-skill');
+    const copilotPackage = await writePackage('personal-copilot', 'copilot-personal-skill');
+    const { run } = fixedRunner(success([
+      {
+        name: 'agents-personal-skill',
+        source: 'personal-agents',
+        path: agentsPackage,
+        enabled: true,
+      },
+      {
+        name: 'copilot-personal-skill',
+        source: 'personal-copilot',
+        path: copilotPackage,
+        enabled: false,
+      },
+    ]));
+
+    const result = await scanCopilotSkills({ projectPath: project, runner: run });
+
+    expect(result.warnings).toEqual([]);
+    expect(namesBySource(result.entries)).toEqual({
+      personal: ['agents-personal-skill', 'copilot-personal-skill'],
+    });
+    expect(result.entries.find((entry) => entry.name === 'copilot-personal-skill')?.enabled)
+      .toBe(false);
+  });
+
   it('keeps valid entries when individual records are malformed', async () => {
     const fallbackPackage = await writePackage('project', 'fallback-name');
     const output = [

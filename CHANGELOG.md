@@ -46,7 +46,9 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 ### Fixed
 
 - Chain bundle export no longer rejects a valid project package merely because another enabled package with the same name exists outside the project.
+- Bundle import no longer treats a same-name personal or remote catalog entry as an installed project conflict when the target package directory is empty.
 - Missing, disabled, ambiguous, and unavailable bundle sources now have distinct actionable diagnostics.
+- Copilot catalog discovery now maps `personal-agents` and `personal-copilot` source labels to `personal` instead of skipping those skills.
 - Portable run-state writes now succeed on platforms such as Windows that reject directory fsync after an atomic replacement.
 
 ### Security

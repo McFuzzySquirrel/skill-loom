@@ -257,7 +257,9 @@ export async function previewBundle(
     bundle,
     skills: await Promise.all(bundle.skills.map(async (skill) => ({
       name: skill.name,
-      conflict: entries.some((entry) => entry.enabled && entry.name === skill.name),
+      conflict: entries.some(
+        (entry) => entry.enabled && entry.source === 'project' && entry.name === skill.name,
+      ),
       directoryExists: await exists(join(projectSkillRootFor(bundle.chain.harness, projectPath), skill.directory)),
       files: skill.files.length,
       bytes: skill.files.reduce((sum, file) => sum + decodeBundleFile(file.content).length, 0),

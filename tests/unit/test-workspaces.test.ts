@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CatalogService } from '../../src/server/catalog/merge.js';
+import type { SkillEntry } from '../../src/server/catalog/types.js';
 import { createConfigStore } from '../../src/server/config/store.js';
 import { createChainService } from '../../src/server/chains/service.js';
 import { createProjectRegistry } from '../../src/server/projects/registry.js';
@@ -69,7 +70,16 @@ async function setup() {
     catalogService,
     now: () => new Date('2026-01-02T03:04:05.000Z'),
   });
-  return { configDirectory, configStore, projectRegistry, source, chain, chainService, service };
+  return {
+    configDirectory,
+    configStore,
+    projectRegistry,
+    source,
+    chain,
+    chainService,
+    catalogService,
+    service,
+  };
 }
 
 describe('managed test workspaces', () => {
@@ -98,6 +108,88 @@ describe('managed test workspaces', () => {
     expect(await readFile(join(source.canonicalPath, '.loom', 'chains', `${chain.id}.json`), 'utf8'))
       .toContain('"name": "Disposable test"');
     expect((await configStore.get()).testWorkspaces).toEqual([]);
+  });
+
+  it('creates a self-contained workspace when a remote catalog skill has the same name', async () => {
+    const { source, chain, chainService, catalogService, service } = await setup();
+    const skillName = 'better-accessibility';
+    const skillText = `---\nname: ${skillName}\ndescription: Accessibility guidance\n---\nUse accessible patterns.\n`;
+    const projectPackage = join(source.canonicalPath, '.agents', 'skills', skillName);
+    const remotePackage = join(root, 'remote', skillName);
+    await mkdir(projectPackage, { recursive: true });
+    await mkdir(remotePackage, { recursive: true });
+    await writeFile(join(projectPackage, 'SKILL.md'), skillText);
+    await writeFile(join(remotePackage, 'SKILL.md'), skillText);
+
+    const projectSkill: SkillEntry = {
+      id: 'copilot-project-better-accessibility',
+      harness: 'copilot',
+      source: 'project',
+      name: skillName,
+      description: 'Accessibility guidance',
+      path: join(projectPackage, 'SKILL.md'),
+      packagePath: projectPackage,
+      enabled: true,
+    };
+    const remoteSkill: SkillEntry = {
+      id: 'copilot-remote-better-accessibility',
+      harness: 'copilot',
+      source: 'remote',
+      name: skillName,
+      description: 'Accessibility guidance',
+      path: join(remotePackage, 'SKILL.md'),
+      packagePath: remotePackage,
+      sourceId: 'remote-source',
+      repository: 'example/skills',
+      revision: 'a'.repeat(40),
+      repositoryPath: `skills/${skillName}`,
+      enabled: true,
+    };
+    catalogService.getCatalog = async ({ projectPath, harness }) => {
+      const entries =
+        projectPath === source.canonicalPath
+          ? [projectSkill, remoteSkill]
+          : [remoteSkill];
+      const bySource = {
+        project: 0,
+        personal: 0,
+        custom: 0,
+        plugin: 0,
+        builtin: 0,
+        'loom-extra': 0,
+        remote: 0,
+      };
+      for (const entry of entries) bySource[entry.source] += 1;
+      const sources = [...new Set(entries.map(({ source: entrySource }) => entrySource))];
+      return {
+        harness,
+        query: '',
+        total: entries.length,
+        counts: { total: entries.length, bySource },
+        groups: sources.map((entrySource) => {
+          const groupEntries = entries.filter(({ source: sourceLabel }) => sourceLabel === entrySource);
+          return { source: entrySource, count: groupEntries.length, entries: groupEntries };
+        }),
+        agents: [],
+        warnings: [],
+        elapsedMs: 0,
+      };
+    };
+    const skillChain = await chainService.update(source.canonicalPath, chain.id, {
+      name: chain.name,
+      harness: 'copilot',
+      sessionMode: chain.sessionMode,
+      steps: [{ id: 'step-1', skillName, instruction: 'Apply the selected skill.' }],
+      inputs: [],
+    });
+
+    const workspace = await service.create({
+      sourceProjectId: source.id,
+      sourceChainId: skillChain.id,
+    });
+
+    expect(await readFile(join(workspace.path, '.agents', 'skills', skillName, 'SKILL.md'), 'utf8'))
+      .toBe(skillText);
   });
 
   it('refuses cleanup while the managed project owns the active run pointer', async () => {

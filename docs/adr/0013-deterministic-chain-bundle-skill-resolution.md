@@ -19,16 +19,19 @@ status: Accepted
 - **MUST:** Prefer one enabled project-local package over enabled non-project packages with the same exact name.
 - **MUST NOT:** Silently select among multiple distinct project packages or, when no project package exists, multiple distinct non-project packages.
 - **MUST:** Deduplicate repeated observations only when they resolve to the same canonical package path; never deduplicate distinct packages by name alone.
+- **MUST:** Treat bundle-import conflicts as project-local package or destination-directory conflicts; a same-name non-project catalog entry does not block installing the exact bundled package into an empty project location.
 - **MUST:** Report missing, disabled, ambiguous, and unavailable package sources as explicit export failures.
 
 ## Verify
 
 - **Check:** `npm test -- tests/integration/chain-bundles.test.ts`
-- **Expected:** A unique project package exports despite same-named non-project copies, repeated observations of one canonical path are treated as one package, and distinct ambiguous sources fail with `BUNDLE_SOURCE_UNAVAILABLE`.
+- **Expected:** A unique project package exports and imports despite same-named non-project copies, repeated observations of one canonical path are treated as one package, and distinct ambiguous sources fail with `BUNDLE_SOURCE_UNAVAILABLE`.
 
 ## Context and Problem Statement
 
 The selected harness catalog may report both a project package and one or more personal or extra-directory packages with the same name. Requiring exactly one catalog entry rejects a usable project package, while choosing the first match or collapsing by name can export an unintended package. Which candidate should a portable chain bundle include?
+
+On import, a non-project package with the same name is not installed in the target project's skill directory. The exact package carried by the bundle can therefore be installed without overwriting anything; the project-local copy takes precedence for the imported chain.
 
 ## Decision Drivers
 
@@ -51,6 +54,7 @@ Chosen option: "Prefer one unique enabled project-local package; otherwise requi
 ### Positive Consequences
 
 - A same-named personal or extra-directory package no longer blocks export of a unique project package.
+- A same-named non-project package does not block importing the exact bundled project package when the target has no project-local package or destination directory.
 - Repeated catalog observations of the same canonical package do not create false ambiguity.
 - Missing, disabled, ambiguous, and unusable sources remain explicit errors with remediation guidance.
 
@@ -58,6 +62,7 @@ Chosen option: "Prefer one unique enabled project-local package; otherwise requi
 
 - Multiple distinct project packages still block export and require the project owner to resolve or rename them.
 - Without a project package, multiple distinct enabled non-project packages remain ambiguous.
+- Importing a bundled project package makes that package take precedence over a same-named personal or remote package for the target project.
 - A package not reported by the selected harness catalog cannot be exported, even if it exists in a directory used by another harness.
 
 ## Pros and Cons of the Options
