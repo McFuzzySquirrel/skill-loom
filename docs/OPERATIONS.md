@@ -97,7 +97,7 @@ Copilot records persistent folder trust in `~/.copilot/config.json` under `trust
 - A missing or unlisted project is **untrusted** and hard-blocks a Copilot run.
 - An unreadable or invalid config is **unknown**; preflight requires an explicit acknowledgement rather than assuming either outcome.
 
-The trust panel can start an interactive trust session in the project directory. Accept the Copilot folder-trust dialog there, then verify trust again; Skill Loom reads the result back from Copilot's config and never writes it. The manual fallback is to run `copilot -C <absolute-project-path>` yourself, accept the trust dialog, exit, and rerun preflight. Preflight resolves trust before step 1 because a prompt queued behind a trust dialog can be swallowed.
+The trust panel can start an interactive trust session in the project directory. In Copilot's folder-trust dialog, choose **Yes, and remember this folder for future sessions**; a session-only choice is not saved and will still be reported as untrusted. Then verify trust again; Skill Loom reads the result back from Copilot's config and never writes it. The manual fallback is to run `copilot -C <absolute-project-path>` yourself, choose the same persistent option, exit, and rerun preflight. Preflight resolves trust before step 1 because a prompt queued behind a trust dialog can be swallowed.
 
 Automatic Copilot mode requires an explicit per-chain opt-in. It is off by default. When enabled, Skill Loom passes the exact broad flags `--allow-all-paths` and `--allow-all-tools` for automatic steps and shows those flags at preflight and on the run; this grants broad filesystem and tool access inside the selected project. Revoke the opt-in on the chain to return to supervised mode. Supervised mode never passes automatic permission flags.
 
@@ -173,7 +173,7 @@ Run `opencode auth login` or `copilot login` in a normal terminal and retry pref
 
 ### Copilot trust block
 
-If preflight says the folder is untrusted, use the trust panel to start the interactive Copilot trust session and accept the dialog, or run `copilot -C <absolute-project-path>` manually and accept it. Then verify trust in the trust panel and rerun preflight. If Copilot's `~/.copilot/config.json` is unreadable or invalid, repair Copilot's own configuration or acknowledge the unknown-trust finding explicitly. Skill Loom never writes this file. A prompt queued during the trust dialog can be swallowed, so resolve trust before step 1.
+If preflight says the folder is untrusted, use the trust panel to start the interactive Copilot trust session and choose **Yes, and remember this folder for future sessions**, or run `copilot -C <absolute-project-path>` manually and choose that persistent option. Session-only trust does not add the folder to `trustedFolders`. Then verify trust in the trust panel and rerun preflight. If Copilot's `~/.copilot/config.json` is unreadable or invalid, repair Copilot's own configuration or acknowledge the unknown-trust finding explicitly. Skill Loom never writes this file. A prompt queued during the trust dialog can be swallowed, so resolve trust before step 1.
 
 ### node-pty build failure
 

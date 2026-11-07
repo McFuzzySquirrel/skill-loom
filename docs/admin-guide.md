@@ -258,7 +258,7 @@ Confirm `command -v opencode` or `command -v copilot` in the environment that la
 
 ### Copilot trust is blocked
 
-Use the trust panel, or run `copilot -C <absolute-project-path>` manually, accept the folder-trust dialog, exit, and rerun preflight. Skill Loom reads `~/.copilot/config.json` and never writes it. Resolve trust before step 1 because a prompt queued behind the dialog can be swallowed.
+Use the trust panel, or run `copilot -C <absolute-project-path>` manually, and choose **Yes, and remember this folder for future sessions** in the folder-trust dialog. A session-only choice does not persist in `trustedFolders`. Exit the terminal and rerun preflight. Skill Loom reads `~/.copilot/config.json` and never writes it. Resolve trust before step 1 because a prompt queued behind the dialog can be swallowed.
 
 ### A run is interrupted or the active pointer is stale
 
@@ -276,7 +276,7 @@ For the full troubleshooting contract, including the dirty Git tree, node-pty, m
 - [ ] `~/.config/loom` is readable only by the intended local user; config writes use restrictive permissions.
 - [ ] No credential, token, API key, or secret is pasted into `config.json`, a chain, a run, or a support report.
 - [ ] Harness CLIs are authenticated in their own stores; Skill Loom reports presence only.
-- [ ] Copilot folder trust is resolved through Copilot's dialog; `~/.copilot/config.json` is not edited by hand unless you are repairing Copilot itself.
+- [ ] Copilot folder trust is persisted through Copilot's **Yes, and remember this folder for future sessions** dialog choice; `~/.copilot/config.json` is not edited by hand unless you are repairing Copilot itself.
 - [ ] The automatic-permission opt-in is enabled only for chains that genuinely need broad filesystem and tool access, and the exact flags are reviewed at preflight.
 - [ ] Run records and backups are treated as sensitive and kept out of version control.
 - [ ] Dependencies are installed from the lockfile and reviewed before upgrading.

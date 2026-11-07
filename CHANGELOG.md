@@ -36,6 +36,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Changed
 
+- Copilot trust guidance now distinguishes persistent folder trust from session-only approval.
 - Persisted chain documents now use version 2 for native-agent selection and migrate valid version 1 chains and frozen run snapshots without changing their behavior.
 - Portable bundle export uses version 2 for chains with a selected native agent, while preserving version 1 for agent-free chains; import is no-overwrite and rollback-safe for both packages and agent definitions.
 - The workflow designer now gives the skill catalog and ordered steps a two-column layout on wider screens and opens selected-step editing in a dialog.

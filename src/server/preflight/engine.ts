@@ -1118,7 +1118,7 @@ function trustCheck(
       status: 'acknowledge',
       message: `Folder trust for ${adapter.displayName} could not be inspected.`,
       remediation:
-        'Open the trust terminal in the project, accept the dialog, then verify trust. If the CLI cannot persist trust, acknowledge the manual fallback.',
+        'Check that Copilot\'s trust config is readable and valid. Skill Loom never writes it. If the folder is not listed, choose "Yes, and remember this folder for future sessions" in Copilot, then verify trust.',
       details: { ...baseDetails, state: 'unknown', acknowledgementKey: key },
       acknowledgementKey: key,
       acknowledged: provided.has(key),
@@ -1145,7 +1145,7 @@ function trustCheck(
       status: 'block',
       message: `The project folder is not trusted by ${adapter.displayName}.`,
       remediation:
-        'Open the trust terminal in the project, accept the folder-trust dialog, then verify trust before starting the run.',
+        'Open the trust terminal in the project, choose "Yes, and remember this folder for future sessions" in Copilot, then verify trust before starting the run. Session-only trust is not saved.',
       details: { ...baseDetails, state: result.state },
     };
   }

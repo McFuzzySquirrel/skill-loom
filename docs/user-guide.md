@@ -272,7 +272,7 @@ Run `opencode auth login` or `copilot login` in a normal terminal, then rerun pr
 
 ### Copilot trust is blocked
 
-Use the trust panel to start the interactive Copilot session, accept the folder-trust dialog, then choose **Verify trust** and rerun preflight. Or run `copilot -C <absolute-project-path>` yourself, accept the dialog, exit, and rerun preflight. Skill Loom reads `~/.copilot/config.json` and never writes it.
+Use the trust panel to start the interactive Copilot session. In the folder-trust dialog, choose **Yes, and remember this folder for future sessions**; a session-only choice is not saved and will still be reported as untrusted. Then choose **Verify trust** and rerun preflight. Or run `copilot -C <absolute-project-path>` yourself, choose the same persistent option, exit, and rerun preflight. Skill Loom reads `~/.copilot/config.json` and never writes it.
 
 ### A run is stuck in automatic mode
 
