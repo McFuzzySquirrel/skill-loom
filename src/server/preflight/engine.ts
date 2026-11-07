@@ -1,7 +1,8 @@
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import type { CatalogService } from '../catalog/merge.js';
-import type { CatalogWarning, SkillEntry } from '../catalog/types.js';
+import { resolveSkillCatalogEntry } from '../catalog/skill-resolution.js';
+import type { CatalogWarning } from '../catalog/types.js';
 import { inspectInstalledNativeAgent } from '../catalog/agent-copy.js';
 import {
   ChainError,
@@ -917,8 +918,17 @@ function evaluateCatalog(
     if (step.kind === 'instruction') {
       continue;
     }
-    const matches = findSkillMatches(entries, step.skillName);
-    const first = matches[0];
+    const resolution = resolveSkillCatalogEntry(entries, {
+      skillName: step.skillName,
+      ...(step.skillBinding === undefined ? {} : { skillBinding: step.skillBinding }),
+    });
+    const first = resolution.status === 'resolved' ? resolution.entry : undefined;
+    const matchCount =
+      resolution.status === 'ambiguous'
+        ? resolution.candidates.length
+        : resolution.status === 'resolved'
+          ? 1
+          : 0;
     const stepLabel = step.label ?? step.skillName;
 
     skills.push({
@@ -930,23 +940,44 @@ function evaluateCatalog(
       entryId: first?.id ?? null,
       source: first?.source ?? null,
       path: first?.path ?? null,
-      matchCount: matches.length,
+      matchCount,
     });
 
     if (first === undefined) {
+      const ambiguous = resolution.status === 'ambiguous';
+      const bindingUnavailable = resolution.status === 'binding-unavailable';
+      const disabled = resolution.status === 'disabled';
+      const message = ambiguous
+        ? `Step ${String(stepIndex + 1)} "${stepLabel}" matches multiple ${resolution.scope === 'project' ? 'project' : 'catalog'} packages named "${step.skillName}". Choose one unambiguous skill package before starting.`
+        : bindingUnavailable
+          ? `The selected remote snapshot for skill "${step.skillName}" is unavailable. Refresh its source or choose another catalog entry.`
+          : disabled
+            ? `Skill "${step.skillName}" is disabled in the ${catalog.harness} catalog. Enable it or choose an available package before starting.`
+            : `Step ${String(stepIndex + 1)} "${stepLabel}" references skill "${step.skillName}", which is not in the ${catalog.harness} catalog.`;
+      const remediation = ambiguous
+        ? 'Select the exact remote snapshot in the catalog, or resolve duplicate project packages before starting.'
+        : bindingUnavailable
+          ? 'Refresh the remote source to restore this snapshot, or edit the step to select an available snapshot.'
+          : disabled
+            ? `Enable the skill for ${catalog.harness}, or edit the step to use an available package.`
+            : `Install or add the "${step.skillName}" skill for ${catalog.harness}, or edit the step to use an available skill.`;
       checks.push({
         id: 'skill',
         key: `skill:${step.id}`,
         severity: 'block',
         status: 'block',
-        message: `Step ${String(stepIndex + 1)} "${stepLabel}" references skill "${step.skillName}", which is not in the ${catalog.harness} catalog.`,
-        remediation: `Install or add the "${step.skillName}" skill for ${catalog.harness}, or edit the step to use an available skill.`,
+        message,
+        remediation,
         details: {
           harness: catalog.harness,
           stepId: step.id,
           stepIndex,
           stepLabel,
           skillName: step.skillName,
+          matchCount,
+          ...(step.skillBinding === undefined
+            ? {}
+            : { skillBinding: step.skillBinding }),
         },
         stepId: step.id,
         stepIndex,
@@ -969,7 +1000,7 @@ function evaluateCatalog(
           entryId: first.id,
           source: first.source,
           path: first.path,
-          matchCount: matches.length,
+          matchCount,
         },
         stepId: step.id,
         stepIndex,
@@ -978,18 +1009,6 @@ function evaluateCatalog(
   }
 
   return { checks, skills, catalogWarnings: [...catalog.warnings] };
-}
-
-function findSkillMatches(entries: readonly SkillEntry[], skillName: string): SkillEntry[] {
-  // A disabled catalog entry cannot be loaded by the harness, so it does not
-  // resolve the step.
-  const usable = entries.filter((entry) => entry.enabled !== false);
-  const exact = usable.filter((entry) => entry.name === skillName);
-  if (exact.length > 0) {
-    return exact;
-  }
-  const lowered = skillName.toLocaleLowerCase('en-US');
-  return usable.filter((entry) => entry.name.toLocaleLowerCase('en-US') === lowered);
 }
 
 function catalogFailureCheck(error: unknown, harness: HarnessId): PreflightCheck {

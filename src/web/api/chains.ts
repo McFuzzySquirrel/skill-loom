@@ -4,7 +4,11 @@ import {
   type FetchLike,
   type RequestJsonOptions,
 } from './client';
-import type { ChainAgentSelection, ChainStep } from '../../shared/chain';
+import type {
+  ChainAgentSelection,
+  ChainStep,
+  SkillSnapshotBinding,
+} from '../../shared/chain';
 export type { ChainStep } from '../../shared/chain';
 
 /**
@@ -200,7 +204,7 @@ export function decodeChainStep(value: unknown): ChainStep {
     ...(label === undefined ? {} : { label }),
   };
   if (value.kind === 'instruction') {
-    if (value.skillName !== undefined) {
+    if (value.skillName !== undefined || value.skillBinding !== undefined) {
       throw invalidResponse('chain step');
     }
     return { ...content, kind: 'instruction' };
@@ -208,10 +212,31 @@ export function decodeChainStep(value: unknown): ChainStep {
   if ((value.kind !== undefined && value.kind !== 'skill') || !isNonEmptyString(value.skillName)) {
     throw invalidResponse('chain step');
   }
+  const skillBinding =
+    value.skillBinding === undefined ? undefined : decodeSkillBinding(value.skillBinding);
   return {
     ...content,
     ...(value.kind === 'skill' ? { kind: 'skill' as const } : {}),
     skillName: value.skillName,
+    ...(skillBinding === undefined ? {} : { skillBinding }),
+  };
+}
+
+function decodeSkillBinding(value: unknown): SkillSnapshotBinding {
+  if (
+    !isRecord(value) ||
+    !isNonEmptyString(value.sourceId) ||
+    !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(value.sourceId) ||
+    !isNonEmptyString(value.revision) ||
+    !/^[a-f0-9]{40,64}$/.test(value.revision) ||
+    !isNonEmptyString(value.repositoryPath)
+  ) {
+    throw invalidResponse('skill snapshot binding');
+  }
+  return {
+    sourceId: value.sourceId,
+    revision: value.revision,
+    repositoryPath: value.repositoryPath,
   };
 }
 
@@ -258,7 +283,7 @@ export function decodeChain(value: unknown): Chain {
     steps: value.steps.map(decodeChainStep),
     inputs: value.inputs.map(decodeInput),
     automaticPermissionOptIn: value.automaticPermissionOptIn,
-      ...(value.agent === undefined ? {} : { agent: decodeChainAgent(value.agent) }),
+    ...(value.agent === undefined ? {} : { agent: decodeChainAgent(value.agent) }),
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
   };
@@ -373,7 +398,13 @@ export function normalizeChainDraft(draft: ChainDraft): ChainDraft {
         id: step.id,
         ...(step.kind === 'instruction'
           ? { kind: 'instruction' as const }
-          : { ...(step.kind === undefined ? {} : { kind: step.kind }), skillName: step.skillName }),
+          : {
+              ...(step.kind === undefined ? {} : { kind: step.kind }),
+              skillName: step.skillName,
+              ...(step.skillBinding === undefined
+                ? {}
+                : { skillBinding: step.skillBinding }),
+            }),
         instruction: step.instruction,
         ...(label === '' ? {} : { label }),
       };

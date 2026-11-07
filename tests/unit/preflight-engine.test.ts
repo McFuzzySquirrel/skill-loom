@@ -310,6 +310,109 @@ describe('preflight engine: passing report', () => {
     expect(report.skills[0]).toMatchObject({ stepId: 'skill', stepIndex: 1, resolved: true });
   });
 
+  it('resolves a bound remote skill snapshot instead of the first same-name catalog entry', async () => {
+    const first = {
+      ...skill('opencode', 'remote', 'review', 'first-revision'),
+      sourceId: 'repo-one',
+      revision: 'a'.repeat(40),
+      repositoryPath: 'skills/review',
+    };
+    const selected = {
+      ...skill('opencode', 'remote', 'review', 'selected-revision'),
+      sourceId: 'repo-one',
+      revision: 'b'.repeat(40),
+      repositoryPath: 'skills/review',
+    };
+    const chain = makeChain({
+      steps: [
+        {
+          id: 'pinned',
+          kind: 'skill',
+          skillName: 'review',
+          skillBinding: {
+            sourceId: selected.sourceId,
+            revision: selected.revision,
+            repositoryPath: selected.repositoryPath,
+          },
+          instruction: 'Review the project.',
+        },
+      ],
+      inputs: [],
+    });
+    const report = await preflight({
+      chain,
+      inputs: {},
+      deps: engineOptions({ chain, catalog: catalogWith([first, selected]) }),
+    });
+
+    expect(report.startAllowed).toBe(true);
+    expect(report.skills).toMatchObject([
+      { stepId: 'pinned', entryId: selected.id, path: selected.path, resolved: true },
+    ]);
+  });
+
+  it('blocks legacy name-only steps when multiple packages match', async () => {
+    const first = {
+      ...skill('opencode', 'remote', 'review', 'first-revision'),
+      sourceId: 'repo-one',
+      revision: 'a'.repeat(40),
+      repositoryPath: 'skills/review',
+    };
+    const second = {
+      ...skill('opencode', 'remote', 'review', 'second-revision'),
+      sourceId: 'repo-one',
+      revision: 'b'.repeat(40),
+      repositoryPath: 'skills/review',
+    };
+    const chain = makeChain({
+      steps: [{ id: 'legacy', skillName: 'review', instruction: 'Review the project.' }],
+      inputs: [],
+    });
+    const report = await preflight({
+      chain,
+      inputs: {},
+      deps: engineOptions({ chain, catalog: catalogWith([first, second]) }),
+    });
+
+    expect(report.skills).toMatchObject([{ stepId: 'legacy', matchCount: 2 }]);
+    expect(report.startAllowed).toBe(false);
+    expect(checkById(report, 'skill:legacy')?.status).toBe('block');
+  });
+
+  it('distinguishes a disabled bound snapshot from an unavailable binding', async () => {
+    const disabled = {
+      ...skill('opencode', 'remote', 'review', 'disabled-revision'),
+      sourceId: 'repo-one',
+      revision: 'c'.repeat(40),
+      repositoryPath: 'skills/review',
+      enabled: false,
+    };
+    const chain = makeChain({
+      steps: [
+        {
+          id: 'pinned',
+          kind: 'skill',
+          skillName: 'review',
+          skillBinding: {
+            sourceId: disabled.sourceId,
+            revision: disabled.revision,
+            repositoryPath: disabled.repositoryPath,
+          },
+          instruction: 'Review the project.',
+        },
+      ],
+      inputs: [],
+    });
+    const report = await preflight({
+      chain,
+      inputs: {},
+      deps: engineOptions({ chain, catalog: catalogWith([disabled]) }),
+    });
+
+    expect(checkById(report, 'skill:pinned')?.message).toContain('disabled');
+    expect(checkById(report, 'skill:pinned')?.message).not.toContain('unavailable');
+  });
+
   it('resolves inputs, skills, auth, trust, session, and a clean tree', async () => {
     const runner = createRunner();
     const report = await preflight({ deps: engineOptions({ runner }) });

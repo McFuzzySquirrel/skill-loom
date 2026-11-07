@@ -100,7 +100,7 @@ describe('chain version', () => {
   });
 
   it('documents the current persisted version and field order', () => {
-    expect(CHAIN_VERSION).toBe(2);
+    expect(CHAIN_VERSION).toBe(3);
     expect(CHAIN_TOP_LEVEL_FIELDS).toEqual([
       'version',
       'id',
@@ -124,6 +124,41 @@ describe('chain version', () => {
 
     expect(() => parseChainDocument({ ...version1, agent: { name: 'unsupported' } }))
       .toThrow(ChainValidationError);
+  });
+
+  it('migrates version 2 chains with native agents and rejects new step fields in legacy documents', () => {
+    const version2 = validChain({
+      version: 2,
+      agent: {
+        harness: 'opencode',
+        name: 'reviewer',
+        sourceId: 'repo-one',
+        revision: 'a'.repeat(40),
+        repositoryPath: 'agents/reviewer.md',
+        agentPath: '.opencode/agents/reviewer.md',
+        fingerprint: 'b'.repeat(64),
+      },
+    });
+    const migrated = parseChainDocument(version2).chain;
+    expect(migrated.version).toBe(CHAIN_VERSION);
+    expect(migrated.agent).toEqual(version2.agent);
+
+    const invalidLegacy = {
+      ...version2,
+      steps: [
+        {
+          id: 'step-1',
+          skillName: 'review',
+          instruction: 'Review.',
+          skillBinding: {
+            sourceId: 'repo-one',
+            revision: 'a'.repeat(40),
+            repositoryPath: 'skills/review',
+          },
+        },
+      ],
+    };
+    expect(() => parseChainDocument(invalidLegacy)).toThrow(ChainValidationError);
   });
 
   it('migrates an unversioned pre-versioning draft without mutating it', () => {
@@ -175,6 +210,49 @@ describe('chain version', () => {
 });
 
 describe('valid chains', () => {
+  it('persists immutable skill snapshot identity on selected remote steps', () => {
+    const binding = {
+      sourceId: 'repo-one',
+      revision: 'a'.repeat(40),
+      repositoryPath: 'skills/review',
+    };
+    const result = validateChain(
+      validChain({
+        steps: [
+          { id: 'step-1', skillName: 'review', skillBinding: binding, instruction: 'Review.' },
+        ],
+      }),
+    );
+    expect(result.chain.steps[0]).toMatchObject({
+      skillName: 'review',
+      skillBinding: binding,
+    });
+  });
+
+  it('rejects same-name steps bound to different package snapshots', () => {
+    const first = {
+      sourceId: 'repo-one',
+      revision: 'a'.repeat(40),
+      repositoryPath: 'skills/review',
+    };
+    const second = { ...first, revision: 'b'.repeat(40) };
+    expect(
+      expectInvalid(
+        validChain({
+          steps: [
+            { id: 'first', skillName: 'review', skillBinding: first, instruction: 'Review.' },
+            { id: 'second', skillName: 'review', skillBinding: second, instruction: 'Review again.' },
+          ],
+        }),
+      ),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: CHAIN_ISSUE_CODES.SKILL_BINDING_CONFLICT,
+        stepId: 'second',
+      }),
+    );
+  });
+
   it('accepts named inputs and placeholders and applies documented defaults', () => {
     const result = validateChain(validChain());
     const chain: Chain = result.chain;

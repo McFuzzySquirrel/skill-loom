@@ -279,10 +279,26 @@ function decodeSkillEntry(value: unknown): SkillEntry {
     throw invalidResponse('catalog entry');
   }
 
+  const source = decodeSource(value.source);
+  const sourceId = optionalString(value.sourceId);
+  const revision = optionalString(value.revision);
+  const repositoryPath = optionalString(value.repositoryPath);
+  if (
+    source === 'remote' &&
+    (sourceId === undefined ||
+      !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(sourceId) ||
+      revision === undefined ||
+      !/^[a-f0-9]{40,64}$/.test(revision) ||
+      repositoryPath === undefined ||
+      repositoryPath.trim() === '')
+  ) {
+    throw invalidResponse('remote skill snapshot identity');
+  }
+
   return {
     id: value.id,
     harness: decodeHarness(value.harness),
-    source: decodeSource(value.source),
+    source,
     name: value.name,
     description: value.description,
     path: value.path,
@@ -290,12 +306,10 @@ function decodeSkillEntry(value: unknown): SkillEntry {
     ...(typeof value.sourceDirectory === 'string'
       ? { sourceDirectory: value.sourceDirectory }
       : {}),
-    ...(typeof value.sourceId === 'string' ? { sourceId: value.sourceId } : {}),
+    ...(sourceId === undefined ? {} : { sourceId }),
     ...(typeof value.repository === 'string' ? { repository: value.repository } : {}),
-    ...(typeof value.revision === 'string' ? { revision: value.revision } : {}),
-    ...(typeof value.repositoryPath === 'string'
-      ? { repositoryPath: value.repositoryPath }
-      : {}),
+    ...(revision === undefined ? {} : { revision }),
+    ...(repositoryPath === undefined ? {} : { repositoryPath }),
     enabled: value.enabled,
   };
 }

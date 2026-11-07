@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import type { ChainStep } from '../api/chains';
+import type { SkillChainStep } from '../../shared/chain';
 import { HelpPopover } from './HelpPopover';
 
 export interface StepEditorProps {
@@ -10,9 +11,7 @@ export interface StepEditorProps {
   skillOptions: string[];
   /** Placeholder problems for this step, already naming the input. */
   placeholderIssues?: string[];
-  onChange: (
-    patch: Partial<Pick<ChainStep, 'skillName' | 'instruction' | 'label'>>,
-  ) => void;
+  onChange: (patch: Partial<Pick<SkillChainStep, 'skillName' | 'skillBinding' | 'instruction' | 'label'>>) => void;
 }
 
 /**
@@ -100,7 +99,9 @@ export function StepEditor({
           className="input"
           id={skillId}
           value={step.skillName}
-          onChange={(event) => onChange({ skillName: event.target.value })}
+          onChange={(event) =>
+            onChange({ skillName: event.target.value, skillBinding: undefined })
+          }
           data-testid="step-skill"
         >
           {options.map((name) => (
@@ -113,6 +114,14 @@ export function StepEditor({
           One harness serves every step. Per-step harness switching is unsupported;
           duplicate the chain to use another harness.
         </p>
+        {step.skillBinding === undefined ? null : (
+          <p className="field__hint" data-testid="skill-snapshot-binding">
+            Pinned to remote snapshot <code>{step.skillBinding.sourceId}</code> at{' '}
+            <code>{step.skillBinding.revision.slice(0, 12)}</code> (
+            <code>{step.skillBinding.repositoryPath}</code>). To use another revision, remove this
+            step and add the desired catalog entry.
+          </p>
+        )}
       </div>}
 
       <div className="field">

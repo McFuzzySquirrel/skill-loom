@@ -380,6 +380,119 @@ test.describe('Chain builder', () => {
     expect(consoleErrors).toEqual([]);
   });
 
+  test('persists the selected remote snapshot and clears it when the skill changes', async ({
+    page,
+    request,
+  }) => {
+    const project = await openFixtureProject(request);
+    const snapshots = [
+      {
+        id: 'remote-review-a',
+        name: 'remote-review',
+        sourceId: 'source-a',
+        revision: 'a'.repeat(40),
+        repositoryPath: 'skills/review',
+      },
+      {
+        id: 'remote-review-b',
+        name: 'alternate-review',
+        sourceId: 'source-b',
+        revision: 'b'.repeat(40),
+        repositoryPath: 'skills/review',
+      },
+    ];
+    await page.route(`**/api/projects/${project.id}/catalog**`, async (route) => {
+      const requestUrl = new URL(route.request().url());
+      const skillId = requestUrl.pathname.split('/skills/')[1];
+      if (skillId !== undefined) {
+        const snapshot = snapshots.find((entry) => entry.id === skillId);
+        if (snapshot === undefined) {
+          await route.fulfill({ status: 404, body: 'not found' });
+          return;
+        }
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: snapshot.id,
+            harness: 'opencode',
+            name: snapshot.name,
+            path: `/snapshot/${snapshot.sourceId}/${snapshot.revision}/SKILL.md`,
+            content: `---\nname: ${snapshot.name}\ndescription: remote test skill\n---\nReview the selected snapshot.`,
+          }),
+        });
+        return;
+      }
+
+      const entries = snapshots.map((snapshot) => ({
+        ...snapshot,
+        harness: 'opencode',
+        source: 'remote',
+        description: 'Remote test skill',
+        path: `/snapshot/${snapshot.sourceId}/${snapshot.revision}/SKILL.md`,
+        packagePath: `/snapshot/${snapshot.sourceId}/${snapshot.revision}`,
+        repository: `https://example.test/${snapshot.sourceId}.git`,
+        enabled: true,
+      }));
+      const query = requestUrl.searchParams.get('q') ?? '';
+      const visibleEntries = entries.filter((entry) =>
+        entry.name.toLocaleLowerCase('en-US').includes(query.toLocaleLowerCase('en-US')),
+      );
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          harness: 'opencode',
+          query,
+          total: visibleEntries.length,
+          counts: {
+            total: visibleEntries.length,
+            bySource: {
+              project: 0,
+              personal: 0,
+              custom: 0,
+              plugin: 0,
+              builtin: 0,
+              'loom-extra': 0,
+              remote: visibleEntries.length,
+            },
+          },
+          groups:
+            visibleEntries.length === 0
+              ? []
+              : [{ source: 'remote', count: visibleEntries.length, entries: visibleEntries }],
+          agents: [],
+          warnings: [],
+          elapsedMs: 1,
+        }),
+      });
+    });
+
+    await gotoNewBuilder(page, project.id, `Remote binding ${runSuffix}`);
+    await page.getByTestId('catalog-search').fill('remote-review');
+    const skillRow = page.locator('[data-testid="skill-row"][data-name="remote-review"]');
+    await expect(skillRow).toHaveCount(1);
+    await skillRow.locator('.skill-row__toggle').click();
+    await skillRow.getByRole('button', { name: 'Add as step' }).click();
+    await page.getByTestId('step-instruction').fill('Review this snapshot.');
+    await expect(page.getByTestId('skill-snapshot-binding')).toContainText('source-a');
+    await expect(page.getByTestId('skill-snapshot-binding')).toContainText('aaaaaaaaaaaa');
+    await closeStepEditor(page);
+    await page.getByTestId('chain-save').click();
+    await expect(page).not.toHaveURL(/\/chains\/new/);
+
+    await page.reload();
+    await stepRows(page).first().getByRole('button', { name: /Select step 1:/ }).click();
+    await expect(page.getByTestId('skill-snapshot-binding')).toContainText('source-a');
+
+    await page.getByTestId('step-skill').selectOption('alternate-review');
+    await expect(page.getByTestId('skill-snapshot-binding')).toHaveCount(0);
+    await closeStepEditor(page);
+    await page.getByTestId('chain-save').click();
+    await page.reload();
+    await stepRows(page).first().getByRole('button', { name: /Select step 1:/ }).click();
+    await expect(page.getByTestId('step-skill')).toHaveValue('alternate-review');
+    await expect(page.getByTestId('skill-snapshot-binding')).toHaveCount(0);
+  });
+
   test('blocks save and shows an inline error while an instruction is empty', async ({
     page,
     request,

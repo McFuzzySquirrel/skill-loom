@@ -3,9 +3,22 @@ id: ADR-0015
 applies_to:
   - "src/server/catalog/remote.ts"
   - "src/server/catalog/merge.ts"
+  - "src/server/catalog/skill-resolution.ts"
   - "src/server/routes/catalog.ts"
+  - "src/server/chains/model.ts"
+  - "src/server/preflight/engine.ts"
+  - "src/server/chains/bundle.ts"
+  - "src/web/api/chains.ts"
+  - "src/web/api/runs.ts"
+  - "src/web/hooks/useChainDraft.ts"
+  - "src/web/components/StepEditor.tsx"
   - "tests/unit/catalog-remote.test.ts"
+  - "tests/unit/chain-model.test.ts"
+  - "tests/unit/preflight-engine.test.ts"
+  - "tests/web/runs-api.test.ts"
   - "tests/integration/catalog-routes.test.ts"
+  - "tests/integration/chain-bundles.test.ts"
+  - "tests/e2e/chain-builder.spec.ts"
 status: Accepted
 ---
 
@@ -25,12 +38,15 @@ status: Accepted
 - **MUST:** Retain only validated regular files belonging to discovered skill packages, subject to explicit command, time, staging, file-count, package-count, and content-size limits.
 - **MUST:** Surface authentication, network, invalid-package, and resource-limit failures as errors rather than an empty catalog.
 - **MUST:** Preserve retained snapshots when a source registration is removed; removing a source must not invalidate previously saved content.
+- **MUST:** Persist the source id, commit revision, and repository-relative package path on a chain step when the user selects a remote skill snapshot.
+- **MUST:** Resolve a bound step to that exact retained snapshot for preflight and export; never silently substitute a same-named project package or refreshed revision.
+- **MUST:** Keep legacy name-only resolution compatible, but block preflight and export when it cannot identify one package under [ADR-0013](0013-deterministic-chain-bundle-skill-resolution.md).
 - **MUST:** Treat remote skill instructions as untrusted content that requires user review before use.
 
 ## Verify
 
-- **Check:** `npx vitest run tests/unit/catalog-remote.test.ts tests/unit/catalog-merge.test.ts tests/integration/catalog-routes.test.ts`
-- **Expected:** Refresh stores a pinned package snapshot and cleans staging, tampered snapshots fail verification, unsafe packages and excessive package sets are rejected, and both harness catalogs can inspect/copy a saved package without network access.
+- **Check:** `npx vitest run tests/unit/catalog-remote.test.ts tests/unit/catalog-merge.test.ts tests/unit/chain-model.test.ts tests/unit/preflight-engine.test.ts tests/web/runs-api.test.ts tests/integration/catalog-routes.test.ts tests/integration/chain-bundles.test.ts`
+- **Expected:** Refresh stores a pinned package snapshot and cleans staging, tampered snapshots fail verification, unsafe packages and excessive package sets are rejected, both harness catalogs can inspect/copy a saved package without network access, and bound chains preflight/export the selected snapshot.
 
 ## Context and Problem Statement
 
@@ -58,6 +74,7 @@ Chosen option: "Resolve each explicit refresh to a commit and retain a validated
 
 - Catalog browsing and package copy can use retained snapshots without contacting the remote repository.
 - A refresh records the exact commit and package fingerprint rather than relying on a branch name.
+- Chains preserve the selected remote snapshot identity, so later refreshes and same-name packages cannot change which package preflight or export uses.
 - Ingestion reads Git tree/blob data without checking out or running repository scripts.
 
 ### Negative Consequences
@@ -70,5 +87,5 @@ Chosen option: "Resolve each explicit refresh to a commit and retain a validated
 ## Links
 
 - Related: [ADR-0002](0002-harness-capability-descriptors.md), [ADR-0012](0012-shared-project-skill-installation-root.md), and [ADR-0013](0013-deterministic-chain-bundle-skill-resolution.md).
-- Implemented by `src/server/catalog/remote.ts`, `src/server/catalog/merge.ts`, and `src/server/routes/catalog.ts`.
-- Regression coverage: `tests/unit/catalog-remote.test.ts` and `tests/integration/catalog-routes.test.ts`.
+- Implemented by `src/server/catalog/remote.ts`, `src/server/catalog/merge.ts`, `src/server/catalog/skill-resolution.ts`, `src/server/routes/catalog.ts`, `src/server/chains/model.ts`, `src/server/preflight/engine.ts`, `src/server/chains/bundle.ts`, and `src/web/hooks/useChainDraft.ts`.
+- Regression coverage: `tests/unit/catalog-remote.test.ts`, `tests/unit/chain-model.test.ts`, `tests/unit/preflight-engine.test.ts`, `tests/integration/catalog-routes.test.ts`, and `tests/integration/chain-bundles.test.ts`.

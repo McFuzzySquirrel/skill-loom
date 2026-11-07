@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
+import { basename, join } from 'node:path';
 import type { BundlePreview, BundleSkill, ChainBundle } from '../../shared/bundles.js';
 import { projectSkillRootFor } from '../catalog/copy.js';
 import { SHARED_PROJECT_SKILLS_SEGMENTS, sharedProjectSkillRoot } from '../catalog/project-paths.js';
+import { resolveSkillCatalogEntry } from '../catalog/skill-resolution.js';
 import {
   installNativeAgentContentIntoProject,
   inspectInstalledNativeAgent,
@@ -72,36 +73,38 @@ export async function exportBundle(
   const skills: BundleSkill[] = [];
   const budget = { bytes: 0, files: 0 };
   for (const name of names) {
-    const matches = entries.filter((entry) => entry.name === name);
-    const available = matches.filter((entry) => entry.enabled);
-    const projectPackages = uniquePackages(available.filter((entry) => entry.source === 'project'));
-    let candidates: typeof available;
-    if (projectPackages.length > 1) {
-      throw new BundleError(
-        'BUNDLE_SOURCE_UNAVAILABLE',
-        `Skill "${name}" has multiple project packages. Keep one project copy or rename the duplicates before export.`,
-      );
+    const skillStep = chain.steps.find(
+      (step) => step.kind !== 'instruction' && step.skillName === name,
+    );
+    if (skillStep === undefined || skillStep.kind === 'instruction') {
+      invalid(`Skill "${name}" is not represented by a skill step.`);
     }
-    if (projectPackages.length === 1) {
-      candidates = projectPackages;
-    } else {
-      candidates = uniquePackages(available.filter((entry) => entry.source !== 'project'));
-      if (candidates.length > 1) {
-        throw new BundleError(
-          'BUNDLE_SOURCE_UNAVAILABLE',
-          `Skill "${name}" has multiple non-project packages and no project copy to prefer. Keep one available package before export.`,
-        );
-      }
+    const resolution = resolveSkillCatalogEntry(entries, {
+      skillName: name,
+      ...(skillStep.skillBinding === undefined
+        ? {}
+        : { skillBinding: skillStep.skillBinding }),
+    });
+    if (resolution.status === 'ambiguous') {
+      const message =
+        resolution.scope === 'project'
+          ? `Skill "${name}" has multiple project packages. Keep one project copy or rename the duplicates before export.`
+          : resolution.scope === 'snapshot'
+            ? `The selected remote snapshot for skill "${name}" matches multiple packages. Refresh the source or choose another catalog entry.`
+            : `Skill "${name}" has multiple non-project packages and no project copy to prefer. Keep one available package before export.`;
+      throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', message);
     }
-    const selected = candidates[0];
+    const selected = resolution.status === 'resolved' ? resolution.entry : undefined;
     if (!selected) {
       const warnings = catalogResult?.warnings ?? [];
       const discoveryNote = warnings.length === 0
         ? ''
         : ` Discovery reported ${String(warnings.length)} warning(s); review the catalog warnings before concluding the skill is missing.`;
-      const message = matches.length > 0
-        ? `Skill "${name}" is disabled in the ${chain.harness} catalog. Enable it or choose an available package before export.${discoveryNote}`
-        : `Skill "${name}" is not present in the ${chain.harness} catalog. Refresh discovery or add the skill to a supported location before export.${discoveryNote}`;
+      const message = resolution.status === 'binding-unavailable'
+        ? `The selected remote snapshot for skill "${name}" is unavailable. Refresh its source or choose another catalog entry.${discoveryNote}`
+        : resolution.status === 'disabled'
+          ? `Skill "${name}" is disabled in the ${chain.harness} catalog. Enable it or choose an available package before export.${discoveryNote}`
+          : `Skill "${name}" is not present in the ${chain.harness} catalog. Refresh discovery or add the skill to a supported location before export.${discoveryNote}`;
       throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', message);
     }
     if (!selected.packagePath) {
@@ -205,7 +208,7 @@ export async function exportBundle(
         name: chain.name,
         harness: chain.harness,
         sessionMode: chain.sessionMode,
-        steps: chain.steps,
+        steps: bundleSteps(chain.steps),
         inputs: chain.inputs.map(({ defaultValue: _defaultValue, ...input }) => input),
         agent: chain.agent,
       },
@@ -226,7 +229,7 @@ export async function exportBundle(
       name: chain.name,
       harness: chain.harness,
       sessionMode: chain.sessionMode,
-      steps: chain.steps,
+      steps: bundleSteps(chain.steps),
       inputs: chain.inputs.map(({ defaultValue: _defaultValue, ...input }) => input),
     },
     skills,
@@ -283,13 +286,18 @@ async function safeSkillRoot(projectPath: string): Promise<string> {
   return root;
 }
 
-function uniquePackages<T extends { id: string; packagePath: string }>(entries: T[]): T[] {
-  const packages = new Map<string, T>();
-  for (const entry of entries) {
-    const key = entry.packagePath ? resolve(entry.packagePath) : `unresolved:${entry.id}`;
-    if (!packages.has(key)) packages.set(key, entry);
-  }
-  return [...packages.values()];
+function bundleSteps(steps: Chain['steps']): Chain['steps'] {
+  return steps.map((step) =>
+    step.kind === 'instruction'
+      ? step
+      : {
+          id: step.id,
+          ...(step.kind === undefined ? {} : { kind: step.kind }),
+          skillName: step.skillName,
+          instruction: step.instruction,
+          ...(step.label === undefined ? {} : { label: step.label }),
+        },
+  );
 }
 
 export async function importBundle(

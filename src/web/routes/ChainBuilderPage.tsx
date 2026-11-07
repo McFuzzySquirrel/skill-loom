@@ -6,7 +6,7 @@ import {
   type SkillEntry,
 } from '../api/catalog';
 import type { ApiClientError } from '../api/client';
-import type { ChainAgentSelection } from '../../shared/chain';
+import type { ChainAgentSelection, SkillChainStep } from '../../shared/chain';
 import {
   CHAIN_HARNESSES,
   NEW_CHAIN_ID,
@@ -173,7 +173,7 @@ export function ChainBuilderPage({
 
   const handleAddAsStep = useCallback(
     (skill: SkillEntry) => {
-      addStep({ name: skill.name });
+      addStep(skill);
       setEditorOpen(true);
       setEditorFocusRequest((current) => current + 1);
     },
@@ -210,7 +210,11 @@ export function ChainBuilderPage({
   );
 
   const handleStepChange = useCallback(
-    (patch: Partial<Pick<ChainStep, 'skillName' | 'instruction' | 'label'>>) => {
+    (
+      patch: Partial<
+        Pick<SkillChainStep, 'skillName' | 'skillBinding' | 'instruction' | 'label'>
+      >,
+    ) => {
       if (selectedStep === null) {
         return;
       }

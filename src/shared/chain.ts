@@ -4,9 +4,17 @@ interface ChainStepContent {
   label?: string | undefined;
 }
 
+/** Immutable identity for a skill package retained from a remote snapshot. */
+export interface SkillSnapshotBinding {
+  sourceId: string;
+  revision: string;
+  repositoryPath: string;
+}
+
 export interface SkillChainStep extends ChainStepContent {
   kind?: 'skill' | undefined;
   skillName: string;
+  skillBinding?: SkillSnapshotBinding | undefined;
 }
 
 export interface InstructionChainStep extends ChainStepContent {

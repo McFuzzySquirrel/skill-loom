@@ -11,7 +11,8 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 - Global remote skill-repository registration with explicit pinned refresh, bounded package snapshots, and catalog visibility for either supported harness.
 - Project-independent drafts start from an outcome, register and explicitly refresh optional remote repositories, and select pinned skills and agents without installing them into an existing project.
 - A configurable local shared bundle library supports reviewed no-overwrite publication, browsing, and import of portable bundles.
-- Remote native-agent discovery, exact snapshot selection for chains, safe installation into native project locations, and preflight checks for installed content and command-surface support.
+- Remote native-agent discovery and selection, safe installation into native project locations, and preflight checks for installed content and command-surface support.
+- Remote skill selections persist their exact source, revision, and package path through chain editing, preflight, and export.
 - Disposable chain-test workspaces with retained project/run state, recent-project hiding, explicit cleanup, and refusal to delete a workspace that owns the active run.
 - Reusable `loom-run-bundle` Agent Skill package with a standalone Node.js helper for reviewed bundle installation, host-mediated chain execution, confirmation gates, and explicit interrupted-run recovery.
 - Separate portable run records, bundle fingerprints, no-overwrite skill installation, and an export-dialog download for the reusable runner skill.
@@ -37,7 +38,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 ### Changed
 
 - Copilot trust guidance now distinguishes persistent folder trust from session-only approval.
-- Persisted chain documents now use version 2 for native-agent selection and migrate valid version 1 chains and frozen run snapshots without changing their behavior.
+- Persisted chain documents now use version 3 for exact remote skill snapshot bindings and migrate valid version 1 and 2 chains while preserving their existing fields.
 - Portable bundle export uses version 2 for chains with a selected native agent, while preserving version 1 for agent-free chains; import is no-overwrite and rollback-safe for both packages and agent definitions.
 - The workflow designer now gives the skill catalog and ordered steps a two-column layout on wider screens and opens selected-step editing in a dialog.
 - OpenCode discovery includes the shared `.agents/skills/` directory while retaining legacy `.opencode/skills/` discovery. Copilot discovery remains CLI-authoritative.
@@ -49,6 +50,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 - Chain bundle export no longer rejects a valid project package merely because another enabled package with the same name exists outside the project.
 - Bundle import no longer treats a same-name personal or remote catalog entry as an installed project conflict when the target package directory is empty.
 - Missing, disabled, ambiguous, and unavailable bundle sources now have distinct actionable diagnostics.
+- Legacy name-only steps no longer pass preflight by selecting the first of multiple same-named remote packages.
 - Copilot catalog discovery now maps `personal-agents` and `personal-copilot` source labels to `personal` instead of skipping those skills.
 - Portable run-state writes now succeed on platforms such as Windows that reject directory fsync after an atomic replacement.
 

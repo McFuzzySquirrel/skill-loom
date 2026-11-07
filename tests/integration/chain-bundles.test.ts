@@ -306,6 +306,68 @@ describe('portable chain bundles', () => {
     });
   });
 
+  it('exports the exact remote snapshot bound to a skill step', async () => {
+    const firstPackage = join(root, 'remote-first', 'review');
+    const selectedPackage = join(root, 'remote-selected', 'review');
+    const firstRevision = 'a'.repeat(40);
+    const selectedRevision = 'b'.repeat(40);
+    const firstText = '---\nname: review\n---\nFirst revision.\n';
+    const selectedText = '---\nname: review\n---\nSelected revision.\n';
+    await mkdir(firstPackage, { recursive: true });
+    await mkdir(selectedPackage, { recursive: true });
+    await writeFile(join(firstPackage, 'SKILL.md'), firstText);
+    await writeFile(join(selectedPackage, 'SKILL.md'), selectedText);
+    discoveryOverride = {
+      entries: [
+        catalogEntry({
+          id: 'remote-first',
+          source: 'remote',
+          path: join(firstPackage, 'SKILL.md'),
+          packagePath: firstPackage,
+          sourceId: 'repo-one',
+          revision: firstRevision,
+          repositoryPath: 'skills/review',
+        }),
+        catalogEntry({
+          id: 'remote-selected',
+          source: 'remote',
+          path: join(selectedPackage, 'SKILL.md'),
+          packagePath: selectedPackage,
+          sourceId: 'repo-one',
+          revision: selectedRevision,
+          repositoryPath: 'skills/review',
+        }),
+      ],
+      warnings: [],
+    };
+    chain = await chains.update(source, chain.id, {
+      ...chain,
+      inputs: [],
+      steps: [
+        {
+          id: 'step-1',
+          kind: 'skill',
+          skillName: 'review',
+          skillBinding: {
+            sourceId: 'repo-one',
+            revision: selectedRevision,
+            repositoryPath: 'skills/review',
+          },
+          instruction: 'Review the project.',
+        },
+      ],
+    });
+
+    const bundle = await exported();
+    expect(bundle.skills).toHaveLength(1);
+    expect(
+      Buffer.from(
+        bundle.skills[0]!.files.find((file) => file.path === 'SKILL.md')!.content,
+        'base64',
+      ).toString(),
+    ).toBe(selectedText);
+  });
+
   it('deduplicates repeated observations of one canonical project package', async () => {
     const entry = catalogEntry();
     discoveryOverride = {

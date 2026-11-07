@@ -8,11 +8,12 @@ export type { ChainStep } from '../../shared/chain.js';
  *
  * Chains are stored as versioned JSON so a later Skill Loom can migrate an older
  * document deliberately instead of guessing at its shape. An unversioned
- * document is the pre-versioning draft format, and version 1 is upgraded to
- * version 2 because native-agent selection adds a strict persisted field.
+ * document is the pre-versioning draft format. Version 1 predates native-agent
+ * selection, version 2 adds it, and version 3 binds remote skill steps to exact
+ * source snapshots.
  * Unsupported versions are rejected rather than reinterpreted.
  */
-export const CHAIN_VERSION = 2;
+export const CHAIN_VERSION = 3;
 
 /** Session behaviour shared by every step in a chain. */
 export const CHAIN_SESSION_MODES = ['shared', 'fresh', 'fork'] as const;
@@ -52,6 +53,12 @@ export const ChainAgentSelectionSchema = z.strictObject({
   fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
 }) satisfies z.ZodType<ChainAgentSelection>;
 
+export const SkillSnapshotBindingSchema = z.strictObject({
+  sourceId: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),
+  revision: z.string().regex(/^[a-f0-9]{40,64}$/),
+  repositoryPath: NonEmptyStringSchema.max(4_096),
+});
+
 const StepContent = {
   /** Stable within the chain; reordering must not change it. */
   id: NonEmptyStringSchema,
@@ -65,6 +72,7 @@ export const ChainStepSchema = z.discriminatedUnion('kind', [
     ...StepContent,
     kind: z.literal('skill').optional(),
     skillName: NonEmptyStringSchema,
+    skillBinding: SkillSnapshotBindingSchema.optional(),
   }),
   z.strictObject({
     ...StepContent,
@@ -109,9 +117,33 @@ const ChainFields = {
   updatedAt: TimestampSchema,
 };
 
+const LegacyChainStepSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    ...StepContent,
+    kind: z.literal('skill').optional(),
+    skillName: NonEmptyStringSchema,
+  }),
+  z.strictObject({
+    ...StepContent,
+    kind: z.literal('instruction'),
+    skillName: z.never().optional(),
+  }),
+]);
+
+const legacyChainFields = {
+  ...ChainFields,
+  steps: z.array(LegacyChainStepSchema).min(1),
+};
+
 const ChainV1Schema = z.strictObject({
   version: z.literal(1),
-  ...ChainFields,
+  ...legacyChainFields,
+});
+
+const ChainV2Schema = z.strictObject({
+  version: z.literal(2),
+  ...legacyChainFields,
+  agent: ChainAgentSelectionSchema.optional(),
 });
 
 export const ChainSchema = z.strictObject({
@@ -132,6 +164,7 @@ export const CHAIN_ISSUE_CODES = {
   PLACEHOLDER_INVALID: 'chain_placeholder_invalid',
   PLACEHOLDER_UNKNOWN: 'chain_placeholder_unknown',
   AGENT_HARNESS_MISMATCH: 'chain_agent_harness_mismatch',
+  SKILL_BINDING_CONFLICT: 'chain_skill_binding_conflict',
 } as const;
 
 export const CHAIN_WARNING_CODES = {
@@ -212,17 +245,18 @@ export type SafeChainValidationResult =
 /**
  * Upgrade a decoded JSON document to the current chain version.
  *
- * Unversioned drafts are stamped with the current version. Version 1 chains
- * are validated against their historical strict shape before upgrading; the
- * input object is never mutated.
+ * Unversioned drafts are stamped with the current version. Version 1 and 2
+ * chains are validated against their historical strict shapes before
+ * upgrading; the input object is never mutated.
  */
 export function migrateChainDocument(raw: unknown): unknown {
   if (!isRecord(raw)) {
     return raw;
   }
   if (!Object.hasOwn(raw, 'version')) return { ...raw, version: CHAIN_VERSION };
-  if (raw.version === 1) {
-    const legacy = ChainV1Schema.safeParse(raw);
+  if (raw.version === 1 || raw.version === 2) {
+    const schema = raw.version === 1 ? ChainV1Schema : ChainV2Schema;
+    const legacy = schema.safeParse(raw);
     return legacy.success ? { ...legacy.data, version: CHAIN_VERSION } : raw;
   }
   return raw;
@@ -238,7 +272,8 @@ export function parseChainDocument(raw: unknown): ChainValidationResult {
     isRecord(raw) &&
     Object.hasOwn(raw, 'version') &&
     raw.version !== CHAIN_VERSION &&
-    raw.version !== 1
+    raw.version !== 1 &&
+    raw.version !== 2
   ) {
     throw new ChainUnsupportedVersionError(raw.version);
   }
@@ -265,6 +300,7 @@ export function validateChain(value: unknown): ChainValidationResult {
   }
 
   validateUniqueStepIds(chain, issues);
+  validateSkillBindingConflicts(chain, issues);
   validateUniqueInputNames(chain, issues);
   validatePlaceholders(chain, issues);
 
@@ -339,6 +375,42 @@ function validateUniqueStepIds(chain: Chain, issues: ChainValidationIssue[]): vo
       stepId: step.id,
       stepIndex: index,
     });
+  });
+}
+
+function validateSkillBindingConflicts(chain: Chain, issues: ChainValidationIssue[]): void {
+  const bindings = new Map<
+    string,
+    { binding: string | null; stepId: string; stepIndex: number }
+  >();
+
+  chain.steps.forEach((step, stepIndex) => {
+    if (step.kind === 'instruction') {
+      return;
+    }
+
+    const name = step.skillName;
+    const binding = step.skillBinding === undefined
+      ? null
+      : [
+          step.skillBinding.sourceId,
+          step.skillBinding.revision,
+          step.skillBinding.repositoryPath,
+        ].join('\0');
+    const previous = bindings.get(name);
+    if (previous === undefined) {
+      bindings.set(name, { binding, stepId: step.id, stepIndex });
+      return;
+    }
+    if (previous.binding !== binding) {
+      issues.push({
+        path: `steps.${String(stepIndex)}.skillBinding`,
+        code: CHAIN_ISSUE_CODES.SKILL_BINDING_CONFLICT,
+        message: `Skill steps named "${step.skillName}" cannot select different packages in one chain.`,
+        stepId: step.id,
+        stepIndex,
+      });
+    }
   });
 }
 

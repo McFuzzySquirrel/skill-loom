@@ -4,6 +4,7 @@ import {
   type FetchLike,
   type RequestJsonOptions,
 } from './client';
+import type { SkillSnapshotBinding } from '../../shared/chain';
 
 /**
  * Typed client for the run record, run actions, and the run event stream.
@@ -326,16 +327,40 @@ function decodeChainStep(value: unknown): RunChainStep {
 
   const label = typeof value.label === 'string' ? value.label : undefined;
   if (value.kind === 'instruction') {
+    if (value.skillBinding !== undefined) {
+      throw invalidResponse('run chain step');
+    }
     return { id: value.id, kind: 'instruction', instruction: value.instruction,
       ...(label === undefined ? {} : { label }) };
   }
   if (!isNonEmptyString(value.skillName)) throw invalidResponse('run chain step');
+  const skillBinding =
+    value.skillBinding === undefined ? undefined : decodeSkillBinding(value.skillBinding);
   return {
     id: value.id,
     ...(value.kind === 'skill' ? { kind: 'skill' as const } : {}),
     skillName: value.skillName,
     instruction: value.instruction,
     ...(label === undefined ? {} : { label }),
+    ...(skillBinding === undefined ? {} : { skillBinding }),
+  };
+}
+
+function decodeSkillBinding(value: unknown): SkillSnapshotBinding {
+  if (
+    !isRecord(value) ||
+    !isNonEmptyString(value.sourceId) ||
+    !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(value.sourceId) ||
+    !isNonEmptyString(value.revision) ||
+    !/^[a-f0-9]{40,64}$/.test(value.revision) ||
+    !isNonEmptyString(value.repositoryPath)
+  ) {
+    throw invalidResponse('run chain skill binding');
+  }
+  return {
+    sourceId: value.sourceId,
+    revision: value.revision,
+    repositoryPath: value.repositoryPath,
   };
 }
 

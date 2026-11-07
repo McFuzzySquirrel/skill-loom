@@ -514,7 +514,15 @@ export function SkillCatalog({
                                   addDisabledReason:
                                     'This skill is disabled by the harness, so it cannot be added as a step.',
                                 }
-                              : {})}
+                              : skill.source === 'remote' &&
+                                  (skill.sourceId === undefined ||
+                                    skill.revision === undefined ||
+                                    skill.repositoryPath === undefined)
+                                ? {
+                                    addDisabledReason:
+                                      'This remote snapshot has no complete identity. Refresh the catalog before adding it.',
+                                  }
+                                : {})}
                             onSkillCopied={() => {
                               refresh();
                             }}
