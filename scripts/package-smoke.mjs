@@ -33,6 +33,8 @@ function assertPackageContents(files) {
     'package/dist/skills/loom-run-bundle.zip',
     'package/dist/skills/loom-run-bundle/SKILL.md',
     'package/dist/skills/loom-run-bundle/scripts/loom-bundle.mjs',
+    'package/dist/skills/scenario-discovery/SKILL.md',
+    'package/dist/skills/scenario-discovery/scripts/build-bundle.mjs',
   ];
   for (const path of required) {
     if (!files.includes(path)) {
@@ -158,6 +160,61 @@ async function smokePortableSkill(temporaryRoot) {
   }
 }
 
+async function smokeScenarioDiscoverySkill(temporaryRoot) {
+  const helperPath = join(
+    repoRoot,
+    'dist',
+    'skills',
+    'scenario-discovery',
+    'scripts',
+    'build-bundle.mjs',
+  );
+  const projectPath = join(temporaryRoot, 'scenario-discovery-project');
+  const skillPath = join(projectPath, '.agents', 'skills', 'smoke-skill');
+  await mkdir(skillPath, { recursive: true });
+  await mkdir(join(projectPath, '.loom'), { recursive: true });
+  await writeFile(join(skillPath, 'SKILL.md'), [
+    '---',
+    'name: smoke-skill',
+    'description: Package smoke fixture.',
+    '---',
+    '',
+    'A reviewed package.',
+  ].join('\n'));
+  const manifestPath = join(temporaryRoot, 'scenario-discovery-manifest.json');
+  const outputPath = join(projectPath, '.loom', 'scenario-proposal.loom.json');
+  await writeFile(manifestPath, JSON.stringify({
+    projectPath,
+    chain: {
+      name: 'Scenario discovery package smoke',
+      harness: 'copilot',
+      sessionMode: 'shared',
+      steps: [{
+        id: 'step-1',
+        kind: 'skill',
+        skillName: 'smoke-skill',
+        instruction: 'Use the reviewed package.',
+      }],
+      inputs: [],
+    },
+    skills: [{ name: 'smoke-skill', packagePath: skillPath }],
+  }));
+  await execFileAsync(
+    process.execPath,
+    [helperPath, '--manifest', manifestPath, '--out', outputPath],
+    { cwd: temporaryRoot, maxBuffer: 2 * 1024 * 1024 },
+  );
+  const bundle = JSON.parse(await readFile(outputPath, 'utf8'));
+  if (
+    bundle.format !== 'skill-loom-chain' ||
+    bundle.version !== 1 ||
+    bundle.chain?.name !== 'Scenario discovery package smoke' ||
+    bundle.skills?.[0]?.name !== 'smoke-skill'
+  ) {
+    throw new Error('The packaged scenario-discovery helper did not produce a valid proposal bundle.');
+  }
+}
+
 async function main() {
   await mkdir(join(repoRoot, '.tmp'), { recursive: true });
   const temporaryRoot = await mkdtemp(join(repoRoot, '.tmp', 'package-smoke-'));
@@ -199,6 +256,7 @@ async function main() {
     const files = listed.stdout.split(/\r?\n/).filter(Boolean);
     assertPackageContents(files);
     await smokePortableSkill(temporaryRoot);
+    await smokeScenarioDiscoverySkill(temporaryRoot);
 
     const version = await execFileAsync(
       npxCommand,

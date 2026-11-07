@@ -9,11 +9,13 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 ### Added
 
 - Global remote skill-repository registration with explicit pinned refresh, bounded package snapshots, and catalog visibility for either supported harness.
+- Successful remote refreshes retain their bounded no-checkout Git clones under managed config storage; interactive final shutdown offers Keep/Delete, while non-interactive shutdown retains and reports locations.
 - Project-independent drafts start from an outcome, register and explicitly refresh optional remote repositories, and select pinned skills and agents without installing them into an existing project.
 - A configurable local shared bundle library supports reviewed no-overwrite publication, browsing, and import of portable bundles.
 - Remote native-agent discovery and selection, safe installation into native project locations, and preflight checks for installed content and command-surface support.
 - Remote skill selections persist their exact source, revision, and package path through chain editing, preflight, and export.
 - Disposable chain-test workspaces with retained project/run state, recent-project hiding, explicit cleanup, and refusal to delete a workspace that owns the active run.
+- Goal-driven scenario discovery in disposable workspaces across global, pinned remote, and optionally selected project catalogs, with reviewed proposal acceptance and frozen package copies in global drafts.
 - Reusable `loom-run-bundle` Agent Skill package with a standalone Node.js helper for reviewed bundle installation, host-mediated chain execution, confirmation gates, and explicit interrupted-run recovery.
 - Separate portable run records, bundle fingerprints, no-overwrite skill installation, and an export-dialog download for the reusable runner skill.
 - Portable `.loom.json` chain export/import with complete skill packages, review previews, explicit reuse of installed skills, safe bounded file handling, and fresh permission consent.
@@ -37,6 +39,8 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Changed
 
+- The standalone `scenario-discovery` skill now has an explicitly gated Skill Loom managed-workspace mode; `loom-run-bundle` needs no change because accepted v1 bundles already use its existing portable contract.
+- Global draft catalogs now include enabled global skill sources, and may add project-local packages for a selected discovery workspace.
 - Copilot trust guidance now distinguishes persistent folder trust from session-only approval.
 - Persisted chain documents now use version 3 for exact remote skill snapshot bindings and migrate valid version 1 and 2 chains while preserving their existing fields.
 - Portable bundle export uses version 2 for chains with a selected native agent, while preserving version 1 for agent-free chains; import is no-overwrite and rollback-safe for both packages and agent definitions.
@@ -52,6 +56,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 - Missing, disabled, ambiguous, and unavailable bundle sources now have distinct actionable diagnostics.
 - Legacy name-only steps no longer pass preflight by selecting the first of multiple same-named remote packages.
 - Copilot catalog discovery now maps `personal-agents` and `personal-copilot` source labels to `personal` instead of skipping those skills.
+- Shared-library review and publication now fingerprint the same frozen draft packages and omit draft-only input defaults.
 - Portable run-state writes now succeed on platforms such as Windows that reject directory fsync after an atomic replacement.
 
 ### Security

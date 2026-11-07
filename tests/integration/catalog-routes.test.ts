@@ -486,7 +486,10 @@ describe('remote skill source settings and catalog snapshots', () => {
       [agentHash, '---\nname: remote-reviewer\ndescription: Reviews changes.\n---\nReview carefully.\n'],
     ]);
     const gitRunner: RemoteSourceGitRunner = async (args) => {
-      if (args[0] === 'clone') return { stdout: '' };
+      if (args[0] === 'clone') {
+        await mkdir(join(args.at(-1)!, '.git'), { recursive: true });
+        return { stdout: '' };
+      }
       if (args.includes('rev-parse')) return { stdout: `${revision}\n` };
       if (args.includes('ls-tree')) {
         return {
@@ -503,10 +506,7 @@ describe('remote skill source settings and catalog snapshots', () => {
       }
       throw new Error('Unexpected Git operation.');
     };
-    const snapshot = await refreshRemoteSkillSource(configStore, source.id, {
-      gitRunner,
-      temporaryDirectory: root,
-    });
+    const snapshot = await refreshRemoteSkillSource(configStore, source.id, { gitRunner });
     expect(snapshot.revision).toBe(revision);
 
     for (const harness of ['opencode', 'copilot']) {

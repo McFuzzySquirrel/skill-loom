@@ -8,6 +8,7 @@
 |----------|------|-------|
 | Global config | `$LOOM_CONFIG_DIR/config.json` or `~/.config/loom/config.json` | Created on first read; never stores a credential value |
 | Active run pointer | `$LOOM_CONFIG_DIR/active-run.json` | At most one active run across the whole server |
+| Frozen global-draft packages | `$LOOM_CONFIG_DIR/draft-packages/<draftId>.json` | Versioned portable bundle retained when a discovery proposal is accepted; deleted with its draft |
 | Chain | `<canonicalProject>/.loom/chains/<chainId>.json` | Project-local, reviewable in git |
 | Run | `<canonicalProject>/.loom/runs/<runId>.json` | `runs/` is listed in `<project>/.loom/.gitignore` |
 | `.loom` guard | `<canonicalProject>/.loom/.gitignore` | Created only when absent; contains `runs/` |
@@ -17,6 +18,7 @@
 ## Identifier rules
 
 - Chain and run ids: lowercase letters, digits, `_`, and `-`; first character is a letter or digit; maximum 64 characters.
+- Draft package ids use the global chain id rule and the document has a literal version; validate the contained portable bundle with its shared parser.
 - Step ids and input names: stable, unique within the document, and safe to interpolate into a prompt.
 - Project id: derived on the server from the canonical project path. Never accept a client path as an id.
 - Reject `..`, `/`, `\`, NUL, absolute paths, and percent-encoded separators before constructing a filename.

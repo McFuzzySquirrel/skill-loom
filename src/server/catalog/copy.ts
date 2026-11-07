@@ -69,6 +69,8 @@ export interface CopySkillIntoProjectInput {
   entry: SkillEntry;
   /** Whether to suffix the destination if the skill directory already exists. */
   allowNameSuffix?: boolean;
+  /** Explicitly allow a fresh catalog entry from a selected source project. */
+  allowProjectSource?: boolean;
 }
 
 export interface CopySkillIntoProjectResult {
@@ -85,9 +87,15 @@ export function projectSkillRootFor(_harness: SkillHarness, projectPath: string)
 export async function copySkillIntoProject(
   input: CopySkillIntoProjectInput,
 ): Promise<CopySkillIntoProjectResult> {
-  const { entry, projectPath, harness, allowNameSuffix = true } = input;
+  const {
+    entry,
+    projectPath,
+    harness,
+    allowNameSuffix = true,
+    allowProjectSource = false,
+  } = input;
 
-  if (entry.source === 'project') {
+  if (entry.source === 'project' && !allowProjectSource) {
     throw new CatalogCopyError(
       CATALOG_COPY_ERROR_CODES.SOURCE_ALREADY_PROJECT,
       'This skill is already part of the current project.',

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -13,6 +13,7 @@ import {
   refreshRemoteSkillSource,
   type RemoteSourceGitRunner,
 } from '../../src/server/catalog/remote.js';
+import { listRetainedRemoteClones } from '../../src/server/catalog/remote-clones.js';
 
 const roots: string[] = [];
 const revision = 'a'.repeat(40);
@@ -55,7 +56,11 @@ function fakeGit(tree = [
     async run(args, _cwd, _timeoutMs, maxOutputBytes) {
       commands.push(args);
       if (maxOutputBytes !== undefined) outputLimits.push(maxOutputBytes);
-      if (args[0] === 'clone' || args[1] === 'fetch') return { stdout: '' };
+      if (args[0] === 'clone') {
+        await mkdir(join(args.at(-1)!, '.git'), { recursive: true });
+        return { stdout: '' };
+      }
+      if (args[1] === 'fetch') return { stdout: '' };
       if (args.includes('rev-parse')) return { stdout: `${revision}\n` };
       if (args.includes('ls-tree')) return { stdout: tree };
       if (args.includes('cat-file')) {
@@ -69,10 +74,8 @@ function fakeGit(tree = [
 }
 
 describe('remote skill source snapshots', () => {
-  it('pins packages to a commit, stores complete files, and removes the staging clone', async () => {
+  it('pins packages to a commit, stores complete files, and retains the successful clone', async () => {
     const root = await makeRoot();
-    const staging = join(root, 'staging');
-    await mkdir(staging);
     const store = createConfigStore({
       env: { LOOM_CONFIG_DIR: join(root, 'config') },
       homeDirectory: () => root,
@@ -85,10 +88,7 @@ describe('remote skill source snapshots', () => {
     });
     const git = fakeGit();
 
-    const snapshot = await refreshRemoteSkillSource(store, 'demo-source', {
-      gitRunner: git.run,
-      temporaryDirectory: staging,
-    });
+    const snapshot = await refreshRemoteSkillSource(store, 'demo-source', { gitRunner: git.run });
 
     expect(snapshot).toMatchObject({
       sourceId: 'demo-source',
@@ -114,7 +114,13 @@ describe('remote skill source snapshots', () => {
       snapshot.packages[0]!.directory,
     );
     expect(await readFile(join(packageRoot, 'SKILL.md'), 'utf8')).toContain('Instructions.');
-    expect((await readdir(staging))).toEqual([]);
+    const retained = await listRetainedRemoteClones(store.getConfigDir());
+    expect(retained).toHaveLength(1);
+    expect(retained[0]).toMatchObject({
+      sourceId: 'demo-source',
+      revision,
+      path: join(store.getConfigDir(), 'catalog-clones', `clone-${retained[0]!.id}`, 'repository'),
+    });
     expect(git.commands[0]).toContain('--no-checkout');
     expect(git.commands.flat().some((argument) => argument === 'checkout')).toBe(false);
     expect(git.outputLimits).toEqual([
@@ -191,8 +197,6 @@ describe('remote skill source snapshots', () => {
 
   it('rejects unsafe package files and leaves no partial snapshot', async () => {
     const root = await makeRoot();
-    const staging = join(root, 'staging');
-    await mkdir(staging);
     const store = createConfigStore({
       env: { LOOM_CONFIG_DIR: join(root, 'config') },
       homeDirectory: () => root,
@@ -209,14 +213,11 @@ describe('remote skill source snapshots', () => {
     ].join('');
     const git = fakeGit(unsafeTree);
 
-    await expect(refreshRemoteSkillSource(store, 'demo-source', {
-      gitRunner: git.run,
-      temporaryDirectory: staging,
-    })).rejects.toMatchObject({
+    await expect(refreshRemoteSkillSource(store, 'demo-source', { gitRunner: git.run })).rejects.toMatchObject({
       code: REMOTE_SOURCE_ERROR_CODES.INVALID_PACKAGE,
     } satisfies Partial<RemoteSourceError>);
     expect(await listRemoteSkillSnapshots(store.getConfigDir(), 'demo-source')).toEqual([]);
-    expect(await readdir(staging)).toEqual([]);
+    expect(await listRetainedRemoteClones(store.getConfigDir())).toEqual([]);
   });
 
   it('reports absent registrations and limits duplicate output without leaking repository details', async () => {
@@ -241,11 +242,8 @@ describe('remote skill source snapshots', () => {
         repository: 'https://example.com/acme/skills.git',
       }],
     });
-    const staging = join(root, 'staging-many');
-    await mkdir(staging);
     await expect(refreshRemoteSkillSource(sourceStore, 'demo-source', {
       gitRunner: fakeGit(tree).run,
-      temporaryDirectory: staging,
     })).rejects.toMatchObject({ code: REMOTE_SOURCE_ERROR_CODES.TOO_LARGE });
   });
 });

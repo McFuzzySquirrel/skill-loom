@@ -192,6 +192,82 @@ describe('managed test workspaces', () => {
       .toBe(skillText);
   });
 
+  it('creates a managed discovery workspace from reviewed project packages and retains its goal', async () => {
+    const {
+      configStore,
+      source,
+      chainService,
+      catalogService,
+      service,
+    } = await setup();
+    const skillName = 'goal-planning';
+    const skillText = `---\nname: ${skillName}\ndescription: Plan a goal.\n---\nRead the supplied goal and make a plan.\n`;
+    const packagePath = join(source.canonicalPath, '.agents', 'skills', skillName);
+    await mkdir(packagePath, { recursive: true });
+    await writeFile(join(packagePath, 'SKILL.md'), skillText);
+    const entry: SkillEntry = {
+      id: 'copilot-project-goal-planning',
+      harness: 'copilot',
+      source: 'project',
+      name: skillName,
+      description: 'Plan a goal.',
+      path: join(packagePath, 'SKILL.md'),
+      packagePath,
+      enabled: true,
+    };
+    catalogService.getCatalog = async ({ projectPath, harness }) => {
+      const entries = projectPath === source.canonicalPath ? [entry] : [];
+      return {
+        harness,
+        query: '',
+        total: entries.length,
+        counts: {
+          total: entries.length,
+          bySource: {
+            project: entries.length, personal: 0, custom: 0, plugin: 0,
+            builtin: 0, 'loom-extra': 0, remote: 0,
+          },
+        },
+        groups: entries.length === 0
+          ? []
+          : [{ source: 'project', count: entries.length, entries }],
+        agents: [],
+        warnings: [],
+        elapsedMs: 0,
+      };
+    };
+
+    const workspace = await service.createDiscovery({
+      goal: 'Create a release checklist for the next version.',
+      harness: 'copilot',
+      skillIds: [entry.id],
+      sourceProjectId: source.id,
+    });
+
+    expect(workspace.purpose).toBe('discovery');
+    expect(workspace.discoveryGoal).toBe('Create a release checklist for the next version.');
+    expect(workspace.discoverySkillNames).toEqual([skillName]);
+    expect(await readFile(join(workspace.path, '.agents', 'skills', skillName, 'SKILL.md'), 'utf8'))
+      .toBe(skillText);
+    expect(await readFile(
+      join(workspace.path, '.agents', 'skills', 'scenario-discovery', 'SKILL.md'),
+      'utf8',
+    )).toContain('Skill Loom managed-workspace mode');
+    const discoveryChain = await chainService.get(workspace.path, workspace.chainId);
+    expect(discoveryChain.steps[0]?.instruction).toContain('{{goal}}');
+    expect(discoveryChain.inputs[0]?.defaultValue).toBe(workspace.discoveryGoal);
+    expect((await configStore.get()).testWorkspaces).toContainEqual(
+      expect.objectContaining({
+        id: workspace.id,
+        purpose: 'discovery',
+        discoverySourceProjectId: source.id,
+      }),
+    );
+
+    await service.remove(workspace.id);
+    expect(await service.list()).toEqual([]);
+  });
+
   it('refuses cleanup while the managed project owns the active run pointer', async () => {
     const { configDirectory, source, chain, service } = await setup();
     const workspace = await service.create({

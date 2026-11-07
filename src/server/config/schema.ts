@@ -44,12 +44,41 @@ export type RecentProject = z.infer<typeof RecentProjectSchema>;
 export const TestWorkspaceRecordSchema = z.strictObject({
   id: z.uuid(),
   projectId: NonEmptyStringSchema,
+  purpose: z.enum(['test', 'discovery']).optional(),
   sourceProjectId: NonEmptyStringSchema.optional(),
   sourceChainId: NonEmptyStringSchema.optional(),
   sourceDraftId: NonEmptyStringSchema.optional(),
+  discoveryGoal: z.string().trim().min(1).max(1_000).optional(),
+  discoverySourceProjectId: NonEmptyStringSchema.optional(),
+  discoverySkillNames: z.array(NonEmptyStringSchema.max(128)).min(1).max(20).optional(),
   chainId: NonEmptyStringSchema,
   createdAt: z.iso.datetime({ offset: true }),
 }).superRefine((record, context) => {
+  if (record.purpose === 'discovery') {
+    if (
+      record.sourceProjectId !== undefined ||
+      record.sourceChainId !== undefined ||
+      record.sourceDraftId !== undefined ||
+      record.discoveryGoal === undefined ||
+      record.discoverySkillNames === undefined
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'A discovery workspace must record its goal and staged skills, not a source chain.',
+      });
+    }
+    return;
+  }
+  if (
+    record.discoveryGoal !== undefined ||
+    record.discoverySourceProjectId !== undefined ||
+    record.discoverySkillNames !== undefined
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Only a discovery workspace may record discovery metadata.',
+    });
+  }
   const projectSource = record.sourceProjectId !== undefined && record.sourceChainId !== undefined;
   const draftSource = record.sourceDraftId !== undefined;
   if (projectSource === draftSource) {

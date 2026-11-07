@@ -42,7 +42,7 @@ status: Accepted
 
 ## Decision Outcome
 
-Chosen option: "Use a configured local or mounted directory with immutable publication." Skill Loom validates the configured path, scans a bounded set of bundle files, and publishes by writing and syncing a temporary file in the same directory before exclusive hard-link creation. The server regenerates the source bundle and checks the user's review fingerprint before publication. There is no overwrite or delete operation.
+Chosen option: "Use a configured local or mounted directory with immutable publication." Skill Loom validates the configured path, scans a bounded set of bundle files, and publishes by writing and syncing a temporary file in the same directory before exclusive hard-link creation. The server regenerates the source bundle and checks the user's review fingerprint before publication. For a global draft with a frozen package bundle, regeneration combines the current draft chain with those immutable package files; it does not re-resolve them from a mutable catalog. Draft-only input defaults are omitted from the reviewed portable bundle. There is no overwrite or delete operation.
 
 Publication review asks the user to confirm package contents and redistribution permission. The software does not harvest license or notice files; users remain responsible for reviewing those obligations. Storage may be a mounted share if it supports same-directory hard links, but the application itself remains single-user and loopback-only.
 
@@ -61,4 +61,4 @@ Publication review asks the user to confirm package contents and redistribution 
 ## Links
 
 - Related: [ADR-0010](0010-global-chain-library-snapshots.md), [ADR-0015](0015-pinned-remote-skill-snapshots.md), and [ADR-0018](0018-version-portable-bundles-for-native-agents.md).
-- Regression coverage: `tests/unit/shared-library.test.ts` and `tests/integration/shared-bundle-routes.test.ts`.
+- Regression coverage: `tests/unit/shared-library.test.ts`, `tests/integration/shared-bundle-routes.test.ts`, and `tests/integration/test-workspace-routes.test.ts`.

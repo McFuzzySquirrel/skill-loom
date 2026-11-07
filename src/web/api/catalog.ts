@@ -180,6 +180,7 @@ export interface RemoteSkillSnapshot {
 export interface CatalogListOptions {
   harness?: CatalogHarness;
   query?: string;
+  sourceProjectId?: string;
   signal?: AbortSignal;
 }
 
@@ -188,7 +189,7 @@ export interface CatalogApi {
   getSkillDetail: (
     projectId: string,
     skillId: string,
-    options?: Pick<CatalogListOptions, 'harness' | 'signal'>,
+    options?: Pick<CatalogListOptions, 'harness' | 'signal' | 'sourceProjectId'>,
   ) => Promise<SkillDetail>;
   copySkillToProject: (
     projectId: string,
@@ -659,6 +660,9 @@ export function createCatalogApi(fetchImpl: FetchLike = fetch): CatalogApi {
       if (options.query !== undefined) {
         search.set(projectId === DRAFT_CATALOG_ID ? 'query' : 'q', options.query);
       }
+      if (projectId === DRAFT_CATALOG_ID && options.sourceProjectId !== undefined) {
+        search.set('sourceProjectId', options.sourceProjectId);
+      }
       const suffix = search.toString();
       const value = await requestJson<unknown>(
         `${catalogPath(projectId)}${suffix === '' ? '' : `?${suffix}`}`,
@@ -671,11 +675,14 @@ export function createCatalogApi(fetchImpl: FetchLike = fetch): CatalogApi {
     async getSkillDetail(
       projectId: string,
       skillId: string,
-      options: Pick<CatalogListOptions, 'harness' | 'signal'> = {},
+      options: Pick<CatalogListOptions, 'harness' | 'signal' | 'sourceProjectId'> = {},
     ): Promise<SkillDetail> {
       const search = new URLSearchParams();
       if (options.harness !== undefined) {
         search.set('harness', options.harness);
+      }
+      if (projectId === DRAFT_CATALOG_ID && options.sourceProjectId !== undefined) {
+        search.set('sourceProjectId', options.sourceProjectId);
       }
       const suffix = search.toString();
       const detailPath =

@@ -248,6 +248,36 @@ describe('typed updates', () => {
     expect(temporaryFiles(await readdir(dirname(store.getConfigPath())))).toEqual([]);
   });
 
+  it('validates discovery workspace metadata without invalidating existing test records', () => {
+    const base = {
+      version: CONFIG_VERSION,
+      testWorkspaces: [{
+        id: 'f04b89d8-6ab7-4678-96dc-a225fe9024ac',
+        projectId: 'managed-project',
+        purpose: 'discovery',
+        discoveryGoal: 'Prepare a release checklist.',
+        discoverySkillNames: ['release-planning'],
+        chainId: 'discovery-chain',
+        createdAt: '2026-11-04T12:00:00.000Z',
+      }],
+    };
+    expect(LoomConfigSchema.safeParse(base).success).toBe(true);
+    expect(LoomConfigSchema.safeParse({
+      ...base,
+      testWorkspaces: [{ ...base.testWorkspaces[0], discoverySkillNames: [] }],
+    }).success).toBe(false);
+    expect(LoomConfigSchema.safeParse({
+      ...base,
+      testWorkspaces: [{
+        id: 'f04b89d8-6ab7-4678-96dc-a225fe9024ac',
+        projectId: 'managed-project',
+        sourceDraftId: 'existing-draft',
+        chainId: 'copied-chain',
+        createdAt: '2026-11-04T12:00:00.000Z',
+      }],
+    }).success).toBe(true);
+  });
+
   it('supports a functional update against the current document', async () => {
     const root = await makeRoot();
     const store = storeFor(root);

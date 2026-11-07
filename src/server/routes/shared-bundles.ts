@@ -18,6 +18,11 @@ import {
   SharedLibraryError,
   type SharedLibrary,
 } from '../bundles/shared-library.js';
+import {
+  draftBundleMatchesChain,
+  readDraftBundle,
+  updateDraftBundleChain,
+} from '../chains/draft-bundles.js';
 import type { ConfigStore } from '../config/store.js';
 
 const configureSchema = z.strictObject({
@@ -113,16 +118,27 @@ export const sharedBundleRoutes: FastifyPluginAsync<SharedBundleRoutesOptions> =
       );
     }
     try {
-      const chain = parsed.data.source.type === 'draft'
-        ? await getDraftService().get(options.configStore.getConfigDir(), parsed.data.source.draftId)
-        : await projectChains.get(
-            await resolveProjectPath(registry, parsed.data.source.projectId),
-            parsed.data.source.chainId,
-          );
-      const sourcePath = parsed.data.source.type === 'draft'
-        ? options.configStore.getConfigDir()
-        : await resolveProjectPath(registry, parsed.data.source.projectId);
-      const bundle = await exportBundle(chain, sourcePath, catalog);
+      let bundle;
+      if (parsed.data.source.type === 'draft') {
+        const configDirectory = options.configStore.getConfigDir();
+        const chain = await getDraftService().get(configDirectory, parsed.data.source.draftId);
+        const frozenBundle = await readDraftBundle(configDirectory, chain.id);
+        if (frozenBundle === null) {
+          bundle = await exportBundle(chain, configDirectory, catalog);
+        } else {
+          if (!draftBundleMatchesChain(frozenBundle, chain)) {
+            throw new SharedLibraryError(
+              SHARED_LIBRARY_ERROR_CODES.REVIEW_STALE,
+              'The saved draft no longer matches its frozen package bundle.',
+            );
+          }
+          bundle = updateDraftBundleChain(frozenBundle, chain);
+        }
+      } else {
+        const projectPath = await resolveProjectPath(registry, parsed.data.source.projectId);
+        const chain = await projectChains.get(projectPath, parsed.data.source.chainId);
+        bundle = await exportBundle(chain, projectPath, catalog);
+      }
       const currentFingerprint = createHash('sha256')
         .update(JSON.stringify(bundle), 'utf8')
         .digest('hex');

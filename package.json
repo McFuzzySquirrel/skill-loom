@@ -19,14 +19,15 @@
     "docs/OPERATIONS.md"
   ],
   "scripts": {
-    "predev": "npm run build:portable-skill",
+    "predev": "npm run build:portable-skill && npm run build:scenario-discovery-skill",
     "dev": "node scripts/dev-supervisor.mjs",
     "dev:server": "tsx watch src/server/index.ts",
     "dev:web": "vite",
-    "build": "npm run build:portable-skill && npm run build:web && npm run build:server",
+    "build": "npm run build:portable-skill && npm run build:scenario-discovery-skill && npm run build:web && npm run build:server",
     "build:web": "vite build",
     "build:server": "tsc -p tsconfig.server.json && node scripts/copy-scenario-skills.mjs",
     "build:portable-skill": "node scripts/build-portable-skill.mjs",
+    "build:scenario-discovery-skill": "node scripts/build-scenario-discovery-skill.mjs",
     "prepack": "npm run build",
     "start": "node dist/src/server/index.js",
     "typecheck": "npm run typecheck:server && npm run typecheck:web",

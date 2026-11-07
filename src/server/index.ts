@@ -6,10 +6,13 @@ import {
   type BuildAppOptions,
   type ServerSettings,
 } from './app.js';
+import { resolveRetainedRemoteCloneShutdown } from './catalog/remote-clones.js';
+import { createConfigStore } from './config/store.js';
+import type { ServerShutdownMode } from './lifecycle.js';
 
 /** Minimal closeable surface so signal wiring is testable without a listener. */
 export interface CloseableServer {
-  close(): Promise<void>;
+  close(mode: ServerShutdownMode): Promise<void>;
 }
 
 export interface SignalSource {
@@ -54,7 +57,8 @@ export function installShutdownHandlers(
       signals.removeListener(event, handlers[event]);
     }
 
-    server.close().catch((error: unknown) => {
+    const mode: ServerShutdownMode = signal === 'SIGINT' ? 'interactive' : 'non-interactive';
+    server.close(mode).catch((error: unknown) => {
       if (options.onCloseError) {
         options.onCloseError(error);
         return;
@@ -85,6 +89,9 @@ export function installShutdownHandlers(
  * instance and may call `stop()` for an explicit shutdown.
  */
 export async function startServer(options: BuildAppOptions = {}): Promise<StartedServer> {
+  const configStore = options.configStore ?? createConfigStore(
+    options.env === undefined ? {} : { env: options.env },
+  );
   const app = await buildApp(options);
   const settings: ServerSettings = { ...app.loomSettings };
 
@@ -111,9 +118,17 @@ export async function startServer(options: BuildAppOptions = {}): Promise<Starte
   if (process.env.LOOM_DEV_SUPERVISOR === '1') {
     process.on('message', handleSupervisorMessage);
   }
-  app.loomLifecycle.setShutdownHandler(async () => {
+  app.loomLifecycle.setShutdownHandler(async (mode) => {
     removeSignalHandlers();
     await app.close();
+    if (process.env.LOOM_DEV_SUPERVISOR !== '1') {
+      await resolveRetainedRemoteCloneShutdown(configStore.getConfigDir(), {
+        interactive: mode === 'interactive' && process.stdin.isTTY === true &&
+          process.stdout.isTTY === true,
+        input: process.stdin,
+        output: process.stdout,
+      });
+    }
     if (
       process.env.LOOM_DEV_SUPERVISOR === '1' &&
       process.send !== undefined &&
@@ -136,13 +151,13 @@ export async function startServer(options: BuildAppOptions = {}): Promise<Starte
     }
   });
   removeSignalHandlers = installShutdownHandlers({
-    close: () => app.loomLifecycle.stop(),
+    close: (mode) => app.loomLifecycle.stop(mode),
   });
 
   return {
     app,
     settings,
-    stop: () => app.loomLifecycle.stop(),
+    stop: () => app.loomLifecycle.stop('interactive'),
   };
 }
 

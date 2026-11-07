@@ -21,7 +21,7 @@ LOOM_CONFIG_DIR=/absolute/path/to/loom-profile npm start
 | `LOOM_PORT` | `7373` | TCP port from 1 to 65535. |
 | `LOOM_WEB_ROOT` | discovered `dist/web` | Optional override for the built UI directory; intended for controlled deployments and tests. |
 
-The versioned config document contains `version`, `harnessCommands`, `extraSkillDirectories`, `remoteSkillSources`, `recentProjects`, and `uiPreferences`. `remoteSkillSources` stores validated credential-free Git URLs and optional refs; pinned package snapshots are retained below `<LOOM_CONFIG_DIR>/catalog-sources/`. `harnessCommands` may override the executable name or absolute path for `opencode` or `copilot`; a missing entry resolves from `PATH`. The config schema is strict: credential-like fields such as `apiKey`, `token`, or `secret` are invalid and are never stored there. Configuration writes use an atomic temporary-file replacement. A corrupt or unsupported-version config is reported rather than silently rewritten.
+The versioned config document contains `version`, `harnessCommands`, `extraSkillDirectories`, `remoteSkillSources`, `recentProjects`, `testWorkspaces`, and `uiPreferences`. `remoteSkillSources` stores validated credential-free Git URLs and optional refs; pinned package snapshots are retained below `<LOOM_CONFIG_DIR>/catalog-sources/`. Accepted scenario-discovery drafts retain complete package bundles below `<LOOM_CONFIG_DIR>/draft-packages/`; deleting the global draft removes its frozen package file. `harnessCommands` may override the executable name or absolute path for `opencode` or `copilot`; a missing entry resolves from `PATH`. The config schema is strict: credential-like fields such as `apiKey`, `token`, or `secret` are invalid and are never stored there. Configuration and draft-package writes use atomic temporary-file replacement. A corrupt or unsupported-version config is reported rather than silently rewritten.
 
 `extraSkillDirectories` is the global list managed from the skill-catalog settings dialog. Recent projects store the canonical path, display name, derived id, and last-opened time; removing a recent entry never removes project files.
 
@@ -49,9 +49,11 @@ The helper is not the `skill-loom` server CLI and does not launch a nested Copil
 
 | Path | Contents | Notes |
 |------|----------|-------|
-| `~/.config/loom/config.json` | Global config, harness command overrides, extra skill directories, recent projects, UI preferences. | Override the whole directory with `LOOM_CONFIG_DIR`. |
-| `~/.config/loom/test-workspaces/<uuid>/` | Retained managed test project, including its `.loom/chains/` and `.loom/runs/` data. | Hidden from the ordinary recent-project list. Remove from **Test workspaces** after inspecting results; active-run ownership blocks cleanup. |
+| `~/.config/loom/config.json` | Global config, harness command overrides, extra skill directories, remote sources, recent projects, test-workspace records, and UI preferences. | Override the whole directory with `LOOM_CONFIG_DIR`. |
+| `~/.config/loom/test-workspaces/<uuid>/` | Managed disposable test or scenario-discovery project, including its `.loom/chains/`, `.loom/runs/`, and discovery proposal artifact. | Hidden from the ordinary recent-project list. Remove from **Test workspaces** after inspecting results; active-run ownership blocks cleanup. |
+| `~/.config/loom/draft-packages/<draftId>.json` | Versioned portable bundle retained when a discovery proposal is accepted as a global draft. | Contains the complete frozen skill packages; written atomically and removed with its global draft. |
 | `~/.config/loom/catalog-sources/<source-id>/<commit>/` | Immutable snapshots of validated remote skill packages and their manifest. | Created only by explicit refresh; unregistering a source retains snapshots. Refresh uses bounded staging and package limits. |
+| `~/.config/loom/catalog-clones/clone-<uuid>/` | Successful no-checkout Git clone plus a small ownership record. | Failed refreshes remove staging clones. Interactive final shutdown offers deletion (default Keep); SIGTERM/non-interactive shutdown keeps clones and prints locations. Development backend reloads skip the prompt. Removing clones leaves pinned snapshots and saved work unchanged. |
 | `~/.config/loom/active-run.json` | Single global active-run pointer used for health reporting and startup recovery. | Holds only the active run's project path, run id, and status. |
 | `~/.config/loom/chains/*.json` | Global chain templates saved with **Save copy to library**. | Independent snapshots, not live links to project chains. Importing copies one into a project with a new id. |
 | `<project>/.loom/chains/*.json` | Saved chain definitions, including steps, inputs, harness, session mode, and the automatic-permission opt-in. | Versioned JSON written atomically. Chain files can be backed up or versioned if you want to keep recipes. |
@@ -61,7 +63,7 @@ The helper is not the `skill-loom` server CLI and does not launch a nested Copil
 
 A run freezes an immutable snapshot of the chain definition and resolved inputs at creation. Editing the saved chain later does not change an existing or in-flight run, and retry uses the snapshot. Chain and run writes are versioned JSON with atomic temp-file replacement; restarting the server marks records that were active as `interrupted` instead of assuming completion.
 
-The **Test workspaces** page lists retained disposable projects, provides a link to inspect each project, and offers explicit cleanup. If cleanup reports that a workspace owns the active run, finish or explicitly abort/recover that run first. Workspaces isolate files from the original project only; they do not restrict the harness's normal filesystem, network, or credential access.
+The **Test workspaces** page lists retained disposable projects, provides links to inspect each project and run discovery, supports proposal review/acceptance, and offers explicit cleanup. If cleanup reports that a workspace owns the active run, finish or explicitly abort/recover that run first. Workspaces isolate files from the original project only; they do not restrict the harness's normal filesystem, network, or credential access.
 
 ## Harness prerequisites
 

@@ -60,7 +60,7 @@ function startBackend() {
       message.type === 'loom:server-stopped' &&
       message.intent === 'stop'
     ) {
-      void shutdown('server requested shutdown');
+      void shutdown('server requested shutdown', 0, 'interactive');
     }
   });
   child.on('error', (error) => reportChildError('backend', error));
@@ -70,7 +70,7 @@ function startBackend() {
       console.error(
         `Skill Loom backend exited unexpectedly (${signal ?? code ?? 'unknown'}).`,
       );
-      void shutdown('backend exited unexpectedly', 1);
+      void shutdown('backend exited unexpectedly', 1, 'interactive');
     }
   });
 }
@@ -88,7 +88,7 @@ function startVite() {
     if (vite === child) vite = null;
     if (!stopping) {
       console.error(`Skill Loom Vite exited (${signal ?? code ?? 'unknown'}).`);
-      void shutdown('Vite exited', 1);
+      void shutdown('Vite exited', 1, 'interactive');
     }
   });
 }
@@ -143,7 +143,7 @@ function scheduleBackendRestart() {
     restartTimer = null;
     void restartBackend().catch((error) => {
       reportChildError('backend restart', error);
-      void shutdown('backend restart failed', 1);
+      void shutdown('backend restart failed', 1, 'interactive');
     });
   }, 150);
 }
@@ -172,7 +172,7 @@ async function watchDirectories(directory) {
   );
 }
 
-function shutdown(reason, exitCode = 0) {
+function shutdown(reason, exitCode = 0, retentionMode = 'non-interactive') {
   if (shutdownPromise !== null) return shutdownPromise;
   stopping = true;
   process.exitCode = exitCode;
@@ -189,17 +189,37 @@ function shutdown(reason, exitCode = 0) {
     const ownedVite = vite;
     if (ownedBackend !== null) expectedExits.add(ownedBackend);
     await Promise.all([stopChild(ownedBackend), stopChild(ownedVite)]);
+    if (retentionMode !== 'skip') {
+      try {
+        await import('tsx/esm');
+        const [{ createConfigStore }, { resolveRetainedRemoteCloneShutdown }] =
+          await Promise.all([
+            import('../src/server/config/store.ts'),
+            import('../src/server/catalog/remote-clones.ts'),
+          ]);
+        const configStore = createConfigStore();
+        await resolveRetainedRemoteCloneShutdown(configStore.getConfigDir(), {
+          interactive: retentionMode === 'interactive' &&
+            process.stdin.isTTY === true && process.stdout.isTTY === true,
+          input: process.stdin,
+          output: process.stdout,
+        });
+      } catch (error) {
+        reportChildError('remote clone shutdown', error);
+        process.exitCode = 1;
+      }
+    }
   })();
   return shutdownPromise;
 }
 
 process.once('SIGINT', () => {
-  void shutdown('SIGINT').then(() => {
+  void shutdown('SIGINT', 0, 'interactive').then(() => {
     process.exitCode = 0;
   });
 });
 process.once('SIGTERM', () => {
-  void shutdown('SIGTERM').then(() => {
+  void shutdown('SIGTERM', 0, 'non-interactive').then(() => {
     process.exitCode = 0;
   });
 });
@@ -211,6 +231,6 @@ try {
   console.log('Skill Loom development services starting on 127.0.0.1:5173.');
 } catch (error) {
   reportChildError('development supervisor', error);
-  await shutdown('startup failed');
+  await shutdown('startup failed', 1, 'non-interactive');
   process.exitCode = 1;
 }

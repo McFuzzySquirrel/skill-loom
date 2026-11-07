@@ -1,12 +1,13 @@
 import { randomBytes } from 'node:crypto';
 
 export type ServerLifecycleState = 'running' | 'stopping' | 'stopped' | 'failed';
+export type ServerShutdownMode = 'interactive' | 'non-interactive';
 
 /** One server instance's explicit, idempotent shutdown contract. */
 export class ServerLifecycle {
   readonly token = randomBytes(32).toString('base64url');
   private stateValue: ServerLifecycleState = 'running';
-  private shutdownHandler: (() => Promise<void>) | null = null;
+  private shutdownHandler: ((mode: ServerShutdownMode) => Promise<void>) | null = null;
   private shutdownPromise: Promise<void> | null = null;
   private responseBarrier: Promise<void> = Promise.resolve();
 
@@ -14,7 +15,7 @@ export class ServerLifecycle {
     return this.stateValue;
   }
 
-  setShutdownHandler(handler: () => Promise<void>): void {
+  setShutdownHandler(handler: (mode: ServerShutdownMode) => Promise<void>): void {
     if (this.shutdownHandler !== null) {
       throw new Error('The server shutdown handler is already configured.');
     }
@@ -43,7 +44,7 @@ export class ServerLifecycle {
     }
   }
 
-  stop(): Promise<void> {
+  stop(mode: ServerShutdownMode = 'interactive'): Promise<void> {
     if (this.shutdownPromise !== null) {
       return this.shutdownPromise;
     }
@@ -55,7 +56,7 @@ export class ServerLifecycle {
     }
 
     this.stateValue = 'stopping';
-    this.shutdownPromise = this.responseBarrier.then(() => this.shutdownHandler?.()).then(
+    this.shutdownPromise = this.responseBarrier.then(() => this.shutdownHandler?.(mode)).then(
       () => {
         this.stateValue = 'stopped';
       },

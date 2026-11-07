@@ -4,7 +4,6 @@ import {
   chmod,
   lstat,
   mkdir,
-  mkdtemp,
   opendir,
   readFile,
   readdir,
@@ -13,7 +12,6 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import { frontmatterString, parseSkillFrontmatter } from './frontmatter.js';
@@ -22,6 +20,10 @@ import {
   type RemoteSkillSource,
 } from '../config/schema.js';
 import type { ConfigStore } from '../config/store.js';
+import {
+  createRemoteCloneStagingDirectory,
+  retainRemoteClone,
+} from './remote-clones.js';
 
 export const REMOTE_SOURCE_LIMITS = {
   cloneTimeoutMs: 120_000,
@@ -76,8 +78,6 @@ export type RemoteSourceGitRunner = (
 export interface RemoteSourceOptions {
   /** Test seam; production always uses shell-free `git` execution. */
   gitRunner?: RemoteSourceGitRunner;
-  /** Staging root seam for isolated tests. */
-  temporaryDirectory?: string;
 }
 
 export const REMOTE_SOURCE_ERROR_CODES = {
@@ -183,7 +183,8 @@ export async function refreshRemoteSkillSource(
     );
   }
 
-  const workRoot = await mkdtemp(join(options.temporaryDirectory ?? tmpdir(), 'skill-loom-source-'));
+  const configDirectory = configStore.getConfigDir();
+  const workRoot = await createRemoteCloneStagingDirectory(configDirectory);
   const clonePath = join(workRoot, 'repository');
   const git = options.gitRunner ?? runGit;
   try {
@@ -243,7 +244,7 @@ export async function refreshRemoteSkillSource(
       throw tooLarge(sourceId);
     }
 
-    const snapshotRoot = await ensureSnapshotRoot(configStore.getConfigDir(), sourceId, revision);
+    const snapshotRoot = await ensureSnapshotRoot(configDirectory, sourceId, revision);
     const temporarySnapshot = join(dirname(snapshotRoot), `.${revision}.${randomUUID()}.tmp`);
     await mkdir(temporarySnapshot, { recursive: false, mode: 0o700 });
     try {
@@ -373,7 +374,14 @@ export async function refreshRemoteSkillSource(
         if (!isErrno(error, 'EEXIST') && !isErrno(error, 'ENOTEMPTY')) throw error;
         await rm(temporarySnapshot, { recursive: true, force: true });
       }
-      return await readSnapshot(snapshotRoot);
+      const snapshot = await readSnapshot(snapshotRoot);
+      await retainRemoteClone(configDirectory, {
+        stagingDirectory: workRoot,
+        sourceId,
+        ...(source.ref === undefined ? {} : { ref: source.ref }),
+        revision,
+      });
+      return snapshot;
     } catch (error) {
       await rm(temporarySnapshot, { recursive: true, force: true });
       throw error;
