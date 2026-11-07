@@ -90,6 +90,7 @@ The config document is versioned and strict:
     "copilot": "/absolute/path/to/copilot"
   },
   "extraSkillDirectories": ["/absolute/path/to/extra-skills"],
+  "remoteSkillSources": [],
   "recentProjects": [],
   "uiPreferences": {}
 }
@@ -97,6 +98,7 @@ The config document is versioned and strict:
 
 - `harnessCommands` optionally overrides the executable name or absolute path. A missing entry resolves from `PATH`. A broken override is a block; Skill Loom does not silently fall back to the default name.
 - `extraSkillDirectories` is the global extra-skill search list managed from the catalog settings dialog.
+- `remoteSkillSources` stores validated HTTPS/SSH Git URLs and optional refs for skill packages and supported native agents. Pinned snapshots live under `<LOOM_CONFIG_DIR>/catalog-sources/`; credentials are never stored.
 - `recentProjects` stores the canonical path, display name, derived id, and last-opened time.
 - `uiPreferences` is opaque to the server; the web client owns its meaning.
 - Credential-like fields such as `apiKey`, `token`, or `secret` are structurally invalid and are never stored. Do not add them.
@@ -127,13 +129,17 @@ If you need multi-user or remote access, this project does not provide it. Treat
 
 | Path | Contents | Notes |
 |---|---|---|
-| `~/.config/loom/config.json` | Global config, executable overrides, extra skill directories, recent projects, UI preferences. | Override the directory with `LOOM_CONFIG_DIR`. Created with restrictive permissions. |
+| `~/.config/loom/config.json` | Global config, executable overrides, extra skill directories, remote sources, recent projects, managed-workspace ownership, and UI preferences. | Override the directory with `LOOM_CONFIG_DIR`. Created with restrictive permissions. |
+| `~/.config/loom/drafts/*.json` | Project-independent chain drafts. | Separate from templates and project chains; back up with the config directory. |
+| `~/.config/loom/test-workspaces/<uuid>/` | Managed disposable projects created by **Test in disposable workspace**. | Retained until explicit cleanup from **Test workspaces**. Cleanup refuses the workspace holding the global active run. |
 | `~/.config/loom/active-run.json` | Single global active-run pointer. | Holds the active run's project path, run id, and status. Do not edit while a run is live. |
 | `~/.config/loom/chains/*.json` | Global chain templates. | Independent snapshots; importing copies one into a project with a new id. |
 | `<project>/.loom/chains/*.json` | Saved project chains. | Versioned JSON, atomic writes. Back up or version these recipes. |
 | `<project>/.loom/runs/*.json` | Run snapshots, statuses, actions, and bounded tails. | At most 200 lines or 32 KiB per step. Never a full transcript. This repository git-ignores `.loom/runs/`. |
 | `<project>/.agents/skills/` | Newly copied and bundle-imported skill packages for either harness. | Independent project files; deleting a chain does not remove them. Include these in recipe backups when needed. Existing packages are not migrated. |
-| Browser download location (`*.loom.json`) | Portable chain and skill bundles. | No run history or input defaults; review package contents and redistribution rights before sharing. Not a complete backup. |
+| `<project>/.opencode/agents/` and `<project>/.github/agents/` | Explicitly copied remote native agent definitions for the corresponding harness. | Copy never overwrites; chain preflight verifies the selected definition fingerprint. These are harness-specific and are not translated. |
+| Browser download location (`*.loom.json`) | Portable chain and skill bundles. | Version 1 contains skills; version 2 can also contain one selected native agent and its pinned identity. No run history or input defaults; review package contents and redistribution rights before sharing. Not a complete backup. |
+| Configured shared bundle directory | Immutable published `.loom.json` files. | Must be an existing absolute directory visible to the server and support same-directory hard links. Publication never replaces an existing file; the directory is local or mounted storage, not a hosted service. |
 | `~/.copilot/config.json` | Copilot's own folder-trust configuration. | Skill Loom only reads `trustedFolders`; it never writes this file. |
 
 Back up the configuration and recipes:
@@ -144,17 +150,23 @@ cp -a ~/.config/loom ~/loom-config-backup
 
 Back up a project's recipes by copying `<project>/.loom/chains/`. Run records are optional history; because they can contain terminal output, treat backups as sensitive and keep them out of version control. This repository already ignores `.loom/runs/`.
 
-Restore by stopping the server, replacing the config or chain directory, and starting again. Validate the restored JSON before use; an unsupported version or corrupt document is rejected rather than migrated beyond the documented version 1 shape.
+Restore by stopping the server, replacing the config or chain directory, and starting again. Validate the restored JSON before use; valid chain version 1 documents migrate to version 2, while unsupported versions or corrupt documents are rejected.
+
+Managed test workspaces are working directories, not security sandboxes. They use the normal harness permissions and authentication available to the server process. Keep disk usage under review and use the UI's explicit cleanup; do not remove a directory while its run is active.
+
+The **Shared bundles** page stores the configured server-side directory in global config. Configure it only to a directory whose access policy and backups are appropriate for the bundles it will contain. Publishing requires review confirmations for bundle contents and redistribution rights; the server regenerates the bundle and checks the reviewed fingerprint before atomically creating a new file without clobbering another. Skill Loom does not harvest license files or independently establish redistribution rights. A mounted share that does not support hard links fails visibly rather than falling back to an overwrite-prone write.
 
 ### Portable bundle administration
 
 Users can export saved project chains with their referenced skill packages and import them into another local installation. See the [sharing workflow](user-guide.md#share-a-chain-and-its-skills). This does not add remote access, user accounts, or a hosted sharing service.
 
-The version 1 `skill-loom-chain` bundle is JSON with base64-encoded package files and executable flags. Export prefers one enabled project-local package to same-name personal or extra-directory packages, but rejects multiple distinct project packages. The server validates both preview and import, rejects unsupported versions, unsafe paths, symlinks, special files, excluded credential/dependency directories, duplicate paths, mismatched skill metadata, and incomplete packages. Limits are 100 packages, 2,000 files, 20 MiB decoded content, and 30 MiB per import request. Existing packages are never overwritten, and permission opt-in is reset. Ordinary file contents are not secret-scanned; review remains essential.
+The `skill-loom-chain` bundle is JSON with base64-encoded package files and executable flags. Version 1 remains the export for chains without a selected native agent; version 2 adds the selected native agent identity and definition. Export uses the exact remote snapshot bound to a skill step; unbound legacy steps retain project-local precedence and fail on unresolved ambiguity. The server validates both preview and import, rejects unsupported versions, unsafe paths, symlinks, special files, excluded credential/dependency directories, duplicate paths, mismatched skill metadata, and incomplete packages. Limits are 100 skill packages, 2,000 combined files, 20 MiB decoded content, and 30 MiB per import request. Existing skill and agent files are never overwritten, and permission opt-in is reset. Ordinary file contents are not secret-scanned; review remains essential.
 
-The same-origin API exposes `GET /api/projects/:projectId/chains/:chainId/bundle`, `POST /api/projects/:projectId/chain-bundles/preview`, and `POST /api/projects/:projectId/chain-bundles/import`. POST bodies contain `bundle`; import additionally requires `confirmed: true` and an optional `reuseSkills` array of installed skill names. Preview is read-only. Import revalidates the bundle and conflicts and rolls back newly installed packages if chain persistence fails. A bundle does not install harness CLIs or external skill dependencies.
+Portable bundle version 2 includes the selected agent's source id, commit, repository-relative path, native path, fingerprint, and bytes; it omits the repository URL and all local filesystem paths. The current portable helper inspects v2 agents but refuses to prepare a selected-agent chain because it cannot switch the current host conversation's agent. Use Loom's managed run path for selected native agents. Persisted chain version 3 includes exact remote skill bindings and optional pinned agent identity; valid version 1 and 2 chain records migrate on read. Older application builds that understand only chain version 2 or below will reject version 3 chains.
 
-Standalone instruction steps use `kind: "instruction"` and contain `id`, `instruction`, and an optional `label`, with no `skillName`. Existing skill steps remain valid without a `kind`; explicit `kind: "skill"` is also supported. Both persist under the existing versioned chain format. Older application builds that do not understand instruction steps will reject such chains; use a compatible build on the receiving installation.
+The same-origin API exposes `GET /api/projects/:projectId/chains/:chainId/bundle`, `POST /api/projects/:projectId/chain-bundles/preview`, and `POST /api/projects/:projectId/chain-bundles/import`. POST bodies contain `bundle`; import additionally requires `confirmed: true` and an optional `reuseSkills` array of installed skill names. Preview is read-only. Import revalidates the bundle and conflicts and rolls back newly installed packages and agent definitions if chain persistence fails. A bundle does not install harness CLIs or external skill dependencies.
+
+Standalone instruction steps use `kind: "instruction"` and contain `id`, `instruction`, and an optional `label`, with no `skillName`. Existing skill steps remain valid without a `kind`; explicit `kind: "skill"` is also supported. Both persist under versioned chain format 3. Older application builds that do not understand instruction steps or chain version 3 will reject such chains; use a compatible build on the receiving installation.
 
 ## Health Checks and Monitoring
 
@@ -246,7 +258,7 @@ Confirm `command -v opencode` or `command -v copilot` in the environment that la
 
 ### Copilot trust is blocked
 
-Use the trust panel, or run `copilot -C <absolute-project-path>` manually, accept the folder-trust dialog, exit, and rerun preflight. Skill Loom reads `~/.copilot/config.json` and never writes it. Resolve trust before step 1 because a prompt queued behind the dialog can be swallowed.
+Use the trust panel, or run `copilot -C <absolute-project-path>` manually, and choose **Yes, and remember this folder for future sessions** in the folder-trust dialog. A session-only choice does not persist in `trustedFolders`. Exit the terminal and rerun preflight. Skill Loom reads `~/.copilot/config.json` and never writes it. Resolve trust before step 1 because a prompt queued behind the dialog can be swallowed.
 
 ### A run is interrupted or the active pointer is stale
 
@@ -264,7 +276,7 @@ For the full troubleshooting contract, including the dirty Git tree, node-pty, m
 - [ ] `~/.config/loom` is readable only by the intended local user; config writes use restrictive permissions.
 - [ ] No credential, token, API key, or secret is pasted into `config.json`, a chain, a run, or a support report.
 - [ ] Harness CLIs are authenticated in their own stores; Skill Loom reports presence only.
-- [ ] Copilot folder trust is resolved through Copilot's dialog; `~/.copilot/config.json` is not edited by hand unless you are repairing Copilot itself.
+- [ ] Copilot folder trust is persisted through Copilot's **Yes, and remember this folder for future sessions** dialog choice; `~/.copilot/config.json` is not edited by hand unless you are repairing Copilot itself.
 - [ ] The automatic-permission opt-in is enabled only for chains that genuinely need broad filesystem and tool access, and the exact flags are reviewed at preflight.
 - [ ] Run records and backups are treated as sensitive and kept out of version control.
 - [ ] Dependencies are installed from the lockfile and reviewed before upgrading.

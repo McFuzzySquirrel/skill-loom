@@ -25,6 +25,7 @@ export const SKILL_SOURCES = [
   'plugin',
   'builtin',
   'loom-extra',
+  'remote',
 ] as const;
 export type SkillSource = (typeof SKILL_SOURCES)[number];
 
@@ -50,8 +51,31 @@ export interface SkillEntry {
   packagePath: string;
   /** Canonical Loom-configured root for entries discovered from an extra directory. */
   sourceDirectory?: string;
+  /** Credential-free origin metadata for an immutable remote package snapshot. */
+  sourceId?: string;
+  repository?: string;
+  revision?: string;
+  repositoryPath?: string;
   /** Copilot can report disabled entries; filesystem discovery is enabled. */
   enabled: boolean;
+}
+
+/** A pinned harness-native agent definition from a verified remote snapshot. */
+export interface NativeAgentEntry {
+  id: string;
+  harness: SkillHarness;
+  source: 'remote';
+  name: string;
+  description: string;
+  path: string;
+  agentPath: string;
+  sourceId: string;
+  repository: string;
+  revision: string;
+  repositoryPath: string;
+  fingerprint: string;
+  status: 'available' | 'disabled' | 'invalid' | 'unsupported';
+  statusReason: string | null;
 }
 
 /** Warning codes are stable API values, never user-facing prose. */
@@ -73,6 +97,7 @@ export const CATALOG_WARNING_CODES = {
   SOURCE_UNKNOWN: 'SKILL_SOURCE_UNKNOWN',
   PATH_UNRESOLVED: 'SKILL_PATH_UNRESOLVED',
   DISCOVERY_SLOW: 'CATALOG_DISCOVERY_SLOW',
+  REMOTE_SOURCE_UNAVAILABLE: 'REMOTE_SOURCE_UNAVAILABLE',
 } as const;
 export type CatalogWarningCode =
   (typeof CATALOG_WARNING_CODES)[keyof typeof CATALOG_WARNING_CODES];
@@ -131,6 +156,25 @@ export function createSkillId(input: SkillIdInput): string {
     .digest('hex')
     .slice(0, 16);
   return `${input.harness}-${input.source}-${digest}`;
+}
+
+export function createNativeAgentId(input: Pick<
+  NativeAgentEntry,
+  'harness' | 'sourceId' | 'revision' | 'repositoryPath' | 'fingerprint'
+>): string {
+  const digest = createHash('sha256')
+    .update(input.harness)
+    .update('\0')
+    .update(input.sourceId)
+    .update('\0')
+    .update(input.revision)
+    .update('\0')
+    .update(input.repositoryPath)
+    .update('\0')
+    .update(input.fingerprint)
+    .digest('hex')
+    .slice(0, 16);
+  return `${input.harness}-remote-agent-${digest}`;
 }
 
 /** Deterministic catalog order: source group, then case-insensitive name, then path. */

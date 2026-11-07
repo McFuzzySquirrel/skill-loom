@@ -172,6 +172,7 @@ describe('catalog merge', () => {
         plugin: 0,
         builtin: 1,
         'loom-extra': 0,
+        remote: 0,
       },
     });
   });

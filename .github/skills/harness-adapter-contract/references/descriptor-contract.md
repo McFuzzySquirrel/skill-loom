@@ -11,6 +11,7 @@ export interface HarnessDescriptor {
   executable: string;
   discovery: "filesystem" | "cli-json";
   supportedSessionModes: Array<"shared" | "fresh" | "fork">;
+  nativeAgentSelection: { interactive: boolean; headless: boolean };
   nativeFork: boolean;
   trust: "none" | "folder-dialog";
   automaticAdvancement: "osc-working-idle" | "process-exit";
@@ -26,7 +27,7 @@ export interface SpawnSpec {
 }
 ```
 
-`StepInvocation` carries the assembled prompt, session id, project directory, session mode, and the per-chain permission opt-in. It never carries a shell string.
+`StepInvocation` carries the assembled prompt, session id, project directory, session mode, the per-chain permission opt-in, and an optional selected native-agent name. It never carries a shell string.
 
 ## Field rules
 
@@ -35,6 +36,7 @@ export interface SpawnSpec {
 | `executable` | Absolute path resolved from config override then `PATH`; never a bare command at spawn time |
 | `discovery` | `filesystem` for OpenCode, `cli-json` for Copilot |
 | `supportedSessionModes` | Modes the descriptor can actually honor; preflight blocks anything else |
+| `nativeAgentSelection` | Whether each command surface can explicitly select a project-native agent; preflight blocks unsupported surfaces |
 | `nativeFork` | True only when the CLI exposes a real fork flag |
 | `trust` | `folder-dialog` means preflight must resolve or block |
 | `automaticAdvancement` | The only signal the automatic runner may consume |
@@ -50,8 +52,8 @@ Do not fall back to a different harness, a bundled binary, or a shell lookup.
 
 ## Capability reporting
 
-Preflight reports the resolved path, version, supported modes, fork mechanism, trust state, and permission flags. Route and UI code receive these values as data; they must not import a harness module or compare `harness === "copilot"`.
+Preflight reports the resolved path, version, supported modes, fork mechanism, native-agent command-surface support, trust state, and permission flags. Route and UI code receive these values as data; they must not import a harness module or compare `harness === "copilot"`.
 
 ## Version handling
 
-The v1 target is OpenCode 2.2.5 and Copilot CLI 1.0.105. If a probe reports a different version, keep the descriptor in one place and add a version note to the block or warning. Never silently drop an unsupported flag.
+The v1 target is OpenCode 2.2.5 and Copilot CLI 1.0.105. If a probe reports a different version, keep the descriptor in one place and add a version note to the block or warning. Never silently drop an unsupported flag. Native-agent `--agent` argument support must be verified against both target versions before release; local binaries with different versions are not sufficient evidence.

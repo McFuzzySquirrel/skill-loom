@@ -568,6 +568,9 @@ test.describe('Run start and preflight', () => {
     await page.getByTestId('trust-start').click();
     const trustConfirm = page.getByTestId('trust-start-confirm-panel');
     await expect(trustConfirm).toBeVisible();
+    await expect(trustConfirm).toContainText(
+      'Yes, and remember this folder for future sessions',
+    );
     await expect(
       page.getByRole('heading', { level: 3, name: 'Open a Copilot trust session?' }),
     ).toBeFocused();

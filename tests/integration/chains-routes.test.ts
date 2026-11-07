@@ -212,6 +212,35 @@ function sequenceIds(prefix = 'chain'): (name: string) => string {
 }
 
 describe('chain CRUD through src/server/app.ts', () => {
+  it('persists and duplicates an exact native-agent selection', async () => {
+    const app = await buildTestApp();
+    const projectId = await registerProject(app, join(root, 'project-agent-chain'));
+    const agent = {
+      harness: 'opencode',
+      name: 'team/reviewer',
+      sourceId: 'remote-source',
+      revision: 'a'.repeat(40),
+      repositoryPath: '.opencode/agents/team/reviewer.md',
+      agentPath: 'team/reviewer.md',
+      fingerprint: 'b'.repeat(64),
+    };
+
+    const created = await createChain(app, projectId, baseDraft({ agent }));
+    expect(created.statusCode).toBe(201);
+    const chain = chainOf(created.body);
+    expect(chain.agent).toEqual(agent);
+
+    const duplicated = await duplicateChain(app, projectId, chain.id);
+    expect(duplicated.statusCode).toBe(201);
+    expect(chainOf(duplicated.body).agent).toEqual(agent);
+
+    const updated = await updateChain(app, projectId, chain.id, {
+      ...chain,
+      harness: 'copilot',
+    });
+    expect(updated.statusCode).toBe(422);
+  });
+
   it('creates, reads, lists, updates, duplicates, and deletes a chain', async () => {
     const app = await buildTestApp();
     const project = join(root, 'project-crud');
@@ -521,7 +550,7 @@ describe('chain request validation', () => {
         path: 'inputs.0.name',
       },
       { payload: { ...baseDraft(), id: 'client-supplied' }, path: 'id', code: 'server_generated' },
-      { payload: { ...baseDraft(), version: 2 }, path: 'version' },
+      { payload: { ...baseDraft(), version: CHAIN_VERSION - 1 }, path: 'version' },
     ];
 
     for (const testCase of cases) {

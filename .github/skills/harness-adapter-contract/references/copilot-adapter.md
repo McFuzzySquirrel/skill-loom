@@ -4,7 +4,7 @@
 
 ## Discovery
 
-Invoke `copilot skill list --json` with the project as `cwd`, an executable-plus-array spawn, a bounded timeout, and captured stdout/stderr. Normalize project, personal, plugin, custom, and builtin source labels. Preserve `enabled` and the canonical path when present.
+Invoke `copilot skill list --json` with the project as `cwd`, an executable-plus-array spawn, a bounded timeout, and captured stdout/stderr. Normalize project, personal, plugin, custom, and builtin source labels. Copilot CLI 1.0.107 also emits `personal-agents` and `personal-copilot`; map both to the catalog's `personal` source. Preserve `enabled` and the canonical path when present.
 
 Missing executable, non-zero exit, invalid JSON, and timeout each become a warning entry; none may be reported as an empty catalog.
 

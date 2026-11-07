@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -87,6 +88,50 @@ function command(
 }
 
 describe('portable bundle execution', () => {
+  it('inspects v2 agents but refuses to silently run with a different current agent', async () => {
+    const agentText = '---\nname: reviewer\ndescription: Review changes\n---\nReview the task.\n';
+    const fingerprint = createHash('sha256').update(agentText).digest('hex');
+    const agentBundle: ChainBundle = {
+      format: 'skill-loom-chain',
+      version: 2,
+      chain: {
+        ...bundle.chain,
+        agent: {
+          harness: 'opencode',
+          name: 'reviewer',
+          sourceId: 'source',
+          revision: 'a'.repeat(40),
+          repositoryPath: '.opencode/agents/reviewer.md',
+          agentPath: 'reviewer.md',
+          fingerprint,
+        },
+      },
+      skills: bundle.skills,
+      agents: [{
+        name: 'reviewer',
+        harness: 'opencode',
+        agentPath: 'reviewer.md',
+        fingerprint,
+        content: Buffer.from(agentText).toString('base64'),
+      }],
+    };
+    await writeFile(bundlePath, JSON.stringify(agentBundle));
+
+    const preview = await executePortableRequest({
+      command: 'inspect',
+      bundlePath,
+      projectPath: project,
+    }) as { agents: Array<{ name: string; content: string }> };
+    expect(preview.agents).toEqual([
+      expect.objectContaining({ name: 'reviewer', content: agentText }),
+    ]);
+    await expect(prepare()).rejects.toMatchObject({
+      code: 'NATIVE_AGENT_REQUIRES_LOOM',
+    });
+    await expect(readFile(join(project, '.agents', 'skills', 'review', 'SKILL.md')))
+      .rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('inspects without project writes and prepares frozen inputs and approved packages', async () => {
     const preview = await executePortableRequest({ command: 'inspect', bundlePath, projectPath: project }) as {
       bundleFingerprint: string;

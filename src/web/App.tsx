@@ -8,12 +8,16 @@ import { WorkspaceProvider } from './WorkspaceContext';
 import { Redirect, RouterProvider, matchRoute, useRouter } from './router';
 import { ChainBuilderPage } from './routes/ChainBuilderPage';
 import { GlobalChainsPage } from './routes/GlobalChainsPage';
+import { GlobalDraftsPage } from './routes/GlobalDraftsPage';
+import { SharedBundlesPage } from './routes/SharedBundlesPage';
 import { NotFoundPage } from './routes/NotFoundPage';
 import { ProjectPage, ProjectsPage } from './routes/ProjectsPage';
 import { RunPage } from './routes/RunPage';
 import { RunStartPage } from './routes/RunStartPage';
+import { RemoteSourcesPage } from './routes/RemoteSourcesPage';
 import { ScenarioCatalogPage } from './routes/ScenarioCatalogPage';
 import { TerminalRunPage } from './routes/TerminalRunPage';
+import { TestWorkspacesPage } from './routes/TestWorkspacesPage';
 
 const HelpPage = lazy(async () => {
   const module = await import('./routes/HelpPage');
@@ -43,9 +47,40 @@ const ROUTES: RouteDefinition[] = [
     render: () => <GlobalChainsPage />,
   },
   {
+    pattern: '/drafts',
+    title: 'Chain drafts',
+    render: () => <GlobalDraftsPage />,
+  },
+  {
+    pattern: '/drafts/:draftId',
+    title: 'Draft workflow designer',
+    render: (params) => (
+      <ChainBuilderPage
+        projectId="__global_drafts__"
+        chainId={params.draftId ?? ''}
+        draftMode
+      />
+    ),
+  },
+  {
+    pattern: '/shared-bundles',
+    title: 'Shared bundle library',
+    render: () => <SharedBundlesPage />,
+  },
+  {
     pattern: '/scenarios',
     title: 'Scenario catalog',
     render: () => <ScenarioCatalogPage />,
+  },
+  {
+    pattern: '/sources',
+    title: 'Remote skill repositories',
+    render: () => <RemoteSourcesPage />,
+  },
+  {
+    pattern: '/test-workspaces',
+    title: 'Disposable test workspaces',
+    render: () => <TestWorkspacesPage />,
   },
   {
     pattern: '/projects/:projectId/skills',

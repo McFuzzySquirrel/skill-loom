@@ -84,6 +84,7 @@ class FileGlobalChainService implements GlobalChainService {
       steps: source.steps,
       inputs: source.inputs,
       automaticPermissionOptIn: source.automaticPermissionOptIn,
+      ...(source.agent === undefined ? {} : { agent: source.agent }),
     };
     const candidate = this.buildChain(draft, this.nextId(name), timestamp, timestamp);
 
@@ -148,6 +149,7 @@ class FileGlobalChainService implements GlobalChainService {
       steps: draft.steps,
       inputs: draft.inputs ?? [],
       automaticPermissionOptIn: draft.automaticPermissionOptIn ?? false,
+      ...(draft.agent === undefined ? {} : { agent: draft.agent }),
       createdAt,
       updatedAt,
     });

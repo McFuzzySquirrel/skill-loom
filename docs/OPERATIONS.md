@@ -21,7 +21,7 @@ LOOM_CONFIG_DIR=/absolute/path/to/loom-profile npm start
 | `LOOM_PORT` | `7373` | TCP port from 1 to 65535. |
 | `LOOM_WEB_ROOT` | discovered `dist/web` | Optional override for the built UI directory; intended for controlled deployments and tests. |
 
-The versioned config document contains `version`, `harnessCommands`, `extraSkillDirectories`, `recentProjects`, and `uiPreferences`. `harnessCommands` may override the executable name or absolute path for `opencode` or `copilot`; a missing entry resolves from `PATH`. The config schema is strict: credential-like fields such as `apiKey`, `token`, or `secret` are invalid and are never stored there. Configuration writes use an atomic temporary-file replacement. A corrupt or unsupported-version config is reported rather than silently rewritten.
+The versioned config document contains `version`, `harnessCommands`, `extraSkillDirectories`, `remoteSkillSources`, `recentProjects`, and `uiPreferences`. `remoteSkillSources` stores validated credential-free Git URLs and optional refs; pinned package snapshots are retained below `<LOOM_CONFIG_DIR>/catalog-sources/`. `harnessCommands` may override the executable name or absolute path for `opencode` or `copilot`; a missing entry resolves from `PATH`. The config schema is strict: credential-like fields such as `apiKey`, `token`, or `secret` are invalid and are never stored there. Configuration writes use an atomic temporary-file replacement. A corrupt or unsupported-version config is reported rather than silently rewritten.
 
 `extraSkillDirectories` is the global list managed from the skill-catalog settings dialog. Recent projects store the canonical path, display name, derived id, and last-opened time; removing a recent entry never removes project files.
 
@@ -50,6 +50,8 @@ The helper is not the `skill-loom` server CLI and does not launch a nested Copil
 | Path | Contents | Notes |
 |------|----------|-------|
 | `~/.config/loom/config.json` | Global config, harness command overrides, extra skill directories, recent projects, UI preferences. | Override the whole directory with `LOOM_CONFIG_DIR`. |
+| `~/.config/loom/test-workspaces/<uuid>/` | Retained managed test project, including its `.loom/chains/` and `.loom/runs/` data. | Hidden from the ordinary recent-project list. Remove from **Test workspaces** after inspecting results; active-run ownership blocks cleanup. |
+| `~/.config/loom/catalog-sources/<source-id>/<commit>/` | Immutable snapshots of validated remote skill packages and their manifest. | Created only by explicit refresh; unregistering a source retains snapshots. Refresh uses bounded staging and package limits. |
 | `~/.config/loom/active-run.json` | Single global active-run pointer used for health reporting and startup recovery. | Holds only the active run's project path, run id, and status. |
 | `~/.config/loom/chains/*.json` | Global chain templates saved with **Save copy to library**. | Independent snapshots, not live links to project chains. Importing copies one into a project with a new id. |
 | `<project>/.loom/chains/*.json` | Saved chain definitions, including steps, inputs, harness, session mode, and the automatic-permission opt-in. | Versioned JSON written atomically. Chain files can be backed up or versioned if you want to keep recipes. |
@@ -58,6 +60,8 @@ The helper is not the `skill-loom` server CLI and does not launch a nested Copil
 | `~/.copilot/config.json` | Copilot's own persistent folder-trust configuration. | Skill Loom only reads `trustedFolders`; it never writes this file. |
 
 A run freezes an immutable snapshot of the chain definition and resolved inputs at creation. Editing the saved chain later does not change an existing or in-flight run, and retry uses the snapshot. Chain and run writes are versioned JSON with atomic temp-file replacement; restarting the server marks records that were active as `interrupted` instead of assuming completion.
+
+The **Test workspaces** page lists retained disposable projects, provides a link to inspect each project, and offers explicit cleanup. If cleanup reports that a workspace owns the active run, finish or explicitly abort/recover that run first. Workspaces isolate files from the original project only; they do not restrict the harness's normal filesystem, network, or credential access.
 
 ## Harness prerequisites
 
@@ -93,7 +97,7 @@ Copilot records persistent folder trust in `~/.copilot/config.json` under `trust
 - A missing or unlisted project is **untrusted** and hard-blocks a Copilot run.
 - An unreadable or invalid config is **unknown**; preflight requires an explicit acknowledgement rather than assuming either outcome.
 
-The trust panel can start an interactive trust session in the project directory. Accept the Copilot folder-trust dialog there, then verify trust again; Skill Loom reads the result back from Copilot's config and never writes it. The manual fallback is to run `copilot -C <absolute-project-path>` yourself, accept the trust dialog, exit, and rerun preflight. Preflight resolves trust before step 1 because a prompt queued behind a trust dialog can be swallowed.
+The trust panel can start an interactive trust session in the project directory. In Copilot's folder-trust dialog, choose **Yes, and remember this folder for future sessions**; a session-only choice is not saved and will still be reported as untrusted. Then verify trust again; Skill Loom reads the result back from Copilot's config and never writes it. The manual fallback is to run `copilot -C <absolute-project-path>` yourself, choose the same persistent option, exit, and rerun preflight. Preflight resolves trust before step 1 because a prompt queued behind a trust dialog can be swallowed.
 
 Automatic Copilot mode requires an explicit per-chain opt-in. It is off by default. When enabled, Skill Loom passes the exact broad flags `--allow-all-paths` and `--allow-all-tools` for automatic steps and shows those flags at preflight and on the run; this grants broad filesystem and tool access inside the selected project. Revoke the opt-in on the chain to return to supervised mode. Supervised mode never passes automatic permission flags.
 
@@ -109,7 +113,7 @@ Skill Loom is a **loopback-only** single-user application. The server binds to `
 
 The server owns all filesystem traversal, path canonicalization, persistence, CLI process spawning, and PTY handling. Harness processes are spawned with an executable plus an argument array, never a shell command string; project paths are canonicalized and traversal outside the intended project data directory is rejected. The browser performs no shell execution and receives only typed API and WebSocket data.
 
-Skill Loom sends no telemetry, crash reporting, remote logging, or outbound application requests. Only the user-invoked harness CLI and package installation may use the network. Terminal output is rendered through xterm.js and skill text through escaped React text; harness, skill, and run content is never rendered as raw HTML. Credentials and tokens are never persisted or logged.
+Skill Loom sends no telemetry, crash reporting, or remote logging. Git network access occurs only when a user explicitly refreshes a registered source; user-invoked harness CLIs and package installation may also use the network. Terminal output is rendered through xterm.js and skill text through escaped React text; harness, skill, and run content is never rendered as raw HTML. Credentials and tokens are never persisted or logged.
 
 ## Backup and cleanup
 
@@ -169,7 +173,7 @@ Run `opencode auth login` or `copilot login` in a normal terminal and retry pref
 
 ### Copilot trust block
 
-If preflight says the folder is untrusted, use the trust panel to start the interactive Copilot trust session and accept the dialog, or run `copilot -C <absolute-project-path>` manually and accept it. Then verify trust in the trust panel and rerun preflight. If Copilot's `~/.copilot/config.json` is unreadable or invalid, repair Copilot's own configuration or acknowledge the unknown-trust finding explicitly. Skill Loom never writes this file. A prompt queued during the trust dialog can be swallowed, so resolve trust before step 1.
+If preflight says the folder is untrusted, use the trust panel to start the interactive Copilot trust session and choose **Yes, and remember this folder for future sessions**, or run `copilot -C <absolute-project-path>` manually and choose that persistent option. Session-only trust does not add the folder to `trustedFolders`. Then verify trust in the trust panel and rerun preflight. If Copilot's `~/.copilot/config.json` is unreadable or invalid, repair Copilot's own configuration or acknowledge the unknown-trust finding explicitly. Skill Loom never writes this file. A prompt queued during the trust dialog can be swallowed, so resolve trust before step 1.
 
 ### node-pty build failure
 

@@ -123,6 +123,8 @@ describe('harness capability descriptors', () => {
       expect(adapter.installHint.trim()).not.toBe('');
       expect(adapter.discovery.strategy).toMatch(/^(filesystem|cli-json)$/);
       expect(adapter.supportedSessionModes.length).toBeGreaterThan(0);
+      expect(typeof adapter.nativeAgentSelection.interactive).toBe('boolean');
+      expect(typeof adapter.nativeAgentSelection.headless).toBe('boolean');
       expect(typeof adapter.nativeFork).toBe('boolean');
       expect(adapter.forkMechanisms.interactive).toMatch(/^(none|native|handoff)$/);
       expect(adapter.forkMechanisms.headless).toMatch(/^(none|native|handoff)$/);
@@ -144,6 +146,7 @@ describe('harness capability descriptors', () => {
     expect(opencode.displayName).toBe('OpenCode');
     expect(opencode.executableName).toBe('opencode');
     expect(opencode.supportedSessionModes).toEqual(CHAIN_SESSION_MODES);
+    expect(opencode.nativeAgentSelection).toEqual({ interactive: false, headless: true });
     expect(opencode.nativeFork).toBe(true);
     expect(opencode.forkMechanisms).toEqual({
       interactive: 'handoff',
@@ -183,6 +186,7 @@ describe('harness capability descriptors', () => {
     expect(copilot.displayName).toBe('GitHub Copilot');
     expect(copilot.executableName).toBe('copilot');
     expect(copilot.supportedSessionModes).toEqual(CHAIN_SESSION_MODES);
+    expect(copilot.nativeAgentSelection).toEqual({ interactive: true, headless: true });
     expect(copilot.nativeFork).toBe(false);
     expect(copilot.forkMechanisms).toEqual({
       interactive: 'handoff',
@@ -518,6 +522,27 @@ describe('command builders', () => {
     expect(command.args).not.toContain('--prompt');
   });
 
+  it('selects OpenCode native agents only on the documented headless surface', () => {
+    const registry = resolvedRegistry();
+    const command = registry.buildHeadlessCommand(
+      'opencode',
+      invocation({ agentName: 'team/reviewer' }),
+    );
+
+    expect(command.args).toEqual([
+      'run',
+      '--agent',
+      'team/reviewer',
+      '--session',
+      SESSION_ID,
+      PROMPT,
+    ]);
+    expectHarnessError(
+      () => registry.buildInteractiveCommand('opencode', invocation({ agentName: 'team/reviewer' })),
+      HARNESS_ERROR_CODES.INVOCATION_INVALID,
+    );
+  });
+
   it('uses native OpenCode run --fork when a parent session is available', () => {
     const registry = resolvedRegistry();
     const command = registry.buildHeadlessCommand(
@@ -572,6 +597,27 @@ describe('command builders', () => {
     expect(command.args).not.toContain('--allow-all-paths');
     expect(command.args).not.toContain('--allow-all-tools');
     expect(command.args).not.toContain('--trust-folder');
+  });
+
+  it('passes the selected native agent to both Copilot command surfaces', () => {
+    const registry = resolvedRegistry();
+    const interactive = registry.buildInteractiveCommand(
+      'copilot',
+      invocation({ sessionId: COPILOT_SESSION_ID, agentName: 'reviewer' }),
+    );
+    const headless = registry.buildHeadlessCommand(
+      'copilot',
+      invocation({
+        sessionId: COPILOT_SESSION_ID,
+        automaticPermissionOptIn: true,
+        agentName: 'reviewer',
+      }),
+    );
+
+    expect(interactive.args).toContain('--agent');
+    expect(interactive.args[interactive.args.indexOf('--agent') + 1]).toBe('reviewer');
+    expect(headless.args).toContain('--agent');
+    expect(headless.args[headless.args.indexOf('--agent') + 1]).toBe('reviewer');
   });
 
   it('labels a Copilot fork as handoff on both surfaces', () => {

@@ -130,8 +130,12 @@ export interface ProjectRegistryOptions {
 export interface ProjectRegistry {
   openProject(path: string): Promise<ProjectRegistration>;
   createProject(input: CreateProjectInput): Promise<ProjectRegistration>;
+  /** Register a service-owned disposable project without showing it as recent. */
+  registerManagedWorkspace(path: string): Promise<ProjectRegistration>;
   /** Recent projects, newest first. */
   listRecentProjects(): Promise<RecentProject[]>;
+  /** All registered project paths, including managed workspaces for run recovery. */
+  listKnownProjects(): Promise<RecentProject[]>;
   /** Remove one recent entry. Never touches the project filesystem. */
   removeRecentProject(projectId: string): Promise<{ projectId: string; removed: true }>;
   /** Look up a recent entry without touching the filesystem. */
@@ -241,7 +245,19 @@ class FileProjectRegistry implements ProjectRegistry {
     return this.register(canonical.path, gitInitialized);
   }
 
+  async registerManagedWorkspace(path: string): Promise<ProjectRegistration> {
+    const canonical = await resolveCanonicalDirectory(path);
+    return this.register(canonical.path, false, true);
+  }
+
   async listRecentProjects(): Promise<RecentProject[]> {
+    const config = await this.options.configStore.get();
+    return config.recentProjects
+      .filter((entry) => entry.managedWorkspace !== true)
+      .sort(compareRecentProjects);
+  }
+
+  async listKnownProjects(): Promise<RecentProject[]> {
     const config = await this.options.configStore.get();
     return [...config.recentProjects].sort(compareRecentProjects);
   }
@@ -280,6 +296,7 @@ class FileProjectRegistry implements ProjectRegistry {
   private async register(
     canonicalPath: string,
     gitInitialized: boolean,
+    managedWorkspace = false,
   ): Promise<ProjectRegistration> {
     const id = projectIdForPath(canonicalPath);
     const displayName = projectDisplayName(canonicalPath);
@@ -293,7 +310,13 @@ class FileProjectRegistry implements ProjectRegistry {
       );
       return {
         recentProjects: [
-          { id, canonicalPath, displayName, lastOpenedAt },
+          {
+            id,
+            canonicalPath,
+            displayName,
+            lastOpenedAt,
+            ...(managedWorkspace ? { managedWorkspace: true as const } : {}),
+          },
           ...withoutDuplicate,
         ],
       };

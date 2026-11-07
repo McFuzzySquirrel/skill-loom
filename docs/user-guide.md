@@ -31,6 +31,8 @@ On first load you land on the **Chain library**, the home for reusable workflow 
 - A desktop navigation sidebar, or a compact **Menu** on smaller screens.
 - Breadcrumbs for the current project, chain, and run workflow.
 - **Projects**, **Scenario catalog**, and the reusable **Chain library**. A selected project adds separate **Project chains** and **Project skills** destinations.
+- **Remote skill repositories** for registering Git sources and explicitly refreshing pinned snapshots.
+- **Drafts** for project-independent authoring and **Shared bundles** for reviewed bundles in a configured local directory.
 - A **Local-only** reminder and **Server connected · v0.1.0** health indicator. If the indicator changes to **Server connection error**, use **Retry**.
 - An **Appearance** selector for **System**, **Light**, or **Dark**. System follows the operating-system preference; an explicit choice is remembered in this browser.
 
@@ -53,6 +55,24 @@ Choose **Projects** to register an existing folder or create a new project for a
 
 OpenCode also discovers legacy project packages under `.opencode/skills/`. Copilot discovery remains authoritative through `copilot skill list --json`; Skill Loom does not move or migrate existing skill directories.
 
+### Register remote skill repositories
+
+1. Open **Remote skill repositories** and enter an HTTPS or SSH Git URL. Do not include a username/password or token in the URL.
+2. Optionally enter a branch, tag, or commit, then register the source. Private repositories use the Git authentication already configured on this machine; Skill Loom does not collect credentials.
+3. Choose **Refresh pinned snapshot** to explicitly access the repository. Skill Loom resolves a commit and stores a local snapshot of discovered `SKILL.md` packages. Repository files are read as data; Loom does not check out the repository or run its scripts.
+4. Open **Project skills** for a project and inspect the remote group. A selected package can be copied into `<project>/.agents/skills/` through the existing no-overwrite copy action. Alternatively, start a project-independent draft and select pinned remote packages directly without installing them into a project.
+5. **Unregister** removes the source registration but keeps saved snapshots. This preserves already-discovered packages; it does not delete snapshot storage.
+
+Refresh requires Git and network access. Each refresh is bounded to 100 packages, 2,000 files, 20 MiB of skill-package content, 128 MiB of temporary Git staging data, 10,000 staging entries, and bounded Git command output/time. A limit, authentication, host-key, or network error is reported rather than shown as an empty catalog. Remote package contents are untrusted instructions; review them before copying or running a chain that uses them.
+
+### Start a project-independent draft from a goal
+
+Open **Drafts** and choose **Start from a goal**. Describe the outcome, choose OpenCode or Copilot CLI, and optionally enter HTTPS/SSH repository URLs with branch, tag, or commit refs. On submit, Skill Loom registers and explicitly refreshes each source into pinned snapshots, then creates a draft whose first standalone instruction records the requested outcome. Earlier sources remain registered if a later repository fails; the error is shown so you can correct or remove them from **Remote skill repositories**.
+
+The draft editor's catalog is limited to remote snapshots: review the listed skills and native agents, then select only the packages needed for the chain. This path does not install remote files into an existing project or automatically recommend a scenario; it provides the goal and safe catalog for you to build and review a chain. Keep credentials and private runtime values out of the goal. Add values that should be collected during a run as named inputs.
+
+Drafts are stored separately from project chains and reusable templates. You can test one in a fresh managed workspace, export its reviewed bundle, or publish it to the shared bundle library. A draft can also be exported and then imported into a project through the regular bundle review flow.
+
 ### Start from a scenario example
 
 The [Scenario catalog](scenario-chains.md) provides illustrative starter chains for business, study, app development, and game development. Filter and review the steps, inputs, prerequisites, pinned revisions, and third-party skill sources, then copy an example into an open project to adapt it in the normal chain builder. Examples are not prescribed workflows or endorsements, and the catalog is not an exhaustive list.
@@ -64,12 +84,13 @@ Copying a scenario creates only an ordinary independent project chain; it does n
 The **Workflow designer** places the skill catalog and ordered steps side by side on wider screens, with chain inputs below the design area. Select a step to open its editor in a dialog; choose **Done editing** or press Escape to close it. On smaller screens the catalog and steps stack in one column.
 
 1. Choose a project to provide a skill catalog and workspace for authoring. Create a chain and choose one harness. A chain is bound to that harness; per-step harness selection is not supported.
-2. Add at least one step. Choose a catalog skill with **Add as step**, or use **Add instruction** for a standalone agent prompt without an installed skill. Both require a non-whitespace instruction and support an optional label.
+2. Add at least one step. Choose a catalog skill with **Add as step**, or use **Add instruction** for a standalone agent prompt without an installed skill. Both require a non-whitespace instruction and support an optional label. Adding a remote skill pins the step to that exact source revision and package path; the editor shows the pin, and changing the skill clears it so you can select another catalog entry. A remote native agent can also be selected from the catalog; adding it copies the exact pinned definition to the harness's native project agent directory without overwriting an existing file.
 3. Reorder steps by dragging or with **Move up** and **Move down**. The visible order is the prompt order.
 4. Optionally declare named inputs and reference them from instructions as `{{name}}`. Input names use identifier syntax; required inputs must resolve before a run starts.
 5. Choose a session mode: **shared**, **fresh**, or **fork**. See [Session modes](#session-modes).
-6. For Copilot automatic mode, explicitly enable the automatic-permission opt-in. It is off by default and grants broad filesystem and tool access.
-7. Save the chain under `<project>/.loom/chains/`. Choose **Save and run** only when you want to test it locally.
+6. Optionally select one native agent for the whole chain. Agent definitions are harness-specific and are never translated. OpenCode native-agent selection is available for automatic/headless runs only; supervised OpenCode has no supported selector. Copilot agent selection applies to supervised and automatic runs. Preflight blocks a missing, modified, unsafe, or incompatible installed agent.
+7. For Copilot automatic mode, explicitly enable the automatic-permission opt-in. It is off by default and grants broad filesystem and tool access.
+8. Save the chain under `<project>/.loom/chains/`. Choose **Save and run** only when you want to test it locally.
 
 An unsaved chain shows a dirty indicator. Navigating away or closing the tab prompts before discarding unsaved changes.
 
@@ -82,13 +103,19 @@ Instruction steps run through the chain's selected harness in the same order and
 - Duplicating a project chain also creates a separate chain id.
 - Deleting a chain or a global template removes only that file. It does not remove the other copies.
 
+### Test in a disposable project
+
+In the workflow designer, choose **Test in disposable workspace** to save the current chain and create a fresh managed test project containing its chain and selected packages. The run uses Skill Loom's regular preflight, trust, permissions, and run controls. It does not modify the source project's files. The test project and run records are retained for inspection until you remove them from **Test workspaces** in the navigation. Cleanup is blocked while a workspace owns the active run.
+
+A separate working directory is not a security sandbox: the selected harness can still access files, network resources, and credentials allowed by its normal permissions. A new test workspace is not shown in the ordinary recent-project list, but remains registered for run recovery. Do not treat successful execution as proof that the chain or its outputs are correct.
+
 ### Share a chain and its skills
 
 1. Save the chain, then return to the project's **Chains** list and choose **Export** on its card. Export uses the saved version, not an unsaved builder draft.
-2. Review the chain instructions, input definitions, package file lists, and `SKILL.md` previews. The bundle includes complete referenced skill packages: scripts, binary assets, and supporting files, with executable flags preserved.
+2. Review the chain instructions, input definitions, package file lists, and `SKILL.md` previews. The bundle includes complete referenced skill packages: scripts, binary assets, and supporting files, with executable flags preserved. A chain with a selected native agent exports as bundle version 2 and includes its exact definition and pinned identity; the export review displays the agent text. Private repository URLs are not included.
 3. Confirm that you reviewed the contents and have redistribution permission, then choose **Download bundle**. Send the resulting `.loom.json` file using your own file-sharing method; Skill Loom does not upload it or create a public link.
 
-The export excludes input default values, run records, terminal output, local catalog source paths, chain identity/timestamps, and automatic-permission consent. It refuses packages containing symbolic links, special files, `.env` files, credential-named files, `.git`, `.loom`, `.ssh`, or `node_modules` directories rather than silently exporting a partial package. This is not a secret scanner: secrets, private paths, or confidential material inside ordinary instructions and files must be removed before sharing.
+The export excludes input default values, run records, terminal output, local catalog source paths, chain identity/timestamps, and automatic-permission consent. It refuses packages containing symbolic links, special files, `.env` files, credential-named files, `.git`, `.loom`, `.ssh`, or `node_modules` directories rather than silently exporting a partial package. Version 1 remains the export format for chains without a selected native agent; version 2 includes the selected agent definition and provenance identity. This is not a secret scanner: secrets, private paths, or confidential material inside ordinary instructions and files must be removed before sharing.
 
 Each skill must resolve to an enabled, readable package for the chain's selected harness. A single project-local package takes precedence over same-name personal or extra-directory copies; multiple distinct project packages remain ambiguous. If there is no project copy, only one available non-project package can be exported. Missing, disabled, ambiguous, or non-filesystem skills block export. Bundles support up to 100 skill packages, 2,000 files, and 20 MiB of decoded file content; the JSON upload limit is 30 MiB. Directory names and file paths must be portable and safe, and directory nesting is bounded.
 
@@ -102,7 +129,7 @@ Each skill must resolve to an enabled, readable package for the chain's selected
 
 Import creates an independent chain with a fresh id and timestamps, resets automatic-permission consent to off, and installs new packages under `.agents/skills/` for both harnesses. It rechecks conflicts at import time and removes newly installed packages if saving the chain fails. Existing packages remain untouched. Import never executes bundled scripts, starts a run, authenticates a harness, or grants folder trust. Removing the imported chain later does not remove its installed skills.
 
-The recipient still needs the selected harness and any external tools, services, or dependencies used by the skills. Bundles are not backups of project files or the global library, and exporting a global template requires first importing it into a project.
+The recipient still needs the selected harness and any external tools, services, or dependencies used by the skills. Version 2 requires a Loom build that supports native agents; older readers should reject it rather than discard the selected agent. The standalone `loom-run-bundle` helper can inspect v2 agent content but will not prepare a chain that selects a native agent, because a current conversation cannot switch its harness agent. Import such a bundle into Skill Loom to run it with the selected agent. Bundles are not backups of project files or the global library, and exporting a global template requires first importing it into a project.
 
 ### Run an exported chain inside a harness
 
@@ -118,14 +145,14 @@ Portable execution is not Skill Loom's terminal runner. The helper never launche
 
 ### Discover and package project workflows
 
-The `scenario-discovery` Agent Skill can turn skills already available to a project into a reviewed chain bundle. Install the skill in a location your current host discovers (for example, `.agents/skills/scenario-discovery/` in the project), or use the copy provided by this Skill Loom checkout. The host may need a refresh or restart after installation.
+The `scenario-discovery` Agent Skill can turn skills available to a project into a reviewed chain bundle. Install the skill in a location your current host discovers (for example, `.agents/skills/scenario-discovery/` in the project), or use the copy provided by this Skill Loom checkout. The host may need a refresh or restart after installation. For project-independent authoring from a goal and remote repositories, use the **Drafts** workflow above instead.
 
-In the project session, ask for a specific outcome, for example: **"Use scenario-discovery to propose a workflow for reviewing our API changes."** The skill:
+In the project session, ask for a specific outcome, for example: **"Use scenario-discovery to propose a workflow for reviewing our API changes."** The skill first asks for the desired outcome and whether remote repositories should be considered. It cannot inspect Loom-managed remote snapshots directly: register and explicitly refresh requested HTTPS/SSH sources in Skill Loom, review the pinned snapshot, and copy selected skill packages into the current project before using the skill. The skill does not clone repositories itself. It then:
 
 1. Inventories enabled **project-local** skills and inspects their instructions as untrusted data; it does not run package scripts.
 2. Proposes supported scenarios, ordered prompt steps, and any named inputs. Review the skill evidence and choose a proposal.
 3. Shows the target harness, session mode, complete chain draft, and every selected package file. Review and explicitly confirm these before bundle creation.
-4. Writes a new `.loom.json` bundle. It does **not** import or run the bundle. To use it in Skill Loom, open a project, choose **Import bundle**, and follow the separate preview, trust, and package-conflict review.
+4. Writes a new version 1 `.loom.json` bundle. It does **not** include selected native-agent definitions, import, or run the bundle. Build and export chains requiring a selected native agent in Skill Loom. To use a generated bundle in Skill Loom, open a project, choose **Import bundle**, and follow the separate preview, trust, and package-conflict review.
 
 The builder helper requires Node.js 24+ and safe structured tool access to the manifest and output path. If your host cannot resolve the installed helper or pass arguments safely, stop rather than guessing a global path. `scenario-discovery` does not install itself, grant permissions, or guarantee that a harness will invoke any named skill.
 
@@ -143,7 +170,7 @@ Preflight states which mechanism applies before you start.
 
 1. On the run-start screen, choose **supervised** or **automatic**.
 2. Provide every required input and review the selected session plan and permission scope.
-3. Choose **Run preflight**. Preflight makes no model call. It checks the harness executable, authentication evidence, Copilot trust, catalog resolution, inputs, session mode, permissions, and Git state.
+3. Choose **Run preflight**. Preflight makes no model call. It checks the harness executable, authentication evidence, Copilot trust, catalog resolution, selected native-agent integrity/capability, inputs, session mode, permissions, and Git state.
 4. Resolve every blocking finding. Acknowledge required warnings, such as ambiguous authentication or an unknown trust result.
 5. Choose **Start run**. The server re-runs the blocking preflight, creates the run, freezes the chain snapshot and resolved inputs, and opens `/runs/<runId>/terminal`.
 
@@ -183,7 +210,7 @@ Inspect the bounded step tail and the reason before retrying. Do not edit run JS
 
 ## Offline and Reconnect Behavior
 
-Skill Loom is a local application. The UI and API work without an internet connection; only a harness CLI, package installation, or other tools you invoke may use the network.
+Skill Loom is a local application. The UI and API work without an internet connection; explicitly refreshing a registered Git repository, a harness CLI, package installation, or other tools you invoke may use the network. Remote snapshots already saved under Loom's config directory remain available offline.
 
 - If the browser loses the server, the header shows **Server connection error** with a **Retry** action and a short screen-reader announcement.
 - Run and terminal routes request a snapshot on connect and then receive ordered deltas. Reopening the run page does not start, advance, or replay a step.
@@ -229,7 +256,7 @@ Run tails and copied skills are local data. Treat run records as sensitive becau
 
 ## Privacy and Data Handling
 
-Skill Loom is **loopback-only** and sends no telemetry, crash reports, remote logs, or outbound application requests of its own. It does not read credentials into its own storage or log secret values. Authentication checks look for evidence such as command output, credential-file presence, or environment-variable presence, never credential values.
+Skill Loom is **loopback-only** and sends no telemetry, crash reports, or remote logs. It performs Git network access only after a user explicitly refreshes a registered repository; it does not otherwise make outbound application requests. It does not read credentials into its own storage or log secret values. Authentication checks look for evidence such as command output, credential-file presence, or environment-variable presence, never credential values.
 
 The browser performs no shell execution and receives typed API and WebSocket data. Harness and skill text is escaped; terminal output is rendered as text by xterm.js. The server owns filesystem traversal, persistence, process spawning, and PTY handling.
 
@@ -245,7 +272,7 @@ Run `opencode auth login` or `copilot login` in a normal terminal, then rerun pr
 
 ### Copilot trust is blocked
 
-Use the trust panel to start the interactive Copilot session, accept the folder-trust dialog, then choose **Verify trust** and rerun preflight. Or run `copilot -C <absolute-project-path>` yourself, accept the dialog, exit, and rerun preflight. Skill Loom reads `~/.copilot/config.json` and never writes it.
+Use the trust panel to start the interactive Copilot session. In the folder-trust dialog, choose **Yes, and remember this folder for future sessions**; a session-only choice is not saved and will still be reported as untrusted. Then choose **Verify trust** and rerun preflight. Or run `copilot -C <absolute-project-path>` yourself, choose the same persistent option, exit, and rerun preflight. Skill Loom reads `~/.copilot/config.json` and never writes it.
 
 ### A run is stuck in automatic mode
 

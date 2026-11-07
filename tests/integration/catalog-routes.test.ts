@@ -10,6 +10,11 @@ import {
   createDefaultCatalogAdapters,
   type CatalogResponse,
 } from '../../src/server/catalog/merge.js';
+import {
+  listRemoteSkillSnapshots,
+  refreshRemoteSkillSource,
+} from '../../src/server/catalog/remote.js';
+import type { RemoteSourceGitRunner } from '../../src/server/catalog/remote.js';
 import { createConfigStore, type ConfigStore } from '../../src/server/config/store.js';
 import { isApiErrorEnvelope, type ApiErrorEnvelope } from '../../src/shared/api.js';
 
@@ -447,5 +452,122 @@ describe('extra skill directory settings', () => {
     });
     expect(missingPath.statusCode).toBe(422);
     expect(envelope(missingPath.json<unknown>()).error.code).toBe('VALIDATION_ERROR');
+  });
+});
+
+describe('remote skill source settings and catalog snapshots', () => {
+  it('registers sources, catalogs pinned packages for both harnesses, and unregisters without deleting snapshots', async () => {
+    const app = await buildTestApp();
+    const registered = await openProject(app);
+    const repository = 'https://example.com/acme/remote-skills.git';
+    const add = await app.inject({
+      method: 'POST',
+      url: '/api/settings/remote-skill-sources',
+      payload: { repository, ref: 'main' },
+    });
+    expect(add.statusCode).toBe(201);
+    const source = add.json<{ source: { id: string; repository: string; ref?: string } }>().source;
+    expect(source).toMatchObject({ repository, ref: 'main' });
+
+    const duplicate = await app.inject({
+      method: 'POST',
+      url: '/api/settings/remote-skill-sources',
+      payload: { repository, ref: 'main' },
+    });
+    expect(duplicate.statusCode).toBe(409);
+
+    const revision = 'd'.repeat(40);
+    const skillHash = 'e'.repeat(40);
+    const assetHash = 'f'.repeat(40);
+    const agentHash = 'a'.repeat(40);
+    const contents = new Map([
+      [skillHash, '---\nname: remote-demo\ndescription: Pinned remote skill.\n---\nRemote instructions.\n'],
+      [assetHash, 'Fixture asset.\n'],
+      [agentHash, '---\nname: remote-reviewer\ndescription: Reviews changes.\n---\nReview carefully.\n'],
+    ]);
+    const gitRunner: RemoteSourceGitRunner = async (args) => {
+      if (args[0] === 'clone') return { stdout: '' };
+      if (args.includes('rev-parse')) return { stdout: `${revision}\n` };
+      if (args.includes('ls-tree')) {
+        return {
+          stdout:
+            `100644 blob ${skillHash}\tcollection/remote-demo/SKILL.md\0` +
+            `100644 blob ${assetHash}\tcollection/remote-demo/references/asset.txt\0` +
+            `100644 blob ${agentHash}\t.github/agents/remote-reviewer.agent.md\0`,
+        };
+      }
+      if (args.includes('cat-file')) {
+        const content = contents.get(args.at(-1) ?? '');
+        if (content === undefined) throw new Error('Unexpected blob.');
+        return { stdout: content };
+      }
+      throw new Error('Unexpected Git operation.');
+    };
+    const snapshot = await refreshRemoteSkillSource(configStore, source.id, {
+      gitRunner,
+      temporaryDirectory: root,
+    });
+    expect(snapshot.revision).toBe(revision);
+
+    for (const harness of ['opencode', 'copilot']) {
+      const catalog = await getCatalog(app, registered.id, harness);
+      expect(catalog.statusCode).toBe(200);
+      const remote = catalogOf(catalog.body).groups
+        .flatMap((group) => group.entries)
+        .find((entry) => entry.name === 'remote-demo');
+      expect(remote).toMatchObject({
+        source: 'remote',
+        repository,
+        revision,
+        repositoryPath: 'collection/remote-demo',
+      });
+
+      const copied = await app.inject({
+        method: 'POST',
+        url: `/api/projects/${encodeURIComponent(registered.id)}/catalog/skills/${encodeURIComponent(remote!.id)}/copy?harness=${harness}`,
+      });
+      expect(copied.statusCode).toBe(201);
+      expect(copied.json<{ destinationPath: string }>().destinationPath).toContain(
+        join('.agents', 'skills', 'remote-demo'),
+      );
+    }
+
+    const copilotCatalog = catalogOf((await getCatalog(app, registered.id, 'copilot')).body);
+    const remoteAgent = copilotCatalog.agents.find((agent) => agent.name === 'remote-reviewer');
+    expect(remoteAgent).toMatchObject({
+      harness: 'copilot',
+      status: 'available',
+      repositoryPath: '.github/agents/remote-reviewer.agent.md',
+      revision,
+    });
+    const installedAgent = await app.inject({
+      method: 'POST',
+      url: `/api/projects/${encodeURIComponent(registered.id)}/catalog/agents/${encodeURIComponent(remoteAgent!.id)}/copy?harness=copilot`,
+    });
+    expect(installedAgent.statusCode).toBe(201);
+    expect(installedAgent.json<{ destinationPath: string }>().destinationPath).toBe(
+      join(project, '.github', 'agents', 'remote-reviewer.agent.md'),
+    );
+    expect(await readFile(join(project, '.github', 'agents', 'remote-reviewer.agent.md'), 'utf8'))
+      .toContain('Review carefully.');
+
+    const remove = await app.inject({
+      method: 'DELETE',
+      url: `/api/settings/remote-skill-sources/${encodeURIComponent(source.id)}`,
+    });
+    expect(remove.statusCode).toBe(200);
+    expect(remove.json<{ remoteSkillSources: unknown[] }>().remoteSkillSources).toEqual([]);
+    expect(await listRemoteSkillSnapshots(configDirectory, source.id)).toHaveLength(1);
+  });
+
+  it('rejects credential-bearing remotes and never returns their values', async () => {
+    const app = await buildTestApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/settings/remote-skill-sources',
+      payload: { repository: 'https://user:secret@example.com/private.git' },
+    });
+    expect(response.statusCode).toBe(422);
+    expect(response.body).not.toContain('secret');
   });
 });

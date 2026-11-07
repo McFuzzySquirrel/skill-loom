@@ -820,6 +820,9 @@ export class SupervisedRunner {
           ? {}
           : { forkFromSessionId: planned.forkFromSessionId }),
         automaticPermissionOptIn: this.runValue.chainSnapshot.automaticPermissionOptIn,
+        ...(this.runValue.chainSnapshot.agent === undefined
+          ? {}
+          : { agentName: this.runValue.chainSnapshot.agent.name }),
       });
     } catch (error) {
       await this.failBeforeSpawn(step, SUPERVISED_STEP_REASONS.COMMAND_FAILED);

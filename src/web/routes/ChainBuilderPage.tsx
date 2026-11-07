@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import type { SkillEntry } from '../api/catalog';
+import {
+  DRAFT_CATALOG_ID,
+  type NativeAgentCopyResult,
+  type NativeAgentEntry,
+  type SkillEntry,
+} from '../api/catalog';
 import type { ApiClientError } from '../api/client';
+import type { ChainAgentSelection, SkillChainStep } from '../../shared/chain';
 import {
   CHAIN_HARNESSES,
   NEW_CHAIN_ID,
@@ -14,6 +20,9 @@ import {
   type ChainsApi,
 } from '../api/chains';
 import { globalChainsApi, type GlobalChainsApi } from '../api/globalChains';
+import { testWorkspacesApi, type TestWorkspacesApi } from '../api/testWorkspaces';
+import { globalDraftChainsApi } from '../api/drafts';
+import type { SharedBundleSource } from '../api/sharedBundles';
 import { InlineError } from '../components/InlineError';
 import { HelpPopover } from '../components/HelpPopover';
 import { InputsEditor } from '../components/InputsEditor';
@@ -28,13 +37,16 @@ import {
 } from '../hooks/useChainDraft';
 import { Link, useRouter } from '../router';
 import { useWorkspace } from '../WorkspaceContext';
+import { PublishSharedBundleDialog } from '../components/PublishSharedBundleDialog';
 
 export interface ChainBuilderPageProps {
   projectId: string;
   chainId: string;
+  draftMode?: boolean;
   /** Test seams; the app always uses the same-origin typed clients. */
   api?: ChainsApi;
   globalChainsApiClient?: GlobalChainsApi;
+  testWorkspacesApiClient?: TestWorkspacesApi;
 }
 
 const UNSAVED_CHANGES_MESSAGE =
@@ -67,8 +79,10 @@ function placeholderIssuesFor(
 export function ChainBuilderPage({
   projectId,
   chainId,
+  draftMode = false,
   api = chainsApi,
   globalChainsApiClient = globalChainsApi,
+  testWorkspacesApiClient = testWorkspacesApi,
 }: ChainBuilderPageProps) {
   const { search, navigate, setNavigationGuard } = useRouter();
   const { setDraftStatus, setInfo } = useWorkspace();
@@ -88,11 +102,17 @@ export function ChainBuilderPage({
     renameInput,
     removeInput,
     setHarness,
+    setAgent,
     validation,
     isDirty,
     save,
     reload,
-  } = useChainDraft({ projectId, chainId, search, api });
+  } = useChainDraft({
+    projectId: draftMode ? DRAFT_CATALOG_ID : projectId,
+    chainId,
+    search,
+    api: draftMode ? globalDraftChainsApi : api,
+  });
 
   const harnessFieldId = useId();
   const harnessNoteId = useId();
@@ -107,8 +127,11 @@ export function ChainBuilderPage({
   const [libraryBusy, setLibraryBusy] = useState(false);
   const [libraryError, setLibraryError] = useState<ApiClientError | null>(null);
   const [librarySavedName, setLibrarySavedName] = useState<string | null>(null);
+  const [testWorkspaceBusy, setTestWorkspaceBusy] = useState(false);
+  const [testWorkspaceError, setTestWorkspaceError] = useState<ApiClientError | null>(null);
   const [duplicateBusy, setDuplicateBusy] = useState(false);
   const [duplicateError, setDuplicateError] = useState<ApiClientError | null>(null);
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [duplicateHarnessChoice, setDuplicateHarnessChoice] =
     useState<ChainHarness | null>(null);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
@@ -116,6 +139,8 @@ export function ChainBuilderPage({
   const pendingNavigationRef = useRef<string | null>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const leaveHeading = useRef<HTMLHeadingElement>(null);
+  const publishTrigger = useRef<HTMLButtonElement>(null);
+  const publishWasOpen = useRef(false);
   const stepEditorDialog = useRef<HTMLDialogElement>(null);
   const lastFocusedEditorRequest = useRef(0);
   const dirtyRef = useRef(false);
@@ -148,11 +173,32 @@ export function ChainBuilderPage({
 
   const handleAddAsStep = useCallback(
     (skill: SkillEntry) => {
-      addStep({ name: skill.name });
+      addStep(skill);
       setEditorOpen(true);
       setEditorFocusRequest((current) => current + 1);
     },
     [addStep],
+  );
+
+  const handleSelectNativeAgent = useCallback(
+    (agent: NativeAgentEntry) => {
+      const selection: ChainAgentSelection = {
+        harness: agent.harness,
+        name: agent.name,
+        sourceId: agent.sourceId,
+        revision: agent.revision,
+        repositoryPath: agent.repositoryPath,
+        agentPath: agent.agentPath,
+        fingerprint: agent.fingerprint,
+      };
+      setAgent(selection);
+    },
+    [setAgent],
+  );
+  const handleAddNativeAgent = useCallback(
+    (agent: NativeAgentEntry, _copy: NativeAgentCopyResult) =>
+      handleSelectNativeAgent(agent),
+    [handleSelectNativeAgent],
   );
 
   const handleSelectStep = useCallback(
@@ -164,7 +210,11 @@ export function ChainBuilderPage({
   );
 
   const handleStepChange = useCallback(
-    (patch: Partial<Pick<ChainStep, 'skillName' | 'instruction' | 'label'>>) => {
+    (
+      patch: Partial<
+        Pick<SkillChainStep, 'skillName' | 'skillBinding' | 'instruction' | 'label'>
+      >,
+    ) => {
       if (selectedStep === null) {
         return;
       }
@@ -278,9 +328,7 @@ export function ChainBuilderPage({
         )} input${saved.inputs.length === 1 ? '' : 's'}.`,
       );
       if (chainId === NEW_CHAIN_ID) {
-        // The draft became a real chain; replace the temporary route so a
-        // reload loads the saved document instead of the URL draft.
-        navigate(chainBuilderPath(projectId, saved.id), {
+        navigate(draftMode ? `/drafts/${encodeURIComponent(saved.id)}` : chainBuilderPath(projectId, saved.id), {
           replace: true,
           skipGuard: true,
         });
@@ -295,7 +343,7 @@ export function ChainBuilderPage({
     } finally {
       setSaving(false);
     }
-  }, [announce, chainId, navigate, projectId, save, saving, state.status, validation.canSave]);
+  }, [announce, chainId, draftMode, navigate, projectId, save, saving, state.status, validation.canSave]);
 
   const handleSaveAndRun = useCallback(async () => {
     if (state.status !== 'ready' || !validation.canSave || saving) {
@@ -329,6 +377,57 @@ export function ChainBuilderPage({
     save,
     saving,
     state.status,
+    validation.canSave,
+  ]);
+
+  const handleTestInWorkspace = useCallback(async () => {
+    if (
+      state.status !== 'ready' ||
+      !validation.canSave ||
+      saving ||
+      testWorkspaceBusy
+    ) {
+      return;
+    }
+
+    setSaving(true);
+    setTestWorkspaceBusy(true);
+    setSaveError(null);
+    setTestWorkspaceError(null);
+    try {
+      const saved = await save();
+      const workspace = await testWorkspacesApiClient.create({
+        ...(draftMode
+          ? { sourceDraftId: saved.id }
+          : { sourceProjectId: projectId, sourceChainId: saved.id }),
+      });
+      announce(
+        `Created a disposable test workspace for ${saved.name}. Its source chain and projects were not changed by the test run.`,
+      );
+      navigate(chainRunPath(workspace.projectId, workspace.chainId), {
+        skipGuard: true,
+      });
+    } catch (error) {
+      const apiError = toApiClientError(
+        error,
+        'An unexpected error prevented creating a disposable test workspace.',
+      );
+      setTestWorkspaceError(apiError);
+      announce(`Disposable test workspace could not be created: ${apiError.message}`, 'assertive');
+    } finally {
+      setSaving(false);
+      setTestWorkspaceBusy(false);
+    }
+  }, [
+    announce,
+    navigate,
+    projectId,
+    draftMode,
+    save,
+    saving,
+    state.status,
+    testWorkspaceBusy,
+    testWorkspacesApiClient,
     validation.canSave,
   ]);
 
@@ -417,10 +516,13 @@ export function ChainBuilderPage({
         inputs: copy.inputs,
         automaticPermissionOptIn: copy.automaticPermissionOptIn,
       });
+      const agentNotice = copy.agent === undefined
+        ? ''
+        : ' The native agent was not copied because agent definitions are not translated between harnesses.';
       announce(
         `Duplicated ${source.name} as ${updated.name} with the ${
           CHAIN_HARNESS_LABELS[target]
-        } harness. The original chain is unchanged.`,
+        } harness. The original chain is unchanged.${agentNotice}`,
       );
       navigate(chainBuilderPath(projectId, updated.id));
     } catch (error) {
@@ -470,6 +572,24 @@ export function ChainBuilderPage({
       ? null
       : draftDocument.steps.findIndex((step) => step.id === selectedStep.id) + 1;
   const canSave = state.status === 'ready' && validation.canSave && !saving;
+  const canPublish =
+    state.status === 'ready' &&
+    state.document.id !== undefined &&
+    !isDirty &&
+    !saving;
+  const publishSource: SharedBundleSource | null =
+    draftDocument?.id === undefined
+      ? null
+      : draftMode
+        ? { type: 'draft', draftId: draftDocument.id }
+        : { type: 'project', projectId, chainId: draftDocument.id };
+
+  useEffect(() => {
+    if (publishWasOpen.current && !publishDialogOpen) {
+      publishTrigger.current?.focus();
+    }
+    publishWasOpen.current = publishDialogOpen;
+  }, [publishDialogOpen]);
 
   const saveHint = (() => {
     if (state.status !== 'ready') {
@@ -509,7 +629,9 @@ export function ChainBuilderPage({
       data-testid="chain-builder-page"
     >
       <p className="breadcrumb">
-        <Link to={`/projects/${projectId}`}>← Project</Link>
+        <Link to={draftMode ? '/drafts' : `/projects/${projectId}`}>
+          {draftMode ? '← Chain drafts' : '← Project'}
+        </Link>
       </p>
 
       <header className="builder-header">
@@ -541,9 +663,9 @@ export function ChainBuilderPage({
               aria-describedby="chain-save-hint"
               data-testid="chain-save"
             >
-              {saving ? 'Saving…' : 'Save chain'}
+              {saving ? 'Saving…' : draftMode ? 'Save draft' : 'Save chain'}
             </button>
-            <button
+            {!draftMode ? <button
               type="button"
               className="button button--secondary"
               onClick={() => void handleSaveAndRun()}
@@ -551,11 +673,21 @@ export function ChainBuilderPage({
               data-testid="chain-save-and-run"
             >
               {saving ? 'Saving…' : 'Save and run'}
+            </button> : null}
+            <button
+              type="button"
+              className="button button--secondary"
+              onClick={() => void handleTestInWorkspace()}
+              disabled={!canSave || testWorkspaceBusy}
+              aria-describedby="chain-test-workspace-hint"
+              data-testid="chain-test-in-workspace"
+            >
+              {testWorkspaceBusy ? 'Creating test workspace…' : 'Test in disposable workspace'}
             </button>
             <details className="builder-header__more">
               <summary className="button button--secondary">More actions</summary>
               <div className="builder-header__more-menu">
-                <button
+                {!draftMode ? <button
                   type="button"
                   className="button button--secondary"
                   onClick={() => void handleSaveToLibrary()}
@@ -563,14 +695,26 @@ export function ChainBuilderPage({
                   data-testid="chain-save-to-library"
                 >
                   {libraryBusy ? 'Saving template…' : 'Save copy to library'}
+                </button> : null}
+                <button
+                  type="button"
+                  className="button button--secondary"
+                  onClick={() => setPublishDialogOpen(true)}
+                  disabled={!canPublish || publishSource === null}
+                  data-testid="publish-shared-bundle"
+                  ref={publishTrigger}
+                >
+                  Publish to shared library
                 </button>
                 {chainId === NEW_CHAIN_ID ? null : (
-                  <Link
+                  !draftMode ? <Link
                     className="button button--secondary"
                     to={chainRunPath(projectId, chainId)}
                     data-testid="chain-run-from-builder"
                   >
                     Run saved chain
+                  </Link> : <Link className="button button--secondary" to="/drafts">
+                    Back to chain drafts
                   </Link>
                 )}
               </div>
@@ -578,11 +722,15 @@ export function ChainBuilderPage({
           </div>
           <p className="field__hint" id="chain-save-hint">
             {saveHint}
-            {chainId === NEW_CHAIN_ID
+            {chainId === NEW_CHAIN_ID && !draftMode
               ? ' Save once to open the run screen.'
               : isDirty
                 ? ' Run uses the saved version; save first to include these edits.'
                 : ''}
+          </p>
+          <p className="field__hint" id="chain-test-workspace-hint">
+            Creates a fresh managed test project for this run. It is separate from the source
+            project or draft, but it is not an operating-system security sandbox.
           </p>
         </div>
       </header>
@@ -652,8 +800,8 @@ export function ChainBuilderPage({
             onRetry={reload}
           />
           <p className="panel__actions">
-            <Link className="button button--secondary" to={`/projects/${projectId}`}>
-              Back to project
+            <Link className="button button--secondary" to={draftMode ? '/drafts' : `/projects/${projectId}`}>
+              {draftMode ? 'Back to chain drafts' : 'Back to project'}
             </Link>
           </p>
         </section>
@@ -668,6 +816,19 @@ export function ChainBuilderPage({
             httpStatus={saveError.status}
             onRetry={() => void handleSave()}
             retryLabel="Retry save"
+          />
+        </div>
+      ) : null}
+
+      {testWorkspaceError !== null ? (
+        <div data-testid="chain-test-workspace-error">
+          <InlineError
+            title="Disposable test workspace could not be created"
+            message={testWorkspaceError.message}
+            code={testWorkspaceError.code}
+            httpStatus={testWorkspaceError.status}
+            onRetry={() => void handleTestInWorkspace()}
+            retryLabel="Retry workspace creation"
           />
         </div>
       ) : null}
@@ -795,9 +956,32 @@ export function ChainBuilderPage({
                     ? 'Choose the harness before the first save. Each step runs under this one harness.'
                     : `This chain is bound to ${CHAIN_HARNESS_LABELS[draftDocument.harness]}. The harness is read-only after creation because per-step harness switching is unsupported.`}
                 </p>
+                <div className="field">
+                  <span className="field__label">Native agent</span>
+                  {draftDocument.agent === undefined ? (
+                    <p className="field__hint">
+                      No native agent selected. Select one from the remote agents in the catalog.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="field__hint">
+                        {draftDocument.agent.name} ({CHAIN_HARNESS_LABELS[draftDocument.agent.harness]})
+                        {' '}from commit {draftDocument.agent.revision.slice(0, 12)}.
+                      </p>
+                      <button
+                        type="button"
+                        className="button button--secondary button--small"
+                        onClick={() => setAgent(undefined)}
+                        disabled={saving}
+                      >
+                        Remove native agent
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
 
-              {chainId === NEW_CHAIN_ID ? null : (
+              {chainId === NEW_CHAIN_ID || draftMode ? null : (
                 <div
                   className="builder-harness__duplicate"
                   data-testid="harness-duplicate"
@@ -925,10 +1109,14 @@ export function ChainBuilderPage({
               data-testid="builder-skills-column"
             >
               <SkillCatalog
-                projectId={projectId}
+                key={draftDocument.harness}
+                projectId={draftMode ? DRAFT_CATALOG_ID : projectId}
                 context="builder"
                 initialHarness={draftDocument.harness}
                 onAddAsStep={handleAddAsStep}
+                onAddNativeAgent={handleAddNativeAgent}
+                onSelectNativeAgent={handleSelectNativeAgent}
+                remoteOnly={draftMode}
                 onCatalogChange={handleCatalogChange}
               />
             </div>
@@ -1004,6 +1192,13 @@ export function ChainBuilderPage({
             />
           </section>
         </>
+      ) : null}
+      {publishDialogOpen && publishSource !== null ? (
+        <PublishSharedBundleDialog
+          source={publishSource}
+          onClose={() => setPublishDialogOpen(false)}
+          onPublished={() => setPublishDialogOpen(false)}
+        />
       ) : null}
     </section>
   );

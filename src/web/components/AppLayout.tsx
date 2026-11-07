@@ -97,8 +97,20 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
     if (pathname === '/chains') {
       return [{ label: 'Chain library' }];
     }
+    if (pathname === '/shared-bundles') {
+      return [{ label: 'Shared bundle library' }];
+    }
+    if (pathname === '/drafts' || pathname.startsWith('/drafts/')) {
+      return [{ label: 'Chain drafts', to: '/drafts' }];
+    }
     if (pathname === '/scenarios') {
       return [{ label: 'Scenario catalog' }];
+    }
+    if (pathname === '/sources') {
+      return [{ label: 'Remote skill repositories' }];
+    }
+    if (pathname === '/test-workspaces') {
+      return [{ label: 'Disposable test workspaces' }];
     }
     if (pathname === '/help') {
       return [{ label: 'Help and user guide' }];
@@ -301,6 +313,20 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
               Chain library
             </Link>
             <Link
+              to="/drafts"
+              aria-current={pathname === '/drafts' || pathname.startsWith('/drafts/') ? 'page' : undefined}
+              onClick={() => setMobileNavOpen(false)}
+            >
+              Chain drafts
+            </Link>
+            <Link
+              to="/shared-bundles"
+              aria-current={pathname === '/shared-bundles' ? 'page' : undefined}
+              onClick={() => setMobileNavOpen(false)}
+            >
+              Shared bundles
+            </Link>
+            <Link
               to="/projects"
               aria-current={
                 pathname === '/projects' || pathname.startsWith('/projects/')
@@ -317,6 +343,20 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
               onClick={() => setMobileNavOpen(false)}
             >
               Scenario catalog
+            </Link>
+            <Link
+              to="/sources"
+              aria-current={pathname === '/sources' ? 'page' : undefined}
+              onClick={() => setMobileNavOpen(false)}
+            >
+              Remote repositories
+            </Link>
+            <Link
+              to="/test-workspaces"
+              aria-current={pathname === '/test-workspaces' ? 'page' : undefined}
+              onClick={() => setMobileNavOpen(false)}
+            >
+              Test workspaces
             </Link>
             <Link
               to="/help"

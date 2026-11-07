@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { chainStepName } from '../../shared/chain';
+import type {
+  ChainAgentSelection,
+  SkillSnapshotBinding,
+} from '../../shared/chain';
 import { isAbortError, type ApiClientError } from '../api/client';
+import type { SkillEntry } from '../api/catalog';
 import {
   CHAIN_HARNESSES,
   CHAIN_INPUT_NAME_PATTERN,
@@ -17,6 +22,7 @@ import {
   type ChainStep,
   type ChainsApi,
 } from '../api/chains';
+import type { SkillChainStep } from '../../shared/chain';
 import { useStatusAnnouncer } from '../components/StatusRegion';
 
 /**
@@ -38,6 +44,7 @@ export interface ChainDraftDocument {
   steps: ChainStep[];
   inputs: ChainInput[];
   automaticPermissionOptIn: boolean;
+  agent?: ChainAgentSelection;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -95,11 +102,13 @@ export interface UseChainDraftResult {
   selectedStepId: string | null;
   selectedStep: ChainStep | null;
   selectStep: (stepId: string | null) => void;
-  addStep: (skill: { name: string }) => string;
+  addStep: (skill: SkillEntry) => string;
   addInstruction: () => string;
   updateStep: (
     stepId: string,
-    patch: Partial<Pick<ChainStep, 'skillName' | 'instruction' | 'label'>>,
+    patch: Partial<
+      Pick<SkillChainStep, 'skillName' | 'skillBinding' | 'instruction' | 'label'>
+    >,
   ) => void;
   removeStep: (stepId: string) => void;
   moveStep: (stepId: string, direction: 'up' | 'down') => void;
@@ -112,6 +121,7 @@ export interface UseChainDraftResult {
   removeInput: (name: string) => void;
   /** The harness can change only before the draft is first saved. */
   setHarness: (harness: ChainHarness) => void;
+  setAgent: (agent: ChainAgentSelection | undefined) => void;
   validation: ChainDraftValidation;
   /** True when the editable content differs from the last load or save. */
   isDirty: boolean;
@@ -175,6 +185,7 @@ export function documentFromChain(chain: Chain): ChainDraftDocument {
     steps: chain.steps,
     inputs: chain.inputs,
     automaticPermissionOptIn: chain.automaticPermissionOptIn,
+    ...(chain.agent === undefined ? {} : { agent: chain.agent }),
     createdAt: chain.createdAt,
     updatedAt: chain.updatedAt,
   };
@@ -189,6 +200,7 @@ export function toChainDraft(document: ChainDraftDocument): ChainDraft {
     steps: document.steps,
     inputs: document.inputs,
     automaticPermissionOptIn: document.automaticPermissionOptIn,
+    ...(document.agent === undefined ? {} : { agent: document.agent }),
   };
 }
 
@@ -212,7 +224,13 @@ export function serializeChainDraft(document: ChainDraftDocument): string {
         id: step.id,
         ...(step.kind === 'instruction'
           ? { kind: 'instruction' as const }
-          : { ...(step.kind === undefined ? {} : { kind: step.kind }), skillName: step.skillName }),
+          : {
+              ...(step.kind === undefined ? {} : { kind: step.kind }),
+              skillName: step.skillName,
+              ...(step.skillBinding === undefined
+                ? {}
+                : { skillBinding: step.skillBinding }),
+            }),
         instruction: step.instruction,
         ...(label === '' ? {} : { label }),
       };
@@ -228,7 +246,26 @@ export function serializeChainDraft(document: ChainDraftDocument): string {
       };
     }),
     automaticPermissionOptIn: document.automaticPermissionOptIn,
+    ...(document.agent === undefined ? {} : { agent: document.agent }),
   });
+}
+
+function skillSnapshotBinding(skill: SkillEntry): SkillSnapshotBinding | undefined {
+  if (skill.source !== 'remote') {
+    return undefined;
+  }
+  if (
+    skill.sourceId === undefined ||
+    skill.revision === undefined ||
+    skill.repositoryPath === undefined
+  ) {
+    throw new Error('Remote catalog entry is missing its snapshot identity.');
+  }
+  return {
+    sourceId: skill.sourceId,
+    revision: skill.revision,
+    repositoryPath: skill.repositoryPath,
+  };
 }
 
 /** Find every `{{name}}` token, including an invalid or empty expression. */
@@ -602,11 +639,13 @@ export function useChainDraft({
   }, []);
 
   const addStep = useCallback(
-    (skill: { name: string }): string => {
+    (skill: SkillEntry): string => {
       const stepId = createLocalStepId();
+      const skillBinding = skillSnapshotBinding(skill);
       const step: ChainStep = {
         id: stepId,
         skillName: skill.name,
+        ...(skillBinding === undefined ? {} : { skillBinding }),
         instruction: '',
       };
 
@@ -640,7 +679,9 @@ export function useChainDraft({
   const updateStep = useCallback(
     (
       stepId: string,
-      patch: Partial<Pick<ChainStep, 'skillName' | 'instruction' | 'label'>>,
+      patch: Partial<
+        Pick<SkillChainStep, 'skillName' | 'skillBinding' | 'instruction' | 'label'>
+      >,
     ) => {
       setState((previous) =>
         updateReadyDocument(previous, (document) => ({
@@ -852,11 +893,35 @@ export function useChainDraft({
         return;
       }
       setState((previous) =>
-        updateReadyDocument(previous, (document) => ({ ...document, harness })),
+        updateReadyDocument(previous, (document) => {
+          if (document.agent === undefined || document.agent.harness === harness) {
+            return { ...document, harness };
+          }
+          const { agent: _agent, ...withoutAgent } = document;
+          return { ...withoutAgent, harness };
+        }),
       );
       announce(`Draft harness set to ${harness}.`);
     },
     [announce, isNew],
+  );
+
+  const setAgent = useCallback(
+    (agent: ChainAgentSelection | undefined) => {
+      if (agent !== undefined && state.status === 'ready' && agent.harness !== state.document.harness) {
+        announce(`The ${agent.harness} agent is incompatible with the ${state.document.harness} chain.`);
+        return;
+      }
+      setState((previous) =>
+        updateReadyDocument(previous, (document) => {
+          if (agent !== undefined) return { ...document, agent };
+          const { agent: _agent, ...withoutAgent } = document;
+          return withoutAgent;
+        }),
+      );
+      announce(agent === undefined ? 'Removed the selected native agent.' : `Selected native agent ${agent.name}.`);
+    },
+    [announce, state],
   );
 
   const save = useCallback(async (): Promise<Chain> => {
@@ -938,6 +1003,7 @@ export function useChainDraft({
     renameInput,
     removeInput,
     setHarness,
+    setAgent,
     validation,
     isDirty,
     save,

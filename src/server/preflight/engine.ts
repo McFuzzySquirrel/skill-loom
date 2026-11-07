@@ -1,7 +1,9 @@
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import type { CatalogService } from '../catalog/merge.js';
-import type { CatalogWarning, SkillEntry } from '../catalog/types.js';
+import { resolveSkillCatalogEntry } from '../catalog/skill-resolution.js';
+import type { CatalogWarning } from '../catalog/types.js';
+import { inspectInstalledNativeAgent } from '../catalog/agent-copy.js';
 import {
   ChainError,
   validateChain,
@@ -66,6 +68,7 @@ export const PREFLIGHT_CHECK_IDS = [
   'cli',
   'catalog',
   'skill',
+  'agent',
   'authentication',
   'trust',
   'session-mode',
@@ -507,6 +510,47 @@ async function executePreflight(
     }
   }
 
+  if (chain.agent !== undefined) {
+    const surface = mode === 'automatic' ? 'headless' : 'interactive';
+    const supported = adapter?.nativeAgentSelection[surface] === true;
+    if (!supported) {
+      checks.push({
+        id: 'agent',
+        key: 'agent:capability',
+        severity: 'block',
+        status: 'block',
+        message: `${adapter?.displayName ?? harness} cannot select native agents on the ${surface} command surface.`,
+        remediation:
+          'Use a supported run mode or remove the native agent selection from the chain.',
+        details: { harness, surface, agentName: chain.agent.name },
+      });
+    } else if (projectResult.ok) {
+      const installedStatus = await inspectInstalledNativeAgent({
+        projectPath: projectResult.path,
+        selection: chain.agent,
+      });
+      const available = installedStatus === 'available';
+      checks.push({
+        id: 'agent',
+        key: 'agent:installed',
+        severity: available ? 'info' : 'block',
+        status: available ? 'pass' : 'block',
+        message: available
+          ? `Native agent "${chain.agent.name}" is installed and matches its selected snapshot.`
+          : `Native agent "${chain.agent.name}" is ${installedStatus} in this project.`,
+        remediation: available
+          ? null
+          : 'Select the verified snapshot again from the catalog, or restore the installed definition without editing it.',
+        details: {
+          harness,
+          agentName: chain.agent.name,
+          installedStatus,
+          surface,
+        },
+      });
+    }
+  }
+
   const sessionPlan =
     adapter === null ? null : describeSessionPlan(adapter, chain, mode);
 
@@ -874,8 +918,17 @@ function evaluateCatalog(
     if (step.kind === 'instruction') {
       continue;
     }
-    const matches = findSkillMatches(entries, step.skillName);
-    const first = matches[0];
+    const resolution = resolveSkillCatalogEntry(entries, {
+      skillName: step.skillName,
+      ...(step.skillBinding === undefined ? {} : { skillBinding: step.skillBinding }),
+    });
+    const first = resolution.status === 'resolved' ? resolution.entry : undefined;
+    const matchCount =
+      resolution.status === 'ambiguous'
+        ? resolution.candidates.length
+        : resolution.status === 'resolved'
+          ? 1
+          : 0;
     const stepLabel = step.label ?? step.skillName;
 
     skills.push({
@@ -887,23 +940,44 @@ function evaluateCatalog(
       entryId: first?.id ?? null,
       source: first?.source ?? null,
       path: first?.path ?? null,
-      matchCount: matches.length,
+      matchCount,
     });
 
     if (first === undefined) {
+      const ambiguous = resolution.status === 'ambiguous';
+      const bindingUnavailable = resolution.status === 'binding-unavailable';
+      const disabled = resolution.status === 'disabled';
+      const message = ambiguous
+        ? `Step ${String(stepIndex + 1)} "${stepLabel}" matches multiple ${resolution.scope === 'project' ? 'project' : 'catalog'} packages named "${step.skillName}". Choose one unambiguous skill package before starting.`
+        : bindingUnavailable
+          ? `The selected remote snapshot for skill "${step.skillName}" is unavailable. Refresh its source or choose another catalog entry.`
+          : disabled
+            ? `Skill "${step.skillName}" is disabled in the ${catalog.harness} catalog. Enable it or choose an available package before starting.`
+            : `Step ${String(stepIndex + 1)} "${stepLabel}" references skill "${step.skillName}", which is not in the ${catalog.harness} catalog.`;
+      const remediation = ambiguous
+        ? 'Select the exact remote snapshot in the catalog, or resolve duplicate project packages before starting.'
+        : bindingUnavailable
+          ? 'Refresh the remote source to restore this snapshot, or edit the step to select an available snapshot.'
+          : disabled
+            ? `Enable the skill for ${catalog.harness}, or edit the step to use an available package.`
+            : `Install or add the "${step.skillName}" skill for ${catalog.harness}, or edit the step to use an available skill.`;
       checks.push({
         id: 'skill',
         key: `skill:${step.id}`,
         severity: 'block',
         status: 'block',
-        message: `Step ${String(stepIndex + 1)} "${stepLabel}" references skill "${step.skillName}", which is not in the ${catalog.harness} catalog.`,
-        remediation: `Install or add the "${step.skillName}" skill for ${catalog.harness}, or edit the step to use an available skill.`,
+        message,
+        remediation,
         details: {
           harness: catalog.harness,
           stepId: step.id,
           stepIndex,
           stepLabel,
           skillName: step.skillName,
+          matchCount,
+          ...(step.skillBinding === undefined
+            ? {}
+            : { skillBinding: step.skillBinding }),
         },
         stepId: step.id,
         stepIndex,
@@ -926,7 +1000,7 @@ function evaluateCatalog(
           entryId: first.id,
           source: first.source,
           path: first.path,
-          matchCount: matches.length,
+          matchCount,
         },
         stepId: step.id,
         stepIndex,
@@ -935,18 +1009,6 @@ function evaluateCatalog(
   }
 
   return { checks, skills, catalogWarnings: [...catalog.warnings] };
-}
-
-function findSkillMatches(entries: readonly SkillEntry[], skillName: string): SkillEntry[] {
-  // A disabled catalog entry cannot be loaded by the harness, so it does not
-  // resolve the step.
-  const usable = entries.filter((entry) => entry.enabled !== false);
-  const exact = usable.filter((entry) => entry.name === skillName);
-  if (exact.length > 0) {
-    return exact;
-  }
-  const lowered = skillName.toLocaleLowerCase('en-US');
-  return usable.filter((entry) => entry.name.toLocaleLowerCase('en-US') === lowered);
 }
 
 function catalogFailureCheck(error: unknown, harness: HarnessId): PreflightCheck {
@@ -1075,7 +1137,7 @@ function trustCheck(
       status: 'acknowledge',
       message: `Folder trust for ${adapter.displayName} could not be inspected.`,
       remediation:
-        'Open the trust terminal in the project, accept the dialog, then verify trust. If the CLI cannot persist trust, acknowledge the manual fallback.',
+        'Check that Copilot\'s trust config is readable and valid. Skill Loom never writes it. If the folder is not listed, choose "Yes, and remember this folder for future sessions" in Copilot, then verify trust.',
       details: { ...baseDetails, state: 'unknown', acknowledgementKey: key },
       acknowledgementKey: key,
       acknowledged: provided.has(key),
@@ -1102,7 +1164,7 @@ function trustCheck(
       status: 'block',
       message: `The project folder is not trusted by ${adapter.displayName}.`,
       remediation:
-        'Open the trust terminal in the project, accept the folder-trust dialog, then verify trust before starting the run.',
+        'Open the trust terminal in the project, choose "Yes, and remember this folder for future sessions" in Copilot, then verify trust before starting the run. Session-only trust is not saved.',
       details: { ...baseDetails, state: result.state },
     };
   }

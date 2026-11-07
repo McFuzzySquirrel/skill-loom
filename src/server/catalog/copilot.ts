@@ -45,14 +45,19 @@ export const MAX_COPILOT_TIMEOUT_MS = 60_000;
 /** Per-stream capture cap for the default runner. */
 export const MAX_COPILOT_CAPTURE_BYTES = 4 * 1024 * 1024;
 
-/** The documented Copilot source labels. Any other label is unknown. */
-export const COPILOT_SOURCE_LABELS = [
-  'project',
-  'personal',
-  'plugin',
-  'custom',
-  'builtin',
-] as const satisfies readonly SkillSource[];
+/** Normalize Copilot source labels to the catalog's harness-neutral sources. */
+const COPILOT_SOURCE_BY_LABEL: Readonly<Record<string, SkillSource | undefined>> = {
+  project: 'project',
+  personal: 'personal',
+  'personal-agents': 'personal',
+  'personal-copilot': 'personal',
+  plugin: 'plugin',
+  custom: 'custom',
+  builtin: 'builtin',
+};
+
+/** Source labels observed from supported Copilot CLI versions. */
+export const COPILOT_SOURCE_LABELS = Object.freeze(Object.keys(COPILOT_SOURCE_BY_LABEL));
 
 /** One shell-free command request handed to an injected runner. */
 export interface CopilotCommandRequest {
@@ -493,9 +498,7 @@ function normalizeSource(value: unknown): SkillSource | undefined {
     return undefined;
   }
   const normalized = value.trim().toLowerCase();
-  return (COPILOT_SOURCE_LABELS as readonly string[]).includes(normalized)
-    ? (normalized as SkillSource)
-    : undefined;
+  return COPILOT_SOURCE_BY_LABEL[normalized];
 }
 
 function normalizeExecutable(value: string | undefined): string {

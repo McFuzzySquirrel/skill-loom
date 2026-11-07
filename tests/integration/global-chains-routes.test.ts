@@ -51,7 +51,11 @@ async function registerProject(app: FastifyInstance, name: string): Promise<stri
   return response.json<{ project: { id: string } }>().project.id;
 }
 
-async function createChain(app: FastifyInstance, projectId: string): Promise<Chain> {
+async function createChain(
+  app: FastifyInstance,
+  projectId: string,
+  agent?: Chain['agent'],
+): Promise<Chain> {
   const response = await app.inject({
     method: 'POST',
     url: `/api/projects/${encodeURIComponent(projectId)}/chains`,
@@ -67,6 +71,7 @@ async function createChain(app: FastifyInstance, projectId: string): Promise<Cha
         },
       ],
       inputs: [{ name: 'release', required: true }],
+      ...(agent === undefined ? {} : { agent }),
     },
   });
   expect(response.statusCode).toBe(201);
@@ -83,7 +88,15 @@ describe('global chain template routes', () => {
     const app = await buildTestApp();
     const sourceProject = await registerProject(app, 'source-project');
     const targetProject = await registerProject(app, 'target-project');
-    const source = await createChain(app, sourceProject);
+    const source = await createChain(app, sourceProject, {
+      harness: 'opencode',
+      name: 'team/reviewer',
+      sourceId: 'remote-source',
+      revision: 'a'.repeat(40),
+      repositoryPath: '.opencode/agents/team/reviewer.md',
+      agentPath: 'team/reviewer.md',
+      fingerprint: 'b'.repeat(64),
+    });
 
     const savedResponse = await app.inject({
       method: 'POST',
@@ -94,6 +107,7 @@ describe('global chain template routes', () => {
     const template = chainOf(savedResponse.json<unknown>());
     expect(template.id).not.toBe(source.id);
     expect(template.name).toBe(source.name);
+    expect(template.agent).toEqual(source.agent);
 
     const listResponse = await app.inject({ method: 'GET', url: '/api/chains' });
     expect(listResponse.statusCode).toBe(200);
@@ -114,6 +128,7 @@ describe('global chain template routes', () => {
     expect(imported.id).not.toBe(template.id);
     expect(imported.steps).toEqual(template.steps);
     expect(imported.inputs).toEqual(template.inputs);
+    expect(imported.agent).toEqual(template.agent);
 
     const targetList = await app.inject({
       method: 'GET',

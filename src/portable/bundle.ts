@@ -1,7 +1,14 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { ChainBundle } from '../shared/bundles.js';
 import { frontmatterString, parseSkillFrontmatter } from '../server/catalog/frontmatter.js';
-import { ChainSchema, parseChain, type Chain } from '../server/chains/model.js';
+import {
+  CHAIN_VERSION,
+  ChainAgentSelectionSchema,
+  ChainSchema,
+  parseChain,
+  type Chain,
+} from '../server/chains/model.js';
 
 export const MAX_BUNDLE_BYTES = 20 * 1024 * 1024;
 export const MAX_BUNDLE_FILES = 2_000;
@@ -40,6 +47,31 @@ const bundleSchema = z.strictObject({
     files: z.array(fileSchema).min(1).max(MAX_BUNDLE_FILES),
   })).max(MAX_BUNDLE_SKILLS),
 });
+const nativeAgentSchema = z.strictObject({
+  name: z.string().trim().min(1).max(128),
+  harness: ChainSchema.shape.harness,
+  agentPath: z.string().min(1).max(512),
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  content: z.string().max(Math.ceil(MAX_BUNDLE_BYTES / 3) * 4),
+});
+const bundleV2Schema = z.strictObject({
+  format: z.literal('skill-loom-chain'),
+  version: z.literal(2),
+  chain: z.strictObject({
+    name: ChainSchema.shape.name,
+    harness: ChainSchema.shape.harness,
+    sessionMode: ChainSchema.shape.sessionMode,
+    steps: ChainSchema.shape.steps,
+    inputs: ChainSchema.shape.inputs,
+    agent: ChainAgentSelectionSchema.optional(),
+  }),
+  skills: z.array(z.strictObject({
+    name: z.string().trim().min(1).max(128),
+    directory: z.string().min(1).max(128).regex(/^[^/\\]+$/),
+    files: z.array(fileSchema).min(1).max(MAX_BUNDLE_FILES),
+  })).max(MAX_BUNDLE_SKILLS),
+  agents: z.array(nativeAgentSchema).max(1),
+});
 
 function invalid(message: string): never {
   throw new BundleError('BUNDLE_INVALID', message);
@@ -70,9 +102,11 @@ export function bundleSkillNames(chain: Pick<Chain, 'steps'>): string[] {
 }
 
 export function chainFromBundle(bundle: ChainBundle): Chain {
+  const agent = bundle.version === 2 ? bundle.chain.agent : undefined;
   return parseChain({
     ...bundle.chain,
-    version: 1,
+    ...(agent === undefined ? {} : { agent }),
+    version: CHAIN_VERSION,
     id: 'portable-bundle',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
@@ -81,7 +115,13 @@ export function chainFromBundle(bundle: ChainBundle): Chain {
 }
 
 export function parseBundle(raw: unknown): ChainBundle {
-  const parsed = bundleSchema.safeParse(raw);
+  const version = isRecord(raw) ? raw.version : undefined;
+  const parsed = version === 1
+    ? bundleSchema.safeParse(raw)
+    : version === 2
+      ? bundleV2Schema.safeParse(raw)
+      : null;
+  if (parsed === null) invalid('The file is not a supported Skill Loom chain bundle.');
   if (!parsed.success) invalid('The file is not a supported Skill Loom chain bundle.');
   const bundle = parsed.data;
   const chain = chainFromBundle(bundle);
@@ -129,5 +169,57 @@ export function parseBundle(raw: unknown): ChainBundle {
     if (name !== skill.name) invalid('A bundled skill name does not match its SKILL.md or directory.');
   }
   if (names.size !== expected.size) invalid('The bundle is missing a referenced skill package.');
+  if (bundle.version === 2) {
+    const selection = bundle.chain.agent;
+    if ((selection === undefined) !== (bundle.agents.length === 0)) {
+      invalid('The bundle agent inventory does not match the selected native agent.');
+    }
+    if (selection !== undefined) {
+      const agent = bundle.agents[0];
+      if (
+        agent === undefined ||
+        agent.name !== selection.name ||
+        agent.harness !== selection.harness ||
+        agent.agentPath !== selection.agentPath ||
+        agent.fingerprint !== selection.fingerprint ||
+        !isSafeBundledAgentPath(agent.agentPath, agent.harness)
+      ) {
+        invalid('The bundled native agent does not match the chain selection.');
+      }
+      const content = decodeBundleFile(agent.content);
+      bytes += content.length;
+      files += 1;
+      if (bytes > MAX_BUNDLE_BYTES || files > MAX_BUNDLE_FILES) {
+        throw new BundleError('BUNDLE_TOO_LARGE', 'Bundles are limited to 20 MiB and 2,000 files.');
+      }
+      if (createHash('sha256').update(content).digest('hex') !== agent.fingerprint) {
+        invalid('The bundled native agent fingerprint does not match its content.');
+      }
+    }
+  }
   return bundle;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isSafeBundledAgentPath(path: string, harness: Chain['harness']): boolean {
+  const segments = path.split('/');
+  if (
+    path.startsWith('/') ||
+    path.includes('\\') ||
+    segments.some((segment) =>
+      segment === '' ||
+      segment === '.' ||
+      segment === '..' ||
+      !/^[^\\/:*?"<>|\x00-\x1f]+$/.test(segment) ||
+      /[. ]$/.test(segment) ||
+      forbiddenSegments.test(segment) ||
+      /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(segment),
+    )
+  ) {
+    return false;
+  }
+  return harness === 'opencode' ? path.endsWith('.md') : path.endsWith('.agent.md');
 }

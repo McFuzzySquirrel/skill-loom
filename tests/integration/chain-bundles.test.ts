@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -112,6 +113,66 @@ function catalogEntry(overrides: Partial<SkillEntry> = {}): SkillEntry {
 }
 
 describe('portable chain bundles', () => {
+  it('round-trips the selected native agent in a version 2 bundle', async () => {
+    const agentText = '---\nname: team/reviewer\ndescription: Review changes\n---\nReview the task.\n';
+    const agentPath = 'team/reviewer.md';
+    const agentFile = join(source, '.opencode', 'agents', agentPath);
+    await mkdir(join(source, '.opencode', 'agents', 'team'), { recursive: true });
+    await writeFile(agentFile, agentText);
+    const agentFingerprint = createHash('sha256').update(agentText).digest('hex');
+    const withAgent = await chains.create(source, {
+      name: 'Portable agent review',
+      harness: 'opencode',
+      sessionMode: 'shared',
+      steps: [{ id: 'step-1', skillName: 'review', instruction: 'Review {{task}}.' }],
+      inputs: [{ name: 'task', required: true }],
+      agent: {
+        harness: 'opencode',
+        name: 'team/reviewer',
+        sourceId: 'remote-source',
+        revision: 'a'.repeat(40),
+        repositoryPath: '.opencode/agents/team/reviewer.md',
+        agentPath,
+        fingerprint: agentFingerprint,
+      },
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/projects/${sourceId}/chains/${withAgent.id}/bundle`,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const bundle = response.json<{ bundle: ChainBundle }>().bundle;
+    expect(bundle.version).toBe(2);
+    expect(JSON.stringify(bundle)).not.toContain(root);
+    if (bundle.version !== 2) throw new Error('Expected bundle format version 2.');
+    expect(bundle.chain.agent?.fingerprint).toBe(agentFingerprint);
+    expect(bundle.agents).toHaveLength(1);
+
+    const tampered = structuredClone(bundle);
+    if (tampered.version !== 2) throw new Error('Expected bundle format version 2.');
+    tampered.agents[0]!.content = Buffer.from('tampered').toString('base64');
+    expect((await request('preview', tampered)).statusCode).toBe(422);
+    expect(await readdir(target)).toEqual(['.loom']);
+
+    const preview = await request('preview', bundle);
+    expect(preview.statusCode).toBe(200);
+    expect(preview.json<BundlePreview>().agents).toEqual([{
+      name: 'team/reviewer',
+      harness: 'opencode',
+      agentPath,
+      conflict: false,
+      bytes: Buffer.byteLength(agentText),
+    }]);
+
+    const importedResponse = await request('import', bundle, { confirmed: true });
+    expect(importedResponse.statusCode, importedResponse.body).toBe(201);
+    const imported = importedResponse.json<{ chain: Chain }>().chain;
+    expect(imported.agent).toEqual(withAgent.agent);
+    expect(await readFile(join(target, '.opencode', 'agents', agentPath), 'utf8')).toBe(agentText);
+  });
+
   it('round-trips full packages, binary files and script modes with fresh identity and consent', async () => {
     const bundle = await exported();
     expect(bundle.chain.inputs).toEqual([{ name: 'task', required: true }]);
@@ -208,7 +269,7 @@ describe('portable chain bundles', () => {
     expect(response.json<{ error: { code: string; message: string } }>().error.message).toContain('not present');
   });
 
-  it('prefers a unique project package over a same-name personal package', async () => {
+  it('imports the unique project package despite a same-name personal package', async () => {
     const personal = join(root, 'home', '.config', 'opencode', 'skills', 'review');
     await mkdir(personal, { recursive: true });
     await writeFile(join(personal, 'SKILL.md'), '---\nname: review\n---\nPersonal copy.\n');
@@ -217,6 +278,19 @@ describe('portable chain bundles', () => {
     expect(response.statusCode, response.body).toBe(200);
     const bundle = response.json<{ bundle: ChainBundle }>().bundle;
     expect(Buffer.from(bundle.skills[0]!.files.find((file) => file.path === 'SKILL.md')!.content, 'base64').toString()).toBe(skillText);
+
+    const preview = await request('preview', bundle);
+    expect(preview.statusCode, preview.body).toBe(200);
+    expect(preview.json<BundlePreview>().skills[0]).toMatchObject({
+      name: 'review',
+      conflict: false,
+      directoryExists: false,
+    });
+
+    const imported = await request('import', bundle, { confirmed: true });
+    expect(imported.statusCode, imported.body).toBe(201);
+    expect(await readFile(join(target, '.agents', 'skills', 'review', 'SKILL.md'), 'utf8'))
+      .toBe(skillText);
   });
 
   it('rejects multiple distinct project packages with an actionable ambiguity error', async () => {
@@ -230,6 +304,68 @@ describe('portable chain bundles', () => {
       code: 'BUNDLE_SOURCE_UNAVAILABLE',
       message: expect.stringContaining('multiple project packages'),
     });
+  });
+
+  it('exports the exact remote snapshot bound to a skill step', async () => {
+    const firstPackage = join(root, 'remote-first', 'review');
+    const selectedPackage = join(root, 'remote-selected', 'review');
+    const firstRevision = 'a'.repeat(40);
+    const selectedRevision = 'b'.repeat(40);
+    const firstText = '---\nname: review\n---\nFirst revision.\n';
+    const selectedText = '---\nname: review\n---\nSelected revision.\n';
+    await mkdir(firstPackage, { recursive: true });
+    await mkdir(selectedPackage, { recursive: true });
+    await writeFile(join(firstPackage, 'SKILL.md'), firstText);
+    await writeFile(join(selectedPackage, 'SKILL.md'), selectedText);
+    discoveryOverride = {
+      entries: [
+        catalogEntry({
+          id: 'remote-first',
+          source: 'remote',
+          path: join(firstPackage, 'SKILL.md'),
+          packagePath: firstPackage,
+          sourceId: 'repo-one',
+          revision: firstRevision,
+          repositoryPath: 'skills/review',
+        }),
+        catalogEntry({
+          id: 'remote-selected',
+          source: 'remote',
+          path: join(selectedPackage, 'SKILL.md'),
+          packagePath: selectedPackage,
+          sourceId: 'repo-one',
+          revision: selectedRevision,
+          repositoryPath: 'skills/review',
+        }),
+      ],
+      warnings: [],
+    };
+    chain = await chains.update(source, chain.id, {
+      ...chain,
+      inputs: [],
+      steps: [
+        {
+          id: 'step-1',
+          kind: 'skill',
+          skillName: 'review',
+          skillBinding: {
+            sourceId: 'repo-one',
+            revision: selectedRevision,
+            repositoryPath: 'skills/review',
+          },
+          instruction: 'Review the project.',
+        },
+      ],
+    });
+
+    const bundle = await exported();
+    expect(bundle.skills).toHaveLength(1);
+    expect(
+      Buffer.from(
+        bundle.skills[0]!.files.find((file) => file.path === 'SKILL.md')!.content,
+        'base64',
+      ).toString(),
+    ).toBe(selectedText);
   });
 
   it('deduplicates repeated observations of one canonical project package', async () => {

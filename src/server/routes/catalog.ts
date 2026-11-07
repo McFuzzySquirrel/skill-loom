@@ -23,6 +23,19 @@ import {
   type CatalogCopyErrorCode,
 } from '../catalog/copy.js';
 import {
+  copyNativeAgentIntoProject,
+  NativeAgentCopyError,
+} from '../catalog/agent-copy.js';
+import {
+  REMOTE_SOURCE_ERROR_CODES,
+  RemoteSourceError,
+  listRemoteSkillSnapshots,
+  listRemoteSkillSources,
+  refreshRemoteSkillSource,
+  registerRemoteSkillSource,
+  unregisterRemoteSkillSource,
+} from '../catalog/remote.js';
+import {
   CATALOG_ERROR_CODES,
   CatalogError,
   SKILL_HARNESSES,
@@ -68,6 +81,11 @@ const extraDirectoryBodySchema = z.strictObject({
 
 const extraDirectoryDeleteSchema = z.object({
   path: z.string().min(1).max(MAX_PATH_LENGTH),
+});
+
+const remoteSourceBodySchema = z.strictObject({
+  repository: z.string().min(1).max(2_048),
+  ref: z.string().min(1).max(255).optional(),
 });
 
 const bundledSkillCopyBodySchema = z.strictObject({
@@ -119,6 +137,27 @@ const STATUS_BY_COPY_CODE: Record<CatalogCopyErrorCode, number> = {
   SKILL_SYMLINK_UNSUPPORTED: 422,
   SKILL_PACKAGE_TOO_LARGE: 413,
   SKILL_COPY_FAILED: 500,
+};
+const STATUS_BY_NATIVE_AGENT_COPY_CODE: Record<
+  ConstructorParameters<typeof NativeAgentCopyError>[0],
+  number
+> = {
+  NATIVE_AGENT_UNAVAILABLE: 404,
+  NATIVE_AGENT_UNSUPPORTED: 422,
+  NATIVE_AGENT_CONFLICT: 409,
+  NATIVE_AGENT_PATH_INVALID: 422,
+  NATIVE_AGENT_COPY_FAILED: 500,
+};
+
+const STATUS_BY_REMOTE_SOURCE_CODE: Record<string, number> = {
+  [REMOTE_SOURCE_ERROR_CODES.INVALID]: 422,
+  [REMOTE_SOURCE_ERROR_CODES.NOT_FOUND]: 404,
+  [REMOTE_SOURCE_ERROR_CODES.DUPLICATE]: 409,
+  [REMOTE_SOURCE_ERROR_CODES.CLONE_FAILED]: 502,
+  [REMOTE_SOURCE_ERROR_CODES.TIMEOUT]: 504,
+  [REMOTE_SOURCE_ERROR_CODES.TOO_LARGE]: 413,
+  [REMOTE_SOURCE_ERROR_CODES.INVALID_PACKAGE]: 422,
+  [REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT]: 500,
 };
 
 /** HTTP status for the folder-path failures reused by directory validation. */
@@ -296,6 +335,52 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRoutesOptions> = async (
           harness,
           skillId: entry.id,
         });
+      } catch (error) {
+        return sendCatalogFailure(reply, error);
+      }
+    },
+  );
+
+  app.post<{
+    Params: ProjectRouteParams & { agentId: string };
+    Querystring: { harness?: string; q?: string };
+  }>(
+    '/api/projects/:projectId/catalog/agents/:agentId/copy',
+    async (request, reply) => {
+      const parsed = catalogQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        return reply.code(422).send(
+          createApiErrorEnvelope(
+            API_ERROR_CODES.VALIDATION_ERROR,
+            'The native agent copy request is not valid.',
+            { issues: toValidationIssues(parsed.error.issues) },
+          ),
+        );
+      }
+
+      try {
+        const project = await resolveRegisteredProject(registry, request.params.projectId);
+        const harness = parsed.data.harness ?? service.defaultHarness;
+        const catalog = await service.getCatalog({
+          projectPath: project.canonicalPath,
+          harness,
+        });
+        const entry = catalog.agents.find((candidate) => candidate.id === request.params.agentId);
+        if (entry === undefined) {
+          return reply.code(404).send(
+            createApiErrorEnvelope(
+              'NATIVE_AGENT_NOT_FOUND',
+              'No native agent snapshot matches that id for the selected harness.',
+              { agentId: request.params.agentId, harness },
+            ),
+          );
+        }
+
+        const copied = await copyNativeAgentIntoProject({
+          projectPath: project.canonicalPath,
+          entry,
+        });
+        return reply.code(201).send({ ...copied, agentId: entry.id });
       } catch (error) {
         return sendCatalogFailure(reply, error);
       }
@@ -497,6 +582,83 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRoutesOptions> = async (
       }
     },
   );
+
+    app.get('/api/settings/remote-skill-sources', async (_request, reply) => {
+      try {
+        return reply.code(200).send({
+          remoteSkillSources: await listRemoteSkillSources(options.configStore),
+        });
+      } catch (error) {
+        return sendCatalogFailure(reply, error);
+      }
+    });
+
+    app.post<{ Body: unknown }>('/api/settings/remote-skill-sources', async (request, reply) => {
+      const parsed = remoteSourceBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(422).send(
+          createApiErrorEnvelope(
+            API_ERROR_CODES.VALIDATION_ERROR,
+            'The remote skill source request is not valid.',
+            { issues: toValidationIssues(parsed.error.issues) },
+          ),
+        );
+      }
+      try {
+        const source = await registerRemoteSkillSource(options.configStore, {
+          repository: parsed.data.repository,
+          ...(parsed.data.ref === undefined ? {} : { ref: parsed.data.ref }),
+        });
+        return reply.code(201).send({ source });
+      } catch (error) {
+        return sendCatalogFailure(reply, error);
+      }
+    });
+
+    app.delete<{ Params: { sourceId: string } }>(
+      '/api/settings/remote-skill-sources/:sourceId',
+      async (request, reply) => {
+        try {
+          await unregisterRemoteSkillSource(options.configStore, request.params.sourceId);
+          return reply.code(200).send({
+            remoteSkillSources: await listRemoteSkillSources(options.configStore),
+          });
+        } catch (error) {
+          return sendCatalogFailure(reply, error);
+        }
+      },
+    );
+
+    app.get<{ Params: { sourceId: string } }>(
+      '/api/settings/remote-skill-sources/:sourceId/snapshots',
+      async (request, reply) => {
+        try {
+          return reply.code(200).send({
+            snapshots: await listRemoteSkillSnapshots(
+              options.configStore.getConfigDir(),
+              request.params.sourceId,
+            ),
+          });
+        } catch (error) {
+          return sendCatalogFailure(reply, error);
+        }
+      },
+    );
+
+    app.post<{ Params: { sourceId: string } }>(
+      '/api/settings/remote-skill-sources/:sourceId/refresh',
+      async (request, reply) => {
+        try {
+          const snapshot = await refreshRemoteSkillSource(
+            options.configStore,
+            request.params.sourceId,
+          );
+          return reply.code(201).send({ snapshot });
+        } catch (error) {
+          return sendCatalogFailure(reply, error);
+        }
+      },
+    );
 };
 
 async function resolveRegisteredProject(
@@ -552,6 +714,18 @@ function sendCatalogFailure(reply: FastifyReply, error: unknown): FastifyReply {
   if (error instanceof CatalogCopyError) {
     return reply
       .code(STATUS_BY_COPY_CODE[error.code] ?? 500)
+      .send(createApiErrorEnvelope(error.code, error.message, error.details));
+  }
+
+  if (error instanceof NativeAgentCopyError) {
+    return reply
+      .code(STATUS_BY_NATIVE_AGENT_COPY_CODE[error.code] ?? 500)
+      .send(createApiErrorEnvelope(error.code, error.message, error.details));
+  }
+
+  if (error instanceof RemoteSourceError) {
+    return reply
+      .code(STATUS_BY_REMOTE_SOURCE_CODE[error.code] ?? 500)
       .send(createApiErrorEnvelope(error.code, error.message, error.details));
   }
 

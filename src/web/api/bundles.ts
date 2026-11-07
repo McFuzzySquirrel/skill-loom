@@ -13,6 +13,12 @@ export const bundlesApi = {
     );
     return result.bundle;
   },
+  async exportDraft(draftId: string): Promise<ChainBundle> {
+    const result = await requestJson<{ bundle: ChainBundle }>(
+      `/api/drafts/${encodeURIComponent(draftId)}/bundle`,
+    );
+    return result.bundle;
+  },
   preview(projectId: string, bundle: unknown): Promise<BundlePreview> {
     return requestJson(`${base(projectId)}/chain-bundles/preview`, {
       method: 'POST', body: { bundle },

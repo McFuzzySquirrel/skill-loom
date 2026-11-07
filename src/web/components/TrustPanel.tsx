@@ -95,7 +95,7 @@ export function TrustPanel({
       setSession(started);
       setPhase('session');
       announce(
-        `${started.displayName} trust terminal opened. Accept the folder-trust dialog, then choose Verify trust.`,
+        `${started.displayName} trust terminal opened. Choose "Yes, and remember this folder for future sessions" in Copilot's dialog, then choose Verify trust.`,
       );
     } catch (caught) {
       setError(
@@ -119,7 +119,9 @@ export function TrustPanel({
         );
       } else {
         announce(
-          `${result.displayName} folder trust is not established. Accept the dialog or run the manual fallback, then verify again.`,
+          result.state === 'untrusted'
+            ? `${result.displayName} folder trust is not established. Choose "Yes, and remember this folder for future sessions" or run the manual fallback, then verify again.`
+            : `${result.displayName} folder trust could not be verified. Check Copilot's trust config or use the manual fallback, then verify again.`,
         );
       }
       onTrustChanged?.(result.trusted);
@@ -147,7 +149,7 @@ export function TrustPanel({
           <HelpPopover topic="preflight" />
           <p className="field__hint">
             The first Copilot prompt can be swallowed by a folder-trust dialog. Skill Loom starts an
-            unseeded interactive session so you can accept that dialog before the run.
+            unseeded interactive session so you can persist trust before the run.
           </p>
         </div>
         <span
@@ -165,7 +167,7 @@ export function TrustPanel({
         {trusted
           ? 'The project folder is trusted by Copilot. Re-run preflight to refresh the findings before Start.'
           : state === 'untrusted'
-            ? 'The project folder is not trusted yet. Open the trust terminal, accept the dialog, then verify.'
+            ? 'The project folder is not trusted yet. In Copilot, choose "Yes, and remember this folder for future sessions", then verify.'
             : 'Folder trust could not be verified automatically. Use the trust terminal or the manual fallback, then verify again.'}
       </p>
 
@@ -199,8 +201,10 @@ export function TrustPanel({
             terminal.
           </p>
           <p className="field__hint">
-            Accept the dialog, then choose Verify trust. If Copilot cannot persist trust, the
-            exact manual command shown below remains available.
+            Choose "Yes, and remember this folder for future sessions" in Copilot's dialog, then
+            choose Verify trust. Session-only trust is not saved and will still be reported as
+            untrusted. If Copilot cannot persist trust, the exact manual command shown below remains
+            available.
           </p>
           <div className="panel__actions">
             <button
@@ -265,8 +269,9 @@ export function TrustPanel({
           Manual fallback
         </h3>
         <p className="field__hint">
-          Display only. Skill Loom never executes this line for you. Run it in a terminal inside the
-          project if the dialog cannot persist trust.
+          Display only. Skill Loom never executes this line for you. If the dialog asks, choose
+          "Yes, and remember this folder for future sessions"; session-only trust is not saved. Run
+          this command in a terminal inside the project if Copilot cannot persist trust.
         </p>
         <pre className="trust-panel__command">
           <code data-testid="trust-manual-command">

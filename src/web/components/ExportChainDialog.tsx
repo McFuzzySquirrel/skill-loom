@@ -9,8 +9,16 @@ import { useStatusAnnouncer } from './StatusRegion';
 import { HelpPopover } from './HelpPopover';
 
 export function ExportChainDialog({
-  projectId, chainId, onClose,
-}: { projectId: string; chainId: string; onClose: () => void }) {
+  projectId,
+  chainId,
+  draftId,
+  onClose,
+}: {
+  projectId?: string;
+  chainId?: string;
+  draftId?: string;
+  onClose: () => void;
+}) {
   const titleId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const { announce } = useStatusAnnouncer();
@@ -23,13 +31,18 @@ export function ExportChainDialog({
   useEffect(() => {
     heading.current?.focus();
     let active = true;
-    void bundlesApi.export(projectId, chainId).then((value) => {
+    const request = draftId !== undefined
+      ? bundlesApi.exportDraft(draftId)
+      : projectId !== undefined && chainId !== undefined
+        ? bundlesApi.export(projectId, chainId)
+        : Promise.reject(new Error('An export source is required.'));
+    void request.then((value) => {
       if (active) setBundle(value);
     }).catch((caught: unknown) => {
       if (active) setError(toApiClientError(caught, 'The chain bundle could not be prepared.'));
     });
     return () => { active = false; };
-  }, [projectId, chainId]);
+  }, [chainId, draftId, projectId]);
 
   return (
     <section className="new-chain" role="dialog" aria-modal="false" aria-labelledby={titleId}>
@@ -39,7 +52,8 @@ export function ExportChainDialog({
         <button type="button" className="button button--secondary" onClick={onClose}>Close</button>
       </div>
       <p>
-        This downloads the saved chain and complete referenced skill packages, including scripts.
+        This downloads the saved chain, complete referenced skill packages, including scripts,
+        and the selected native agent definition when the chain uses one.
         Input defaults, run history, local source paths, and permission consent are not exported.
         Review instructions and all package files for secrets, private data, and redistribution rights before sharing.
         Embedded paths or secrets in file contents cannot be detected automatically.

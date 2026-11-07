@@ -915,6 +915,9 @@ export class AutomaticRunner {
           ? {}
           : { forkFromSessionId: planned.forkFromSessionId }),
         automaticPermissionOptIn: this.runValue.chainSnapshot.automaticPermissionOptIn,
+        ...(this.runValue.chainSnapshot.agent === undefined
+          ? {}
+          : { agentName: this.runValue.chainSnapshot.agent.name }),
       });
     } catch (error) {
       const reason =

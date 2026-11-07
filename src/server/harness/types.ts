@@ -97,6 +97,11 @@ export interface HarnessDescriptor {
   readonly installHint: string;
   readonly discovery: HarnessDiscoveryDescriptor;
   readonly supportedSessionModes: readonly ChainSessionMode[];
+  /** Whether the selected native agent can be pinned on each command surface. */
+  readonly nativeAgentSelection: {
+    readonly interactive: boolean;
+    readonly headless: boolean;
+  };
   /** True only when at least one command surface exposes a real fork flag. */
   readonly nativeFork: boolean;
   readonly forkMechanisms: HarnessForkMechanisms;
@@ -160,6 +165,8 @@ export interface StepInvocation {
   forkFromSessionId?: string | undefined;
   /** Per-chain opt-in for broad automatic permissions. Defaults to false. */
   automaticPermissionOptIn?: boolean | undefined;
+  /** Exact native agent name selected by the chain, when supported. */
+  agentName?: string | undefined;
 }
 
 /** A shell-free executable-plus-array command. */
@@ -366,6 +373,19 @@ export function assertStepInvocation(
       harness,
       'automaticPermissionOptIn',
       'The automatic permission opt-in must be a boolean.',
+    );
+  }
+
+  if (
+    invocation.agentName !== undefined &&
+    (typeof invocation.agentName !== 'string' ||
+      invocation.agentName.trim() === '' ||
+      invocation.agentName.includes('\0'))
+  ) {
+    throw new HarnessInvocationError(
+      harness,
+      'agentName',
+      'The native agent name must be a nonempty string without NUL characters.',
     );
   }
 

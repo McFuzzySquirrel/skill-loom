@@ -206,6 +206,97 @@ test.describe('Chain builder', () => {
     await expect(page.getByTestId('step-skill')).toHaveCount(0);
   });
 
+  test('project-independent drafts save, reopen, and create disposable test workspaces', async ({ page, request }) => {
+    const errors = collectConsoleErrors(page);
+    await page.goto('/drafts');
+    await page.getByRole('link', { name: 'Blank draft' }).click();
+    await expect(page.getByTestId('chain-builder-page')).toBeVisible();
+    await expect(page.getByTestId('chain-save')).toHaveText('Save draft');
+
+    await page.getByTestId('chain-add-instruction').click();
+    await page.getByTestId('step-instruction').fill('Write a draft test result file.');
+    await page.getByTestId('step-label').fill('Create result');
+    await closeStepEditor(page);
+    await page.getByTestId('chain-save').click();
+
+    await expect(page).toHaveURL(/\/drafts\/[^/]+$/);
+    await expect(page.getByTestId('chain-save')).toHaveText('Save draft');
+    const draftId = new URL(page.url()).pathname.split('/').at(-1);
+    expect(draftId).toBeTruthy();
+
+    await page.getByTestId('chain-test-in-workspace').click();
+    await expect(page).toHaveURL(/\/projects\/[^/]+\/chains\/[^/]+\/run$/);
+    const response = await request.get('/api/test-workspaces');
+    expect(response.ok()).toBe(true);
+    const body = await response.json() as {
+      workspaces: Array<{ sourceDraftId?: string }>;
+    };
+    expect(body.workspaces.some((workspace) => workspace.sourceDraftId === draftId)).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
+  test('starts a project-independent scenario draft from a goal', async ({ page }) => {
+    const outcome = `Summarize a project and produce a release checklist ${runSuffix}`;
+    await page.goto('/drafts');
+    await page.getByRole('button', { name: 'Start from a goal' }).click();
+    await page.getByLabel('What outcome do you want?').fill(outcome);
+    await page.getByRole('button', { name: 'Review catalog and build draft' }).click();
+
+    await expect(page).toHaveURL(/\/drafts\/[^/]+$/);
+    await expect(page.getByTestId('chain-builder-page')).toBeVisible();
+    await expect(stepRows(page)).toHaveCount(1);
+    await expect(stepRows(page).first()).toContainText(`Achieve this outcome: ${outcome}`);
+  });
+
+  test('registers and refreshes optional repositories before opening a goal draft', async ({ page }) => {
+    const repository = 'https://github.com/example/scenario-skills.git';
+    const sourceRequests: Array<{ repository: string; ref?: string }> = [];
+    const refreshRequests: string[] = [];
+    await page.route('**/api/settings/remote-skill-sources', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      const body = route.request().postDataJSON() as { repository: string; ref?: string };
+      sourceRequests.push(body);
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          source: { id: 'scenario-source', repository: body.repository, ref: body.ref },
+        }),
+      });
+    });
+    await page.route('**/api/settings/remote-skill-sources/scenario-source/refresh', async (route) => {
+      refreshRequests.push(route.request().method());
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          snapshot: {
+            version: 1,
+            sourceId: 'scenario-source',
+            repository,
+            revision: 'a'.repeat(40),
+            packages: [],
+            agents: [],
+          },
+        }),
+      });
+    });
+
+    await page.goto('/drafts');
+    await page.getByRole('button', { name: 'Start from a goal' }).click();
+    await page.getByLabel('What outcome do you want?').fill('Review the repository before a release.');
+    await page.getByLabel('Repository URL 1').fill(repository);
+    await page.getByLabel('Optional branch, tag, or commit').fill('release');
+    await page.getByRole('button', { name: 'Review catalog and build draft' }).click();
+
+    await expect(page).toHaveURL(/\/drafts\/[^/]+$/);
+    expect(sourceRequests).toEqual([{ repository, ref: 'release' }]);
+    expect(refreshRequests).toEqual(['POST']);
+  });
+
   test('uses a responsive multi-pane workflow design layout', async ({ page, request }) => {
     const project = await openFixtureProject(request);
     await page.setViewportSize({ width: 1600, height: 1000 });
@@ -287,6 +378,119 @@ test.describe('Chain builder', () => {
     await expect(stepRows(page)).toHaveCount(2);
 
     expect(consoleErrors).toEqual([]);
+  });
+
+  test('persists the selected remote snapshot and clears it when the skill changes', async ({
+    page,
+    request,
+  }) => {
+    const project = await openFixtureProject(request);
+    const snapshots = [
+      {
+        id: 'remote-review-a',
+        name: 'remote-review',
+        sourceId: 'source-a',
+        revision: 'a'.repeat(40),
+        repositoryPath: 'skills/review',
+      },
+      {
+        id: 'remote-review-b',
+        name: 'alternate-review',
+        sourceId: 'source-b',
+        revision: 'b'.repeat(40),
+        repositoryPath: 'skills/review',
+      },
+    ];
+    await page.route(`**/api/projects/${project.id}/catalog**`, async (route) => {
+      const requestUrl = new URL(route.request().url());
+      const skillId = requestUrl.pathname.split('/skills/')[1];
+      if (skillId !== undefined) {
+        const snapshot = snapshots.find((entry) => entry.id === skillId);
+        if (snapshot === undefined) {
+          await route.fulfill({ status: 404, body: 'not found' });
+          return;
+        }
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: snapshot.id,
+            harness: 'opencode',
+            name: snapshot.name,
+            path: `/snapshot/${snapshot.sourceId}/${snapshot.revision}/SKILL.md`,
+            content: `---\nname: ${snapshot.name}\ndescription: remote test skill\n---\nReview the selected snapshot.`,
+          }),
+        });
+        return;
+      }
+
+      const entries = snapshots.map((snapshot) => ({
+        ...snapshot,
+        harness: 'opencode',
+        source: 'remote',
+        description: 'Remote test skill',
+        path: `/snapshot/${snapshot.sourceId}/${snapshot.revision}/SKILL.md`,
+        packagePath: `/snapshot/${snapshot.sourceId}/${snapshot.revision}`,
+        repository: `https://example.test/${snapshot.sourceId}.git`,
+        enabled: true,
+      }));
+      const query = requestUrl.searchParams.get('q') ?? '';
+      const visibleEntries = entries.filter((entry) =>
+        entry.name.toLocaleLowerCase('en-US').includes(query.toLocaleLowerCase('en-US')),
+      );
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          harness: 'opencode',
+          query,
+          total: visibleEntries.length,
+          counts: {
+            total: visibleEntries.length,
+            bySource: {
+              project: 0,
+              personal: 0,
+              custom: 0,
+              plugin: 0,
+              builtin: 0,
+              'loom-extra': 0,
+              remote: visibleEntries.length,
+            },
+          },
+          groups:
+            visibleEntries.length === 0
+              ? []
+              : [{ source: 'remote', count: visibleEntries.length, entries: visibleEntries }],
+          agents: [],
+          warnings: [],
+          elapsedMs: 1,
+        }),
+      });
+    });
+
+    await gotoNewBuilder(page, project.id, `Remote binding ${runSuffix}`);
+    await page.getByTestId('catalog-search').fill('remote-review');
+    const skillRow = page.locator('[data-testid="skill-row"][data-name="remote-review"]');
+    await expect(skillRow).toHaveCount(1);
+    await skillRow.locator('.skill-row__toggle').click();
+    await skillRow.getByRole('button', { name: 'Add as step' }).click();
+    await page.getByTestId('step-instruction').fill('Review this snapshot.');
+    await expect(page.getByTestId('skill-snapshot-binding')).toContainText('source-a');
+    await expect(page.getByTestId('skill-snapshot-binding')).toContainText('aaaaaaaaaaaa');
+    await closeStepEditor(page);
+    await page.getByTestId('chain-save').click();
+    await expect(page).not.toHaveURL(/\/chains\/new/);
+
+    await page.reload();
+    await stepRows(page).first().getByRole('button', { name: /Select step 1:/ }).click();
+    await expect(page.getByTestId('skill-snapshot-binding')).toContainText('source-a');
+
+    await page.getByTestId('step-skill').selectOption('alternate-review');
+    await expect(page.getByTestId('skill-snapshot-binding')).toHaveCount(0);
+    await closeStepEditor(page);
+    await page.getByTestId('chain-save').click();
+    await page.reload();
+    await stepRows(page).first().getByRole('button', { name: /Select step 1:/ }).click();
+    await expect(page.getByTestId('step-skill')).toHaveValue('alternate-review');
+    await expect(page.getByTestId('skill-snapshot-binding')).toHaveCount(0);
   });
 
   test('blocks save and shows an inline error while an instruction is empty', async ({

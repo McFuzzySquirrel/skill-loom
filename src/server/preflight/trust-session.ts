@@ -151,7 +151,9 @@ interface TrustSessionRecord {
 }
 
 const MANUAL_FALLBACK_REMEDIATION =
-  'Accept the folder-trust dialog in the interactive terminal, then verify trust. If the CLI cannot persist trust, run the manual command in a terminal and verify again.';
+  'Choose "Yes, and remember this folder for future sessions" in Copilot\'s folder-trust dialog, then verify trust. Session-only trust is not saved in trustedFolders. If the CLI cannot persist trust, run the manual command in a terminal and verify again.';
+const UNKNOWN_TRUST_REMEDIATION =
+  'Copilot trust could not be read. Check that Copilot\'s trust config is readable and valid. If the folder is not listed, choose "Yes, and remember this folder for future sessions" in Copilot\'s dialog. If needed, run the manual command in a terminal and verify again.';
 
 export function createTrustSessionService(
   options: TrustSessionServiceOptions,
@@ -315,7 +317,9 @@ export function createTrustSessionService(
         remediation:
           trust.state === 'trusted'
             ? 'The project folder is trusted. Run preflight again before starting.'
-            : MANUAL_FALLBACK_REMEDIATION,
+            : trust.state === 'untrusted'
+              ? MANUAL_FALLBACK_REMEDIATION
+              : UNKNOWN_TRUST_REMEDIATION,
       };
     },
 

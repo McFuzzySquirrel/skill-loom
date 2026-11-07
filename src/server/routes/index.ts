@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { catalogRoutes, type CatalogRoutesOptions } from './catalog.js';
 import { chainRoutes, type ChainRoutesOptions } from './chains.js';
 import { chainBundleRoutes } from './chain-bundles.js';
+import { draftRoutes } from './drafts.js';
 import { fsRoutes, type FsRouteOptions } from './fs.js';
 import {
   globalChainRoutes,
@@ -15,6 +16,8 @@ import { scenarioPresetRoutes } from './presets.js';
 import { runRoutes, type RunRoutesOptions } from './runs.js';
 import { terminalRoutes, type TerminalRouteOptions } from './terminal.js';
 import { serverRoutes, type ServerRoutesOptions } from './server.js';
+import { testWorkspaceRoutes } from './test-workspaces.js';
+import { sharedBundleRoutes, type SharedBundleRoutesOptions } from './shared-bundles.js';
 
 export type RouteRegistrationOptions = HealthRouteOptions &
   ServerRoutesOptions &
@@ -25,7 +28,8 @@ export type RouteRegistrationOptions = HealthRouteOptions &
   ChainRoutesOptions &
   GlobalChainRoutesOptions &
   PreflightRoutesOptions &
-  RunRoutesOptions;
+  RunRoutesOptions &
+  SharedBundleRoutesOptions;
 
 /**
  * Single registration point for the HTTP and WebSocket surface. Every feature
@@ -42,8 +46,11 @@ export const routes: FastifyPluginAsync<RouteRegistrationOptions> = async (app, 
   await app.register(chainBundleRoutes, options);
   await app.register(portableSkillRoutes);
   await app.register(globalChainRoutes, options);
+  await app.register(draftRoutes, options);
   await app.register(preflightRoutes, options);
   await app.register(runRoutes, options);
+  await app.register(testWorkspaceRoutes, options);
+  await app.register(sharedBundleRoutes, options);
   await app.register(scenarioPresetRoutes);
   await app.register(terminalRoutes, options);
 };

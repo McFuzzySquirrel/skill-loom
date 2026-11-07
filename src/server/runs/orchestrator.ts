@@ -644,7 +644,7 @@ class RunOrchestratorService implements RunOrchestrator {
       }
     }
 
-    const recent = await this.options.projectRegistry.listRecentProjects();
+    const recent = await this.options.projectRegistry.listKnownProjects();
     const targets: string[] = [];
     if (pointer !== null) {
       targets.push(pointer.projectPath);
@@ -1312,7 +1312,7 @@ class RunOrchestratorService implements RunOrchestrator {
     }
 
     let firstError: unknown;
-    const projects = await this.options.projectRegistry.listRecentProjects();
+    const projects = await this.options.projectRegistry.listKnownProjects();
     for (const project of projects) {
       try {
         const run = await this.storeFor(project.canonicalPath).read(runId);

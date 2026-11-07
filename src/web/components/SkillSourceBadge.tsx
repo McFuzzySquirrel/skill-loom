@@ -1,6 +1,6 @@
 import type { SkillSource } from '../api/catalog';
 
-/** User-facing names for the six documented sources. */
+/** User-facing names for the catalog sources. */
 export const SOURCE_LABELS: Record<SkillSource, string> = {
   project: 'Project',
   personal: 'Personal',
@@ -8,6 +8,7 @@ export const SOURCE_LABELS: Record<SkillSource, string> = {
   plugin: 'Plugin',
   builtin: 'Builtin',
   'loom-extra': 'Loom extra',
+  remote: 'Remote snapshot',
 };
 
 export interface SkillSourceBadgeProps {

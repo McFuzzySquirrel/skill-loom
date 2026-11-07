@@ -184,6 +184,7 @@ function fakeCatalog(entries: readonly SkillEntry[]): CatalogService {
           matching.length === 0
             ? []
             : [{ source: 'project', count: matching.length, entries: [...matching] }],
+        agents: [],
         warnings: [],
         elapsedMs: 1,
       };
@@ -596,7 +597,9 @@ describe('POST /api/projects/:projectId/trust', () => {
     expect(verified.trusted).toBe(false);
     expect(verified.state).toBe('untrusted');
     expect(verified.closed).toBe(false);
-    expect(verified.remediation.length).toBeGreaterThan(0);
+    expect(verified.remediation).toContain(
+      'Yes, and remember this folder for future sessions',
+    );
     expect(verified.manualCommand).toEqual({
       harness: 'copilot',
       executable: COPILOT(),
@@ -607,6 +610,31 @@ describe('POST /api/projects/:projectId/trust', () => {
 
     expect(terminal.closed).toEqual([]);
     expect(terminal.getSession(started.sessionId)).toBeDefined();
+  });
+
+  it('distinguishes unreadable trust config from a missing persistent trust choice', async () => {
+    const harness = await buildTestApp();
+    const start = await postTrust(harness.app, harness.projectId, {
+      action: 'start',
+      harness: 'copilot',
+    });
+    const started = start.body as TrustStartResult;
+
+    trustConfig = 'not-json';
+    const response = await postTrust(harness.app, harness.projectId, {
+      action: 'verify',
+      harness: 'copilot',
+      sessionId: started.sessionId,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const verified = response.body as TrustVerifyResult;
+    expect(verified.state).toBe('unknown');
+    expect(verified.remediation).toContain('trust config is readable and valid');
+    expect(verified.remediation).not.toContain(
+      'Session-only trust is not saved',
+    );
+    expect(terminal.closed).toEqual([]);
   });
 
   it('rejects an unsupported trust harness and invalid project with the envelope', async () => {
