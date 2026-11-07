@@ -58,13 +58,16 @@ The product promise is deliberately narrow:
 | Capability | What it does |
 |---|---|
 | Global chain library | Keep reusable chain templates outside any project, then copy them into a project to adapt or test. |
-| Portable chain bundles | Export a saved chain with complete referenced skill packages as `.loom.json`; review, download, and move it into another repository or installation. |
-| Chain builder | Create a chain bound to one harness, add skill or standalone instruction steps, reorder with drag or **Move up**/**Move down**, declare named inputs, and use `{{name}}` placeholders. |
+| Project-independent drafts | Start from an outcome, register and refresh optional remote repositories, select pinned skills and agents, and build without installing content into an existing project. |
+| Portable chain bundles | Export a saved chain with complete referenced skill packages as `.loom.json`; version 2 also preserves one selected native agent. Review, download, and move it into another repository or installation. |
+| Shared bundle library | Publish reviewed bundles without overwriting existing files to a configured local or mounted directory, then browse and import them from Skill Loom. |
+| Chain builder | Create a chain bound to one harness, add skill or standalone instruction steps, optionally select one exact remote native agent, reorder steps, and declare named inputs. |
 | Projects | Register existing folders or create new ones, browse the filesystem, optionally initialize Git, and keep a recent-project list. Removing a recent entry never deletes project files. |
 | Skill catalog | Discover OpenCode filesystem skills and Copilot CLI skills, read `SKILL.md` metadata, search, add extra global directories, and copy non-project packages into the shared `.agents/skills/` root. |
+| Remote repositories | Register HTTPS/SSH Git repositories, explicitly refresh pinned skill and native-agent snapshots, and inspect artifacts without checking out or running repository scripts. |
 | Workspace and appearance | Navigate project skills, chains, and details separately; choose system, light, or dark appearance. |
 | Scenario catalog | Browse illustrative starter chains for business, student, app developer, and game developer workflows; inspect pinned third-party skill sources, copy examples into the builder, and explicitly add bundled skills to a project when needed. See the [scenario chain guide](docs/scenario-chains.md). |
-| Optional local testing | Preflight the chain and CLI, choose a session mode, and test in an interactive terminal with supervised or adapter-signaled progression, recovery, and retry controls. |
+| Optional local testing | Test a saved chain or project-independent draft in a fresh managed project directory, then inspect or explicitly remove retained workspaces; the directory is separate from the source project, not an OS security sandbox. |
 | Terminal and accessibility | Serve a server-owned PTY to xterm.js with screen-reader mode, Escape-to-leave focus, skip links, keyboard reordering, and polite/assertive status announcements. |
 | Local CLI | Run the packaged local design workspace as `skill-loom` with `--help`, `--version`, `--no-open`, `--port`, and `--config-dir`. |
 
@@ -116,6 +119,7 @@ Key boundaries and the decisions behind them:
 - Skills remain model-invoked prompt context — [ADR-0003](docs/adr/0003-model-invoked-skill-prompts.md).
 - Runs freeze their chain and keep only a bounded tail — [ADR-0004](docs/adr/0004-frozen-run-snapshots-and-bounded-tails.md).
 - Config, chains, and runs use versioned atomic JSON — [ADR-0005](docs/adr/0005-atomic-versioned-json-persistence.md).
+- Native agents remain harness-specific, source-pinned, and are selected only through adapter-supported command surfaces — [ADR-0016](docs/adr/0016-pinned-native-agent-selection.md).
 - One active run is enforced globally with explicit interruption recovery — [ADR-0006](docs/adr/0006-single-active-run-and-interrupt-recovery.md).
 - Automatic runs rely on explicit signals, not output quiescence — [ADR-0007](docs/adr/0007-explicit-advancement-signals.md).
 - Copilot trust is read-only and broad permissions need an opt-in — [ADR-0009](docs/adr/0009-read-only-copilot-trust-and-explicit-permissions.md).
@@ -250,7 +254,7 @@ The live probes exercise real OpenCode and Copilot CLIs. They fail with a clear 
 1. Start the development app with `npm run dev` and open `http://127.0.0.1:5173`, or build and run production with `npm run build && npm start` and open `http://127.0.0.1:7373`.
 2. On the Projects screen, open an existing folder or create a new project. Registering a project records it in the recent-projects list; removing a recent entry does not delete project files.
 3. Open **Project skills**, choose the harness, and search or expand a skill's `SKILL.md`. You can add extra skill directories in the settings dialog. A skill from a personal, plugin, custom, or extra source can be copied into the project with **Copy into this project**; new copies for either harness go to `.agents/skills/`. OpenCode also discovers legacy `.opencode/skills/` packages, while Copilot discovery remains authoritative through its CLI.
-4. Create a chain, add at least one step, choose the harness, give every step an instruction, declare any named inputs, and save. A saved chain is stored under `<project>/.loom/chains/`. **Save and run** saves the chain and opens its run-start screen.
+4. Create a chain, add at least one step, choose the harness, optionally select a compatible native agent from a remote source, give every step an instruction, declare any named inputs, and save. A saved chain is stored under `<project>/.loom/chains/`. **Save and run** saves the chain and opens its run-start screen.
 5. On run start, choose supervised or automatic mode, provide required inputs, and run preflight. Preflight never makes a model call.
 6. Resolve every blocking finding and acknowledge every required warning, then choose **Start run**. Skill Loom creates the run through `POST /api/projects/<projectId>/runs`, re-runs the blocking preflight on the server, and opens the dedicated terminal page at `/runs/<runId>/terminal`.
 7. The terminal page keeps xterm and the compact run controls together without scrolling past step details; **Run details** opens `/runs/<runId>` for the step rail, full controls, and recovery guidance. A run never advances because of terminal output, a timer, or a page load. A chain card's **Run** action returns to the run-start screen, and the project screen links to any active run.
@@ -275,7 +279,7 @@ The CLI flags `--port` and `--config-dir` set `LOOM_PORT` and `LOOM_CONFIG_DIR`.
 
 Skill Loom is **loopback-only**. The server binds to `127.0.0.1` by default, refuses any non-loopback `LOOM_HOST`, and has **no authentication** because there is no remote access. Never expose the port through a reverse proxy, tunnel, container port publish, or remote host.
 
-The server owns all filesystem traversal, persistence, process spawning, and PTY handling. The browser performs no shell execution and receives only typed API and WebSocket data. Skill Loom sends no telemetry, crash reports, remote logs, or outbound application requests; only user-invoked harness CLIs and package installation use the network. Credentials and tokens are never read into Skill Loom, persisted, or logged.
+The server owns all filesystem traversal, persistence, process spawning, and PTY handling. The browser performs no shell execution and receives only typed API and WebSocket data. Skill Loom sends no telemetry, crash reports, or remote logs. Git network access occurs only when a user explicitly refreshes a registered repository; user-invoked harness CLIs and package installation may also use the network. Credentials and tokens are never read into Skill Loom, persisted, or logged.
 
 Harness children are spawned with an executable plus an argument array, never a shell command string. Project paths are canonicalized, path traversal outside the intended data directory is rejected, and harness, skill, and run content is rendered as escaped text or raw terminal text, never as HTML.
 

@@ -3,16 +3,20 @@ import type {
   CatalogApi,
   CatalogHarness,
   CatalogWarning,
+  NativeAgentCopyResult,
+  NativeAgentEntry,
   SkillEntry,
   SkillSource,
 } from '../api/catalog';
-import { CATALOG_HARNESSES } from '../api/catalog';
+import { catalogApi, CATALOG_HARNESSES, toApiClientError } from '../api/catalog';
+import type { ApiClientError } from '../api/client';
 import { HARNESS_LABELS, useCatalog } from '../hooks/useCatalog';
 import { InlineError } from './InlineError';
 import { SkillDetail } from './SkillDetail';
 import { SkillSourceBadge, SOURCE_LABELS } from './SkillSourceBadge';
 import { ExtraDirectoriesDialog } from './ExtraDirectoriesDialog';
 import { HelpPopover } from './HelpPopover';
+import { useStatusAnnouncer } from './StatusRegion';
 
 export interface SkillCatalogProps {
   projectId: string;
@@ -21,6 +25,9 @@ export interface SkillCatalogProps {
   initiallyExpanded?: boolean;
   initialHarness?: CatalogHarness;
   onAddAsStep?: (skill: SkillEntry) => void;
+  onAddNativeAgent?: (agent: NativeAgentEntry, copy: NativeAgentCopyResult) => void;
+  onSelectNativeAgent?: (agent: NativeAgentEntry) => void;
+  remoteOnly?: boolean;
   /**
    * Reports every discovered entry after a successful load so a sibling editor
    * can offer the same skill names without issuing a second catalog request.
@@ -50,7 +57,10 @@ export function SkillCatalog({
   initiallyExpanded = context === 'project',
   initialHarness = 'opencode',
   onAddAsStep,
+  onAddNativeAgent,
+  onSelectNativeAgent,
   onCatalogChange,
+  remoteOnly = false,
   api,
 }: SkillCatalogProps) {
   const baseId = useId();
@@ -74,6 +84,9 @@ export function SkillCatalog({
   );
   const [collapsed, setCollapsed] = useState(!initiallyExpanded);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [copyingAgentId, setCopyingAgentId] = useState<string | null>(null);
+  const [agentCopyError, setAgentCopyError] = useState<ApiClientError | null>(null);
+  const { announce } = useStatusAnnouncer();
   const settingsTrigger = useRef<HTMLButtonElement>(null);
   const restoreSettingsFocus = useRef(false);
 
@@ -91,6 +104,30 @@ export function SkillCatalog({
 
   const data = state.data;
   const displayedGroups = data === null ? [] : displayGroups(data.groups);
+
+  const addNativeAgent = async (agent: NativeAgentEntry) => {
+    if (remoteOnly) {
+      onSelectNativeAgent?.(agent);
+      announce(`Selected ${agent.name} as the chain's native agent.`);
+      return;
+    }
+    setCopyingAgentId(agent.id);
+    setAgentCopyError(null);
+    try {
+      const copied = await (api ?? catalogApi).copyAgentToProject(projectId, agent.id, {
+        harness,
+      });
+      announce(`Installed ${agent.name} for ${HARNESS_LABELS[harness]} at ${copied.destinationPath}.`);
+      onAddNativeAgent?.(agent, copied);
+      refresh();
+    } catch (error) {
+      const apiError = toApiClientError(error, 'The native agent could not be installed.');
+      setAgentCopyError(apiError);
+      announce(`Native agent installation failed: ${apiError.message}`);
+    } finally {
+      setCopyingAgentId(null);
+    }
+  };
 
   useEffect(() => {
     if (onCatalogChange === undefined || state.status !== 'ready' || data === null) {
@@ -263,6 +300,72 @@ export function SkillCatalog({
             </section>
           ) : null}
 
+          {data.agents.length > 0 ? (
+            <section className="catalog-group" aria-labelledby={`${baseId}-agents-title`}>
+              <h3 className="catalog-group__header" id={`${baseId}-agents-title`}>
+                <span className="catalog-group__label">Remote native agents</span>
+                <span className="catalog-group__count">
+                  {String(data.agents.length)} agent{data.agents.length === 1 ? '' : 's'}
+                </span>
+              </h3>
+              <ul className="catalog-group__list">
+                {data.agents.map((agent) => (
+                  <li className="skill-row" key={agent.id} data-testid="native-agent-row">
+                    <div className="skill-row__toggle">
+                      <span className="skill-row__name">{agent.name}</span>
+                      <span className="status-tag">
+                        {HARNESS_LABELS[agent.harness]} · {agent.status}
+                      </span>
+                      <span className="skill-row__description">
+                        {agent.description || 'No description in native agent metadata.'}
+                      </span>
+                      <span className="skill-row__path"><code>{agent.repositoryPath}</code></span>
+                      {agent.statusReason === null ? null : (
+                        <span className="status-tag status-tag--warning">{agent.statusReason}</span>
+                      )}
+                      {remoteOnly ? (
+                        onSelectNativeAgent !== undefined && agent.status === 'available' ? (
+                          <button
+                            type="button"
+                            className="button button--secondary button--small"
+                            onClick={() => addNativeAgent(agent)}
+                            data-testid={`select-agent-${agent.id}`}
+                          >
+                            Select native agent
+                          </button>
+                        ) : null
+                      ) : context === 'project' ? (
+                        <button
+                          type="button"
+                          className="button button--secondary button--small"
+                          disabled={agent.status !== 'available' || copyingAgentId !== null}
+                          onClick={() => void addNativeAgent(agent)}
+                        >
+                          {copyingAgentId === agent.id ? 'Installing…' : 'Install native agent'}
+                        </button>
+                      ) : onAddNativeAgent !== undefined && agent.status === 'available' ? (
+                        <button
+                          type="button"
+                          className="button button--secondary button--small"
+                          disabled={copyingAgentId !== null}
+                          onClick={() => void addNativeAgent(agent)}
+                        >
+                          {copyingAgentId === agent.id ? 'Adding…' : 'Add agent to chain'}
+                        </button>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {agentCopyError === null ? null : (
+                <p className="state-note">
+                  Native agent installation failed: {agentCopyError.message}
+                  {agentCopyError.code === undefined ? '' : ` (${agentCopyError.code})`}
+                </p>
+              )}
+            </section>
+          ) : null}
+
           {data.total === 0 ? (
             <div className="empty-state" data-testid="catalog-empty">
               {data.query === '' ? (
@@ -297,9 +400,10 @@ export function SkillCatalog({
                 ? !expandedExtraGroups.has(group.key)
                 : collapsedGroups.has(group.key);
             const groupLabel =
-              group.sourceDirectory === undefined
+              group.label ??
+              (group.sourceDirectory === undefined
                 ? `${SOURCE_LABELS[group.source]} skills`
-                : `${SOURCE_LABELS[group.source]} skills from ${group.sourceDirectory}`;
+                : `${SOURCE_LABELS[group.source]} skills from ${group.sourceDirectory}`);
             return (
               <section
                 className="catalog-group"
@@ -445,6 +549,7 @@ interface DisplayGroup {
   key: string;
   source: SkillSource;
   sourceDirectory?: string;
+  label?: string;
   entries: SkillEntry[];
 }
 
@@ -453,6 +558,28 @@ function displayGroups(
 ): DisplayGroup[] {
   const result: DisplayGroup[] = [];
   for (const group of groups) {
+    if (group.source === 'remote') {
+      const bySnapshot = new Map<string, SkillEntry[]>();
+      for (const entry of group.entries) {
+        const key = `${entry.sourceId ?? ''}:${entry.revision ?? ''}`;
+        const entries = bySnapshot.get(key) ?? [];
+        entries.push(entry);
+        bySnapshot.set(key, entries);
+      }
+      for (const [snapshotId, entries] of [...bySnapshot].sort(([a], [b]) =>
+        a.localeCompare(b),
+      )) {
+        const first = entries[0];
+        result.push({
+          key: `remote:${snapshotId}`,
+          source: 'remote',
+          label: `Remote skills from ${first?.repository ?? first?.sourceId ?? 'repository'} at ${first?.revision?.slice(0, 12) ?? 'unknown commit'}`,
+          entries,
+        });
+      }
+      continue;
+    }
+
     if (group.source !== 'loom-extra') {
       result.push({
         key: group.source,

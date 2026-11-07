@@ -4,6 +4,7 @@ import type { HarnessId } from '../config/schema.js';
 import {
   assertStepInvocation,
   assertSupportedSessionMode,
+  HarnessInvocationError,
   isChainSessionMode,
   resolveHarnessExecutable,
   type ForkMechanism,
@@ -104,6 +105,7 @@ export function createOpenCodeAdapter(options: HarnessAdapterOptions = {}): Harn
     installHint: OPENCODE_INSTALL_HINT,
     discovery: DISCOVERY,
     supportedSessionModes: OPENCODE_SUPPORTED_SESSION_MODES,
+    nativeAgentSelection: Object.freeze({ interactive: false, headless: true }),
     nativeFork: true,
     forkMechanisms: OPENCODE_FORK_MECHANISMS,
     trust: TRUST,
@@ -139,6 +141,13 @@ export function createOpenCodeAdapter(options: HarnessAdapterOptions = {}): Harn
 
     buildInteractiveCommand(invocation: StepInvocation): HarnessCommand {
       const sessionMode = assertStepInvocation(OPENCODE_HARNESS, invocation);
+      if (invocation.agentName !== undefined) {
+        throw new HarnessInvocationError(
+          OPENCODE_HARNESS,
+          'agentName',
+          'OpenCode does not expose a verified native-agent selector on its interactive command surface.',
+        );
+      }
       assertSupportedSessionMode(
         OPENCODE_HARNESS,
         OPENCODE_SUPPORTED_SESSION_MODES,
@@ -174,6 +183,9 @@ export function createOpenCodeAdapter(options: HarnessAdapterOptions = {}): Harn
 
       const { executable } = resolveExecutable();
       const args = ['run'];
+      if (invocation.agentName !== undefined) {
+        args.push('--agent', invocation.agentName);
+      }
       let forkMechanism: ForkMechanism = 'none';
 
       if (sessionMode === 'fork') {

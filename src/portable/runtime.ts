@@ -510,11 +510,39 @@ export async function executePortableRequest(request: PortableRequest): Promise<
         bundledFingerprint: packageFingerprint(skill.files),
       });
     }
+    const agents = bundle.version === 2
+      ? await Promise.all(bundle.agents.map(async (agent) => {
+          let existing: string | null = null;
+          if (project !== null) {
+            const root = agent.harness === 'opencode' ? '.opencode/agents' : '.github/agents';
+            const candidate = join(project, root, agent.agentPath);
+            try {
+              const entry = await lstat(candidate);
+              existing = entry.isFile() &&
+                !entry.isSymbolicLink() &&
+                await realpath(candidate) === candidate
+                ? fingerprint(await readFile(candidate))
+                : 'unsafe';
+            } catch (error) {
+              if (!isErrno(error, 'ENOENT')) throw error;
+            }
+          }
+          return {
+            name: agent.name,
+            harness: agent.harness,
+            agentPath: agent.agentPath,
+            fingerprint: agent.fingerprint,
+            content: decodeBundleFile(agent.content).toString('utf8'),
+            existingFingerprint: existing,
+          };
+        }))
+      : [];
     return {
       ok: true,
       chain: bundle.chain,
       bundleFingerprint: fingerprint(JSON.stringify(bundle)),
       skills,
+      agents,
     };
   }
 
@@ -535,6 +563,12 @@ export async function executePortableRequest(request: PortableRequest): Promise<
       fail('CHAIN_TOO_LARGE', `Portable chains are limited to ${String(MAX_PORTABLE_STEPS)} steps.`);
     }
     const chain = chainFromBundle(bundle);
+    if (chain.agent !== undefined) {
+      fail(
+        'NATIVE_AGENT_REQUIRES_LOOM',
+        'This bundle selects a harness-native agent. The portable current-conversation runner cannot switch agents; import the bundle into Skill Loom to run it with the selected agent.',
+      );
+    }
     const inputs = resolvedInputs(bundle, input.inputs);
     for (let index = 0; index < bundle.chain.steps.length; index += 1) {
       if (Buffer.byteLength(resolveBundleInstruction(bundle, index, inputs), 'utf8') > MAX_STEP_INSTRUCTION_BYTES) {

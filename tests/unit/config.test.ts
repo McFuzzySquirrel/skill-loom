@@ -116,6 +116,7 @@ describe('missing configuration', () => {
     expect(config.version).toBe(CONFIG_VERSION);
     expect(config.harnessCommands).toEqual({});
     expect(config.extraSkillDirectories).toEqual([]);
+    expect(config.remoteSkillSources).toEqual([]);
     expect(config.recentProjects).toEqual([]);
     expect(config.uiPreferences).toEqual({});
 
@@ -208,11 +209,21 @@ describe('typed updates', () => {
       displayName: 'Demo Project',
       lastOpenedAt: '2026-11-04T12:00:00.000Z',
     };
+    const workspace = {
+      id: 'f04b89d8-6ab7-4678-96dc-a225fe9024ac',
+      projectId: 'managed-project',
+      sourceProjectId: recent.id,
+      sourceChainId: 'demo-chain',
+      chainId: 'copied-chain',
+      createdAt: '2026-11-04T12:00:00.000Z',
+    };
 
     await store.update({
       harnessCommands: { opencode: '/usr/local/bin/opencode' },
       extraSkillDirectories: [join(root, 'skills')],
+      remoteSkillSources: [{ id: 'public-skills', repository: 'https://github.com/acme/skills.git', ref: 'main' }],
       recentProjects: [recent],
+      testWorkspaces: [workspace],
       uiPreferences: { theme: 'dark' },
     });
 
@@ -228,7 +239,9 @@ describe('typed updates', () => {
         copilot: '/usr/local/bin/copilot',
       },
       extraSkillDirectories: [join(root, 'skills')],
+      remoteSkillSources: [{ id: 'public-skills', repository: 'https://github.com/acme/skills.git', ref: 'main' }],
       recentProjects: [recent],
+      testWorkspaces: [workspace],
       uiPreferences: { theme: 'dark', density: 'compact' },
     });
     expect(JSON.parse(await readFile(store.getConfigPath(), 'utf8'))).toEqual(updated);
@@ -245,6 +258,34 @@ describe('typed updates', () => {
     }));
 
     expect(updated.extraSkillDirectories).toEqual([join(root, 'extra-skills')]);
+  });
+
+  it('accepts supported Git remotes but rejects embedded credentials and URL parameters', async () => {
+    const root = await makeRoot();
+    const store = storeFor(root);
+    const validSources = [
+      { id: 'https-source', repository: 'https://github.com/acme/skills.git', ref: 'main' },
+      { id: 'ssh-uri', repository: 'ssh://git@github.com/acme/skills.git' },
+      { id: 'scp-source', repository: 'git@github.com:acme/skills.git' },
+    ];
+
+    await expect(store.update({ remoteSkillSources: validSources })).resolves.toMatchObject({
+      remoteSkillSources: validSources,
+    });
+
+    for (const repository of [
+      'https://user:password@example.com/skills.git',
+      'https://token@example.com/skills.git',
+      'ssh://alice@example.com/skills.git',
+      'https://example.com/skills.git?token=secret',
+      'file:///tmp/skills.git',
+      'git://example.com/skills.git',
+    ]) {
+      const parsed = ConfigUpdateSchema.safeParse({
+        remoteSkillSources: [{ id: 'source', repository }],
+      });
+      expect(parsed.success, repository).toBe(false);
+    }
   });
 
   it('serializes concurrent read-modify-write cycles without losing either update', async () => {
@@ -345,7 +386,10 @@ describe('credential safety', () => {
       'version',
       'harnessCommands',
       'extraSkillDirectories',
+      'remoteSkillSources',
+      'sharedBundleDirectory',
       'recentProjects',
+      'testWorkspaces',
       'uiPreferences',
     ]);
     expect(Object.keys(LoomConfigSchema.shape)).toEqual([...CONFIG_TOP_LEVEL_FIELDS]);

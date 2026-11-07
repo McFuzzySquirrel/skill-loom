@@ -1,5 +1,6 @@
-import { realpath } from 'node:fs/promises';
-import { isAbsolute, resolve } from 'node:path';
+import { readFile, realpath } from 'node:fs/promises';
+import { isAbsolute, join, resolve } from 'node:path';
+import type { RemoteSkillSource } from '../config/schema.js';
 import type { ConfigStore } from '../config/store.js';
 import {
   PathInvalidError,
@@ -12,6 +13,13 @@ import {
   type CopilotCommandRunner,
 } from './copilot.js';
 import { scanOpenCodeSkills } from './opencode.js';
+import { frontmatterString, parseSkillFrontmatter } from './frontmatter.js';
+import {
+  RemoteSourceError,
+  listRemoteSkillSnapshots,
+  resolveSnapshotAgentPath,
+  resolveSnapshotPackagePath,
+} from './remote.js';
 import {
   CATALOG_ERROR_CODES,
   CATALOG_WARNING_CODES,
@@ -20,8 +28,10 @@ import {
   SKILL_SOURCE_ORDER,
   SKILL_SOURCES,
   compareSkillEntries,
+  createNativeAgentId,
   createSkillId,
   type CatalogWarning,
+  type NativeAgentEntry,
   type SkillDiscoveryResult,
   type SkillEntry,
   type SkillHarness,
@@ -137,6 +147,7 @@ export interface CatalogResponse {
   counts: CatalogCounts;
   /** Nonempty source groups, in the documented badge order. */
   groups: CatalogGroup[];
+  agents: NativeAgentEntry[];
   warnings: CatalogWarning[];
   /** Observed discovery and merge duration. Never used to hide entries. */
   elapsedMs: number;
@@ -209,7 +220,17 @@ export function createCatalogService(options: CatalogServiceOptions): CatalogSer
       });
       const elapsedMs = Math.max(0, Math.round(now() - startedAt));
 
-      const merged = discovery.entries
+      const remote = await discoverRemoteSkillEntries({
+        configDirectory: options.configStore.getConfigDir(),
+        sources: config.remoteSkillSources,
+        harness: adapter.harness,
+      });
+      const agents = await discoverRemoteNativeAgents({
+        configDirectory: options.configStore.getConfigDir(),
+        sources: config.remoteSkillSources,
+        harness: adapter.harness,
+      });
+      const merged = [...discovery.entries, ...remote.entries]
         .map((entry) => normalizeEntry(adapter.harness, entry))
         .sort(compareSkillEntries);
       const filtered = query === '' ? merged : merged.filter((entry) => matchesQuery(entry, query));
@@ -227,7 +248,8 @@ export function createCatalogService(options: CatalogServiceOptions): CatalogSer
         }
       }
 
-      const warnings = [...discovery.warnings];
+      const warnings = [...discovery.warnings, ...remote.warnings];
+      warnings.push(...agents.warnings);
       if (elapsedMs > slowThresholdMs) {
         warnings.push({
           code: CATALOG_WARNING_CODES.DISCOVERY_SLOW,
@@ -237,12 +259,130 @@ export function createCatalogService(options: CatalogServiceOptions): CatalogSer
         });
       }
 
+      async function discoverRemoteSkillEntries(options: {
+        configDirectory: string;
+        sources: readonly RemoteSkillSource[];
+        harness: SkillHarness;
+      }): Promise<{ entries: SkillEntry[]; warnings: CatalogWarning[] }> {
+        const entries: SkillEntry[] = [];
+        const warnings: CatalogWarning[] = [];
+        for (const source of options.sources) {
+          try {
+            const snapshots = await listRemoteSkillSnapshots(options.configDirectory, source.id);
+            for (const snapshot of snapshots) {
+              for (const packageInfo of snapshot.packages) {
+                try {
+                  const packagePath = await resolveSnapshotPackagePath(
+                    options.configDirectory,
+                    snapshot,
+                    packageInfo,
+                  );
+                  const skillPath = join(packagePath, 'SKILL.md');
+                  const metadata = parseSkillFrontmatter(await readFile(skillPath, 'utf8'));
+                  const name = frontmatterString(metadata.data, 'name') ?? packageInfo.name;
+                  const description =
+                    frontmatterString(metadata.data, 'description') ?? packageInfo.description;
+                  entries.push({
+                    id: createSkillId({
+                      harness: options.harness,
+                      source: 'remote',
+                      path: skillPath,
+                      name,
+                    }),
+                    harness: options.harness,
+                    source: 'remote',
+                    name,
+                    description,
+                    path: skillPath,
+                    packagePath,
+                    sourceId: source.id,
+                    repository: snapshot.repository,
+                    revision: snapshot.revision,
+                    repositoryPath: packageInfo.repositoryPath,
+                    enabled: true,
+                  });
+                } catch (error) {
+                  warnings.push(remoteWarning(options.harness, source.id, error));
+                }
+              }
+            }
+          } catch (error) {
+            warnings.push(remoteWarning(options.harness, source.id, error));
+          }
+        }
+        return { entries, warnings };
+      }
+
+      async function discoverRemoteNativeAgents(options: {
+        configDirectory: string;
+        sources: readonly RemoteSkillSource[];
+        harness: SkillHarness;
+      }): Promise<{ entries: NativeAgentEntry[]; warnings: CatalogWarning[] }> {
+        const entries: NativeAgentEntry[] = [];
+        const warnings: CatalogWarning[] = [];
+        for (const source of options.sources) {
+          try {
+            const snapshots = await listRemoteSkillSnapshots(options.configDirectory, source.id);
+            for (const snapshot of snapshots) {
+              for (const agent of snapshot.agents.filter((item) => item.harness === options.harness)) {
+                try {
+                  const path = await resolveSnapshotAgentPath(options.configDirectory, snapshot, agent);
+                  entries.push({
+                    id: createNativeAgentId({
+                      harness: agent.harness,
+                      sourceId: source.id,
+                      revision: snapshot.revision,
+                      repositoryPath: agent.repositoryPath,
+                      fingerprint: agent.fingerprint,
+                    }),
+                    harness: agent.harness,
+                    source: 'remote',
+                    name: agent.name,
+                    description: agent.description,
+                    path,
+                    agentPath: agent.agentPath,
+                    sourceId: source.id,
+                    repository: snapshot.repository,
+                    revision: snapshot.revision,
+                    repositoryPath: agent.repositoryPath,
+                    fingerprint: agent.fingerprint,
+                    status: agent.status,
+                    statusReason: agent.statusReason,
+                  });
+                } catch (error) {
+                  warnings.push(remoteWarning(options.harness, source.id, error));
+                }
+              }
+            }
+          } catch (error) {
+            warnings.push(remoteWarning(options.harness, source.id, error));
+          }
+        }
+        return { entries, warnings };
+      }
+
+      function remoteWarning(harness: SkillHarness, sourceId: string, error: unknown): CatalogWarning {
+        return {
+          code: CATALOG_WARNING_CODES.REMOTE_SOURCE_UNAVAILABLE,
+          message: 'A saved remote skill snapshot could not be verified and was omitted. Refresh or remove the source.',
+          harness,
+          source: 'remote',
+          reason: error instanceof RemoteSourceError ? error.code : 'READ_FAILED',
+          path: sourceId,
+        };
+      }
+
       return {
         harness: adapter.harness,
         query,
         total: filtered.length,
         counts: { total: filtered.length, bySource },
         groups,
+        agents: query === ''
+          ? agents.entries
+          : agents.entries.filter((entry) =>
+              `${entry.name} ${entry.description}`.toLocaleLowerCase('en-US')
+                .includes(query.toLocaleLowerCase('en-US'))),
         warnings,
         elapsedMs,
       };

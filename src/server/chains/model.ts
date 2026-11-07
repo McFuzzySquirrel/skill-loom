@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { chainStepName } from '../../shared/chain.js';
+import { chainStepName, type ChainAgentSelection } from '../../shared/chain.js';
 import { HARNESS_IDS, HarnessIdSchema, type HarnessId } from '../config/schema.js';
 export type { ChainStep } from '../../shared/chain.js';
 
@@ -8,10 +8,11 @@ export type { ChainStep } from '../../shared/chain.js';
  *
  * Chains are stored as versioned JSON so a later Skill Loom can migrate an older
  * document deliberately instead of guessing at its shape. An unversioned
- * document is the pre-versioning draft format and is migrated by stamping the
- * current version; any other version is rejected rather than reinterpreted.
+ * document is the pre-versioning draft format, and version 1 is upgraded to
+ * version 2 because native-agent selection adds a strict persisted field.
+ * Unsupported versions are rejected rather than reinterpreted.
  */
-export const CHAIN_VERSION = 1;
+export const CHAIN_VERSION = 2;
 
 /** Session behaviour shared by every step in a chain. */
 export const CHAIN_SESSION_MODES = ['shared', 'fresh', 'fork'] as const;
@@ -34,12 +35,22 @@ export const CHAIN_TOP_LEVEL_FIELDS = [
   'steps',
   'inputs',
   'automaticPermissionOptIn',
+  'agent',
   'createdAt',
   'updatedAt',
 ] as const;
 
 const NonEmptyStringSchema = z.string().trim().min(1);
 const TimestampSchema = z.iso.datetime({ offset: true });
+export const ChainAgentSelectionSchema = z.strictObject({
+  harness: HarnessIdSchema,
+  name: NonEmptyStringSchema,
+  sourceId: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),
+  revision: z.string().regex(/^[a-f0-9]{40,64}$/),
+  repositoryPath: NonEmptyStringSchema.max(4_096),
+  agentPath: NonEmptyStringSchema.max(4_096),
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+}) satisfies z.ZodType<ChainAgentSelection>;
 
 const StepContent = {
   /** Stable within the chain; reordering must not change it. */
@@ -81,8 +92,7 @@ export type ChainInput = z.infer<typeof ChainInputSchema>;
  * other routing field is structurally invalid instead of being silently
  * accepted and ignored.
  */
-export const ChainSchema = z.strictObject({
-  version: z.literal(CHAIN_VERSION),
+const ChainFields = {
   /** Server-generated stable id. The store validates path safety separately. */
   id: NonEmptyStringSchema,
   name: NonEmptyStringSchema,
@@ -97,6 +107,18 @@ export const ChainSchema = z.strictObject({
   automaticPermissionOptIn: z.boolean().default(false),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
+};
+
+const ChainV1Schema = z.strictObject({
+  version: z.literal(1),
+  ...ChainFields,
+});
+
+export const ChainSchema = z.strictObject({
+  version: z.literal(CHAIN_VERSION),
+  ...ChainFields,
+  /** Optional harness-native agent, pinned to a verified remote definition. */
+  agent: ChainAgentSelectionSchema.optional(),
 });
 export type Chain = z.infer<typeof ChainSchema>;
 
@@ -109,6 +131,7 @@ export const CHAIN_ISSUE_CODES = {
   DUPLICATE_INPUT_NAME: 'chain_duplicate_input_name',
   PLACEHOLDER_INVALID: 'chain_placeholder_invalid',
   PLACEHOLDER_UNKNOWN: 'chain_placeholder_unknown',
+  AGENT_HARNESS_MISMATCH: 'chain_agent_harness_mismatch',
 } as const;
 
 export const CHAIN_WARNING_CODES = {
@@ -189,15 +212,20 @@ export type SafeChainValidationResult =
 /**
  * Upgrade a decoded JSON document to the current chain version.
  *
- * Version 1 is the first persisted format. The only legacy shape is an
- * unversioned draft, which is structurally identical and is upgraded by
- * adding `version`. The input object is never mutated.
+ * Unversioned drafts are stamped with the current version. Version 1 chains
+ * are validated against their historical strict shape before upgrading; the
+ * input object is never mutated.
  */
 export function migrateChainDocument(raw: unknown): unknown {
-  if (!isRecord(raw) || Object.hasOwn(raw, 'version')) {
+  if (!isRecord(raw)) {
     return raw;
   }
-  return { ...raw, version: CHAIN_VERSION };
+  if (!Object.hasOwn(raw, 'version')) return { ...raw, version: CHAIN_VERSION };
+  if (raw.version === 1) {
+    const legacy = ChainV1Schema.safeParse(raw);
+    return legacy.success ? { ...legacy.data, version: CHAIN_VERSION } : raw;
+  }
+  return raw;
 }
 
 /**
@@ -206,7 +234,12 @@ export function migrateChainDocument(raw: unknown): unknown {
  * if it were the current version.
  */
 export function parseChainDocument(raw: unknown): ChainValidationResult {
-  if (isRecord(raw) && Object.hasOwn(raw, 'version') && raw.version !== CHAIN_VERSION) {
+  if (
+    isRecord(raw) &&
+    Object.hasOwn(raw, 'version') &&
+    raw.version !== CHAIN_VERSION &&
+    raw.version !== 1
+  ) {
     throw new ChainUnsupportedVersionError(raw.version);
   }
 
@@ -222,6 +255,14 @@ export function validateChain(value: unknown): ChainValidationResult {
 
   const chain = parsed.data;
   const issues: ChainValidationIssue[] = [];
+
+  if (chain.agent !== undefined && chain.agent.harness !== chain.harness) {
+    issues.push({
+      path: 'agent.harness',
+      code: CHAIN_ISSUE_CODES.AGENT_HARNESS_MISMATCH,
+      message: `The selected ${chain.agent.harness} agent is incompatible with the ${chain.harness} chain harness.`,
+    });
+  }
 
   validateUniqueStepIds(chain, issues);
   validateUniqueInputNames(chain, issues);

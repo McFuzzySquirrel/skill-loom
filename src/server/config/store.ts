@@ -379,7 +379,15 @@ function applyUpdate(current: LoomConfig, patch: ConfigUpdate): LoomConfig {
     version: CONFIG_VERSION,
     harnessCommands,
     extraSkillDirectories: patch.extraSkillDirectories ?? current.extraSkillDirectories,
+    remoteSkillSources: patch.remoteSkillSources ?? current.remoteSkillSources,
+    ...(patch.sharedBundleDirectory === null
+      ? {}
+      : {
+          sharedBundleDirectory:
+            patch.sharedBundleDirectory ?? current.sharedBundleDirectory,
+        }),
     recentProjects: patch.recentProjects ?? current.recentProjects,
+    testWorkspaces: patch.testWorkspaces ?? current.testWorkspaces,
     uiPreferences:
       patch.uiPreferences === undefined
         ? current.uiPreferences

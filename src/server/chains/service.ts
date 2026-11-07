@@ -49,6 +49,7 @@ export interface ChainDraft {
   steps: unknown;
   inputs?: unknown;
   automaticPermissionOptIn?: unknown;
+  agent?: unknown;
 }
 
 export interface CreateChainOptions {
@@ -200,6 +201,7 @@ class ProjectChainService implements ChainService {
       steps: source.steps,
       inputs: source.inputs,
       automaticPermissionOptIn: source.automaticPermissionOptIn,
+      ...(source.agent === undefined ? {} : { agent: source.agent }),
     };
 
     const candidate = this.buildChain(draft, this.nextId(name), timestamp, timestamp);
@@ -237,6 +239,7 @@ class ProjectChainService implements ChainService {
       steps: source.steps,
       inputs: source.inputs,
       automaticPermissionOptIn: source.automaticPermissionOptIn,
+      ...(source.agent === undefined ? {} : { agent: source.agent }),
     };
 
     const candidate = this.buildChain(draft, this.nextId(name), timestamp, timestamp);
@@ -292,6 +295,7 @@ class ProjectChainService implements ChainService {
       steps: draft.steps,
       inputs: draft.inputs ?? [],
       automaticPermissionOptIn: draft.automaticPermissionOptIn ?? false,
+      ...(draft.agent === undefined ? {} : { agent: draft.agent }),
       createdAt,
       updatedAt,
     });

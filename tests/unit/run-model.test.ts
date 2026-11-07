@@ -137,6 +137,42 @@ describe('run creation and snapshot immutability', () => {
     expect(parseRun(run)).toEqual(run);
   });
 
+  it('migrates a legacy run snapshot chain without changing the run record version', () => {
+    const run = makeRun();
+    const legacy = structuredClone(run) as unknown as Record<string, unknown>;
+    const snapshot = legacy['chainSnapshot'] as Record<string, unknown>;
+    snapshot['version'] = 1;
+
+    const migrated = parseRunDocument(legacy);
+
+    expect(migrated.version).toBe(RUN_VERSION);
+    expect(migrated.chainSnapshot.version).toBe(CHAIN_VERSION);
+    expect(migrated.chainSnapshot.agent).toBeUndefined();
+  });
+
+  it('freezes the selected native-agent identity with the chain snapshot', () => {
+    const agent = {
+      harness: 'opencode',
+      name: 'team/reviewer',
+      sourceId: 'remote-source',
+      revision: 'a'.repeat(40),
+      repositoryPath: '.opencode/agents/team/reviewer.md',
+      agentPath: 'team/reviewer.md',
+      fingerprint: 'b'.repeat(64),
+    };
+    const chain = makeChain({ agent });
+    const run = createRunRecord({
+      projectId: 'project-1',
+      chain,
+      mode: 'automatic',
+      inputs: { task: 'review' },
+      now: CREATED_AT,
+    });
+
+    expect(run.chainSnapshot.agent).toEqual(agent);
+    expect(run.chainSnapshot.agent).not.toBe(chain.agent);
+  });
+
   it('resolves defaults and optional inputs into a concrete string map', () => {
     const run = createRunRecord({
       id: 'run-defaults',

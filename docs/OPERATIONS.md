@@ -21,7 +21,7 @@ LOOM_CONFIG_DIR=/absolute/path/to/loom-profile npm start
 | `LOOM_PORT` | `7373` | TCP port from 1 to 65535. |
 | `LOOM_WEB_ROOT` | discovered `dist/web` | Optional override for the built UI directory; intended for controlled deployments and tests. |
 
-The versioned config document contains `version`, `harnessCommands`, `extraSkillDirectories`, `recentProjects`, and `uiPreferences`. `harnessCommands` may override the executable name or absolute path for `opencode` or `copilot`; a missing entry resolves from `PATH`. The config schema is strict: credential-like fields such as `apiKey`, `token`, or `secret` are invalid and are never stored there. Configuration writes use an atomic temporary-file replacement. A corrupt or unsupported-version config is reported rather than silently rewritten.
+The versioned config document contains `version`, `harnessCommands`, `extraSkillDirectories`, `remoteSkillSources`, `recentProjects`, and `uiPreferences`. `remoteSkillSources` stores validated credential-free Git URLs and optional refs; pinned package snapshots are retained below `<LOOM_CONFIG_DIR>/catalog-sources/`. `harnessCommands` may override the executable name or absolute path for `opencode` or `copilot`; a missing entry resolves from `PATH`. The config schema is strict: credential-like fields such as `apiKey`, `token`, or `secret` are invalid and are never stored there. Configuration writes use an atomic temporary-file replacement. A corrupt or unsupported-version config is reported rather than silently rewritten.
 
 `extraSkillDirectories` is the global list managed from the skill-catalog settings dialog. Recent projects store the canonical path, display name, derived id, and last-opened time; removing a recent entry never removes project files.
 
@@ -50,6 +50,8 @@ The helper is not the `skill-loom` server CLI and does not launch a nested Copil
 | Path | Contents | Notes |
 |------|----------|-------|
 | `~/.config/loom/config.json` | Global config, harness command overrides, extra skill directories, recent projects, UI preferences. | Override the whole directory with `LOOM_CONFIG_DIR`. |
+| `~/.config/loom/test-workspaces/<uuid>/` | Retained managed test project, including its `.loom/chains/` and `.loom/runs/` data. | Hidden from the ordinary recent-project list. Remove from **Test workspaces** after inspecting results; active-run ownership blocks cleanup. |
+| `~/.config/loom/catalog-sources/<source-id>/<commit>/` | Immutable snapshots of validated remote skill packages and their manifest. | Created only by explicit refresh; unregistering a source retains snapshots. Refresh uses bounded staging and package limits. |
 | `~/.config/loom/active-run.json` | Single global active-run pointer used for health reporting and startup recovery. | Holds only the active run's project path, run id, and status. |
 | `~/.config/loom/chains/*.json` | Global chain templates saved with **Save copy to library**. | Independent snapshots, not live links to project chains. Importing copies one into a project with a new id. |
 | `<project>/.loom/chains/*.json` | Saved chain definitions, including steps, inputs, harness, session mode, and the automatic-permission opt-in. | Versioned JSON written atomically. Chain files can be backed up or versioned if you want to keep recipes. |
@@ -58,6 +60,8 @@ The helper is not the `skill-loom` server CLI and does not launch a nested Copil
 | `~/.copilot/config.json` | Copilot's own persistent folder-trust configuration. | Skill Loom only reads `trustedFolders`; it never writes this file. |
 
 A run freezes an immutable snapshot of the chain definition and resolved inputs at creation. Editing the saved chain later does not change an existing or in-flight run, and retry uses the snapshot. Chain and run writes are versioned JSON with atomic temp-file replacement; restarting the server marks records that were active as `interrupted` instead of assuming completion.
+
+The **Test workspaces** page lists retained disposable projects, provides a link to inspect each project, and offers explicit cleanup. If cleanup reports that a workspace owns the active run, finish or explicitly abort/recover that run first. Workspaces isolate files from the original project only; they do not restrict the harness's normal filesystem, network, or credential access.
 
 ## Harness prerequisites
 
@@ -109,7 +113,7 @@ Skill Loom is a **loopback-only** single-user application. The server binds to `
 
 The server owns all filesystem traversal, path canonicalization, persistence, CLI process spawning, and PTY handling. Harness processes are spawned with an executable plus an argument array, never a shell command string; project paths are canonicalized and traversal outside the intended project data directory is rejected. The browser performs no shell execution and receives only typed API and WebSocket data.
 
-Skill Loom sends no telemetry, crash reporting, remote logging, or outbound application requests. Only the user-invoked harness CLI and package installation may use the network. Terminal output is rendered through xterm.js and skill text through escaped React text; harness, skill, and run content is never rendered as raw HTML. Credentials and tokens are never persisted or logged.
+Skill Loom sends no telemetry, crash reporting, or remote logging. Git network access occurs only when a user explicitly refreshes a registered source; user-invoked harness CLIs and package installation may also use the network. Terminal output is rendered through xterm.js and skill text through escaped React text; harness, skill, and run content is never rendered as raw HTML. Credentials and tokens are never persisted or logged.
 
 ## Backup and cleanup
 

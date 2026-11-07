@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { BundlePreview } from '../../shared/bundles';
+import type { BundlePreview, ChainBundle } from '../../shared/bundles';
 import { bundlesApi } from '../api/bundles';
 import { toApiClientError, type Chain } from '../api/chains';
 import { ApiClientError } from '../api/client';
@@ -9,8 +9,16 @@ import { useStatusAnnouncer } from './StatusRegion';
 import { HelpPopover } from './HelpPopover';
 
 export function ImportBundleDialog({
-  projectId, onImported, onClose,
-}: { projectId: string; onImported: (chain: Chain) => void; onClose: () => void }) {
+  projectId,
+  initialBundle,
+  onImported,
+  onClose,
+}: {
+  projectId: string;
+  initialBundle?: ChainBundle;
+  onImported: (chain: Chain) => void;
+  onClose: () => void;
+}) {
   const titleId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const { announce } = useStatusAnnouncer();
@@ -25,6 +33,27 @@ export function ImportBundleDialog({
     heading.current?.focus();
     return () => { requestId.current += 1; };
   }, []);
+
+  useEffect(() => {
+    if (initialBundle === undefined) return;
+    const id = ++requestId.current;
+    setBusy(true);
+    setPreview(null);
+    setError(null);
+    setReviewed(false);
+    setReuse([]);
+    void bundlesApi.preview(projectId, initialBundle).then((result) => {
+      if (id === requestId.current) setPreview(result);
+    }).catch((caught: unknown) => {
+      if (id === requestId.current) {
+        const failure = toApiClientError(caught, 'The shared bundle could not be previewed.');
+        setError(failure);
+        announce(`Bundle preview failed: ${failure.message}`, 'assertive');
+      }
+    }).finally(() => {
+      if (id === requestId.current) setBusy(false);
+    });
+  }, [announce, initialBundle, projectId]);
 
   const chooseFile = async (file: File | undefined) => {
     const id = ++requestId.current;
@@ -75,6 +104,7 @@ export function ImportBundleDialog({
   };
   const unresolved = preview?.skills.some((skill) =>
     (skill.conflict || skill.directoryExists) && !reuse.includes(skill.name)) ?? false;
+  const agentConflict = preview?.agents.some((agent) => agent.conflict) ?? false;
 
   return (
     <section className="new-chain" role="dialog" aria-modal="false" aria-labelledby={titleId}>
@@ -83,14 +113,18 @@ export function ImportBundleDialog({
         <HelpPopover topic="importBundle" />
         <button type="button" className="button button--secondary" onClick={onClose} disabled={busy}>Close</button>
       </div>
-      <label className="field__label">
-        Chain bundle (.loom.json)
-        <input type="file" accept=".json,application/json" disabled={busy} onChange={(event) => void chooseFile(event.target.files?.[0])} />
-      </label>
+      {initialBundle === undefined ? (
+        <label className="field__label">
+          Chain bundle (.loom.json)
+          <input type="file" accept=".json,application/json" disabled={busy} onChange={(event) => void chooseFile(event.target.files?.[0])} />
+        </label>
+      ) : (
+        <p>Previewing a bundle from the configured shared library.</p>
+      )}
       <p>
         Only import skills you trust. Packages can contain executable scripts and agent instructions.
         Import installs project-local files but never runs them or starts a chain.
-        Existing packages are never overwritten; permission consent starts off.
+        Existing packages and native agent files are never overwritten; permission consent starts off.
       </p>
       {busy ? <p role="status">Processing bundle…</p> : null}
       {error !== null ? <InlineError title="Bundle import failed" message={error.message} code={error.code} httpStatus={error.status} /> : null}
@@ -116,12 +150,26 @@ export function ImportBundleDialog({
               ) : null}
             </div>
           ))}
+          {preview.agents.map((agent) => (
+            <div key={`${agent.harness}:${agent.agentPath}`}>
+              <p>
+                Native {agent.harness} agent <strong>{agent.name}</strong> at{' '}
+                <code>{agent.agentPath}</code>, {agent.bytes} bytes.
+              </p>
+              {agent.conflict ? (
+                <p role="alert">
+                  That native agent destination already exists or is unsafe. Cancel and resolve it
+                  before importing; the file will not be overwritten.
+                </p>
+              ) : null}
+            </div>
+          ))}
           <label className="field__label">
             <input type="checkbox" checked={reviewed} disabled={busy} onChange={(event) => setReviewed(event.target.checked)} />
             {' '}I reviewed and trust these instructions and packages.
           </label>
-          <button type="button" className="button" disabled={busy || !reviewed || unresolved} onClick={() => void importCopy()}>
-            Import chain and skills
+          <button type="button" className="button" disabled={busy || !reviewed || unresolved || agentConflict} onClick={() => void importCopy()}>
+            Import chain, skills, and agents
           </button>
         </>
       ) : null}

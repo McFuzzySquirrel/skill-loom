@@ -42,6 +42,9 @@
   --source-plugin-border: #ffc078;
   --source-plugin-bg: #2f2009;
   --source-plugin-text: #ffe4c2;
+  --source-remote-border: #75d7d0;
+  --source-remote-bg: #102a2b;
+  --source-remote-text: #d3fbf7;
 
   --radius: 10px;
   --space-1: 0.35rem;
@@ -94,6 +97,9 @@
   --source-plugin-border: #80500f;
   --source-plugin-bg: #fff0d6;
   --source-plugin-text: #523200;
+  --source-remote-border: #17635d;
+  --source-remote-bg: #e2f5f3;
+  --source-remote-text: #124740;
 }
 
 *,
@@ -1006,6 +1012,12 @@ main:focus {
   border-color: var(--warning-border);
   background: var(--warning-bg);
   color: var(--warning-text);
+}
+
+.source-badge--remote {
+  border-color: var(--source-remote-border);
+  background: var(--source-remote-bg);
+  color: var(--source-remote-text);
 }
 
 .catalog-warnings {

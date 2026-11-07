@@ -8,9 +8,15 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Added
 
+- Global remote skill-repository registration with explicit pinned refresh, bounded package snapshots, and catalog visibility for either supported harness.
+- Project-independent drafts start from an outcome, register and explicitly refresh optional remote repositories, and select pinned skills and agents without installing them into an existing project.
+- A configurable local shared bundle library supports reviewed no-overwrite publication, browsing, and import of portable bundles.
+- Remote native-agent discovery, exact snapshot selection for chains, safe installation into native project locations, and preflight checks for installed content and command-surface support.
+- Disposable chain-test workspaces with retained project/run state, recent-project hiding, explicit cleanup, and refusal to delete a workspace that owns the active run.
 - Reusable `loom-run-bundle` Agent Skill package with a standalone Node.js helper for reviewed bundle installation, host-mediated chain execution, confirmation gates, and explicit interrupted-run recovery.
 - Separate portable run records, bundle fingerprints, no-overwrite skill installation, and an export-dialog download for the reusable runner skill.
 - Portable `.loom.json` chain export/import with complete skill packages, review previews, explicit reuse of installed skills, safe bounded file handling, and fresh permission consent.
+- Version 2 portable bundles that preserve an exact selected native agent definition; version 1 remains available for agent-free chains.
 - Standalone agent instruction steps alongside skill steps, with labels, ordering, named inputs, preflight, and run lifecycle support.
 - Project skill copies and bundle imports use the shared `.agents/skills/` location for either harness.
 - Project workspace navigation and selectable system, light, and dark appearance modes.
@@ -30,6 +36,8 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Changed
 
+- Persisted chain documents now use version 2 for native-agent selection and migrate valid version 1 chains and frozen run snapshots without changing their behavior.
+- Portable bundle export uses version 2 for chains with a selected native agent, while preserving version 1 for agent-free chains; import is no-overwrite and rollback-safe for both packages and agent definitions.
 - The workflow designer now gives the skill catalog and ordered steps a two-column layout on wider screens and opens selected-step editing in a dialog.
 - OpenCode discovery includes the shared `.agents/skills/` directory while retaining legacy `.opencode/skills/` discovery. Copilot discovery remains CLI-authoritative.
 - Bundle export prefers one enabled project-local package over same-named personal or extra-directory packages, while rejecting distinct project duplicates and other ambiguous sources.
@@ -44,6 +52,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 ### Security
 
 - The server is loopback-only with no authentication; credential-like fields are rejected, and authentication checks use presence evidence only.
+- Remote repository access occurs only after an explicit user refresh. Git uses the machine's existing authentication without storing credentials; package scripts are not checked out or executed.
 - Harness processes are spawned with an executable and argument array, never a shell string.
 - Copilot trust is read-only, and broad automatic flags require an explicit per-chain opt-in.
-- No telemetry, crash reporting, remote logging, or outbound application requests are sent by Skill Loom.
+- No telemetry, crash reporting, or remote logging is sent by Skill Loom. User-requested Git refreshes, harness CLIs, and package installation may access the network.

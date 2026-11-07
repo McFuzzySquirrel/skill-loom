@@ -2,6 +2,7 @@ import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import type { CatalogService } from '../catalog/merge.js';
 import type { CatalogWarning, SkillEntry } from '../catalog/types.js';
+import { inspectInstalledNativeAgent } from '../catalog/agent-copy.js';
 import {
   ChainError,
   validateChain,
@@ -66,6 +67,7 @@ export const PREFLIGHT_CHECK_IDS = [
   'cli',
   'catalog',
   'skill',
+  'agent',
   'authentication',
   'trust',
   'session-mode',
@@ -504,6 +506,47 @@ async function executePreflight(
         count: 0,
         reason: 'GIT_STATUS_FAILED',
       };
+    }
+  }
+
+  if (chain.agent !== undefined) {
+    const surface = mode === 'automatic' ? 'headless' : 'interactive';
+    const supported = adapter?.nativeAgentSelection[surface] === true;
+    if (!supported) {
+      checks.push({
+        id: 'agent',
+        key: 'agent:capability',
+        severity: 'block',
+        status: 'block',
+        message: `${adapter?.displayName ?? harness} cannot select native agents on the ${surface} command surface.`,
+        remediation:
+          'Use a supported run mode or remove the native agent selection from the chain.',
+        details: { harness, surface, agentName: chain.agent.name },
+      });
+    } else if (projectResult.ok) {
+      const installedStatus = await inspectInstalledNativeAgent({
+        projectPath: projectResult.path,
+        selection: chain.agent,
+      });
+      const available = installedStatus === 'available';
+      checks.push({
+        id: 'agent',
+        key: 'agent:installed',
+        severity: available ? 'info' : 'block',
+        status: available ? 'pass' : 'block',
+        message: available
+          ? `Native agent "${chain.agent.name}" is installed and matches its selected snapshot.`
+          : `Native agent "${chain.agent.name}" is ${installedStatus} in this project.`,
+        remediation: available
+          ? null
+          : 'Select the verified snapshot again from the catalog, or restore the installed definition without editing it.',
+        details: {
+          harness,
+          agentName: chain.agent.name,
+          installedStatus,
+          surface,
+        },
+      });
     }
   }
 

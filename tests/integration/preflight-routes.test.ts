@@ -184,6 +184,7 @@ function fakeCatalog(entries: readonly SkillEntry[]): CatalogService {
           matching.length === 0
             ? []
             : [{ source: 'project', count: matching.length, entries: [...matching] }],
+        agents: [],
         warnings: [],
         elapsedMs: 1,
       };

@@ -1,9 +1,17 @@
+import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import type { BundlePreview, BundleSkill, ChainBundle } from '../../shared/bundles.js';
 import { projectSkillRootFor } from '../catalog/copy.js';
 import { SHARED_PROJECT_SKILLS_SEGMENTS, sharedProjectSkillRoot } from '../catalog/project-paths.js';
+import {
+  installNativeAgentContentIntoProject,
+  inspectInstalledNativeAgent,
+  installedNativeAgentPath,
+  NativeAgentCopyError,
+  removeNativeAgentIfUnchanged,
+} from '../catalog/agent-copy.js';
 import type { CatalogService } from '../catalog/merge.js';
 import type { Chain } from './model.js';
 import type { ChainService } from './service.js';
@@ -57,7 +65,7 @@ export async function exportBundle(
   if (names.length > MAX_BUNDLE_SKILLS) {
     throw new BundleError('BUNDLE_TOO_LARGE', 'Bundles are limited to 100 skill packages.');
   }
-  const catalogResult = names.length === 0
+  const catalogResult = names.length === 0 && chain.agent === undefined
     ? undefined
     : await catalog.getCatalog({ projectPath, harness: chain.harness });
   const entries = catalogResult?.groups.flatMap((group) => group.entries) ?? [];
@@ -145,6 +153,72 @@ export async function exportBundle(
     }
     skills.push(skill);
   }
+  if (chain.agent !== undefined) {
+    const installedStatus = await inspectInstalledNativeAgent({
+      projectPath,
+      selection: chain.agent,
+    });
+    const installedPath = installedNativeAgentPath(projectPath, chain.agent);
+    const remoteAgent = catalogResult?.agents.find(
+      (candidate) =>
+        candidate.sourceId === chain.agent?.sourceId &&
+        candidate.revision === chain.agent?.revision &&
+        candidate.repositoryPath === chain.agent?.repositoryPath &&
+        candidate.agentPath === chain.agent?.agentPath &&
+        candidate.fingerprint === chain.agent?.fingerprint &&
+        candidate.status === 'available',
+    );
+    const agentPath =
+      installedStatus === 'available' && installedPath !== null
+        ? installedPath
+        : remoteAgent?.path ?? null;
+    if (agentPath === null) {
+      throw new BundleError(
+        'BUNDLE_SOURCE_UNAVAILABLE',
+        `Selected native agent "${chain.agent.name}" is unavailable or changed and cannot be exported.`,
+      );
+    }
+
+    let content: Buffer;
+    try {
+      content = await readFile(agentPath);
+    } catch {
+      throw new BundleError(
+        'BUNDLE_SOURCE_UNAVAILABLE',
+        `Selected native agent "${chain.agent.name}" could not be read for export.`,
+      );
+    }
+    const fingerprint = createHash('sha256').update(content).digest('hex');
+    if (fingerprint !== chain.agent.fingerprint) {
+      throw new BundleError(
+        'BUNDLE_SOURCE_UNAVAILABLE',
+        `Selected native agent "${chain.agent.name}" changed during export. Retry after editing finishes.`,
+      );
+    }
+    if (budget.bytes + content.length > MAX_BUNDLE_BYTES || budget.files + 1 > MAX_BUNDLE_FILES) {
+      throw new BundleError('BUNDLE_TOO_LARGE', 'Bundles are limited to 20 MiB and 2,000 files.');
+    }
+    return parseBundle({
+      format: 'skill-loom-chain',
+      version: 2,
+      chain: {
+        name: chain.name,
+        harness: chain.harness,
+        sessionMode: chain.sessionMode,
+        steps: chain.steps,
+        inputs: chain.inputs.map(({ defaultValue: _defaultValue, ...input }) => input),
+        agent: chain.agent,
+      },
+      skills,
+      agents: [{
+        name: chain.agent.name,
+        harness: chain.agent.harness,
+        agentPath: chain.agent.agentPath,
+        fingerprint,
+        content: content.toString('base64'),
+      }],
+    });
+  }
   return parseBundle({
     format: 'skill-loom-chain',
     version: 1,
@@ -167,6 +241,18 @@ export async function previewBundle(
   const bundle = parseBundle(raw);
   const entries = bundle.skills.length === 0 ? [] :
     (await catalog.getCatalog({ projectPath, harness: bundle.chain.harness })).groups.flatMap((group) => group.entries);
+  const agents = bundle.version === 2 && bundle.chain.agent !== undefined
+    ? await Promise.all(bundle.agents.map(async (agent) => {
+        const destination = installedNativeAgentPath(projectPath, bundle.chain.agent!);
+        return {
+          name: agent.name,
+          harness: agent.harness,
+          agentPath: agent.agentPath,
+          conflict: destination === null ? true : await exists(destination),
+          bytes: decodeBundleFile(agent.content).length,
+        };
+      }))
+    : [];
   return {
     bundle,
     skills: await Promise.all(bundle.skills.map(async (skill) => ({
@@ -176,6 +262,7 @@ export async function previewBundle(
       files: skill.files.length,
       bytes: skill.files.reduce((sum, file) => sum + decodeBundleFile(file.content).length, 0),
     }))),
+    agents,
   };
 }
 
@@ -222,6 +309,7 @@ export async function importBundle(
     }
   }
   const created: string[] = [];
+  const createdAgents: Array<{ path: string; fingerprint: string }> = [];
   try {
     if (preview.bundle.skills.some((skill) => !reuse.has(skill.name))) {
       const root = await safeSkillRoot(projectPath);
@@ -246,9 +334,33 @@ export async function importBundle(
         }
       }
     }
+    if (preview.bundle.version === 2) {
+      for (const agent of preview.bundle.agents) {
+        const installed = await installNativeAgentContentIntoProject({
+          projectPath,
+          name: agent.name,
+          harness: agent.harness,
+          agentPath: agent.agentPath,
+          fingerprint: agent.fingerprint,
+          content: decodeBundleFile(agent.content),
+        });
+        createdAgents.push({
+          path: installed.destinationPath,
+          fingerprint: installed.fingerprint,
+        });
+      }
+    }
     return await chains.importChain(projectPath, bundleChain(preview.bundle));
   } catch (error) {
     await Promise.all(created.map((path) => rm(path, { recursive: true, force: true })));
+    await Promise.all(createdAgents.map(({ path, fingerprint }) =>
+      removeNativeAgentIfUnchanged(path, fingerprint)));
+    if (error instanceof NativeAgentCopyError) {
+      throw new BundleError(
+        error.code === 'NATIVE_AGENT_CONFLICT' ? 'BUNDLE_CONFLICT' : 'BUNDLE_SOURCE_UNAVAILABLE',
+        error.message,
+      );
+    }
     throw error;
   }
 }

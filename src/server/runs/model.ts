@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   ChainSchema,
   ChainSessionModeSchema,
+  migrateChainDocument,
   parseChain,
   type Chain,
 } from '../chains/model.js';
@@ -449,10 +450,15 @@ export function createRunId(): string {
  * is upgraded by adding `version`.
  */
 export function migrateRunDocument(raw: unknown): unknown {
-  if (!isRecord(raw) || Object.hasOwn(raw, 'version')) {
-    return raw;
-  }
-  return { ...raw, version: RUN_VERSION };
+  if (!isRecord(raw)) return raw;
+  const chainSnapshot = raw.chainSnapshot;
+  return {
+    ...raw,
+    ...(!Object.hasOwn(raw, 'version') ? { version: RUN_VERSION } : {}),
+    ...(chainSnapshot === undefined
+      ? {}
+      : { chainSnapshot: migrateChainDocument(chainSnapshot) }),
+  };
 }
 
 /** Validate a decoded run document, applying the documented migration first. */

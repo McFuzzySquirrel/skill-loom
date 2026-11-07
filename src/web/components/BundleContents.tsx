@@ -32,6 +32,23 @@ export function BundleContents({ bundle }: { bundle: ChainBundle }) {
           </details>
         </details>
       ))}
+      {bundle.version === 2 ? bundle.agents.map((agent) => (
+        <details key={`${agent.harness}:${agent.agentPath}`}>
+          <summary>
+            Native {agent.harness} agent: {agent.name}
+          </summary>
+          <p>
+            Project path: <code>{agent.agentPath}</code>. This definition is not translated to
+            another harness.
+          </p>
+          <pre className="skill-detail__content">
+            {new TextDecoder().decode(Uint8Array.from(
+              atob(agent.content),
+              (char) => char.charCodeAt(0),
+            ))}
+          </pre>
+        </details>
+      )) : null}
     </div>
   );
 }

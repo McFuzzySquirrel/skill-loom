@@ -18,6 +18,12 @@
 | [ADR-0012](0012-shared-project-skill-installation-root.md) | Use a shared project skill installation root | Accepted | 2026-11-05 |
 | [ADR-0013](0013-deterministic-chain-bundle-skill-resolution.md) | Resolve bundle skills with project-local precedence | Accepted | 2026-11-05 |
 | [ADR-0014](0014-portable-agent-skill-execution.md) | Execute exported chains through a standalone agent skill | Accepted | 2026-11-05 |
+| [ADR-0015](0015-pinned-remote-skill-snapshots.md) | Ingest remote skills as pinned immutable snapshots | Accepted | 2026-11-13 |
+| [ADR-0016](0016-pinned-native-agent-selection.md) | Select source-pinned native agents through harness capabilities | Accepted | 2026-11-13 |
+| [ADR-0017](0017-managed-disposable-test-workspaces.md) | Run chain tests in managed disposable workspaces | Accepted | 2026-11-13 |
+| [ADR-0018](0018-version-portable-bundles-for-native-agents.md) | Version portable bundles for native-agent assets | Accepted | 2026-11-13 |
+| [ADR-0019](0019-project-independent-chain-drafts.md) | Store project-independent chain drafts separately | Accepted | 2026-11-13 |
+| [ADR-0020](0020-local-shared-bundle-library.md) | Publish reviewed bundles to a configured local library | Accepted | 2026-11-13 |
 
 ## Rules
 

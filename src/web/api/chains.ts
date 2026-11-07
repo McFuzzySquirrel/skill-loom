@@ -4,7 +4,7 @@ import {
   type FetchLike,
   type RequestJsonOptions,
 } from './client';
-import type { ChainStep } from '../../shared/chain';
+import type { ChainAgentSelection, ChainStep } from '../../shared/chain';
 export type { ChainStep } from '../../shared/chain';
 
 /**
@@ -53,6 +53,7 @@ export interface Chain {
   steps: ChainStep[];
   inputs: ChainInput[];
   automaticPermissionOptIn: boolean;
+  agent?: ChainAgentSelection;
   createdAt: string;
   updatedAt: string;
 }
@@ -85,6 +86,7 @@ export interface ChainDraft {
   steps: ChainStep[];
   inputs?: ChainInput[];
   automaticPermissionOptIn?: boolean;
+  agent?: ChainAgentSelection;
 }
 
 /**
@@ -256,8 +258,33 @@ export function decodeChain(value: unknown): Chain {
     steps: value.steps.map(decodeChainStep),
     inputs: value.inputs.map(decodeInput),
     automaticPermissionOptIn: value.automaticPermissionOptIn,
+      ...(value.agent === undefined ? {} : { agent: decodeChainAgent(value.agent) }),
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
+  };
+}
+
+function decodeChainAgent(value: unknown): ChainAgentSelection {
+  if (
+    !isRecord(value) ||
+    !isNonEmptyString(value.name) ||
+    !isNonEmptyString(value.sourceId) ||
+    !/^[a-f0-9]{40,64}$/.test(String(value.revision)) ||
+    !isNonEmptyString(value.repositoryPath) ||
+    !isNonEmptyString(value.agentPath) ||
+    typeof value.fingerprint !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(value.fingerprint)
+  ) {
+    throw invalidResponse('chain native agent selection');
+  }
+  return {
+    harness: decodeHarness(value.harness),
+    name: value.name,
+    sourceId: value.sourceId,
+    revision: String(value.revision),
+    repositoryPath: value.repositoryPath,
+    agentPath: value.agentPath,
+    fingerprint: value.fingerprint,
   };
 }
 
@@ -362,6 +389,7 @@ export function normalizeChainDraft(draft: ChainDraft): ChainDraft {
       };
     }),
     automaticPermissionOptIn: draft.automaticPermissionOptIn ?? false,
+    ...(draft.agent === undefined ? {} : { agent: draft.agent }),
   };
 }
 
@@ -378,6 +406,9 @@ function toDraftBody(draft: ChainDraft): Record<string, unknown> {
   }
   if (normalized.automaticPermissionOptIn !== undefined) {
     body.automaticPermissionOptIn = normalized.automaticPermissionOptIn;
+  }
+  if (normalized.agent !== undefined) {
+    body.agent = normalized.agent;
   }
   return body;
 }

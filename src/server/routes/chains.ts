@@ -5,7 +5,12 @@ import {
   createApiErrorEnvelope,
   type ApiValidationIssue,
 } from '../../shared/api.js';
-import { CHAIN_VERSION, ChainValidationError, type Chain } from '../chains/model.js';
+import {
+  CHAIN_VERSION,
+  ChainAgentSelectionSchema,
+  ChainValidationError,
+  type Chain,
+} from '../chains/model.js';
 import {
   CHAIN_SERVICE_ERROR_CODES,
   ChainServiceError,
@@ -47,6 +52,7 @@ const chainPayloadSchema = z.strictObject({
   steps: z.array(z.unknown()),
   inputs: z.array(z.unknown()).optional(),
   automaticPermissionOptIn: z.boolean().optional(),
+  agent: ChainAgentSelectionSchema.optional(),
   /** Optional uniqueness request carried in the body (query is also accepted). */
   uniqueName: z.boolean().optional(),
   id: z.string().optional(),
@@ -365,6 +371,7 @@ function toDraft(body: z.infer<typeof chainPayloadSchema>): ChainDraft {
     ...(body.automaticPermissionOptIn === undefined
       ? {}
       : { automaticPermissionOptIn: body.automaticPermissionOptIn }),
+    ...(body.agent === undefined ? {} : { agent: body.agent }),
   };
 }
 

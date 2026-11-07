@@ -131,6 +131,7 @@ export function createCopilotAdapter(options: HarnessAdapterOptions = {}): Harne
     installHint: COPILOT_INSTALL_HINT,
     discovery: DISCOVERY,
     supportedSessionModes: COPILOT_SUPPORTED_SESSION_MODES,
+    nativeAgentSelection: Object.freeze({ interactive: true, headless: true }),
     nativeFork: false,
     forkMechanisms: COPILOT_FORK_MECHANISMS,
     trust: TRUST,
@@ -181,6 +182,7 @@ export function createCopilotAdapter(options: HarnessAdapterOptions = {}): Harne
         args: [
           '-i',
           invocation.prompt,
+          ...(invocation.agentName === undefined ? [] : ['--agent', invocation.agentName]),
           '--session-id',
           invocation.sessionId,
           '-C',
@@ -216,6 +218,7 @@ export function createCopilotAdapter(options: HarnessAdapterOptions = {}): Harne
         args: [
           '-p',
           invocation.prompt,
+          ...(invocation.agentName === undefined ? [] : ['--agent', invocation.agentName]),
           '--session-id',
           invocation.sessionId,
           ...COPILOT_AUTOMATIC_PERMISSIONS,

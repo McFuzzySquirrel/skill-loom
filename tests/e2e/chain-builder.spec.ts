@@ -206,6 +206,97 @@ test.describe('Chain builder', () => {
     await expect(page.getByTestId('step-skill')).toHaveCount(0);
   });
 
+  test('project-independent drafts save, reopen, and create disposable test workspaces', async ({ page, request }) => {
+    const errors = collectConsoleErrors(page);
+    await page.goto('/drafts');
+    await page.getByRole('link', { name: 'Blank draft' }).click();
+    await expect(page.getByTestId('chain-builder-page')).toBeVisible();
+    await expect(page.getByTestId('chain-save')).toHaveText('Save draft');
+
+    await page.getByTestId('chain-add-instruction').click();
+    await page.getByTestId('step-instruction').fill('Write a draft test result file.');
+    await page.getByTestId('step-label').fill('Create result');
+    await closeStepEditor(page);
+    await page.getByTestId('chain-save').click();
+
+    await expect(page).toHaveURL(/\/drafts\/[^/]+$/);
+    await expect(page.getByTestId('chain-save')).toHaveText('Save draft');
+    const draftId = new URL(page.url()).pathname.split('/').at(-1);
+    expect(draftId).toBeTruthy();
+
+    await page.getByTestId('chain-test-in-workspace').click();
+    await expect(page).toHaveURL(/\/projects\/[^/]+\/chains\/[^/]+\/run$/);
+    const response = await request.get('/api/test-workspaces');
+    expect(response.ok()).toBe(true);
+    const body = await response.json() as {
+      workspaces: Array<{ sourceDraftId?: string }>;
+    };
+    expect(body.workspaces.some((workspace) => workspace.sourceDraftId === draftId)).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
+  test('starts a project-independent scenario draft from a goal', async ({ page }) => {
+    const outcome = `Summarize a project and produce a release checklist ${runSuffix}`;
+    await page.goto('/drafts');
+    await page.getByRole('button', { name: 'Start from a goal' }).click();
+    await page.getByLabel('What outcome do you want?').fill(outcome);
+    await page.getByRole('button', { name: 'Review catalog and build draft' }).click();
+
+    await expect(page).toHaveURL(/\/drafts\/[^/]+$/);
+    await expect(page.getByTestId('chain-builder-page')).toBeVisible();
+    await expect(stepRows(page)).toHaveCount(1);
+    await expect(stepRows(page).first()).toContainText(`Achieve this outcome: ${outcome}`);
+  });
+
+  test('registers and refreshes optional repositories before opening a goal draft', async ({ page }) => {
+    const repository = 'https://github.com/example/scenario-skills.git';
+    const sourceRequests: Array<{ repository: string; ref?: string }> = [];
+    const refreshRequests: string[] = [];
+    await page.route('**/api/settings/remote-skill-sources', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      const body = route.request().postDataJSON() as { repository: string; ref?: string };
+      sourceRequests.push(body);
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          source: { id: 'scenario-source', repository: body.repository, ref: body.ref },
+        }),
+      });
+    });
+    await page.route('**/api/settings/remote-skill-sources/scenario-source/refresh', async (route) => {
+      refreshRequests.push(route.request().method());
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          snapshot: {
+            version: 1,
+            sourceId: 'scenario-source',
+            repository,
+            revision: 'a'.repeat(40),
+            packages: [],
+            agents: [],
+          },
+        }),
+      });
+    });
+
+    await page.goto('/drafts');
+    await page.getByRole('button', { name: 'Start from a goal' }).click();
+    await page.getByLabel('What outcome do you want?').fill('Review the repository before a release.');
+    await page.getByLabel('Repository URL 1').fill(repository);
+    await page.getByLabel('Optional branch, tag, or commit').fill('release');
+    await page.getByRole('button', { name: 'Review catalog and build draft' }).click();
+
+    await expect(page).toHaveURL(/\/drafts\/[^/]+$/);
+    expect(sourceRequests).toEqual([{ repository, ref: 'release' }]);
+    expect(refreshRequests).toEqual(['POST']);
+  });
+
   test('uses a responsive multi-pane workflow design layout', async ({ page, request }) => {
     const project = await openFixtureProject(request);
     await page.setViewportSize({ width: 1600, height: 1000 });

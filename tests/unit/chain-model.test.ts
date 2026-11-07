@@ -100,7 +100,7 @@ describe('chain version', () => {
   });
 
   it('documents the current persisted version and field order', () => {
-    expect(CHAIN_VERSION).toBe(1);
+    expect(CHAIN_VERSION).toBe(2);
     expect(CHAIN_TOP_LEVEL_FIELDS).toEqual([
       'version',
       'id',
@@ -110,9 +110,20 @@ describe('chain version', () => {
       'steps',
       'inputs',
       'automaticPermissionOptIn',
+      'agent',
       'createdAt',
       'updatedAt',
     ]);
+  });
+
+  it('migrates strict version 1 chains while rejecting unknown legacy fields', () => {
+    const version1 = validChain({ version: 1 });
+    const migrated = parseChainDocument(version1).chain;
+    expect(migrated.version).toBe(CHAIN_VERSION);
+    expect(migrated.agent).toBeUndefined();
+
+    expect(() => parseChainDocument({ ...version1, agent: { name: 'unsupported' } }))
+      .toThrow(ChainValidationError);
   });
 
   it('migrates an unversioned pre-versioning draft without mutating it', () => {

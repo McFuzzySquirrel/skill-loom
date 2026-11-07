@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { chainStepName } from '../../shared/chain';
+import type { ChainAgentSelection } from '../../shared/chain';
 import { isAbortError, type ApiClientError } from '../api/client';
 import {
   CHAIN_HARNESSES,
@@ -38,6 +39,7 @@ export interface ChainDraftDocument {
   steps: ChainStep[];
   inputs: ChainInput[];
   automaticPermissionOptIn: boolean;
+  agent?: ChainAgentSelection;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -112,6 +114,7 @@ export interface UseChainDraftResult {
   removeInput: (name: string) => void;
   /** The harness can change only before the draft is first saved. */
   setHarness: (harness: ChainHarness) => void;
+  setAgent: (agent: ChainAgentSelection | undefined) => void;
   validation: ChainDraftValidation;
   /** True when the editable content differs from the last load or save. */
   isDirty: boolean;
@@ -175,6 +178,7 @@ export function documentFromChain(chain: Chain): ChainDraftDocument {
     steps: chain.steps,
     inputs: chain.inputs,
     automaticPermissionOptIn: chain.automaticPermissionOptIn,
+    ...(chain.agent === undefined ? {} : { agent: chain.agent }),
     createdAt: chain.createdAt,
     updatedAt: chain.updatedAt,
   };
@@ -189,6 +193,7 @@ export function toChainDraft(document: ChainDraftDocument): ChainDraft {
     steps: document.steps,
     inputs: document.inputs,
     automaticPermissionOptIn: document.automaticPermissionOptIn,
+    ...(document.agent === undefined ? {} : { agent: document.agent }),
   };
 }
 
@@ -228,6 +233,7 @@ export function serializeChainDraft(document: ChainDraftDocument): string {
       };
     }),
     automaticPermissionOptIn: document.automaticPermissionOptIn,
+    ...(document.agent === undefined ? {} : { agent: document.agent }),
   });
 }
 
@@ -852,11 +858,35 @@ export function useChainDraft({
         return;
       }
       setState((previous) =>
-        updateReadyDocument(previous, (document) => ({ ...document, harness })),
+        updateReadyDocument(previous, (document) => {
+          if (document.agent === undefined || document.agent.harness === harness) {
+            return { ...document, harness };
+          }
+          const { agent: _agent, ...withoutAgent } = document;
+          return { ...withoutAgent, harness };
+        }),
       );
       announce(`Draft harness set to ${harness}.`);
     },
     [announce, isNew],
+  );
+
+  const setAgent = useCallback(
+    (agent: ChainAgentSelection | undefined) => {
+      if (agent !== undefined && state.status === 'ready' && agent.harness !== state.document.harness) {
+        announce(`The ${agent.harness} agent is incompatible with the ${state.document.harness} chain.`);
+        return;
+      }
+      setState((previous) =>
+        updateReadyDocument(previous, (document) => {
+          if (agent !== undefined) return { ...document, agent };
+          const { agent: _agent, ...withoutAgent } = document;
+          return withoutAgent;
+        }),
+      );
+      announce(agent === undefined ? 'Removed the selected native agent.' : `Selected native agent ${agent.name}.`);
+    },
+    [announce, state],
   );
 
   const save = useCallback(async (): Promise<Chain> => {
@@ -938,6 +968,7 @@ export function useChainDraft({
     renameInput,
     removeInput,
     setHarness,
+    setAgent,
     validation,
     isDirty,
     save,
