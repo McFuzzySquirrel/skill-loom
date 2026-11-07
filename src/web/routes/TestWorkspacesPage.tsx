@@ -432,7 +432,7 @@ export function TestWorkspacesPage({
         />
       ) : null}
 
-      {loading ? <p className="state-note">Loading test workspaces…</p> : null}
+      {loading ? <p className="state-note" role="status">Loading test workspaces…</p> : null}
       {!loading && workspaces.length === 0 && error === null ? (
         <p className="state-note" data-testid="test-workspaces-empty">
           No retained test workspaces. Start a test from a saved chain or create a discovery workspace.

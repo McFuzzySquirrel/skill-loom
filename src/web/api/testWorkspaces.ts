@@ -127,7 +127,7 @@ function decodeProposal(value: unknown): DiscoveryProposalPreview {
     if (
       !isRecord(input) ||
       !isNonEmptyString(input.name) ||
-      !isNonEmptyString(input.label) ||
+      input.label !== undefined && !isNonEmptyString(input.label) ||
       typeof input.required !== 'boolean' ||
       input.defaultValue !== undefined && typeof input.defaultValue !== 'string'
     ) {
@@ -135,7 +135,7 @@ function decodeProposal(value: unknown): DiscoveryProposalPreview {
     }
     return {
       name: input.name,
-      label: input.label,
+      label: typeof input.label === 'string' ? input.label : input.name,
       required: input.required,
       ...(typeof input.defaultValue === 'string' ? { defaultValue: input.defaultValue } : {}),
     };

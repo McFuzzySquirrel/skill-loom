@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import Fastify from 'fastify';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -154,6 +154,43 @@ describe('test-workspace routes', () => {
     });
     expect(accepted.statusCode).toBe(201);
     const draftId = accepted.json<{ chain: { id: string; name: string } }>().chain.id;
+
+    const concurrentUpdates = await Promise.all(
+      ['Concurrent update one', 'Concurrent update two', 'Concurrent update three'].map((name) =>
+        app.inject({
+          method: 'PUT',
+          url: `/api/drafts/${draftId}`,
+          payload: {
+            name,
+            harness: 'copilot',
+            sessionMode: 'shared',
+            steps: [{
+              id: 'plan-release',
+              skillName: 'goal-planning',
+              instruction: `Create a checklist for ${name}.`,
+            }],
+            inputs: [],
+          },
+        }),
+      ),
+    );
+    expect(concurrentUpdates.map(({ statusCode }) => statusCode)).toEqual([200, 200, 200]);
+    const concurrentDraft = await app.inject({
+      method: 'GET',
+      url: `/api/drafts/${draftId}`,
+    });
+    const concurrentBundle = await app.inject({
+      method: 'GET',
+      url: `/api/drafts/${draftId}/bundle`,
+    });
+    expect(concurrentBundle.statusCode, concurrentBundle.body).toBe(200);
+    expect(concurrentBundle.json<{ bundle: ChainBundle }>().bundle)
+      .toEqual(await exportBundle(
+        concurrentDraft.json<{ chain: Chain }>().chain,
+        configDirectory,
+        catalogService,
+      ));
+
     const reviewed = await app.inject({
       method: 'GET',
       url: `/api/drafts/${draftId}/bundle`,
@@ -256,6 +293,20 @@ describe('test-workspace routes', () => {
       join(copyPath, '.agents', 'skills', 'goal-planning', 'SKILL.md'),
       'utf8',
     )).toBe(skillText);
+
+    const frozenPackagePath = join(configDirectory, 'draft-packages', `${draftId}.json`);
+    await rm(frozenPackagePath);
+    await symlink(join(root, 'outside-package.json'), frozenPackagePath);
+    const failedDeletion = await app.inject({
+      method: 'DELETE',
+      url: `/api/drafts/${draftId}`,
+    });
+    expect(failedDeletion.statusCode).not.toBe(200);
+    const retainedDraft = await app.inject({
+      method: 'GET',
+      url: `/api/drafts/${draftId}`,
+    });
+    expect(retainedDraft.statusCode).toBe(200);
 
     await app.close();
   });

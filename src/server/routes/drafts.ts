@@ -71,6 +71,7 @@ export const draftRoutes: FastifyPluginAsync<DraftRoutesOptions> = async (
     options.catalogService ??
     createCatalogService({ configStore: options.configStore });
   const projectRegistry = createProjectRegistry({ configStore: options.configStore });
+  const draftLocks = new Map<string, Promise<void>>();
 
   app.get('/api/drafts', async (_request, reply) => {
     try {
@@ -86,45 +87,49 @@ export const draftRoutes: FastifyPluginAsync<DraftRoutesOptions> = async (
   });
 
   app.get<{ Params: DraftParams }>('/api/drafts/:draftId', async (request, reply) => {
-    try {
-      const configDirectory = getConfigDirectory();
-      const chain = await getDraftService().get(configDirectory, request.params.draftId);
-      return reply.code(200).send({ chain } satisfies { chain: Chain });
-    } catch (error) {
-      return sendChainFailure(reply, error);
-    }
+    return withDraftLock(draftLocks, request.params.draftId, async () => {
+      try {
+        const configDirectory = getConfigDirectory();
+        const chain = await getDraftService().get(configDirectory, request.params.draftId);
+        return reply.code(200).send({ chain } satisfies { chain: Chain });
+      } catch (error) {
+        return sendChainFailure(reply, error);
+      }
+    });
   });
 
   app.get<{ Params: DraftParams }>('/api/drafts/:draftId/bundle', async (request, reply) => {
-    try {
-      const configDirectory = getConfigDirectory();
-      const chain = await getDraftService().get(configDirectory, request.params.draftId);
-      const frozenBundle = await readDraftBundle(configDirectory, chain.id);
-      if (frozenBundle !== null) {
-        if (!draftBundleMatchesChain(frozenBundle, chain)) {
-          throw new DraftBundleStoreError(
-            'The saved global draft no longer matches its frozen package bundle.',
-          );
+    return withDraftLock(draftLocks, request.params.draftId, async () => {
+      try {
+        const configDirectory = getConfigDirectory();
+        const chain = await getDraftService().get(configDirectory, request.params.draftId);
+        const frozenBundle = await readDraftBundle(configDirectory, chain.id);
+        if (frozenBundle !== null) {
+          if (!draftBundleMatchesChain(frozenBundle, chain)) {
+            throw new DraftBundleStoreError(
+              'The saved global draft no longer matches its frozen package bundle.',
+            );
+          }
+          return reply.code(200).send({
+            bundle: updateDraftBundleChain(frozenBundle, chain),
+          });
         }
         return reply.code(200).send({
-          bundle: updateDraftBundleChain(frozenBundle, chain),
+          bundle: await exportBundle(chain, configDirectory, catalogService),
         });
+      } catch (error) {
+        if (error instanceof BundleError) {
+          const status =
+            error.code === 'BUNDLE_TOO_LARGE'
+              ? 413
+              : error.code === 'BUNDLE_CONFLICT'
+                ? 409
+                : 422;
+          return reply.code(status).send(createApiErrorEnvelope(error.code, error.message));
+        }
+        return sendChainFailure(reply, error);
       }
-      return reply.code(200).send({
-        bundle: await exportBundle(chain, configDirectory, catalogService),
-      });
-    } catch (error) {
-      if (error instanceof BundleError) {
-        const status =
-          error.code === 'BUNDLE_TOO_LARGE'
-            ? 413
-            : error.code === 'BUNDLE_CONFLICT'
-              ? 409
-              : 422;
-        return reply.code(status).send(createApiErrorEnvelope(error.code, error.message));
-      }
-      return sendChainFailure(reply, error);
-    }
+    });
   });
 
   app.get('/api/drafts/catalog', async (request, reply) => {
@@ -279,70 +284,94 @@ export const draftRoutes: FastifyPluginAsync<DraftRoutesOptions> = async (
       return sendValidationFailure(reply, 'The draft request is not valid.', parsed.error.issues);
     }
 
-    try {
-      const configDirectory = getConfigDirectory();
-      const currentBundle = await readDraftBundle(configDirectory, request.params.draftId);
-      const nextNames = uniqueSkillNames(parsed.data.steps);
-      const availableNames = new Set(currentBundle?.skills.map((skill) => skill.name) ?? []);
-      if (
-        currentBundle !== null &&
-        nextNames.some((name) => !availableNames.has(name))
-      ) {
-        return reply.code(409).send(
-          createApiErrorEnvelope(
-            'DRAFT_PACKAGE_SET_FIXED',
-            'This accepted discovery draft contains a frozen package set. Create a new draft from the current catalog to add different packages.',
-          ),
-        );
-      }
-      const previous = await getDraftService().get(configDirectory, request.params.draftId);
-      const chain = await getDraftService().update(
-        configDirectory,
-        request.params.draftId,
-        toDraft(parsed.data),
-      );
-      if (currentBundle !== null) {
-        const retainedNames = new Set(nextNames);
-        const updatedBundle = {
-          ...updateDraftBundleChain(currentBundle, chain),
-          skills: currentBundle.skills.filter((skill) => retainedNames.has(skill.name)),
-        };
-        try {
-          await saveDraftBundle(configDirectory, chain.id, chain, updatedBundle);
-        } catch (error) {
-          await getDraftService().update(
-            configDirectory,
-            previous.id,
-            toDraft({
-              name: previous.name,
-              harness: previous.harness,
-              sessionMode: previous.sessionMode,
-              steps: previous.steps,
-              inputs: previous.inputs,
-              automaticPermissionOptIn: previous.automaticPermissionOptIn,
-              ...(previous.agent === undefined ? {} : { agent: previous.agent }),
-            }),
+    return withDraftLock(draftLocks, request.params.draftId, async () => {
+      try {
+        const configDirectory = getConfigDirectory();
+        const currentBundle = await readDraftBundle(configDirectory, request.params.draftId);
+        const nextNames = uniqueSkillNames(parsed.data.steps);
+        const availableNames = new Set(currentBundle?.skills.map((skill) => skill.name) ?? []);
+        if (
+          currentBundle !== null &&
+          nextNames.some((name) => !availableNames.has(name))
+        ) {
+          return reply.code(409).send(
+            createApiErrorEnvelope(
+              'DRAFT_PACKAGE_SET_FIXED',
+              'This accepted discovery draft contains a frozen package set. Create a new draft from the current catalog to add different packages.',
+            ),
           );
-          throw error;
         }
+        const previous = await getDraftService().get(configDirectory, request.params.draftId);
+        const chain = await getDraftService().update(
+          configDirectory,
+          request.params.draftId,
+          toDraft(parsed.data),
+        );
+        if (currentBundle !== null) {
+          const retainedNames = new Set(nextNames);
+          const updatedBundle = {
+            ...updateDraftBundleChain(currentBundle, chain),
+            skills: currentBundle.skills.filter((skill) => retainedNames.has(skill.name)),
+          };
+          try {
+            await saveDraftBundle(configDirectory, chain.id, chain, updatedBundle);
+          } catch (error) {
+            await getDraftService().update(
+              configDirectory,
+              previous.id,
+              toDraft({
+                name: previous.name,
+                harness: previous.harness,
+                sessionMode: previous.sessionMode,
+                steps: previous.steps,
+                inputs: previous.inputs,
+                automaticPermissionOptIn: previous.automaticPermissionOptIn,
+                ...(previous.agent === undefined ? {} : { agent: previous.agent }),
+              }),
+            );
+            throw error;
+          }
+        }
+        return reply.code(200).send({ chain } satisfies { chain: Chain });
+      } catch (error) {
+        return sendChainFailure(reply, error);
       }
-      return reply.code(200).send({ chain } satisfies { chain: Chain });
-    } catch (error) {
-      return sendChainFailure(reply, error);
-    }
+    });
   });
 
   app.delete<{ Params: DraftParams }>('/api/drafts/:draftId', async (request, reply) => {
-    try {
-      const configDirectory = getConfigDirectory();
-      await getDraftService().remove(configDirectory, request.params.draftId);
-      await removeDraftBundle(configDirectory, request.params.draftId);
-      return reply.code(200).send({ draftId: request.params.draftId, deleted: true });
-    } catch (error) {
-      return sendChainFailure(reply, error);
-    }
+    return withDraftLock(draftLocks, request.params.draftId, async () => {
+      try {
+        const configDirectory = getConfigDirectory();
+        await removeDraftBundle(configDirectory, request.params.draftId);
+        await getDraftService().remove(configDirectory, request.params.draftId);
+        return reply.code(200).send({ draftId: request.params.draftId, deleted: true });
+      } catch (error) {
+        return sendChainFailure(reply, error);
+      }
+    });
   });
 };
+
+async function withDraftLock<T>(
+  locks: Map<string, Promise<void>>,
+  draftId: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const previous = locks.get(draftId);
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  locks.set(draftId, current);
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (locks.get(draftId) === current) locks.delete(draftId);
+  }
+}
 
 function toDraft(body: z.infer<typeof draftPayloadSchema>): ChainDraft {
   return {
