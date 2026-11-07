@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "5efb54d4-1f0e-49e0-a96e-b1cc1fd537c2",
+  "status": "current",
+  "command": "deliver",
+  "type": "explainer",
+  "input": "/tmp/archify-explainer-patch-ZbBlGJ/patched-draft.json",
+  "output": "/home/mcfuzzysquirrel/Projects/skill-loom/docs/skill-loom-end-to-end.html",
+  "specification": {
+    "sha256": "9c2d2ecddf47ae063d723f28e0a64f28b65ef66edc3326826528c380776aa000",
+    "bytes": 8497
+  },
+  "artifact": {
+    "sha256": "9defa6df4cef4946ad53d7162af7893d423bfeb527e90ebb02634f827ce0f40d",
+    "bytes": 1669141
+  },
+  "explainer": {
+    "preparedSha256": "3c05a4df49d8dd5a4223058c60f26b95725c4196790476d1896d46ceed544c22",
+    "dependencies": [
+      {
+        "kind": "repository",
+        "id": "app",
+        "path": "src/server/app.ts",
+        "revision": "bb55fdfeb20a684a1ec41841d2548eb1d31baf57",
+        "sha256": "258233db3b19a429a7260e03dd76745b98a55312bfbc299415c3a7dfd488a630",
+        "bytes": 15546,
+        "retained": true
+      },
+      {
+        "kind": "repository",
+        "id": "preflight",
+        "path": "src/server/preflight/engine.ts",
+        "revision": "bb55fdfeb20a684a1ec41841d2548eb1d31baf57",
+        "sha256": "da224298f094c8898968f18d5b1c5102749c303ed3ebc46356fc1c80ea2d0d2b",
+        "bytes": 46559,
+        "retained": true
+      },
+      {
+        "kind": "repository",
+        "id": "tails",
+        "path": "src/server/runs/model.ts",
+        "revision": "bb55fdfeb20a684a1ec41841d2548eb1d31baf57",
+        "sha256": "30f68e9d8ac93fc7e3be21ce03596f159a9d0c9c7f42cc3d23d547904b1d5b5e",
+        "bytes": 23409,
+        "retained": true
+      },
+      {
+        "kind": "repository",
+        "id": "signals",
+        "path": "src/server/runs/automatic.ts",
+        "revision": "bb55fdfeb20a684a1ec41841d2548eb1d31baf57",
+        "sha256": "529b795fc9712965be1fc90e2407767cd79fb4291c3b3e127a1f8c059cf5d5ac",
+        "bytes": 56223,
+        "retained": true
+      },
+      {
+        "kind": "repository",
+        "id": "opencode",
+        "path": "src/server/harness/opencode.ts",
+        "revision": "bb55fdfeb20a684a1ec41841d2548eb1d31baf57",
+        "sha256": "7077158360684ee0f292b35e8e1dc7a2e587b25bbbaf66bf2469824877ad9608",
+        "bytes": 6880,
+        "retained": true
+      },
+      {
+        "kind": "repository",
+        "id": "copilot",
+        "path": "src/server/harness/copilot.ts",
+        "revision": "bb55fdfeb20a684a1ec41841d2548eb1d31baf57",
+        "sha256": "53ae9ebaa8db91c77ca3bc4152d56c962fae2250f05a255739a85bcc1949fdf1",
+        "bytes": 7463,
+        "retained": true
+      },
+      {
+        "kind": "repository",
+        "id": "pty",
+        "path": "src/server/terminal/pty.ts",
+        "revision": "bb55fdfeb20a684a1ec41841d2548eb1d31baf57",
+        "sha256": "9cf047b5489bdc1c2dd56a35ceaeafd83c8b82b68ea20b66aa0cb84aea6f0e5e",
+        "bytes": 18772,
+        "retained": true
+      },
+      {
+        "kind": "repository",
+        "id": "orchestrator",
+        "path": "src/server/runs/orchestrator.ts",
+        "revision": "bb55fdfeb20a684a1ec41841d2548eb1d31baf57",
+        "sha256": "fe5e6b1400695c6b0dc4b3b9bc96c06ee47c344f01c1072321315b58ce992553",
+        "bytes": 53232,
+        "retained": true
+      },
+      {
+        "kind": "repository",
+        "id": "registry",
+        "path": "src/server/harness/registry.ts",
+        "revision": "bb55fdfeb20a684a1ec41841d2548eb1d31baf57",
+        "sha256": "f30d469c9ac5ff2aa244494f88ecf8184d848dc86a500d42509da0d086ce802a",
+        "bytes": 5505,
+        "retained": true
+      },
+      {
+        "kind": "diagram-spec",
+        "id": "components-diagram",
+        "inline": true,
+        "sha256": "c067deb132c9008edbe1285be3721388d7dda66b90d1f9334ea2f2aab51cbc7f",
+        "bytes": 1086,
+        "retained": true
+      },
+      {
+        "kind": "diagram-spec",
+        "id": "journey-diagram",
+        "inline": true,
+        "sha256": "0a851ce6a2d46506716f39872875eaebdf1461811f1171adc34b6b641e7ff0aa",
+        "bytes": 1564,
+        "retained": true
+      },
+      {
+        "kind": "diagram-spec",
+        "id": "step-path-diagram",
+        "inline": true,
+        "sha256": "abf70e890a7ccfa14fcb7cec37b2e805e71348017aaf44076ba314add5fe7349",
+        "bytes": 1409,
+        "retained": true
+      }
+    ]
+  }
+}
