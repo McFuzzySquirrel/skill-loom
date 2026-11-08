@@ -10,10 +10,16 @@ const source = join(root, '.github', 'skills', 'loom-run-bundle');
 const mirroredSource = join(root, 'skill', 'loom-run-bundle');
 const output = join(root, 'dist', 'skills', 'loom-run-bundle');
 const archive = join(root, 'dist', 'skills', 'loom-run-bundle.zip');
+const discoverySource = join(root, '.github', 'skills', 'scenario-discovery');
+const discoveryMirror = join(root, 'skill', 'scenario-discovery');
+const discoveryOutput = join(root, 'dist', 'skills', 'scenario-discovery');
+const discoveryArchive = join(root, 'dist', 'skills', 'scenario-discovery-v1.zip');
 const fixedTime = new Date('2000-01-01T00:00:00.000Z');
 
 await rm(output, { recursive: true, force: true });
 await rm(archive, { force: true });
+await rm(discoveryOutput, { recursive: true, force: true });
+await rm(discoveryArchive, { force: true });
 await mkdir(join(output, 'scripts'), { recursive: true });
 await build({ configFile: join(root, 'vite.portable.config.ts'), root });
 await rename(join(output, 'scripts', 'loom-bundle.js'), join(output, 'scripts', 'loom-bundle.mjs'));
@@ -38,13 +44,13 @@ for (const dependency of ['zod', 'yaml']) {
   await cp(license, join(licenses, `${dependency}-LICENSE`));
 }
 
-async function listFiles(directory) {
+async function listFiles(directory, packageRoot = directory) {
   const files = [];
   for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...await listFiles(path));
+    if (entry.isDirectory()) files.push(...await listFiles(path, packageRoot));
     else if (entry.isFile()) files.push(path);
-    else throw new Error(`The skill package contains a non-regular file: ${relative(output, path)}`);
+    else throw new Error(`The skill package contains a non-regular file: ${relative(packageRoot, path)}`);
   }
   return files;
 }
@@ -60,3 +66,18 @@ for (const path of await listFiles(output)) {
 await mkdir(dirname(archive), { recursive: true });
 await writeFile(archive, zipSync(zipped, { level: 9 }));
 console.log(`Built ${relative(root, output)} and ${relative(root, archive)}.`);
+
+await rm(discoveryMirror, { recursive: true, force: true });
+await cp(discoverySource, discoveryMirror, { recursive: true });
+await cp(discoverySource, discoveryOutput, { recursive: true });
+await cp(join(root, 'LICENSE'), join(discoveryOutput, 'LICENSE'));
+const discoveryFiles = {};
+for (const path of await listFiles(discoveryOutput)) {
+  const relativePath = relative(discoveryOutput, path).split('\\').join('/');
+  discoveryFiles[`scenario-discovery/${relativePath}`] = [
+    new Uint8Array(await readFile(path)),
+    { mtime: fixedTime, os: 3, attrs: 0o100644 << 16 },
+  ];
+}
+await writeFile(discoveryArchive, zipSync(discoveryFiles, { level: 9 }));
+console.log(`Built ${relative(root, discoveryOutput)} and ${relative(root, discoveryArchive)}.`);

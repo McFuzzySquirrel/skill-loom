@@ -18,18 +18,18 @@ export function BundleContents({ bundle }: { bundle: ChainBundle }) {
             {skill.files.map((file) => (
               <li key={file.path}>
                 <code>{file.path}</code>{file.executable ? ' (executable)' : ''}
+                <details>
+                  <summary>Review file contents</summary>
+                  <pre className="skill-detail__content">
+                    {new TextDecoder().decode(Uint8Array.from(
+                      atob(file.content),
+                      (char) => char.charCodeAt(0),
+                    ))}
+                  </pre>
+                </details>
               </li>
             ))}
           </ul>
-          <details>
-            <summary>Review SKILL.md</summary>
-            <pre className="skill-detail__content">
-              {new TextDecoder().decode(Uint8Array.from(
-                atob(skill.files.find((file) => file.path === 'SKILL.md')?.content ?? ''),
-                (char) => char.charCodeAt(0),
-              ))}
-            </pre>
-          </details>
         </details>
       ))}
       {bundle.version === 2 ? bundle.agents.map((agent) => (

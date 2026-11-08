@@ -24,7 +24,7 @@ status: Accepted
 - **MUST:** Pin selected remote skills and agents to their verified source snapshots; never execute repository files during registration, refresh, or cataloging.
 - **MUST:** Create test workspaces from a draft without modifying another project.
 - **MUST NOT:** Install selected remote packages into a project merely because they were selected in a draft.
-- **MUST NOT:** Describe goal entry as automatic scenario recommendation or discovery; it seeds the draft instruction.
+- **MUST NOT:** Describe goal entry as automatic scenario recommendation or discovery; it seeds the draft instruction. Agent-assisted discovery is a separate, explicit handoff flow and does not create or mutate a draft.
 
 ## Decision Drivers
 
@@ -41,7 +41,7 @@ status: Accepted
 
 ## Decision Outcome
 
-Chosen option: "Store drafts in a separate config-owned directory while reusing the chain service." Draft files live under the Loom config directory and use the existing versioned chain model. The remote catalog is available to the draft builder without installing package files into a project. A goal-based start creates a standalone instruction containing the requested outcome; users review the catalog and compose the remaining steps.
+Chosen option: "Store drafts in a separate config-owned directory while reusing the chain service." Draft files live under the Loom config directory and use the existing versioned chain model. The remote catalog is available to the draft builder without installing package files into a project. A goal-based start creates a standalone instruction containing the requested outcome; users review the catalog and compose the remaining steps. It does not recommend or assemble a scenario. Agent-assisted discovery uses the separate transient handoff contract in [ADR-0021](0021-validated-project-independent-discovery-handoff.md); it does not launch an agent or create a chain.
 
 Testing uses a retained managed workspace and the regular harness preflight and run controls. Export and shared-library publication continue to require explicit review.
 
@@ -54,10 +54,10 @@ Testing uses a retained managed workspace and the regular harness preflight and 
 ### Negative Consequences
 
 - Drafts and selected source snapshots are still local data that must be included in config backups.
-- Goal entry does not automatically recommend or assemble a scenario.
+- Goal entry does not automatically recommend or assemble a scenario; agent-assisted discovery uses a separate transient handoff contract.
 - Copying a draft into a project remains an explicit reviewed bundle import.
 
 ## Links
 
-- Related: [ADR-0010](0010-global-chain-library-snapshots.md), [ADR-0015](0015-pinned-remote-skill-snapshots.md), and [ADR-0017](0017-managed-disposable-test-workspaces.md).
+- Related: [ADR-0010](0010-global-chain-library-snapshots.md), [ADR-0015](0015-pinned-remote-skill-snapshots.md), [ADR-0017](0017-managed-disposable-test-workspaces.md), and [ADR-0021](0021-validated-project-independent-discovery-handoff.md).
 - Regression coverage: `tests/integration/drafts-routes.test.ts` and `tests/e2e/chain-builder.spec.ts`.

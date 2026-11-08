@@ -5,7 +5,7 @@ import { HelpPopoverProvider } from './components/HelpPopover';
 import { StatusAnnouncerProvider } from './components/StatusRegion';
 import { ThemeProvider } from './ThemeProvider';
 import { WorkspaceProvider } from './WorkspaceContext';
-import { Redirect, RouterProvider, matchRoute, useRouter } from './router';
+import { RouterProvider, matchRoute, useRouter } from './router';
 import { ChainBuilderPage } from './routes/ChainBuilderPage';
 import { GlobalChainsPage } from './routes/GlobalChainsPage';
 import { GlobalDraftsPage } from './routes/GlobalDraftsPage';
@@ -18,6 +18,9 @@ import { RemoteSourcesPage } from './routes/RemoteSourcesPage';
 import { ScenarioCatalogPage } from './routes/ScenarioCatalogPage';
 import { TerminalRunPage } from './routes/TerminalRunPage';
 import { TestWorkspacesPage } from './routes/TestWorkspacesPage';
+import { StartPage } from './routes/StartPage';
+import { LibraryOverviewPage } from './routes/LibraryOverviewPage';
+import { DiscoveryPage } from './routes/DiscoveryPage';
 
 const HelpPage = lazy(async () => {
   const module = await import('./routes/HelpPage');
@@ -31,6 +34,21 @@ interface RouteDefinition {
 }
 
 const ROUTES: RouteDefinition[] = [
+  {
+    pattern: '/',
+    title: 'Start',
+    render: () => <StartPage />,
+  },
+  {
+    pattern: '/library',
+    title: 'Libraries and saved work',
+    render: () => <LibraryOverviewPage />,
+  },
+  {
+    pattern: '/discovery',
+    title: 'Discover reusable workflows',
+    render: () => <DiscoveryPage />,
+  },
   {
     pattern: '/help',
     title: 'Help and user guide',
@@ -132,10 +150,6 @@ interface Screen {
 }
 
 export function resolveScreen(pathname: string): Screen {
-  if (pathname === '/' || pathname === '') {
-    return { title: 'Chain library', element: <Redirect to="/chains" /> };
-  }
-
   for (const route of ROUTES) {
     const match = matchRoute(route.pattern, pathname);
     if (match !== null) {

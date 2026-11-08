@@ -18,6 +18,11 @@ export interface SharedLibrarySnapshot {
   truncated: boolean;
 }
 
+export interface SharedBundleUploadReview {
+  bundle: ChainBundle;
+  reviewFingerprint: string;
+}
+
 export type SharedBundleSource =
   | { type: 'draft'; draftId: string }
   | { type: 'project'; projectId: string; chainId: string };
@@ -56,6 +61,37 @@ function decodeEntry(value: unknown): SharedLibraryEntry {
     ...(typeof value.agent === 'string' ? { agent: value.agent } : {}),
     ...(typeof value.message === 'string' ? { message: value.message } : {}),
   };
+}
+
+function decodeUploadedBundle(value: unknown): ChainBundle {
+  if (
+    !isRecord(value) ||
+    value.format !== 'skill-loom-chain' ||
+    (value.version !== 1 && value.version !== 2) ||
+    !isRecord(value.chain) ||
+    typeof value.chain.name !== 'string' ||
+    (value.chain.harness !== 'opencode' && value.chain.harness !== 'copilot') ||
+    !['shared', 'fresh', 'fork'].includes(String(value.chain.sessionMode)) ||
+    !Array.isArray(value.chain.steps) ||
+    !Array.isArray(value.chain.inputs) ||
+    !Array.isArray(value.skills) ||
+    value.skills.some((skill) =>
+      !isRecord(skill) ||
+      typeof skill.name !== 'string' ||
+      typeof skill.directory !== 'string' ||
+      !Array.isArray(skill.files) ||
+      skill.files.some((file) =>
+        !isRecord(file) ||
+        typeof file.path !== 'string' ||
+        typeof file.content !== 'string' ||
+        typeof file.executable !== 'boolean',
+      ),
+    ) ||
+    (value.version === 2 && !Array.isArray(value.agents))
+  ) {
+    throw invalidResponse('uploaded chain bundle');
+  }
+  return value as unknown as ChainBundle;
 }
 
 function decodeStatus(value: string): SharedLibraryEntry['status'] | null {
@@ -107,6 +143,41 @@ export const sharedBundlesApi = {
       throw invalidResponse('shared bundle');
     }
     return value.bundle;
+  },
+
+  async previewUpload(bundle: unknown): Promise<SharedBundleUploadReview> {
+    const value = await requestJson<unknown>('/api/shared-bundles/preview-upload', {
+      method: 'POST',
+      body: { bundle },
+    });
+    if (
+      !isRecord(value) ||
+      typeof value.reviewFingerprint !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(value.reviewFingerprint)
+    ) {
+      throw invalidResponse('uploaded bundle review');
+    }
+    return {
+      bundle: decodeUploadedBundle(value.bundle),
+      reviewFingerprint: value.reviewFingerprint,
+    };
+  },
+
+  async publishUpload(input: {
+    bundle: ChainBundle;
+    displayName: string;
+    contentsReviewed: true;
+    redistributionReviewed: true;
+    reviewFingerprint: string;
+  }): Promise<SharedLibraryEntry> {
+    const value = await requestJson<unknown>('/api/shared-bundles/publish-upload', {
+      method: 'POST',
+      body: input,
+    });
+    if (!isRecord(value) || value.entry === undefined) {
+      throw invalidResponse('uploaded bundle publication');
+    }
+    return decodeEntry(value.entry);
   },
 
   async publish(input: {

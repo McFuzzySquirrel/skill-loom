@@ -24,6 +24,7 @@
 | [ADR-0018](0018-version-portable-bundles-for-native-agents.md) | Version portable bundles for native-agent assets | Accepted | 2026-11-13 |
 | [ADR-0019](0019-project-independent-chain-drafts.md) | Store project-independent chain drafts separately | Accepted | 2026-11-13 |
 | [ADR-0020](0020-local-shared-bundle-library.md) | Publish reviewed bundles to a configured local library | Accepted | 2026-11-13 |
+| [ADR-0021](0021-validated-project-independent-discovery-handoff.md) | Prepare validated discovery handoffs from pinned snapshots | Accepted | 2026-11-13 |
 
 ## Rules
 

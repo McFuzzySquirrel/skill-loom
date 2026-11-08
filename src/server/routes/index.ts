@@ -18,6 +18,7 @@ import { terminalRoutes, type TerminalRouteOptions } from './terminal.js';
 import { serverRoutes, type ServerRoutesOptions } from './server.js';
 import { testWorkspaceRoutes } from './test-workspaces.js';
 import { sharedBundleRoutes, type SharedBundleRoutesOptions } from './shared-bundles.js';
+import { discoveryRoutes } from './discovery.js';
 
 export type RouteRegistrationOptions = HealthRouteOptions &
   ServerRoutesOptions &
@@ -42,6 +43,7 @@ export const routes: FastifyPluginAsync<RouteRegistrationOptions> = async (app, 
   await app.register(fsRoutes, options);
   await app.register(projectRoutes, options);
   await app.register(catalogRoutes, options);
+  await app.register(discoveryRoutes, options);
   await app.register(chainRoutes, options);
   await app.register(chainBundleRoutes, options);
   await app.register(portableSkillRoutes);

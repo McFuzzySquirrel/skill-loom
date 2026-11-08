@@ -6,6 +6,9 @@ interface ShellRoute {
 }
 
 const shellRoutes: ShellRoute[] = [
+  { path: '/', heading: 'What would you like to do?' },
+  { path: '/library', heading: 'Libraries and saved work' },
+  { path: '/discovery', heading: 'Discover reusable workflows' },
   { path: '/projects', heading: 'Projects' },
   { path: '/chains', heading: 'Global chain library' },
   { path: '/help', heading: 'Help and user guide' },
@@ -176,11 +179,11 @@ function collectConsoleErrors(page: Page): string[] {
 }
 
 test.describe('Skill Loom shell', () => {
-  test('redirects the initial route to /chains', async ({ page }) => {
+  test('opens the Start page at the initial route', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page).toHaveURL(/\/chains$/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Global chain library' })).toBeVisible();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'What would you like to do?' })).toBeVisible();
   });
 
   for (const route of shellRoutes) {

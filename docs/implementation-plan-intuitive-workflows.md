@@ -1,6 +1,6 @@
 # Implementation plan: intuitive workflows and scenario discovery
 
-**Status:** Proposed; this document describes future work, not existing behavior.
+**Status:** Implemented. This document describes the delivered Start, discovery handoff, and project-independent shared-bundle workflows; see the user, administrator, and operations guides for current behavior.
 
 ## Outcome
 

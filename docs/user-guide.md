@@ -26,11 +26,17 @@ Skill Loom does not install or authenticate harnesses for you, and it does not s
 
 There is **no sign-in**. Skill Loom binds to loopback and has **no authentication** because it is not designed for remote access. Do not expose the port through a reverse proxy, tunnel, container port publish, or remote host.
 
-On first load you land on the **Chain library**, the home for reusable workflow templates. The responsive workspace shell provides:
+On first load you land on **Start**, which organizes the main journeys around your goal rather than storage type:
+
+- **Discover reusable workflows** selects candidate skills from retained remote snapshots and prepares a reviewed handoff for an existing compatible CLI session.
+- **Work in a repository** opens a project for skill inspection, chain design, and optional managed runs.
+- **Browse examples and saved work** opens an overview of examples, drafts, templates, and shared bundles.
+
+The responsive workspace shell provides:
 
 - A desktop navigation sidebar, or a compact **Menu** on smaller screens.
 - Breadcrumbs for the current project, chain, and run workflow.
-- **Projects**, **Scenario catalog**, and the reusable **Chain library**. A selected project adds separate **Project chains** and **Project skills** destinations.
+- Grouped **Workflows**, **Libraries**, and **Skills and support** navigation, with a selected project adding separate **Project chains** and **Project skills** destinations.
 - **Remote skill repositories** for registering Git sources and explicitly refreshing pinned snapshots.
 - **Drafts** for project-independent authoring and **Shared bundles** for reviewed bundles in a configured local directory.
 - A **Local-only** reminder and **Server connected · v0.1.0** health indicator. If the indicator changes to **Server connection error**, use **Retry**.
@@ -60,14 +66,24 @@ OpenCode also discovers legacy project packages under `.opencode/skills/`. Copil
 1. Open **Remote skill repositories** and enter an HTTPS or SSH Git URL. Do not include a username/password or token in the URL.
 2. Optionally enter a branch, tag, or commit, then register the source. Private repositories use the Git authentication already configured on this machine; Skill Loom does not collect credentials.
 3. Choose **Refresh pinned snapshot** to explicitly access the repository. Skill Loom resolves a commit and stores a local snapshot of discovered `SKILL.md` packages. Repository files are read as data; Loom does not check out the repository or run its scripts.
-4. Open **Project skills** for a project and inspect the remote group. A selected package can be copied into `<project>/.agents/skills/` through the existing no-overwrite copy action. Alternatively, start a project-independent draft and select pinned remote packages directly without installing them into a project.
+4. Open **Project skills** for a project and inspect the remote group. A selected package can be copied into `<project>/.agents/skills/` through the existing no-overwrite copy action. For agent-assisted scenario discovery without a project, use **Discover workflows**; for manual authoring, use **Drafts**.
 5. **Unregister** removes the source registration but keeps saved snapshots. This preserves already-discovered packages; it does not delete snapshot storage.
 
 Refresh requires Git and network access. Each refresh is bounded to 100 packages, 2,000 files, 20 MiB of skill-package content, 128 MiB of temporary Git staging data, 10,000 staging entries, and bounded Git command output/time. A limit, authentication, host-key, or network error is reported rather than shown as an empty catalog. Remote package contents are untrusted instructions; review them before copying or running a chain that uses them.
 
+### Discover candidate skills and prepare a handoff
+
+Open **Discover workflows** from Start. Enter an outcome and target harness, then select skills from the already refreshed remote snapshots. Search changes only visible rows; **Select all available skills** includes eligible packages hidden by search. Candidate selection is not a chain step, native agents are not included, and the selected count is independent of the current filter. Refreshing a repository is an explicit network action; no source is fetched automatically.
+
+Inspect candidate metadata and `SKILL.md` content, choose only packages relevant to the outcome, then prepare the handoff. The review displays the goal, exact source/revision/package identities, complete file inventories and contents, and an artifact fingerprint. The handoff has a separate `skill-loom-discovery-handoff` v1 format and `.loom-discovery.json` filename; it is not a chain bundle and cannot be imported or executed by Skill Loom. The limits are 100 candidate packages, 2,000 files, 20 MiB decoded content, and 30 MiB JSON. If the selection exceeds a limit, reduce it explicitly; Skill Loom does not truncate it.
+
+Review the contents and redistribution rights separately before downloading. Browser download location is controlled by your browser. The page provides a copyable prompt with a path placeholder; replace it with the actual downloaded file path in an existing OpenCode or Copilot CLI session using `scenario-discovery`. The helper validates the complete handoff offline, treats its goal and packages as untrusted data, and proposes scenarios without running package files or making network requests. You choose and revise a proposal, then explicitly approve the full chain and selected packages before it creates a normal v1 `.loom.json` bundle. Redistribution review and execution consent are separate decisions. The chain is never imported or run automatically.
+
+If your host does not already have the updated skill, download **scenario-discovery v1** from the discovery page. Install the `scenario-discovery/` directory into a host-discovered skill location, then refresh or restart the host. The helper requires Node.js 24+ and structured process arguments. Handoff-created v1 bundles do not include native-agent definitions; use Skill Loom's managed designer and run flow for chains requiring a selected agent.
+
 ### Start a project-independent draft from a goal
 
-Open **Drafts** and choose **Start from a goal**. Describe the outcome, choose OpenCode or Copilot CLI, and optionally enter HTTPS/SSH repository URLs with branch, tag, or commit refs. On submit, Skill Loom registers and explicitly refreshes each source into pinned snapshots, then creates a draft whose first standalone instruction records the requested outcome. Earlier sources remain registered if a later repository fails; the error is shown so you can correct or remove them from **Remote skill repositories**.
+Open **Drafts** and choose **Start from a goal**. This is a manual authoring path, not automatic discovery or scenario recommendation. Describe the outcome, choose OpenCode or Copilot CLI, and optionally enter HTTPS/SSH repository URLs with branch, tag, or commit refs. On submit, Skill Loom registers and explicitly refreshes each source into pinned snapshots, then creates a draft whose first standalone instruction records the requested outcome. Earlier sources remain registered if a later repository fails; the error is shown so you can correct or remove them from **Remote skill repositories**.
 
 The draft editor's catalog is limited to remote snapshots: review the listed skills and native agents, then select only the packages needed for the chain. This path does not install remote files into an existing project or automatically recommend a scenario; it provides the goal and safe catalog for you to build and review a chain. Keep credentials and private runtime values out of the goal. Add values that should be collected during a run as named inputs.
 
@@ -121,11 +137,13 @@ Each skill must resolve to an enabled, readable package for the chain's selected
 
 ### Import a shared chain
 
-1. Open the destination project and choose **Import bundle** in its **Chains** list.
-2. Select a `.loom.json` file. Preview validates the bundle without installing files. Review its harness, steps, inputs, package file lists, and `SKILL.md` text.
-3. If a skill name is already installed, explicitly choose **Reuse installed** to keep your version; its contents may differ from the bundle. Import never overwrites an existing skill package. If a destination directory exists without a matching catalog skill, cancel and resolve that directory conflict first.
-4. Confirm that you trust the instructions and packages, then choose **Import chain and skills**.
-5. Open the new chain, provide inputs, review automatic permissions, and run preflight before running it.
+1. To publish from a local file without a project, open **Shared bundles**, choose a `.loom.json` file under **Review and add bundle**, and inspect the strict preview, complete package file contents, and any native agent.
+2. Confirm content review and redistribution review separately. Publication stores an immutable copy in the configured shared directory; it does not install or run the bundle and does not establish redistribution rights.
+3. To import, open the destination project and choose **Import bundle** in its **Chains** list, or use **Import into project** from a shared-library entry.
+4. Select a `.loom.json` file. Preview validates the bundle without installing files. Review its harness, steps, inputs, package file lists, complete file contents, and any native agent.
+5. If a skill name is already installed, explicitly choose **Reuse installed** to keep your version; its contents may differ from the bundle. Import never overwrites an existing skill package. If a destination directory exists without a matching catalog skill, cancel and resolve that directory conflict first.
+6. Confirm that you trust the instructions and packages, then choose **Import chain and skills**.
+7. Open the new chain, provide inputs, review automatic permissions, and run preflight before running it.
 
 Import creates an independent chain with a fresh id and timestamps, resets automatic-permission consent to off, and installs new packages under `.agents/skills/` for both harnesses. It rechecks conflicts at import time and removes newly installed packages if saving the chain fails. Existing packages remain untouched. Import never executes bundled scripts, starts a run, authenticates a harness, or grants folder trust. Removing the imported chain later does not remove its installed skills.
 
@@ -133,7 +151,7 @@ The recipient still needs the selected harness and any external tools, services,
 
 ### Run an exported chain inside a harness
 
-The export dialog also offers **Download reusable runner skill**. This ZIP contains the generic `loom-run-bundle` Agent Skill, its references, a dependency-bundled helper, and license notices; it does not contain the exported chain. A recipient needs Node.js 24+ and a harness that can read project skills, invoke Node with arguments/stdin, and request confirmation. Skill Loom does not need to be installed or running during execution.
+The export dialog and shared bundle library offer **Download reusable runner skill**. The separate discovery page offers **Download scenario-discovery v1**. The runner ZIP contains the generic `loom-run-bundle` Agent Skill, its references, a dependency-bundled helper, and license notices; the discovery ZIP contains the scenario-discovery skill and standalone handoff helpers. Neither ZIP contains a user chain. A recipient needs Node.js 24+ and a host that can read project skills, invoke Node with arguments, and request confirmation. Skill Loom does not need to be installed or running during handoff review or portable chain inspection.
 
 Extract the ZIP and install its `loom-run-bundle/` directory into the target project's `.agents/skills/` directory, unless that skill already exists. Alternatively, in a Skill Loom checkout run `npm run build:portable-skill` and copy the generated `dist/skills/loom-run-bundle/` directory into that location. Do not merge over an existing runner package. Refresh or restart the host if it does not discover the new skill. The helper also needs to be invokable from the skill directory reported by the host; if the host cannot locate it or pass structured stdin, stop rather than guessing a global path.
 
@@ -145,16 +163,16 @@ Portable execution is not Skill Loom's terminal runner. The helper never launche
 
 ### Discover and package project workflows
 
-The `scenario-discovery` Agent Skill can turn skills available to a project into a reviewed chain bundle. Install the skill in a location your current host discovers (for example, `.agents/skills/scenario-discovery/` in the project), or use the copy provided by this Skill Loom checkout. The host may need a refresh or restart after installation. For project-independent authoring from a goal and remote repositories, use the **Drafts** workflow above instead.
+The project-local `scenario-discovery` mode can turn skills available to a project into a reviewed chain bundle. Install the skill in a location your current host discovers (for example, `.agents/skills/scenario-discovery/` in the project), or use the copy provided by this Skill Loom checkout. The host may need a refresh or restart after installation. For project-independent manual authoring, use **Drafts**. For agent-assisted discovery from pinned remote candidates, use the **Discover workflows** page and its validated handoff.
 
-In the project session, ask for a specific outcome, for example: **"Use scenario-discovery to propose a workflow for reviewing our API changes."** The skill first asks for the desired outcome and whether remote repositories should be considered. It cannot inspect Loom-managed remote snapshots directly: register and explicitly refresh requested HTTPS/SSH sources in Skill Loom, review the pinned snapshot, and copy selected skill packages into the current project before using the skill. The skill does not clone repositories itself. It then:
+In the project session, ask for a specific outcome, for example: **"Use scenario-discovery to propose a workflow for reviewing our API changes."** The project-local skill first asks for the desired outcome and whether remote repositories should be considered. It cannot inspect Loom-managed remote snapshots directly: register and explicitly refresh requested HTTPS/SSH sources in Skill Loom, review the pinned snapshot, and copy selected skill packages into the current project before using the project-local mode. The skill does not clone repositories itself. It then:
 
 1. Inventories enabled **project-local** skills and inspects their instructions as untrusted data; it does not run package scripts.
 2. Proposes supported scenarios, ordered prompt steps, and any named inputs. Review the skill evidence and choose a proposal.
 3. Shows the target harness, session mode, complete chain draft, and every selected package file. Review and explicitly confirm these before bundle creation.
 4. Writes a new version 1 `.loom.json` bundle. It does **not** include selected native-agent definitions, import, or run the bundle. Build and export chains requiring a selected native agent in Skill Loom. To use a generated bundle in Skill Loom, open a project, choose **Import bundle**, and follow the separate preview, trust, and package-conflict review.
 
-The builder helper requires Node.js 24+ and safe structured tool access to the manifest and output path. If your host cannot resolve the installed helper or pass arguments safely, stop rather than guessing a global path. `scenario-discovery` does not install itself, grant permissions, or guarantee that a harness will invoke any named skill.
+The project-local builder helper requires Node.js 24+ and safe structured tool access to the manifest and output path. The handoff reader validates all package content and fingerprints before displaying it, and the handoff builder delegates final bundle checks to the existing package-root-constrained builder. If your host cannot resolve the installed helper or pass arguments safely, stop rather than guessing a global path. `scenario-discovery` does not install itself, grant permissions, or guarantee that a harness will invoke any named skill.
 
 ### Session modes
 

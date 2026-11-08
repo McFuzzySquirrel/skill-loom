@@ -6,7 +6,12 @@ import {
   createApiErrorEnvelope,
   type ApiValidationIssue,
 } from '../../shared/api.js';
-import { BundleError, exportBundle } from '../chains/bundle.js';
+import {
+  BundleError,
+  MAX_BUNDLE_REQUEST_BYTES,
+  exportBundle,
+  parseBundle,
+} from '../chains/bundle.js';
 import { createGlobalDraftService } from '../chains/drafts.js';
 import { createChainService, type ChainService } from '../chains/service.js';
 import { createCatalogService, type CatalogService } from '../catalog/merge.js';
@@ -36,6 +41,14 @@ const publishSchema = z.strictObject({
       draftId: z.string().min(1).max(64),
     }),
   ]),
+  displayName: z.string().trim().min(1).max(100),
+  contentsReviewed: z.literal(true),
+  redistributionReviewed: z.literal(true),
+  reviewFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+});
+const uploadedPreviewSchema = z.strictObject({ bundle: z.unknown() });
+const uploadedPublishSchema = z.strictObject({
+  bundle: z.unknown(),
   displayName: z.string().trim().min(1).max(100),
   contentsReviewed: z.literal(true),
   redistributionReviewed: z.literal(true),
@@ -97,6 +110,57 @@ export const sharedBundleRoutes: FastifyPluginAsync<SharedBundleRoutesOptions> =
     async (request, reply) => {
       try {
         return reply.code(200).send({ bundle: await library.read(request.params.bundleId) });
+      } catch (error) {
+        return sendSharedFailure(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/shared-bundles/preview-upload',
+    { bodyLimit: MAX_BUNDLE_REQUEST_BYTES },
+    async (request, reply) => {
+      const parsed = uploadedPreviewSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return sendValidationFailure(reply, 'A chain bundle is required for review.', parsed.error.issues);
+      }
+      try {
+        const bundle = parseBundle(parsed.data.bundle);
+        const reviewFingerprint = createHash('sha256')
+          .update(JSON.stringify(bundle), 'utf8')
+          .digest('hex');
+        return reply.code(200).send({ bundle, reviewFingerprint });
+      } catch (error) {
+        return sendSharedFailure(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/shared-bundles/publish-upload',
+    { bodyLimit: MAX_BUNDLE_REQUEST_BYTES },
+    async (request, reply) => {
+      const parsed = uploadedPublishSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return sendValidationFailure(
+          reply,
+          'Publishing requires review of bundle contents and redistribution rights.',
+          parsed.error.issues,
+        );
+      }
+      try {
+        const bundle = parseBundle(parsed.data.bundle);
+        const reviewFingerprint = createHash('sha256')
+          .update(JSON.stringify(bundle), 'utf8')
+          .digest('hex');
+        if (reviewFingerprint !== parsed.data.reviewFingerprint) {
+          throw new SharedLibraryError(
+            SHARED_LIBRARY_ERROR_CODES.REVIEW_STALE,
+            'The reviewed bundle changed before publication. Review the current contents again.',
+          );
+        }
+        const entry = await library.publish(bundle, parsed.data.displayName);
+        return reply.code(201).send({ entry });
       } catch (error) {
         return sendSharedFailure(reply, error);
       }

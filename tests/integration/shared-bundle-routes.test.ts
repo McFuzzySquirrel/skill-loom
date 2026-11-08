@@ -18,6 +18,79 @@ afterEach(async () => {
 });
 
 describe('shared bundle routes', () => {
+  it('reviews a locally supplied bundle and publishes only the fingerprinted reviewed content', async () => {
+    root = await mkdtemp(join(tmpdir(), 'loom-shared-upload-'));
+    const sharedDirectory = join(root, 'shared');
+    await mkdir(sharedDirectory);
+    const configStore = createConfigStore({
+      env: { LOOM_CONFIG_DIR: join(root, 'config') },
+      homeDirectory: () => join(root, 'home'),
+    });
+    const app = Fastify({ logger: false });
+    await app.register(sharedBundleRoutes, { configStore });
+    await app.inject({
+      method: 'PUT',
+      url: '/api/shared-bundles/config',
+      payload: { directory: sharedDirectory },
+    });
+    const bundle = {
+      format: 'skill-loom-chain',
+      version: 1,
+      chain: {
+        name: 'Local reviewed bundle',
+        harness: 'opencode',
+        sessionMode: 'shared',
+        steps: [{ id: 'step-1', kind: 'instruction', instruction: 'Review the supplied scope.' }],
+        inputs: [],
+      },
+      skills: [],
+    };
+    const preview = await app.inject({
+      method: 'POST',
+      url: '/api/shared-bundles/preview-upload',
+      payload: { bundle },
+    });
+    expect(preview.statusCode).toBe(200);
+    const review = preview.json<{ bundle: typeof bundle; reviewFingerprint: string }>();
+    expect(review.bundle).toEqual(bundle);
+
+    const stale = await app.inject({
+      method: 'POST',
+      url: '/api/shared-bundles/publish-upload',
+      payload: {
+        bundle: { ...bundle, chain: { ...bundle.chain, name: 'Changed after review' } },
+        displayName: 'Local reviewed bundle',
+        contentsReviewed: true,
+        redistributionReviewed: true,
+        reviewFingerprint: review.reviewFingerprint,
+      },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toMatchObject({ error: { code: SHARED_LIBRARY_ERROR_CODES.REVIEW_STALE } });
+
+    const published = await app.inject({
+      method: 'POST',
+      url: '/api/shared-bundles/publish-upload',
+      payload: {
+        ...review,
+        displayName: 'Local reviewed bundle',
+        contentsReviewed: true,
+        redistributionReviewed: true,
+      },
+    });
+    expect(published.statusCode).toBe(201);
+    const entry = published.json<{ entry: { id: string; name: string } }>().entry;
+    expect(entry.name).toBe('Local reviewed bundle');
+    const stored = await app.inject({
+      method: 'GET',
+      url: `/api/shared-bundles/${encodeURIComponent(entry.id)}`,
+    });
+    expect(stored.json()).toMatchObject({
+      bundle: { chain: { name: 'Local reviewed bundle' } },
+    });
+    await app.close();
+  });
+
   it('publishes only a reviewed source bundle and makes it browseable', async () => {
     root = await mkdtemp(join(tmpdir(), 'loom-shared-routes-'));
     const configDirectory = join(root, 'config');

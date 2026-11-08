@@ -91,6 +91,15 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
   }, [info, pathname]);
 
   const pageTrail: Array<{ label: string; to?: string }> = (() => {
+    if (pathname === '/') {
+      return [{ label: 'Start' }];
+    }
+    if (pathname === '/library') {
+      return [{ label: 'Libraries and saved work' }];
+    }
+    if (pathname === '/discovery') {
+      return [{ label: 'Discover workflows' }];
+    }
     if (pathname === '/projects') {
       return [{ label: 'Projects' }];
     }
@@ -298,19 +307,46 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
           id="workspace-navigation"
         >
           <div className="workspace-brand">
-            <Link to="/chains" className="wordmark" onClick={() => setMobileNavOpen(false)}>
+            <Link to="/" className="wordmark" onClick={() => setMobileNavOpen(false)}>
               Skill Loom
             </Link>
           </div>
           <nav className="app-nav" aria-label="Primary">
             <Link
-              to="/chains"
+              to="/"
               aria-current={
-                pathname === '/chains' ? 'page' : undefined
+                pathname === '/' ? 'page' : undefined
               }
               onClick={() => setMobileNavOpen(false)}
             >
-              Chain library
+              Start
+            </Link>
+            <h2 className="app-nav__heading">Workflows</h2>
+            <Link
+              to="/discovery"
+              aria-current={pathname === '/discovery' ? 'page' : undefined}
+              onClick={() => setMobileNavOpen(false)}
+            >
+              Discover workflows
+            </Link>
+            <Link
+              to="/projects"
+              aria-current={
+                pathname === '/projects' || pathname.startsWith('/projects/')
+                  ? 'page'
+                  : undefined
+              }
+              onClick={() => setMobileNavOpen(false)}
+            >
+              Projects
+            </Link>
+            <h2 className="app-nav__heading">Libraries</h2>
+            <Link
+              to="/library"
+              aria-current={pathname === '/library' ? 'page' : undefined}
+              onClick={() => setMobileNavOpen(false)}
+            >
+              Library overview
             </Link>
             <Link
               to="/drafts"
@@ -326,17 +362,7 @@ export function AppLayout({ children, projectName }: AppLayoutProps) {
             >
               Shared bundles
             </Link>
-            <Link
-              to="/projects"
-              aria-current={
-                pathname === '/projects' || pathname.startsWith('/projects/')
-                  ? 'page'
-                  : undefined
-              }
-              onClick={() => setMobileNavOpen(false)}
-            >
-              Projects
-            </Link>
+            <h2 className="app-nav__heading">Skills and support</h2>
             <Link
               to="/scenarios"
               aria-current={pathname === '/scenarios' ? 'page' : undefined}

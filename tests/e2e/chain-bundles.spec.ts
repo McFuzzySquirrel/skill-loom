@@ -66,9 +66,9 @@ test('shares mixed chains through a reviewed download and import with explicit c
   const importDialog = page.getByRole('dialog', { name: 'Import chain bundle' });
   await importDialog.getByLabel('Chain bundle (.loom.json)').setInputFiles(bundlePath);
   await expect(importDialog.getByText('Shared mixed chain', { exact: true })).toBeVisible();
-  await expect(importDialog.getByRole('button', { name: 'Import chain and skills' })).toBeDisabled();
+  await expect(importDialog.getByRole('button', { name: 'Import chain, skills, and agents' })).toBeDisabled();
   await importDialog.getByRole('checkbox', { name: 'I reviewed and trust these instructions and packages.' }).check();
-  await importDialog.getByRole('button', { name: 'Import chain and skills' }).click();
+  await importDialog.getByRole('button', { name: 'Import chain, skills, and agents' }).click();
   await expect(importDialog).not.toBeVisible();
   const cards = page.getByTestId('chain-card');
   await expect(cards).toHaveCount(1);
@@ -84,9 +84,9 @@ test('shares mixed chains through a reviewed download and import with explicit c
   const reuse = importDialog.getByRole('checkbox', { name: /Reuse installed "sharing-probe"/ });
   await expect(reuse).toBeVisible();
   await importDialog.getByRole('checkbox', { name: 'I reviewed and trust these instructions and packages.' }).check();
-  await expect(importDialog.getByRole('button', { name: 'Import chain and skills' })).toBeDisabled();
+  await expect(importDialog.getByRole('button', { name: 'Import chain, skills, and agents' })).toBeDisabled();
   await reuse.check();
-  await importDialog.getByRole('button', { name: 'Import chain and skills' }).click();
+  await importDialog.getByRole('button', { name: 'Import chain, skills, and agents' }).click();
   await expect(importDialog).not.toBeVisible();
   await expect(cards).toHaveCount(2);
 });
