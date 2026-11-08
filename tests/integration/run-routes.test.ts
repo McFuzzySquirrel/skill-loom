@@ -33,6 +33,7 @@ import type {
 } from '../../src/server/runs/orchestrator.js';
 import type { Run } from '../../src/server/runs/model.js';
 import { createRunStore } from '../../src/server/runs/store.js';
+import { createProjectRegistry } from '../../src/server/projects/registry.js';
 import type {
   CreateTerminalSessionOptions,
   TerminalExit,
@@ -659,6 +660,37 @@ describe('POST /api/projects/:projectId/runs', () => {
     expect(response.json()).toMatchObject({
       error: { code: 'DISCOVERY_SUPERVISED_ONLY' },
     });
+  });
+
+  it('refuses to mark a discovery step Done until its exact result is reviewed', async () => {
+    const { app, configStore } = await buildTestApp();
+    const workspaceId = 'a0f4cbaa-f755-4be6-95bf-d6a2019ff7d5';
+    const workspacePath = join(configDirectory, 'discovery-workspaces', workspaceId);
+    await mkdir(workspacePath, { recursive: true });
+    const managedProject = await createProjectRegistry({ configStore })
+      .registerManagedWorkspace(workspacePath);
+    const chain = await createChain(app, managedProject.id);
+    await configStore.update({
+      discoveryWorkspaces: [{
+        id: workspaceId,
+        projectId: managedProject.id,
+        chainId: chain.id,
+        harness: 'opencode',
+        createdAt: CREATED_AT,
+        handoffFingerprint: 'a'.repeat(64),
+        autoImport: false,
+      }],
+    });
+
+    const run = await createRun(app, managedProject.id, chain, { mode: 'supervised' });
+    const done = await postAction(app, run.id, { action: 'done' });
+    expect(done.statusCode).toBe(422);
+    expect(envelope(done.body)).toMatchObject({
+      error: { code: 'DISCOVERY_RESULT_REVIEW_REQUIRED' },
+    });
+    const current = await getRunRecord(app, run.id);
+    expect(current.statusCode).toBe(200);
+    expect((current.body as { run: Run }).run.steps[0]?.status).toBe('running');
   });
 
   it('re-runs preflight, snapshots the chain, and starts a supervised run', async () => {

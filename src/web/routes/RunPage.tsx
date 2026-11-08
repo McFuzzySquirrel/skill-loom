@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiClientError } from '../api/client';
 import {
-  discoveryWorkspaceApi,
-  type DiscoveryWorkspace,
-} from '../api/discovery';
-import {
   runTerminalPath,
   type Run,
   type RunActionName,
@@ -12,15 +8,16 @@ import {
   type RunView,
 } from '../api/runs';
 import { InlineError } from '../components/InlineError';
+import { DiscoveryRunReviewPanel } from '../components/DiscoveryRunReviewPanel';
 import { HelpPopover } from '../components/HelpPopover';
 import { RunControls } from '../components/RunControls';
 import { StatusText, StepRail, stepDisplayName } from '../components/StepRail';
 import { TerminalPane } from '../components/TerminalPane';
 import { useRunStream } from '../hooks/useRunStream';
+import { useDiscoveryRunReview } from '../hooks/useDiscoveryRunReview';
 import { CHAIN_HARNESS_LABELS, CHAIN_SESSION_MODE_LABELS } from '../hooks/useChains';
 import { Link, useRouter } from '../router';
 import { useWorkspace } from '../WorkspaceContext';
-import { toApiClientError } from '../api/projects';
 
 /**
  * Terminal-dominant run view (RUN-FR-12).
@@ -171,31 +168,10 @@ export function RunPage({ runId }: RunPageProps) {
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const lastCurrentIndexRef = useRef<number | null>(null);
   const [clock, setClock] = useState(() => Date.now());
-  const [discoveryWorkspace, setDiscoveryWorkspace] = useState<DiscoveryWorkspace | null>(null);
-  const [discoveryResult, setDiscoveryResult] = useState<{ bundle: unknown; fingerprint: string } | null>(null);
-  const [discoveryResultError, setDiscoveryResultError] = useState<ApiClientError | null>(null);
-  const [resultContentsReviewed, setResultContentsReviewed] = useState(false);
-  const [resultRedistributionReviewed, setResultRedistributionReviewed] = useState(false);
-  const [resultBusy, setResultBusy] = useState(false);
 
   const view = stream.view;
   const run = view?.run ?? null;
-
-  useEffect(() => {
-    if (run === null) return;
-    let active = true;
-    void discoveryWorkspaceApi.list().then((workspaces) => {
-      if (!active) return;
-      setDiscoveryWorkspace(workspaces.find((candidate) =>
-        candidate.projectId === run.projectId && candidate.chainId === run.chainId,
-      ) ?? null);
-    }).catch(() => {
-      if (active) setDiscoveryWorkspace(null);
-    });
-    return () => {
-      active = false;
-    };
-  }, [run?.projectId, run?.chainId, run?.status]);
+  const discoveryReview = useDiscoveryRunReview(run);
 
   useEffect(() => {
     if (run !== null) {
@@ -245,78 +221,15 @@ export function RunPage({ runId }: RunPageProps) {
 
   const handleAction = useCallback(
     async (action: RunActionName, reason?: string) => {
-      if (action === 'done' && discoveryWorkspace !== null) {
-        if (
-          discoveryResult === null ||
-          !resultContentsReviewed ||
-          !resultRedistributionReviewed
-        ) {
-          setDiscoveryResultError(new ApiClientError(
-            'Load and review the complete result and redistribution rights before marking discovery Done.',
-            { code: 'DISCOVERY_RESULT_REVIEW_REQUIRED', status: 0 },
-          ));
-          return;
-        }
-        setResultBusy(true);
-        try {
-          await discoveryWorkspaceApi.reviewResult(
-            discoveryWorkspace.id,
-            discoveryResult.fingerprint,
-          );
-        } catch (error) {
-          setDiscoveryResultError(toApiClientError(error, 'The discovery result could not be reviewed.'));
-          setResultBusy(false);
-          return;
-        }
-      }
+      if (action === 'done' && !(await discoveryReview.reviewBeforeDone())) return;
       const result = await stream.applyAction(action, reason);
-      setResultBusy(false);
-      if (result?.run.status === 'completed' && discoveryWorkspace !== null) {
-        if (result.discoveryImportError !== undefined) {
-          setDiscoveryResultError(new ApiClientError(
-            result.discoveryImportError.message,
-            { code: result.discoveryImportError.code, status: 0 },
-          ));
-        }
-        const workspaces = await discoveryWorkspaceApi.list().catch(() => []);
-        setDiscoveryWorkspace(workspaces.find((candidate) => candidate.id === discoveryWorkspace.id) ?? discoveryWorkspace);
-      }
+      if (result !== null) await discoveryReview.handleActionResult(result);
       if (result?.restartedFrom !== null && result?.restartedFrom !== undefined) {
         navigate(`/runs/${encodeURIComponent(result.run.id)}`, { replace: true });
       }
     },
-    [discoveryResult, discoveryWorkspace, navigate, resultContentsReviewed, resultRedistributionReviewed, stream],
+    [discoveryReview, navigate, stream],
   );
-
-  const loadDiscoveryResult = async () => {
-    if (discoveryWorkspace === null) return;
-    setResultBusy(true);
-    setDiscoveryResultError(null);
-    try {
-      setDiscoveryResult(await discoveryWorkspaceApi.previewResult(discoveryWorkspace.id));
-      setResultContentsReviewed(false);
-      setResultRedistributionReviewed(false);
-    } catch (error) {
-      setDiscoveryResultError(toApiClientError(error, 'The discovery result could not be loaded for review.'));
-    } finally {
-      setResultBusy(false);
-    }
-  };
-
-  const importDiscoveryResult = async () => {
-    if (discoveryWorkspace === null) return;
-    setResultBusy(true);
-    setDiscoveryResultError(null);
-    try {
-      await discoveryWorkspaceApi.importResult(discoveryWorkspace.id);
-      const workspaces = await discoveryWorkspaceApi.list();
-      setDiscoveryWorkspace(workspaces.find((candidate) => candidate.id === discoveryWorkspace.id) ?? discoveryWorkspace);
-    } catch (error) {
-      setDiscoveryResultError(toApiClientError(error, 'The approved result could not be imported.'));
-    } finally {
-      setResultBusy(false);
-    }
-  };
 
   const handleExitTerminal = useCallback(() => {
     controlsRef.current?.focus();
@@ -467,90 +380,18 @@ export function RunPage({ runId }: RunPageProps) {
 
       <RunFailurePanel run={run} />
 
-      {discoveryWorkspace !== null ? (
-        <section className="panel" aria-labelledby="discovery-result-review-title">
-          <h2 className="section-title" id="discovery-result-review-title">
-            Review scenario-discovery result
-          </h2>
-          <p>
-            The harness output is untrusted. Load the fixed result file for complete validation,
-            review the generated chain and package contents, and approve redistribution separately.
-            Marking the discovery step Done binds approval to this exact result fingerprint.
-          </p>
-          <p>Workspace handoff fingerprint: <code>{discoveryWorkspace.handoffFingerprint}</code></p>
-          <button
-            type="button"
-            className="button button--secondary"
-            onClick={() => void loadDiscoveryResult()}
-            disabled={resultBusy}
-          >
-            {resultBusy ? 'Loading result…' : 'Load result for review'}
-          </button>
-          {discoveryResultError !== null ? (
-            <InlineError
-              title="Discovery result action failed"
-              message={discoveryResultError.message}
-              code={discoveryResultError.code}
-              httpStatus={discoveryResultError.status}
-              onRetry={() => void loadDiscoveryResult()}
-            />
-          ) : null}
-          {discoveryResult !== null ? (
-            <>
-              <p>Result fingerprint: <code>{discoveryResult.fingerprint}</code></p>
-              <details open>
-                <summary>Review complete chain, package inventory, and contents</summary>
-                <pre>{JSON.stringify(discoveryResult.bundle, null, 2)}</pre>
-              </details>
-              <label className="checkbox-field">
-                <input
-                  type="checkbox"
-                  checked={resultContentsReviewed}
-                  onChange={(event) => setResultContentsReviewed(event.target.checked)}
-                />
-                <span>I reviewed the complete generated chain and package contents.</span>
-              </label>
-              <label className="checkbox-field">
-                <input
-                  type="checkbox"
-                  checked={resultRedistributionReviewed}
-                  onChange={(event) => setResultRedistributionReviewed(event.target.checked)}
-                />
-                <span>I separately reviewed whether sharing these package contents is permitted.</span>
-              </label>
-            </>
-          ) : null}
-          {discoveryWorkspace.importedDraftId ? (
-            <p className="state-note">
-              Imported as a new project-independent draft:{' '}
-              <Link to={`/drafts/${encodeURIComponent(discoveryWorkspace.importedDraftId)}`}>
-                Open Chain draft
-              </Link>
-            </p>
-          ) : run.status === 'completed' && discoveryWorkspace.resultFingerprint !== undefined ? (
-            <button type="button" className="button" onClick={() => void importDiscoveryResult()} disabled={resultBusy}>
-              {resultBusy ? 'Creating draft…' : 'Create new Chain draft from reviewed result'}
-            </button>
-          ) : null}
-        </section>
-      ) : null}
+      <DiscoveryRunReviewPanel review={discoveryReview} runStatus={run.status} />
 
       <RunControls
         mode={run.mode}
         status={run.status}
-        actions={discoveryWorkspace === null
-          ? view.actions
-          : {
-              ...view.actions,
-              done: view.actions.done &&
-                discoveryResult !== null &&
-                resultContentsReviewed &&
-                resultRedistributionReviewed &&
-                !resultBusy,
-            }}
+        actions={{
+          ...view.actions,
+          done: view.actions.done && discoveryReview.canMarkDone,
+        }}
         recovery={view.recovery}
         currentStepStatus={run.steps[run.currentStepIndex]?.status ?? null}
-        busyAction={stream.busyAction}
+        busyAction={discoveryReview.busy ? 'done' : stream.busyAction}
         onAction={(action, reason) => void handleAction(action, reason)}
         controlBarRef={controlsRef}
       />

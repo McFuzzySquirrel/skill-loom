@@ -322,6 +322,276 @@ function terminalScreen(page: Page) {
 }
 
 test.describe('Terminal-dominant run view', () => {
+  test('shows and gates managed discovery review before terminal controls', async ({ page, request }) => {
+    const { project } = await openFixtureProject(request, 'discovery-review');
+    const chain = await createChain(request, project.id, `Discovery review ${runSuffix}`, [
+      {
+        id: 'scenario-discovery',
+        skillName: 'deploy-helper',
+        instruction: 'Review the discovery result.',
+      },
+    ]);
+    const run = await createRun(request, project.id, chain.id, 'supervised');
+    await page.route('**/api/discovery/workspaces', async (route) => {
+      await route.fulfill({
+        json: {
+          workspaces: [{
+            id: 'a0f4cbaa-f755-4be6-95bf-d6a2019ff7d5',
+            projectId: project.id,
+            chainId: chain.id,
+            harness: 'opencode',
+            createdAt: new Date().toISOString(),
+            handoffFingerprint: 'a'.repeat(64),
+            autoImport: false,
+            path: project.canonicalPath,
+            runId: run.id,
+          }],
+        },
+      });
+    });
+
+    await page.goto(`/runs/${encodeURIComponent(run.id)}/terminal`);
+
+    const reviewHeading = page.getByRole('heading', {
+      level: 2,
+      name: 'Review scenario-discovery result',
+    });
+    const done = page.getByTestId('run-outcome-done');
+    await expect(reviewHeading).toBeVisible();
+    await expect(page.locator('[data-testid="discovery-result-review"], [data-testid="run-controls"]')
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-testid')))
+    ).resolves.toEqual(['discovery-result-review', 'run-controls']);
+    await expect(done).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Load result for review' })).toBeVisible();
+  });
+
+  test('shows the same guarded review in run details', async ({ page, request }) => {
+    const { project } = await openFixtureProject(request, 'discovery-review-details');
+    const chain = await createChain(request, project.id, `Discovery details ${runSuffix}`, [
+      {
+        id: 'scenario-discovery',
+        skillName: 'deploy-helper',
+        instruction: 'Review the discovery result.',
+      },
+    ]);
+    const run = await createRun(request, project.id, chain.id, 'supervised');
+    await page.route('**/api/discovery/workspaces', async (route) => {
+      await route.fulfill({
+        json: {
+          workspaces: [{
+            id: 'a0f4cbaa-f755-4be6-95bf-d6a2019ff7d5',
+            projectId: project.id,
+            chainId: chain.id,
+            harness: 'opencode',
+            createdAt: new Date().toISOString(),
+            handoffFingerprint: 'a'.repeat(64),
+            autoImport: false,
+            path: project.canonicalPath,
+            runId: run.id,
+          }],
+        },
+      });
+    });
+
+    await page.goto(`/runs/${encodeURIComponent(run.id)}`);
+    await expect(page.getByRole('heading', { name: 'Review scenario-discovery result' })).toBeVisible();
+    await expect(page.getByTestId('run-outcome-done')).toBeDisabled();
+  });
+
+  test('reviews the exact result before Done and imports the completed result as a draft', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(60_000);
+    const { project } = await openFixtureProject(request, 'discovery-review-flow');
+    const chain = await createChain(request, project.id, `Discovery review flow ${runSuffix}`, [
+      {
+        id: 'scenario-discovery',
+        skillName: 'deploy-helper',
+        instruction: 'Review the discovery result.',
+      },
+    ]);
+    const run = await createRun(request, project.id, chain.id, 'supervised');
+    const workspace: Record<string, unknown> = {
+      id: 'a0f4cbaa-f755-4be6-95bf-d6a2019ff7d5',
+      projectId: project.id,
+      chainId: chain.id,
+      harness: 'opencode',
+      createdAt: new Date().toISOString(),
+      handoffFingerprint: 'a'.repeat(64),
+      autoImport: true,
+      path: project.canonicalPath,
+      runId: run.id,
+    };
+    const resultBundle = {
+      format: 'skill-loom-chain',
+      version: 1,
+      chain: {
+        name: 'Reviewed discovery result',
+        harness: 'opencode',
+        sessionMode: 'shared',
+        steps: [{ id: 'approved-step', skillName: 'deploy-helper', instruction: 'Review safely.' }],
+        inputs: [],
+      },
+      skills: [{
+        name: 'deploy-helper',
+        directory: 'deploy-helper',
+        files: [{ path: 'SKILL.md', content: 'Reviewed fixture content.', executable: false }],
+      }],
+    };
+    let actionFingerprint: string | null = null;
+    await page.route('**/api/discovery/workspaces', async (route) => {
+      await route.fulfill({ json: { workspaces: [workspace] } });
+    });
+    await page.route('**/api/discovery/workspaces/*/result', async (route) => {
+      await route.fulfill({ json: { bundle: resultBundle, fingerprint: 'd'.repeat(64) } });
+    });
+    await page.route('**/api/discovery/workspaces/*/result-review', async (route) => {
+      const body = route.request().postDataJSON() as {
+        fingerprint: string;
+        contentsReviewed: boolean;
+        redistributionReviewed: boolean;
+      };
+      expect(body).toEqual({
+        fingerprint: 'd'.repeat(64),
+        contentsReviewed: true,
+        redistributionReviewed: true,
+      });
+      actionFingerprint = body.fingerprint;
+      workspace.resultFingerprint = body.fingerprint;
+      await route.fulfill({ json: { fingerprint: body.fingerprint, reviewed: true } });
+    });
+    await page.route('**/api/discovery/workspaces/*/import', async (route) => {
+      workspace.importedDraftId = 'draft-reviewed-result';
+      await route.fulfill({ json: { draftId: 'draft-reviewed-result', imported: true } });
+    });
+
+    await page.goto(`/runs/${encodeURIComponent(run.id)}/terminal`);
+    const done = page.getByTestId('run-outcome-done');
+    await expect(done).toBeDisabled();
+    await page.getByRole('button', { name: 'Load result for review' }).click();
+    await expect(page.getByText('Reviewed fixture content.')).toBeVisible();
+    await page.getByLabel('I reviewed the complete generated chain and package contents.').check();
+    await page.getByLabel('I separately reviewed whether sharing these package contents is permitted.').check();
+    await expect(done).toBeEnabled();
+    await done.click();
+    await expect.poll(() => actionFingerprint).toBe('d'.repeat(64));
+    await expect(page.getByTestId('run-control-next')).toBeEnabled();
+    await page.getByTestId('run-control-next').click();
+    await expect(page.getByTestId('terminal-run-status')).toHaveAttribute('data-status', 'completed');
+    const importButton = page.getByRole('button', { name: 'Create new Chain draft from reviewed result' });
+    await expect(importButton).toBeVisible();
+    await importButton.click();
+    await expect(page.getByRole('link', { name: 'Open Chain draft' })).toHaveAttribute(
+      'href',
+      '/drafts/draft-reviewed-result',
+    );
+  });
+
+  test('keeps Done disabled and offers retry when discovery ownership cannot be checked', async ({
+    page,
+    request,
+  }) => {
+    const { project } = await openFixtureProject(request, 'discovery-review-lookup');
+    const chain = await createChain(request, project.id, `Discovery lookup ${runSuffix}`, [
+      {
+        id: 'scenario-discovery',
+        skillName: 'deploy-helper',
+        instruction: 'Review the discovery result.',
+      },
+    ]);
+    const run = await createRun(request, project.id, chain.id, 'supervised');
+    let lookupCount = 0;
+    await page.route('**/api/discovery/workspaces', async (route) => {
+      lookupCount += 1;
+      if (lookupCount === 1) {
+        await route.fulfill({
+          status: 503,
+          json: { error: { code: 'TEMPORARY', message: 'Workspace lookup failed.' } },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          workspaces: [{
+            id: 'a0f4cbaa-f755-4be6-95bf-d6a2019ff7d5',
+            projectId: project.id,
+            chainId: chain.id,
+            harness: 'opencode',
+            createdAt: new Date().toISOString(),
+            handoffFingerprint: 'a'.repeat(64),
+            autoImport: false,
+            path: project.canonicalPath,
+            runId: run.id,
+          }],
+        },
+      });
+    });
+
+    await page.goto(`/runs/${encodeURIComponent(run.id)}/terminal`);
+    const done = page.getByTestId('run-outcome-done');
+    await expect(page.getByText('Workspace lookup failed.')).toBeVisible();
+    await expect(done).toBeDisabled();
+    await page.locator('.panel')
+      .filter({ has: page.getByRole('heading', { name: 'Discovery review status unavailable' }) })
+      .getByRole('button', { name: 'Retry' })
+      .click();
+    await expect(page.getByRole('heading', { name: 'Review scenario-discovery result' })).toBeVisible();
+    await expect(done).toBeDisabled();
+  });
+
+  test('clears loaded result approval when the fingerprint becomes stale', async ({ page, request }) => {
+    const { project } = await openFixtureProject(request, 'discovery-review-stale');
+    const chain = await createChain(request, project.id, `Discovery stale ${runSuffix}`, [
+      {
+        id: 'scenario-discovery',
+        skillName: 'deploy-helper',
+        instruction: 'Review the discovery result.',
+      },
+    ]);
+    const run = await createRun(request, project.id, chain.id, 'supervised');
+    await page.route('**/api/discovery/workspaces', async (route) => {
+      await route.fulfill({
+        json: {
+          workspaces: [{
+            id: 'a0f4cbaa-f755-4be6-95bf-d6a2019ff7d5',
+            projectId: project.id,
+            chainId: chain.id,
+            harness: 'opencode',
+            createdAt: new Date().toISOString(),
+            handoffFingerprint: 'a'.repeat(64),
+            autoImport: false,
+            path: project.canonicalPath,
+            runId: run.id,
+          }],
+        },
+      });
+    });
+    await page.route('**/api/discovery/workspaces/*/result', async (route) => {
+      await route.fulfill({ json: { bundle: { chain: { name: 'Stale fixture' } }, fingerprint: 'd'.repeat(64) } });
+    });
+    await page.route('**/api/discovery/workspaces/*/result-review', async (route) => {
+      await route.fulfill({
+        status: 409,
+        json: { error: { code: 'DISCOVERY_RESULT_REVIEW_STALE', message: 'The result changed after review.' } },
+      });
+    });
+
+    await page.goto(`/runs/${encodeURIComponent(run.id)}/terminal`);
+    await page.getByRole('button', { name: 'Load result for review' }).click();
+    await page.getByLabel('I reviewed the complete generated chain and package contents.').check();
+    await page.getByLabel('I separately reviewed whether sharing these package contents is permitted.').check();
+    const done = page.getByTestId('run-outcome-done');
+    await expect(done).toBeEnabled();
+    await done.click();
+    await expect(page.getByText('The result changed after review.')).toBeVisible();
+    await expect(done).toBeDisabled();
+    await expect(page.getByTestId('terminal-run-status')).toHaveAttribute('data-status', 'awaiting-user');
+    const runResponse = await request.get(`/api/runs/${encodeURIComponent(run.id)}`);
+    expect(runResponse.ok()).toBe(true);
+    expect((await runResponse.json()).run.steps[0].status).toBe('running');
+  });
+
   test('shows the supervised terminal, waits for Done, advances, and leaves the terminal with Escape', async ({
     page,
     request,
