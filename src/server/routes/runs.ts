@@ -399,6 +399,9 @@ export const runRoutes: FastifyPluginAsync<RunRoutesOptions> = async (
       try {
         const startRun = async () => {
           const orchestrator = await getOrchestrator();
+          if (discoveryWorkspace !== undefined) {
+            await discoveryWorkspaces.prepareForRun(discoveryWorkspace.id);
+          }
           const run = await orchestrator.createRun(createRequest);
           if (discoveryWorkspace !== undefined) {
             try {

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, readdir, realpath, rm } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, realpath, rm, unlink } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
@@ -73,6 +73,7 @@ export interface DiscoveryWorkspaceService {
     autoImport: boolean;
   }): Promise<{ workspace: DiscoveryWorkspace; handoff: DiscoveryHandoff }>;
   list(): Promise<DiscoveryWorkspace[]>;
+  prepareForRun(id: string): Promise<void>;
   previewResult(id: string): Promise<{ bundle: ChainBundle; fingerprint: string }>;
   reviewResult(
     id: string,
@@ -99,6 +100,7 @@ export function createDiscoveryWorkspaceService(
   return {
     create: (input) => createWorkspace(input, options),
     list: () => listWorkspaces(options),
+    prepareForRun: (id) => prepareWorkspaceForRun(id, options),
     previewResult: (id) => previewResult(id, options),
     reviewResult: (id, fingerprint, contentsReviewed, redistributionReviewed) =>
       reviewResult(id, fingerprint, contentsReviewed, redistributionReviewed, options),
@@ -277,6 +279,56 @@ async function previewResult(
     throw new DiscoveryWorkspaceError(
       DISCOVERY_WORKSPACE_ERROR_CODES.RESULT_INVALID,
       'The discovery result is not a supported v1 bundle made only from the reviewed candidates.',
+      { id },
+      { cause: error },
+    );
+  }
+}
+
+async function prepareWorkspaceForRun(
+  id: string,
+  options: DiscoveryWorkspaceServiceOptions,
+): Promise<void> {
+  const { path } = await ownedWorkspace(id, options);
+  const outputDirectory = join(path, 'discovery-output');
+  const resultPath = join(outputDirectory, 'approved-result.loom.json');
+  try {
+    const directoryInfo = await lstat(outputDirectory);
+    if (
+      !directoryInfo.isDirectory() ||
+      directoryInfo.isSymbolicLink() ||
+      await realpath(outputDirectory) !== outputDirectory ||
+      !isWithin(path, outputDirectory)
+    ) {
+      throw new Error('unsafe discovery output directory');
+    }
+    const resultInfo = await lstatIfPresent(resultPath);
+    if (resultInfo !== undefined) {
+      if (
+        !resultInfo.isFile() ||
+        resultInfo.isSymbolicLink() ||
+        await realpath(resultPath) !== resultPath ||
+        !isWithin(path, resultPath)
+      ) {
+        throw new Error('unsafe discovery result path');
+      }
+    }
+    await options.configStore.update((current) => ({
+      discoveryWorkspaces: current.discoveryWorkspaces.map((candidate) => {
+        if (candidate.id !== id) return candidate;
+        const reset = { ...candidate };
+        delete reset.runId;
+        delete reset.resultFingerprint;
+        delete reset.importedDraftId;
+        return reset;
+      }),
+    }));
+    if (resultInfo !== undefined) await unlink(resultPath);
+  } catch (error) {
+    if (error instanceof DiscoveryWorkspaceError) throw error;
+    throw new DiscoveryWorkspaceError(
+      DISCOVERY_WORKSPACE_ERROR_CODES.PREPARE_FAILED,
+      'The retained discovery workspace could not be reset for a new run.',
       { id },
       { cause: error },
     );
@@ -719,7 +771,7 @@ async function resolveScenarioSkill(explicit?: string): Promise<string> {
   const sourceDirectory = fileURLToPath(new URL('../../../', import.meta.url));
   const candidates = explicit === undefined
     ? [
-        join(sourceDirectory, 'dist', 'skills', SKILL_DIRECTORY),
+        join(sourceDirectory, 'skills', SKILL_DIRECTORY),
         join(cwd, 'dist', 'skills', SKILL_DIRECTORY),
         join(cwd, '.github', 'skills', SKILL_DIRECTORY),
         join(cwd, 'skill', SKILL_DIRECTORY),

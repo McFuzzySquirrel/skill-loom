@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -666,7 +666,7 @@ describe('POST /api/projects/:projectId/runs', () => {
     const { app, configStore } = await buildTestApp();
     const workspaceId = 'a0f4cbaa-f755-4be6-95bf-d6a2019ff7d5';
     const workspacePath = join(configDirectory, 'discovery-workspaces', workspaceId);
-    await mkdir(workspacePath, { recursive: true });
+    await mkdir(join(workspacePath, 'discovery-output'), { recursive: true });
     const managedProject = await createProjectRegistry({ configStore })
       .registerManagedWorkspace(workspacePath);
     const chain = await createChain(app, managedProject.id);
@@ -691,6 +691,58 @@ describe('POST /api/projects/:projectId/runs', () => {
     const current = await getRunRecord(app, run.id);
     expect(current.statusCode).toBe(200);
     expect((current.body as { run: Run }).run.steps[0]?.status).toBe('running');
+  });
+
+  it('clears the previous discovery result and review state before starting another run', async () => {
+    const { app, configStore } = await buildTestApp();
+    const workspaceId = 'a0f4cbaa-f755-4be6-95bf-d6a2019ff7d5';
+    const workspacePath = join(configDirectory, 'discovery-workspaces', workspaceId);
+    await mkdir(join(workspacePath, 'discovery-output'), { recursive: true });
+    const managedProject = await createProjectRegistry({ configStore })
+      .registerManagedWorkspace(workspacePath);
+    const chain = await createChain(app, managedProject.id, {
+      steps: [{ id: 'discover', kind: 'instruction', instruction: 'Review the discovery result.' }],
+      inputs: [],
+    });
+    const previousResultPath = join(workspacePath, 'discovery-output', 'approved-result.loom.json');
+    await writeFile(previousResultPath, '{"previous":"result"}');
+    await configStore.update({
+      discoveryWorkspaces: [{
+        id: workspaceId,
+        projectId: managedProject.id,
+        chainId: chain.id,
+        harness: 'opencode',
+        createdAt: CREATED_AT,
+        handoffFingerprint: 'a'.repeat(64),
+        autoImport: false,
+        runId: 'run-previous',
+        resultFingerprint: 'b'.repeat(64),
+        importedDraftId: 'draft-previous',
+      }],
+    });
+    trustConfig = JSON.stringify({ trustedFolders: [workspacePath] });
+
+    const started = await postRun(app, managedProject.id, {
+      chainId: chain.id,
+      mode: 'supervised',
+    });
+
+    expect(started.statusCode).toBe(201);
+    const run = (started.body as { run: Run }).run;
+    expect(await configStore.get()).toMatchObject({
+      discoveryWorkspaces: [{
+        id: workspaceId,
+        runId: run.id,
+      }],
+    });
+    expect((await configStore.get()).discoveryWorkspaces[0]).not.toHaveProperty('resultFingerprint');
+    expect((await configStore.get()).discoveryWorkspaces[0]).not.toHaveProperty('importedDraftId');
+    await expect(access(previousResultPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    const done = await postAction(app, run.id, { action: 'done' });
+    expect(done.statusCode).toBe(422);
+    expect(envelope(done.body)).toMatchObject({
+      error: { code: 'DISCOVERY_RESULT_REVIEW_REQUIRED' },
+    });
   });
 
   it('re-runs preflight, snapshots the chain, and starts a supervised run', async () => {
