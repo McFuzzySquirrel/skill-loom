@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { catalogApi, type CatalogHarness, type RemoteSkillSource } from '../api/catalog';
-import { discoveryApi, discoveryCandidateFromPackage, discoveryCandidateKey, type DiscoveryCandidate, type DiscoveryCandidateIdentity } from '../api/discovery';
+import { discoveryApi, discoveryWorkspaceApi, discoveryCandidateFromPackage, discoveryCandidateKey, type DiscoveryCandidate, type DiscoveryCandidateIdentity, type DiscoveryWorkspace } from '../api/discovery';
 import type { DiscoveryHandoff } from '../../shared/discovery-handoff';
 import { ApiClientError } from '../api/client';
 import { toApiClientError } from '../api/projects';
@@ -56,9 +56,17 @@ export function DiscoveryPage() {
   const [preparing, setPreparing] = useState(false);
   const [prepareError, setPrepareError] = useState<ApiClientError | null>(null);
   const [prepared, setPrepared] = useState<PreparedArtifact | null>(null);
+  const [discoveryWorkspaces, setDiscoveryWorkspaces] = useState<DiscoveryWorkspace[]>([]);
+  const [workspaceLoading, setWorkspaceLoading] = useState(true);
+  const [workspaceBusy, setWorkspaceBusy] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState<ApiClientError | null>(null);
+  const [autoImport, setAutoImport] = useState(false);
   const [contentReviewed, setContentReviewed] = useState(false);
   const [redistributionReviewed, setRedistributionReviewed] = useState(false);
   const [inspected, setInspected] = useState<Map<string, DiscoveryHandoff['candidates'][number]>>(
+    () => new Map(),
+  );
+  const [inspectionErrors, setInspectionErrors] = useState<Map<string, ApiClientError>>(
     () => new Map(),
   );
   const [inspectionBusy, setInspectionBusy] = useState<string | null>(null);
@@ -104,6 +112,22 @@ export function DiscoveryPage() {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  const reloadWorkspaces = useCallback(async () => {
+    setWorkspaceLoading(true);
+    setWorkspaceError(null);
+    try {
+      setDiscoveryWorkspaces(await discoveryWorkspaceApi.list());
+    } catch (error) {
+      setWorkspaceError(toApiClientError(error, 'Retained discovery workspaces could not be loaded.'));
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void reloadWorkspaces();
+  }, [reloadWorkspaces]);
 
   useEffect(() => {
     setNavigationGuard(() => {
@@ -194,8 +218,12 @@ export function DiscoveryPage() {
 
   const inspectCandidate = async (candidate: DiscoveryCandidate) => {
     const key = discoveryCandidateKey(candidate);
+    setInspectionErrors((current) => {
+      const next = new Map(current);
+      next.delete(key);
+      return next;
+    });
     setInspectionBusy(key);
-    setPrepareError(null);
     try {
       const handoff = await discoveryApi.prepare({
         goal: goal.trim() || `Inspect the selected package ${candidate.name}`,
@@ -203,10 +231,10 @@ export function DiscoveryPage() {
         candidates: [candidate],
       });
       setInspected((current) => new Map(current).set(key, handoff.candidates[0]!));
+      announce(`Inspected ${candidate.name}. Verified package files are available below.`);
     } catch (error) {
       const apiError = toApiClientError(error, 'The selected package could not be inspected.');
-      setPrepareError(apiError);
-      announce(`Candidate inspection failed: ${apiError.message}`, 'assertive');
+      setInspectionErrors((current) => new Map(current).set(key, apiError));
     } finally {
       setInspectionBusy(null);
     }
@@ -231,6 +259,48 @@ export function DiscoveryPage() {
       announce(`Handoff preparation failed: ${apiError.message}`, 'assertive');
     } finally {
       setPreparing(false);
+    }
+  };
+
+  const prepareDiscoveryWorkspace = async () => {
+    if (!prepared || !contentReviewed || !redistributionReviewed) return;
+    setWorkspaceBusy(true);
+    setWorkspaceError(null);
+    try {
+      const { workspace } = await discoveryWorkspaceApi.create({
+        goal: prepared.handoff.goal,
+        harness: prepared.handoff.harness,
+        createdAt: prepared.handoff.createdAt,
+        reviewFingerprint: prepared.handoff.fingerprint,
+        candidates: prepared.handoff.candidates,
+        contentsReviewed: true,
+        redistributionReviewed: true,
+        autoImport,
+      });
+      setDiscoveryWorkspaces((current) => [workspace, ...current]);
+      announce(`Prepared a retained discovery workspace for ${workspace.harness}. No CLI was started.`);
+    } catch (error) {
+      const apiError = toApiClientError(error, 'The managed discovery workspace could not be prepared.');
+      setWorkspaceError(apiError);
+      announce(`Discovery workspace preparation failed: ${apiError.message}`, 'assertive');
+    } finally {
+      setWorkspaceBusy(false);
+    }
+  };
+
+  const removeDiscoveryWorkspace = async (workspace: DiscoveryWorkspace) => {
+    setWorkspaceBusy(true);
+    setWorkspaceError(null);
+    try {
+      await discoveryWorkspaceApi.remove(workspace.id);
+      setDiscoveryWorkspaces((current) => current.filter((entry) => entry.id !== workspace.id));
+      announce('Removed the retained discovery workspace. Imported drafts and pinned source snapshots are unchanged.');
+    } catch (error) {
+      const apiError = toApiClientError(error, 'The retained discovery workspace could not be removed.');
+      setWorkspaceError(apiError);
+      announce(`Discovery workspace removal failed: ${apiError.message}`, 'assertive');
+    } finally {
+      setWorkspaceBusy(false);
     }
   };
 
@@ -389,6 +459,7 @@ export function DiscoveryPage() {
           {visibleCandidates.map((candidate) => {
             const key = discoveryCandidateKey(candidate);
             const details = inspected.get(key);
+            const inspectionError = inspectionErrors.get(key);
             return (
               <li className="discovery-candidate" key={key}>
                 <label className="discovery-candidate__select">
@@ -407,6 +478,16 @@ export function DiscoveryPage() {
                 <button type="button" className="button button--secondary button--small" onClick={() => void inspectCandidate(candidate)} disabled={inspectionBusy !== null}>
                   {inspectionBusy === key ? 'Inspecting…' : 'Inspect package and SKILL.md'}
                 </button>
+                {inspectionError ? (
+                  <InlineError
+                    title="Skill package could not be inspected"
+                    message={inspectionError.message}
+                    code={inspectionError.code}
+                    httpStatus={inspectionError.status}
+                    onRetry={() => void inspectCandidate(candidate)}
+                    retryLabel="Retry inspection"
+                  />
+                ) : null}
                 {details ? (
                   <details className="discovery-candidate__inspection" open>
                     <summary>Verified package files ({String(details.files.length)})</summary>
@@ -488,6 +569,41 @@ export function DiscoveryPage() {
               Discard prepared review
             </button>
           </div>
+          <section aria-labelledby="managed-discovery-title">
+            <h3 className="section-title" id="managed-discovery-title">Continue in a managed interactive workspace</h3>
+            <p>
+              Skill Loom will copy its bundled <code>scenario-discovery</code> skill and this
+              verified handoff into a retained blank workspace. Candidate packages stay in
+              the handoff; they are not installed as active skills. This is file isolation,
+              not an operating-system sandbox.
+            </p>
+            <label className="checkbox-field">
+              <input type="checkbox" checked={autoImport} onChange={(event) => setAutoImport(event.target.checked)} />
+              <span>After I review the exact result and mark discovery Done, create a new Chain draft from it. Never run the resulting chain.</span>
+            </label>
+            {workspaceError ? (
+              <InlineError
+                title="Discovery workspace action failed"
+                message={workspaceError.message}
+                code={workspaceError.code}
+                httpStatus={workspaceError.status}
+                onRetry={() => void reloadWorkspaces()}
+              />
+            ) : null}
+            <button
+              type="button"
+              className="button"
+              onClick={() => void prepareDiscoveryWorkspace()}
+              disabled={workspaceBusy || !contentReviewed || !redistributionReviewed}
+            >
+              {workspaceBusy ? 'Preparing retained workspace…' : 'Prepare discovery workspace'}
+            </button>
+            <p className="field__hint">
+              Preparation does not start a CLI. The next step uses ordinary harness preflight,
+              trust, and explicit Start. The harness keeps its normal file, network, and
+              authentication access.
+            </p>
+          </section>
           <p className="field__hint">
             Paste the copied prompt into an existing compatible OpenCode or Copilot CLI
             session after refreshing or installing the updated <code>scenario-discovery</code>
@@ -497,14 +613,52 @@ export function DiscoveryPage() {
         </section>
       ) : null}
 
+      <section className="panel" aria-labelledby="discovery-workspaces-title">
+        <h2 className="section-title" id="discovery-workspaces-title">Retained discovery workspaces</h2>
+        <p>Workspaces remain available for recovery and review until you remove them. Removal is blocked while one owns the active run.</p>
+        {workspaceLoading ? <p className="state-note" role="status">Loading retained discovery workspaces…</p> : null}
+        {!workspaceLoading && discoveryWorkspaces.length === 0 && !workspaceError ? (
+          <p className="state-note">No retained discovery workspaces.</p>
+        ) : null}
+        {discoveryWorkspaces.map((workspace) => (
+          <article className="discovery-source" key={workspace.id}>
+            <h3>{workspace.harness === 'opencode' ? 'OpenCode' : 'Copilot CLI'} discovery</h3>
+            <p>Created {new Date(workspace.createdAt).toLocaleString()} · handoff <code>{workspace.handoffFingerprint}</code></p>
+            <p><code>{workspace.path}</code></p>
+            <div className="panel__actions">
+              <Link className="button" to={`/discovery/workspaces/${encodeURIComponent(workspace.id)}/start`}>
+                Preflight and start discovery
+              </Link>
+              <Link className="button button--secondary" to={`/projects/${encodeURIComponent(workspace.projectId)}`}>
+                Inspect workspace
+              </Link>
+              <button
+                type="button"
+                className="button button--danger"
+                onClick={() => {
+                  if (window.confirm('Remove this discovery workspace, handoff, result, and run history? Imported Chain drafts and pinned source snapshots will remain.')) {
+                    void removeDiscoveryWorkspace(workspace);
+                  }
+                }}
+                disabled={workspaceBusy}
+              >
+                Remove workspace
+              </button>
+            </div>
+          </article>
+        ))}
+      </section>
+
       <section className="panel" aria-labelledby="discovery-result-title">
         <h2 className="section-title" id="discovery-result-title">5. Use the reviewed result</h2>
         <p>
-          In your CLI session, ask <code>scenario-discovery</code> to inspect the downloaded
-          handoff. Review and approve a proposed chain before it creates a normal
+          In a managed workspace, the existing interactive terminal asks <code>scenario-discovery</code>
+          to inspect the validated handoff after you explicitly start it. You can also use
+          the download/copy flow to continue in an existing CLI session. Review and approve a proposed chain before it creates a normal
           <code> .loom.json</code> bundle. Then review that bundle separately before
           publishing it to the shared bundle library or importing it into a project.
-          Discovery never imports or runs the resulting chain.
+          Discovery never runs the resulting chain. Automatic import, when selected, creates
+          only a new Chain draft after reviewed Done.
         </p>
         <div className="panel__actions">
           <Link className="button button--secondary" to="/shared-bundles">Shared bundle library</Link>
@@ -515,8 +669,8 @@ export function DiscoveryPage() {
           </a>
         </div>
         <p className="field__hint">
-          Install the downloaded package in a skill location your host discovers, then
-          refresh or restart the host. This handoff is not an executable chain bundle.
+          The managed workspace installs only Skill Loom's bundled discovery skill. The
+          handoff itself remains a separate validated data file.
         </p>
       </section>
     </section>

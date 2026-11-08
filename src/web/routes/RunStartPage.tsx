@@ -37,6 +37,7 @@ import type { PreflightRunMode } from '../api/preflight';
 export interface RunStartPageProps {
   projectId: string;
   chainId: string;
+  supervisedOnly?: boolean;
   /** Test seams; the app always uses the same-origin typed clients. */
   api?: ChainsApi;
   preflightApiClient?: PreflightApi;
@@ -111,6 +112,7 @@ function describeReport(report: PreflightReportData): string {
 export function RunStartPage({
   projectId,
   chainId,
+  supervisedOnly = false,
   api = chainsApi,
   preflightApiClient = preflightApi,
   runsApiClient = runsApi,
@@ -514,22 +516,24 @@ export function RunStartPage({
                     One step at a time. The run view advances only on an explicit action.
                   </p>
                 </div>
-                <div className="checkbox-field">
-                  <input
-                    id="run-mode-automatic"
-                    type="radio"
-                    name="run-mode"
-                    value="automatic"
-                    checked={mode === 'automatic'}
-                    onChange={() => setMode('automatic')}
-                    data-testid="run-mode-automatic"
-                  />
-                  <label htmlFor="run-mode-automatic">Automatic</label>
-                  <p className="field__hint">
-                    Steps use the harness&apos;s automatic surface. Copilot requires an explicit
-                    per-chain permission opt-in before broad flags are used.
-                  </p>
-                </div>
+                {!supervisedOnly ? (
+                  <div className="checkbox-field">
+                    <input
+                      id="run-mode-automatic"
+                      type="radio"
+                      name="run-mode"
+                      value="automatic"
+                      checked={mode === 'automatic'}
+                      onChange={() => setMode('automatic')}
+                      data-testid="run-mode-automatic"
+                    />
+                    <label htmlFor="run-mode-automatic">Automatic</label>
+                    <p className="field__hint">
+                      Steps use the harness&apos;s automatic surface. Copilot requires an explicit
+                      per-chain permission opt-in before broad flags are used.
+                    </p>
+                  </div>
+                ) : null}
               </div>
             </fieldset>
           </section>

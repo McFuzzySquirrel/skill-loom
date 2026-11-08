@@ -118,6 +118,7 @@ describe('missing configuration', () => {
     expect(config.extraSkillDirectories).toEqual([]);
     expect(config.remoteSkillSources).toEqual([]);
     expect(config.recentProjects).toEqual([]);
+    expect(config.discoveryWorkspaces).toEqual([]);
     expect(config.uiPreferences).toEqual({});
 
     const onDiskText = await readFile(store.getConfigPath(), 'utf8');
@@ -242,6 +243,7 @@ describe('typed updates', () => {
       remoteSkillSources: [{ id: 'public-skills', repository: 'https://github.com/acme/skills.git', ref: 'main' }],
       recentProjects: [recent],
       testWorkspaces: [workspace],
+      discoveryWorkspaces: [],
       uiPreferences: { theme: 'dark', density: 'compact' },
     });
     expect(JSON.parse(await readFile(store.getConfigPath(), 'utf8'))).toEqual(updated);
@@ -390,6 +392,7 @@ describe('credential safety', () => {
       'sharedBundleDirectory',
       'recentProjects',
       'testWorkspaces',
+      'discoveryWorkspaces',
       'uiPreferences',
     ]);
     expect(Object.keys(LoomConfigSchema.shape)).toEqual([...CONFIG_TOP_LEVEL_FIELDS]);

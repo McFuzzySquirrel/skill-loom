@@ -54,6 +54,12 @@ import {
   type RunStoreErrorCode,
 } from '../runs/store.js';
 import type { TerminalManager } from '../terminal/pty.js';
+import {
+  createDiscoveryWorkspaceService,
+  DISCOVERY_WORKSPACE_ERROR_CODES,
+  DiscoveryWorkspaceError,
+  withDiscoveryWorkspaceLock,
+} from '../runs/discovery-workspaces.js';
 
 /**
  * Run orchestration HTTP and WebSocket surface.
@@ -168,6 +174,8 @@ interface ActionResultResponse {
   actions: RunView['actions'];
   recovery: RunView['recovery'];
   restartedFrom: string | null;
+  discoveryDraftId?: string;
+  discoveryImportError?: { code: string; message: string };
 }
 
 /** HTTP status for each typed run-storage failure. */
@@ -254,6 +262,11 @@ export const runRoutes: FastifyPluginAsync<RunRoutesOptions> = async (
   const chainService = options.chainService ?? createChainService();
   const catalogService =
     options.catalogService ?? createCatalogService({ configStore: options.configStore });
+  const discoveryWorkspaces = createDiscoveryWorkspaceService({
+    configStore: options.configStore,
+    projectRegistry,
+    chainService,
+  });
 
   const harnessRegistry = async (): Promise<HarnessRegistry> => {
     if (options.harnessRegistry !== undefined) {
@@ -358,11 +371,25 @@ export const runRoutes: FastifyPluginAsync<RunRoutesOptions> = async (
       }
 
       const body = parsed.data;
+      const config = await options.configStore.get();
+      const discoveryWorkspace = config.discoveryWorkspaces.find(
+        (workspace) =>
+          workspace.projectId === request.params.projectId &&
+          workspace.chainId === body.chainId,
+      );
+      if (discoveryWorkspace !== undefined && body.mode === 'automatic') {
+        return reply.code(409).send(createApiErrorEnvelope(
+          'DISCOVERY_SUPERVISED_ONLY',
+          'Managed scenario discovery must use the supervised interactive runner.',
+        ));
+      }
       const createRequest: CreateRunRequest = {
         projectId: request.params.projectId,
         chainId: body.chainId,
         ...(body.harness === undefined ? {} : { harness: body.harness }),
-        ...(body.mode === undefined ? {} : { mode: body.mode }),
+        ...(discoveryWorkspace !== undefined
+          ? { mode: 'supervised' as const }
+          : body.mode === undefined ? {} : { mode: body.mode }),
         ...(body.inputs === undefined ? {} : { inputs: body.inputs }),
         ...(body.acknowledgements === undefined
           ? {}
@@ -370,9 +397,38 @@ export const runRoutes: FastifyPluginAsync<RunRoutesOptions> = async (
       };
 
       try {
-        const orchestrator = await getOrchestrator();
-        const run = await orchestrator.createRun(createRequest);
-        const view = await orchestrator.getRunView(run.id);
+        const startRun = async () => {
+          const orchestrator = await getOrchestrator();
+          const run = await orchestrator.createRun(createRequest);
+          if (discoveryWorkspace !== undefined) {
+            try {
+              await options.configStore.update((current) => ({
+                discoveryWorkspaces: current.discoveryWorkspaces.map((workspace) =>
+                  workspace.id === discoveryWorkspace.id
+                    ? { ...workspace, runId: run.id }
+                    : workspace,
+                ),
+              }));
+            } catch (error) {
+              try {
+                await orchestrator.applyAction(run.id, {
+                  action: 'abort',
+                  reason: 'The discovery run could not be associated with its retained workspace.',
+                });
+              } catch (abortError) {
+                request.log.error(
+                  { err: abortError, runId: run.id, workspaceId: discoveryWorkspace.id },
+                  'Could not abort a discovery run after workspace association failed.',
+                );
+              }
+              throw error;
+            }
+          }
+          return orchestrator.getRunView(run.id);
+        };
+        const view = discoveryWorkspace === undefined
+          ? await startRun()
+          : await withDiscoveryWorkspaceLock(discoveryWorkspace.projectId, startRun);
         return reply.code(201).send({
           run: view.run,
           terminalId: view.terminalId,
@@ -451,10 +507,34 @@ export const runRoutes: FastifyPluginAsync<RunRoutesOptions> = async (
 
       try {
         const orchestrator = await getOrchestrator();
+        const before = await orchestrator.getRunView(params.data.runId);
+        const workspace = (await options.configStore.get()).discoveryWorkspaces.find(
+          (candidate) =>
+            candidate.projectId === before.run.projectId &&
+            candidate.chainId === before.run.chainId,
+        );
+        if (workspace !== undefined && actionRequest.action === 'done') {
+          await discoveryWorkspaces.assertResultReviewed(workspace.id);
+        }
         const result: RunActionResult = await orchestrator.applyAction(
           params.data.runId,
           actionRequest,
         );
+        let discoveryDraftId: string | undefined;
+        let discoveryImportError: { code: string; message: string } | undefined;
+        if (
+          workspace?.autoImport === true &&
+          actionRequest.action === 'next' &&
+          result.run.status === 'completed'
+        ) {
+          try {
+            discoveryDraftId = (await discoveryWorkspaces.importResult(workspace.id)).draftId;
+          } catch (error) {
+            if (!(error instanceof DiscoveryWorkspaceError)) throw error;
+            discoveryImportError = { code: error.code, message: error.message };
+            request.log.error({ err: error, workspaceId: workspace.id }, 'Automatic discovery result import failed.');
+          }
+        }
         const view = await orchestrator.getRunView(result.run.id);
         return reply.code(200).send({
           run: view.run,
@@ -462,8 +542,20 @@ export const runRoutes: FastifyPluginAsync<RunRoutesOptions> = async (
           actions: view.actions,
           recovery: view.recovery,
           restartedFrom: result.restartedFrom,
+          ...(discoveryDraftId === undefined ? {} : { discoveryDraftId }),
+          ...(discoveryImportError === undefined ? {} : { discoveryImportError }),
         } satisfies ActionResultResponse);
       } catch (error) {
+        if (error instanceof DiscoveryWorkspaceError) {
+          const status = error.code === DISCOVERY_WORKSPACE_ERROR_CODES.NOT_FOUND
+            ? 404
+            : error.code === DISCOVERY_WORKSPACE_ERROR_CODES.RESULT_REVIEW_STALE
+              ? 409
+              : error.code === DISCOVERY_WORKSPACE_ERROR_CODES.RESULT_UNAVAILABLE
+                ? 404
+                : 422;
+          return reply.code(status).send(createApiErrorEnvelope(error.code, error.message, error.details));
+        }
         return sendFailure(reply, error);
       }
     },

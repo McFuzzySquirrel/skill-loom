@@ -16,7 +16,7 @@ import {
   type SkillSource,
 } from '../../src/server/catalog/types.js';
 import type { Chain } from '../../src/server/chains/model.js';
-import { createConfigStore } from '../../src/server/config/store.js';
+import { createConfigStore, type ConfigStore } from '../../src/server/config/store.js';
 import {
   createHarnessRegistry,
   type HarnessRegistry,
@@ -299,6 +299,7 @@ interface AppHarness {
   projectPath: string;
   runner: TestRunner;
   baseUrl: string;
+  configStore: ConfigStore;
 }
 
 async function buildTestApp(options: { extraEnv?: NodeJS.ProcessEnv } = {}): Promise<AppHarness> {
@@ -338,7 +339,7 @@ async function buildTestApp(options: { extraEnv?: NodeJS.ProcessEnv } = {}): Pro
   const baseUrl = `ws://127.0.0.1:${String((address as AddressInfo).port)}`;
 
   const projectId = await registerProject(app, project);
-  return { app, projectId, projectPath: canonicalProject, runner, baseUrl };
+  return { app, projectId, projectPath: canonicalProject, runner, baseUrl, configStore };
 }
 
 async function registerProject(app: FastifyInstance, directory: string): Promise<string> {
@@ -634,6 +635,32 @@ afterEach(async () => {
 });
 
 describe('POST /api/projects/:projectId/runs', () => {
+  it('refuses automatic execution for a managed discovery chain', async () => {
+    const { app, projectId, configStore } = await buildTestApp();
+    const chain = await createChain(app, projectId);
+    await configStore.update({
+      discoveryWorkspaces: [{
+        id: 'a0f4cbaa-f755-4be6-95bf-d6a2019ff7d5',
+        projectId,
+        chainId: chain.id,
+        harness: 'opencode',
+        createdAt: CREATED_AT,
+        handoffFingerprint: 'a'.repeat(64),
+        autoImport: false,
+      }],
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/projects/${encodeURIComponent(projectId)}/runs`,
+      payload: { chainId: chain.id, mode: 'automatic' },
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      error: { code: 'DISCOVERY_SUPERVISED_ONLY' },
+    });
+  });
+
   it('re-runs preflight, snapshots the chain, and starts a supervised run', async () => {
     const harness = await buildTestApp();
     const chain = await createChain(harness.app, harness.projectId);

@@ -32,6 +32,7 @@ const candidateIdentitySchema = DiscoveryHandoffSchema.shape.candidates.element.
 const prepareSchema = z.strictObject({
   goal: z.string().trim().min(1).max(1_000),
   harness: DiscoveryHandoffSchema.shape.harness,
+  createdAt: DiscoveryHandoffSchema.shape.createdAt.optional(),
   candidates: candidateIdentitySchema.array().min(1).max(MAX_HANDOFF_PACKAGES),
 });
 
@@ -54,6 +55,7 @@ export class DiscoveryHandoffError extends Error {
 export async function prepareDiscoveryHandoff(
   configStore: ConfigStore,
   raw: unknown,
+  options: { allowUnregisteredSources?: boolean } = {},
 ): Promise<DiscoveryHandoff> {
   const parsed = prepareSchema.safeParse(raw);
   if (!parsed.success) {
@@ -77,12 +79,17 @@ export async function prepareDiscoveryHandoff(
     keys.add(key);
   }
 
-  const sources = await listRemoteSkillSources(configStore);
+  const sources = options.allowUnregisteredSources === true
+    ? []
+    : await listRemoteSkillSources(configStore);
   const packages: DiscoveryHandoffCandidate[] = [];
   let totalFiles = 0;
   let totalBytes = 0;
   for (const identity of identities) {
-    if (!sources.some((source) => source.id === identity.sourceId)) {
+    if (
+      options.allowUnregisteredSources !== true &&
+      !sources.some((source) => source.id === identity.sourceId)
+    ) {
       throw unavailable('The selected source is no longer registered. Review the current sources and select it again.');
     }
     const snapshots = await listRemoteSkillSnapshots(
@@ -177,7 +184,7 @@ export async function prepareDiscoveryHandoff(
     version: 1 as const,
     goal: parsed.data.goal,
     harness: parsed.data.harness,
-    createdAt: new Date().toISOString(),
+    createdAt: parsed.data.createdAt ?? new Date().toISOString(),
     candidates: packages,
   };
   const handoff = {
