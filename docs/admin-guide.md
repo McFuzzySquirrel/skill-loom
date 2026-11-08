@@ -133,6 +133,7 @@ If you need multi-user or remote access, this project does not provide it. Treat
 | `~/.config/loom/drafts/*.json` | Project-independent chain drafts. | Separate from templates and project chains; back up with the config directory. |
 | Browser download location (`*.loom-discovery.json`) | A user-prepared discovery handoff containing the goal and exact selected candidate packages. | Not retained by the server. It can contain private or redistribution-restricted content; protect or remove it according to your local policy. |
 | `~/.config/loom/test-workspaces/<uuid>/` | Managed disposable projects created by **Test in disposable workspace**. | Retained until explicit cleanup from **Test workspaces**. Cleanup refuses the workspace holding the global active run. |
+| `~/.config/loom/discovery-workspaces/<uuid>/` | Reviewed handoff, bundled `scenario-discovery` package, managed project, result file, and run state for interactive scenario discovery. | Retained until explicit cleanup from **Discover workflows**. Cleanup refuses the workspace holding the global active run. |
 | `~/.config/loom/active-run.json` | Single global active-run pointer. | Holds the active run's project path, run id, and status. Do not edit while a run is live. |
 | `~/.config/loom/chains/*.json` | Global chain templates. | Independent snapshots; importing copies one into a project with a new id. |
 | `<project>/.loom/chains/*.json` | Saved project chains. | Versioned JSON, atomic writes. Back up or version these recipes. |
@@ -153,7 +154,7 @@ Back up a project's recipes by copying `<project>/.loom/chains/`. Run records ar
 
 Restore by stopping the server, replacing the config or chain directory, and starting again. Validate the restored JSON before use; valid chain version 1 documents migrate to version 2, while unsupported versions or corrupt documents are rejected.
 
-Managed test workspaces are working directories, not security sandboxes. They use the normal harness permissions and authentication available to the server process. Keep disk usage under review and use the UI's explicit cleanup; do not remove a directory while its run is active.
+Managed test and discovery workspaces are working directories, not security sandboxes. They use the normal harness permissions and authentication available to the server process. Discovery workspaces persist candidate package contents and goals until explicit cleanup; protect the configured Skill Loom storage directory accordingly. Keep disk usage under review and use the UI's explicit cleanup; do not remove a directory while its run is active.
 
 The **Shared bundles** page stores the configured server-side directory in global config. Configure it only to a directory whose access policy and backups are appropriate for the bundles it will contain. Publishing from a project chain or a locally selected `.loom.json` requires review confirmations for bundle contents and redistribution rights; local-file upload does not require a project or accept a server path from the browser. The server validates the upload, checks the reviewed fingerprint, then atomically creates a new file without clobbering another. Skill Loom does not harvest license files or independently establish redistribution rights. A mounted share that does not support hard links fails visibly rather than falling back to an overwrite-prone write.
 

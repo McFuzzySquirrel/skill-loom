@@ -176,6 +176,8 @@ export interface RunActionResultView {
   actions: RunActionAvailability;
   recovery: RunRecoveryOptions | null;
   restartedFrom: string | null;
+  discoveryDraftId?: string;
+  discoveryImportError?: { code: string; message: string };
 }
 
 export interface RunStreamSnapshot {
@@ -568,12 +570,25 @@ function decodeActionResult(value: unknown): RunActionResultView {
   if (!isRecord(value)) {
     throw invalidResponse('run action result');
   }
+  const discoveryImportError = value.discoveryImportError;
+  if (
+    discoveryImportError !== undefined &&
+    (!isRecord(discoveryImportError) ||
+      typeof discoveryImportError.code !== 'string' ||
+      typeof discoveryImportError.message !== 'string')
+  ) {
+    throw invalidResponse('discovery import result');
+  }
   return {
     run: decodeRun(value.run),
     terminalId: decodeNullableString(value.terminalId, 'run terminal id'),
     actions: decodeActions(value.actions),
     recovery: decodeRecovery(value.recovery),
     restartedFrom: decodeNullableString(value.restartedFrom, 'restarted run id'),
+    ...(typeof value.discoveryDraftId === 'string' ? { discoveryDraftId: value.discoveryDraftId } : {}),
+    ...(isRecord(discoveryImportError)
+      ? { discoveryImportError: { code: discoveryImportError.code as string, message: discoveryImportError.message as string } }
+      : {}),
   };
 }
 

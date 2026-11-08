@@ -19,6 +19,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 - Portable `.loom.json` chain export/import with complete skill packages, review previews, explicit reuse of installed skills, safe bounded file handling, and fresh permission consent.
 - Version 2 portable bundles that preserve an exact selected native agent definition; version 1 remains available for agent-free chains.
 - Standalone agent instruction steps alongside skill steps, with labels, ordering, named inputs, preflight, and run lifecycle support.
+- Managed interactive scenario discovery workspaces with a pinned handoff, supervised harness launch, fingerprint-bound result review, retained recovery state, and optional import into a new project-independent draft.
 - Project skill copies and bundle imports use the shared `.agents/skills/` location for either harness.
 - Project workspace navigation and selectable system, light, and dark appearance modes.
 - Project documentation set: user guide, administrator guide, ADR index and records, release notes, and this changelog.

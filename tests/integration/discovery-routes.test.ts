@@ -1,11 +1,15 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
-import { refreshRemoteSkillSource, type RemoteSourceGitRunner } from '../../src/server/catalog/remote.js';
+import {
+  refreshRemoteSkillSource,
+  type RemoteSourceGitRunner,
+  unregisterRemoteSkillSource,
+} from '../../src/server/catalog/remote.js';
 import { createConfigStore, type ConfigStore } from '../../src/server/config/store.js';
 import { DiscoveryHandoffSchema } from '../../src/shared/discovery-handoff.js';
 
@@ -153,6 +157,26 @@ describe('discovery handoff route', () => {
   });
 
   it('rejects malformed or duplicate candidate identities', async () => {
+    const withDisplayMetadata = await app.inject({
+      method: 'POST',
+      url: '/api/discovery/handoffs',
+      payload: {
+        goal: 'Review skills',
+        harness: 'opencode',
+        candidates: [{
+          sourceId: 'test-source',
+          revision,
+          repositoryPath: 'collection/handoff-skill',
+          fingerprint: '1'.repeat(64),
+          name: 'handoff-skill',
+        }],
+      },
+    });
+    expect(withDisplayMetadata.statusCode).toBe(422);
+    expect(withDisplayMetadata.json()).toMatchObject({
+      error: { code: 'DISCOVERY_CANDIDATE_INVALID' },
+    });
+
     const duplicate = await app.inject({
       method: 'POST',
       url: '/api/discovery/handoffs',
@@ -167,5 +191,125 @@ describe('discovery handoff route', () => {
     });
     expect(duplicate.statusCode).toBe(422);
     expect(duplicate.json()).toMatchObject({ error: { code: 'DISCOVERY_CANDIDATE_INVALID' } });
+  });
+
+  it('creates a retained blank workspace only from the reviewed pinned handoff', async () => {
+    const { listRemoteSkillSnapshots } = await import('../../src/server/catalog/remote.js');
+    const snapshot = (await listRemoteSkillSnapshots(store.getConfigDir(), 'test-source'))[0]!;
+    const pkg = snapshot.packages[0]!;
+    const identity = {
+      sourceId: snapshot.sourceId,
+      revision: snapshot.revision,
+      repositoryPath: pkg.repositoryPath,
+      fingerprint: pkg.fingerprint,
+    };
+    const handoffResponse = await app.inject({
+      method: 'POST',
+      url: '/api/discovery/handoffs',
+      payload: {
+        goal: 'Propose a reusable review workflow',
+        harness: 'opencode',
+        candidates: [identity],
+      },
+    });
+    expect(handoffResponse.statusCode).toBe(200);
+    const handoff = handoffResponse.json();
+
+    const stale = await app.inject({
+      method: 'POST',
+      url: '/api/discovery/workspaces',
+      payload: {
+        goal: handoff.goal,
+        harness: handoff.harness,
+        createdAt: handoff.createdAt,
+        reviewFingerprint: '0'.repeat(64),
+        candidates: [identity],
+        contentsReviewed: true,
+        redistributionReviewed: true,
+        autoImport: false,
+      },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toMatchObject({ error: { code: 'DISCOVERY_WORKSPACE_INVALID' } });
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/discovery/workspaces',
+      payload: {
+        goal: handoff.goal,
+        harness: handoff.harness,
+        createdAt: handoff.createdAt,
+        reviewFingerprint: handoff.fingerprint,
+        candidates: [identity],
+        contentsReviewed: true,
+        redistributionReviewed: true,
+        autoImport: true,
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const { workspace, handoff: persistedHandoff } = created.json();
+    expect(persistedHandoff.fingerprint).toBe(handoff.fingerprint);
+    expect(workspace).toMatchObject({
+      harness: 'opencode',
+      handoffFingerprint: handoff.fingerprint,
+      autoImport: true,
+    });
+    expect(await readFile(join(workspace.path, '.agents', 'skills', 'scenario-discovery', 'SKILL.md'), 'utf8'))
+      .toContain('Project-independent discovery handoff');
+    expect(JSON.parse(await readFile(join(workspace.path, 'skill-loom-discovery.loom-discovery.json'), 'utf8')))
+      .toMatchObject({ fingerprint: handoff.fingerprint });
+    expect((await stat(join(workspace.path, 'discovery-output'))).isDirectory()).toBe(true);
+
+    const resultBundle = {
+      format: 'skill-loom-chain',
+      version: 1,
+      chain: {
+        name: 'Pinned review workflow',
+        harness: 'opencode',
+        sessionMode: 'shared',
+        steps: [{
+          id: 'review',
+          skillName: 'handoff-skill',
+          instruction: 'Review the requested change.',
+        }],
+        inputs: [],
+      },
+      skills: [{
+        name: 'handoff-skill',
+        directory: 'handoff-skill',
+        files: [
+          { path: 'SKILL.md', content: Buffer.from(skillContent).toString('base64'), executable: false },
+          { path: 'scripts/check.sh', content: Buffer.from(scriptContent).toString('base64'), executable: true },
+        ],
+      }],
+    };
+    await writeFile(
+      join(workspace.path, 'discovery-output', 'approved-result.loom.json'),
+      JSON.stringify(resultBundle),
+    );
+    await unregisterRemoteSkillSource(store, 'test-source');
+    const preview = await app.inject({
+      method: 'GET',
+      url: `/api/discovery/workspaces/${workspace.id}/result`,
+    });
+    expect(preview.statusCode).toBe(200);
+    const resultFingerprint = preview.json().fingerprint as string;
+    expect(preview.json().bundle.chain.name).toBe('Pinned review workflow');
+
+    const review = await app.inject({
+      method: 'POST',
+      url: `/api/discovery/workspaces/${workspace.id}/result-review`,
+      payload: {
+        fingerprint: resultFingerprint,
+        contentsReviewed: true,
+        redistributionReviewed: true,
+      },
+    });
+    expect(review.statusCode).toBe(200);
+    await expect(app.inject({
+      method: 'POST',
+      url: `/api/discovery/workspaces/${workspace.id}/import`,
+      payload: {},
+    })).resolves.toMatchObject({ statusCode: 409 });
   });
 });

@@ -14,6 +14,7 @@ import { NotFoundPage } from './routes/NotFoundPage';
 import { ProjectPage, ProjectsPage } from './routes/ProjectsPage';
 import { RunPage } from './routes/RunPage';
 import { RunStartPage } from './routes/RunStartPage';
+import { DiscoveryWorkspaceStartPage } from './routes/DiscoveryWorkspaceStartPage';
 import { RemoteSourcesPage } from './routes/RemoteSourcesPage';
 import { ScenarioCatalogPage } from './routes/ScenarioCatalogPage';
 import { TerminalRunPage } from './routes/TerminalRunPage';
@@ -111,6 +112,13 @@ const ROUTES: RouteDefinition[] = [
     pattern: '/projects/:projectId',
     title: 'Project workspace',
     render: (params) => <ProjectPage projectId={params.projectId ?? ''} view="chains" />,
+  },
+  {
+    pattern: '/discovery/workspaces/:workspaceId/start',
+    title: 'Start interactive discovery',
+    render: (params) => (
+      <DiscoveryWorkspaceStartPage workspaceId={params.workspaceId ?? ''} />
+    ),
   },
   {
     pattern: '/projects/:projectId/chains/:chainId/run',

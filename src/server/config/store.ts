@@ -388,6 +388,7 @@ function applyUpdate(current: LoomConfig, patch: ConfigUpdate): LoomConfig {
         }),
     recentProjects: patch.recentProjects ?? current.recentProjects,
     testWorkspaces: patch.testWorkspaces ?? current.testWorkspaces,
+    discoveryWorkspaces: patch.discoveryWorkspaces ?? current.discoveryWorkspaces,
     uiPreferences:
       patch.uiPreferences === undefined
         ? current.uiPreferences

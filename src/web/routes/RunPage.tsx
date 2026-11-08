@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ApiClientError } from '../api/client';
+import { ApiClientError } from '../api/client';
 import {
   runTerminalPath,
   type Run,
@@ -8,11 +8,13 @@ import {
   type RunView,
 } from '../api/runs';
 import { InlineError } from '../components/InlineError';
+import { DiscoveryRunReviewPanel } from '../components/DiscoveryRunReviewPanel';
 import { HelpPopover } from '../components/HelpPopover';
 import { RunControls } from '../components/RunControls';
 import { StatusText, StepRail, stepDisplayName } from '../components/StepRail';
 import { TerminalPane } from '../components/TerminalPane';
 import { useRunStream } from '../hooks/useRunStream';
+import { useDiscoveryRunReview } from '../hooks/useDiscoveryRunReview';
 import { CHAIN_HARNESS_LABELS, CHAIN_SESSION_MODE_LABELS } from '../hooks/useChains';
 import { Link, useRouter } from '../router';
 import { useWorkspace } from '../WorkspaceContext';
@@ -169,6 +171,7 @@ export function RunPage({ runId }: RunPageProps) {
 
   const view = stream.view;
   const run = view?.run ?? null;
+  const discoveryReview = useDiscoveryRunReview(run);
 
   useEffect(() => {
     if (run !== null) {
@@ -218,12 +221,14 @@ export function RunPage({ runId }: RunPageProps) {
 
   const handleAction = useCallback(
     async (action: RunActionName, reason?: string) => {
+      if (action === 'done' && !(await discoveryReview.reviewBeforeDone())) return;
       const result = await stream.applyAction(action, reason);
+      if (result !== null) await discoveryReview.handleActionResult(result);
       if (result?.restartedFrom !== null && result?.restartedFrom !== undefined) {
         navigate(`/runs/${encodeURIComponent(result.run.id)}`, { replace: true });
       }
     },
-    [navigate, stream],
+    [discoveryReview, navigate, stream],
   );
 
   const handleExitTerminal = useCallback(() => {
@@ -375,13 +380,18 @@ export function RunPage({ runId }: RunPageProps) {
 
       <RunFailurePanel run={run} />
 
+      <DiscoveryRunReviewPanel review={discoveryReview} runStatus={run.status} />
+
       <RunControls
         mode={run.mode}
         status={run.status}
-        actions={view.actions}
+        actions={{
+          ...view.actions,
+          done: view.actions.done && discoveryReview.canMarkDone,
+        }}
         recovery={view.recovery}
         currentStepStatus={run.steps[run.currentStepIndex]?.status ?? null}
-        busyAction={stream.busyAction}
+        busyAction={discoveryReview.busy ? 'done' : stream.busyAction}
         onAction={(action, reason) => void handleAction(action, reason)}
         controlBarRef={controlsRef}
       />

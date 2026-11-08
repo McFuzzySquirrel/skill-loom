@@ -25,7 +25,7 @@ status: Accepted
 - **MUST:** Keep handoffs distinct from chain bundles and reject them from chain import and execution APIs.
 - **MUST:** Require explicit review and download by the user; bind review to the prepared bytes and show the full selected package contents.
 - **MUST:** Bound package count, file count, decoded content, and JSON request size; fail visibly rather than truncating.
-- **MUST NOT:** Persist handoffs on the server, fetch repositories automatically, accept browser-supplied filesystem paths or package bytes as snapshot identities, execute package code, or launch a CLI/model from the web application.
+- **MUST NOT:** Persist handoffs outside an explicitly reviewed managed discovery workspace, fetch repositories automatically, accept browser-supplied filesystem paths or package bytes as snapshot identities, or execute package code.
 - **MUST NOT:** Treat selecting all candidates as approval to include or execute all of them in a proposed chain.
 - **MUST NOT:** Install packages into a project, import a resulting chain, or imply redistribution rights have been established.
 
@@ -46,7 +46,9 @@ status: Accepted
 
 Chosen option: "Create a bounded, server-prepared download from exact retained snapshot identities for an existing CLI session." The `skill-loom-discovery-handoff` v1 artifact contains the goal, chosen harness, exact candidate identities, bounded regular-file contents, executable flags, package fingerprints, and an overall fingerprint. It contains no repository URL, absolute path, credential, run history, or input default. Preparation re-resolves selected identities against retained snapshots, verifies contents, and rejects unavailable, ambiguous, stale, unsafe, or oversized selections. The server does not retain the resulting artifact.
 
-The standalone `scenario-discovery` skill validates the handoff offline and treats its content as untrusted. It proposes scenarios for user selection and revision, then creates a standard v1 `.loom.json` bundle only after explicit chain and redistribution review. The builder includes only approved referenced packages, preserves executable flags, uses the existing bundle rules, and creates output exclusively. The web application neither launches an agent nor imports or runs the resulting chain. Native-agent selection remains in the managed designer and run path.
+The standalone `scenario-discovery` skill validates the handoff offline and treats its content as untrusted. In the original handoff flow, it proposes scenarios for user selection and revision, then creates a standard v1 `.loom.json` bundle only after explicit chain and redistribution review. The builder includes only approved referenced packages, preserves executable flags, uses the existing bundle rules, and creates output exclusively. The web application never imports or runs the resulting chain. Native-agent selection remains in the managed designer and run path.
+
+The later managed discovery flow is an explicit exception to the original no-launch boundary: after content and redistribution review, Skill Loom may create a retained managed workspace, persist the exact validated handoff there, install only its shipped `scenario-discovery` package, and offer the existing supervised preflight/trust/interactive-run flow. It does not activate candidate packages. The user must review the exact output and mark the supervised step Done before optional draft creation. Draft creation preserves exact remote bindings and never starts the resulting chain. See [ADR-0022](0022-managed-interactive-scenario-discovery.md).
 
 ### Positive Consequences
 

@@ -5,11 +5,13 @@ import {
   type Run,
   type RunActionName,
 } from '../api/runs';
+import { DiscoveryRunReviewPanel } from '../components/DiscoveryRunReviewPanel';
 import { InlineError } from '../components/InlineError';
 import { RunControls } from '../components/RunControls';
 import { StatusText, stepDisplayName } from '../components/StepRail';
 import { TerminalPane } from '../components/TerminalPane';
 import { useRunStream } from '../hooks/useRunStream';
+import { useDiscoveryRunReview } from '../hooks/useDiscoveryRunReview';
 import { Link, useRouter } from '../router';
 import { useWorkspace } from '../WorkspaceContext';
 
@@ -55,6 +57,7 @@ export function TerminalRunPage({ runId }: TerminalRunPageProps) {
 
   const view = stream.view;
   const run = view?.run ?? null;
+  const discoveryReview = useDiscoveryRunReview(run);
 
   useEffect(() => {
     if (run !== null) {
@@ -98,12 +101,14 @@ export function TerminalRunPage({ runId }: TerminalRunPageProps) {
 
   const handleAction = useCallback(
     async (action: RunActionName, reason?: string) => {
+      if (action === 'done' && !(await discoveryReview.reviewBeforeDone())) return;
       const result = await stream.applyAction(action, reason);
+      if (result !== null) await discoveryReview.handleActionResult(result);
       if (result?.restartedFrom !== null && result?.restartedFrom !== undefined) {
         navigate(`/runs/${encodeURIComponent(result.run.id)}/terminal`, { replace: true });
       }
     },
-    [navigate, stream],
+    [discoveryReview, navigate, stream],
   );
 
   const handleExitTerminal = useCallback(() => {
@@ -192,14 +197,19 @@ export function TerminalRunPage({ runId }: TerminalRunPageProps) {
         />
       ) : null}
 
+      <DiscoveryRunReviewPanel review={discoveryReview} runStatus={run.status} />
+
       <RunControls
         compact
         mode={run.mode}
         status={run.status}
-        actions={view.actions}
+        actions={{
+          ...view.actions,
+          done: view.actions.done && discoveryReview.canMarkDone,
+        }}
         recovery={view.recovery}
         currentStepStatus={run.steps[run.currentStepIndex]?.status ?? null}
-        busyAction={stream.busyAction}
+        busyAction={discoveryReview.busy ? 'done' : stream.busyAction}
         onAction={(action, reason) => void handleAction(action, reason)}
         controlBarRef={controlsRef}
       />

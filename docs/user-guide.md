@@ -28,7 +28,7 @@ There is **no sign-in**. Skill Loom binds to loopback and has **no authenticatio
 
 On first load you land on **Start**, which organizes the main journeys around your goal rather than storage type:
 
-- **Discover reusable workflows** selects candidate skills from retained remote snapshots and prepares a reviewed handoff for an existing compatible CLI session.
+- **Discover reusable workflows** selects candidate skills from retained remote snapshots and prepares a reviewed handoff for either an existing CLI session or an explicitly started retained managed workspace.
 - **Work in a repository** opens a project for skill inspection, chain design, and optional managed runs.
 - **Browse examples and saved work** opens an overview of examples, drafts, templates, and shared bundles.
 
@@ -124,6 +124,16 @@ Instruction steps run through the chain's selected harness in the same order and
 In the workflow designer, choose **Test in disposable workspace** to save the current chain and create a fresh managed test project containing its chain and selected packages. The run uses Skill Loom's regular preflight, trust, permissions, and run controls. It does not modify the source project's files. The test project and run records are retained for inspection until you remove them from **Test workspaces** in the navigation. Cleanup is blocked while a workspace owns the active run.
 
 A separate working directory is not a security sandbox: the selected harness can still access files, network resources, and credentials allowed by its normal permissions. A new test workspace is not shown in the ordinary recent-project list, but remains registered for run recovery. Do not treat successful execution as proof that the chain or its outputs are correct.
+
+### Run interactive scenario discovery
+
+On **Discover workflows**, select the outcome, harness, and pinned candidate skills. Prepare the handoff and review every selected package file. Confirm content review and redistribution rights separately. You can download the handoff for an existing CLI session, or prepare a managed workspace.
+
+A managed workspace is a blank retained project containing Skill Loom's bundled `scenario-discovery` skill and the validated handoff. Candidate packages remain data in that handoff; they are not installed as active skills. Preparing the workspace does not start a process. Choose **Preflight and start discovery** to review ordinary harness requirements and explicitly start its supervised interactive run.
+
+The harness uses its normal filesystem, network, and authentication permissions; the workspace is not an operating-system sandbox. Candidate instructions are untrusted and must not be executed. When the discovery run is ready to finish, the Terminal page's review panel appears above its controls: load and inspect the exact generated chain and package contents, acknowledge redistribution separately, then mark the supervised step Done and choose Next. Done stays disabled until both reviews are accepted for the loaded result; a changed result must be loaded and reviewed again. If you enabled automatic draft creation, Skill Loom creates a new project-independent Chain draft after the run completes. It never runs that chain. Otherwise, you can explicitly create the draft after completion. Drafts preserve pinned remote skill identities.
+
+Discovery workspaces and run history remain available until you explicitly remove them. Removal is blocked while a workspace owns the active run. Removing a workspace does not remove a Chain draft already created from its result or the retained remote snapshots. The local-only notice still applies: protect the configured Skill Loom directory and review generated content before sharing.
 
 ### Share a chain and its skills
 

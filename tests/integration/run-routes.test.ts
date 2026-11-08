@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -16,7 +16,7 @@ import {
   type SkillSource,
 } from '../../src/server/catalog/types.js';
 import type { Chain } from '../../src/server/chains/model.js';
-import { createConfigStore } from '../../src/server/config/store.js';
+import { createConfigStore, type ConfigStore } from '../../src/server/config/store.js';
 import {
   createHarnessRegistry,
   type HarnessRegistry,
@@ -33,6 +33,7 @@ import type {
 } from '../../src/server/runs/orchestrator.js';
 import type { Run } from '../../src/server/runs/model.js';
 import { createRunStore } from '../../src/server/runs/store.js';
+import { createProjectRegistry } from '../../src/server/projects/registry.js';
 import type {
   CreateTerminalSessionOptions,
   TerminalExit,
@@ -299,6 +300,7 @@ interface AppHarness {
   projectPath: string;
   runner: TestRunner;
   baseUrl: string;
+  configStore: ConfigStore;
 }
 
 async function buildTestApp(options: { extraEnv?: NodeJS.ProcessEnv } = {}): Promise<AppHarness> {
@@ -338,7 +340,7 @@ async function buildTestApp(options: { extraEnv?: NodeJS.ProcessEnv } = {}): Pro
   const baseUrl = `ws://127.0.0.1:${String((address as AddressInfo).port)}`;
 
   const projectId = await registerProject(app, project);
-  return { app, projectId, projectPath: canonicalProject, runner, baseUrl };
+  return { app, projectId, projectPath: canonicalProject, runner, baseUrl, configStore };
 }
 
 async function registerProject(app: FastifyInstance, directory: string): Promise<string> {
@@ -634,6 +636,115 @@ afterEach(async () => {
 });
 
 describe('POST /api/projects/:projectId/runs', () => {
+  it('refuses automatic execution for a managed discovery chain', async () => {
+    const { app, projectId, configStore } = await buildTestApp();
+    const chain = await createChain(app, projectId);
+    await configStore.update({
+      discoveryWorkspaces: [{
+        id: 'a0f4cbaa-f755-4be6-95bf-d6a2019ff7d5',
+        projectId,
+        chainId: chain.id,
+        harness: 'opencode',
+        createdAt: CREATED_AT,
+        handoffFingerprint: 'a'.repeat(64),
+        autoImport: false,
+      }],
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/projects/${encodeURIComponent(projectId)}/runs`,
+      payload: { chainId: chain.id, mode: 'automatic' },
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      error: { code: 'DISCOVERY_SUPERVISED_ONLY' },
+    });
+  });
+
+  it('refuses to mark a discovery step Done until its exact result is reviewed', async () => {
+    const { app, configStore } = await buildTestApp();
+    const workspaceId = 'a0f4cbaa-f755-4be6-95bf-d6a2019ff7d5';
+    const workspacePath = join(configDirectory, 'discovery-workspaces', workspaceId);
+    await mkdir(join(workspacePath, 'discovery-output'), { recursive: true });
+    const managedProject = await createProjectRegistry({ configStore })
+      .registerManagedWorkspace(workspacePath);
+    const chain = await createChain(app, managedProject.id);
+    await configStore.update({
+      discoveryWorkspaces: [{
+        id: workspaceId,
+        projectId: managedProject.id,
+        chainId: chain.id,
+        harness: 'opencode',
+        createdAt: CREATED_AT,
+        handoffFingerprint: 'a'.repeat(64),
+        autoImport: false,
+      }],
+    });
+
+    const run = await createRun(app, managedProject.id, chain, { mode: 'supervised' });
+    const done = await postAction(app, run.id, { action: 'done' });
+    expect(done.statusCode).toBe(422);
+    expect(envelope(done.body)).toMatchObject({
+      error: { code: 'DISCOVERY_RESULT_REVIEW_REQUIRED' },
+    });
+    const current = await getRunRecord(app, run.id);
+    expect(current.statusCode).toBe(200);
+    expect((current.body as { run: Run }).run.steps[0]?.status).toBe('running');
+  });
+
+  it('clears the previous discovery result and review state before starting another run', async () => {
+    const { app, configStore } = await buildTestApp();
+    const workspaceId = 'a0f4cbaa-f755-4be6-95bf-d6a2019ff7d5';
+    const workspacePath = join(configDirectory, 'discovery-workspaces', workspaceId);
+    await mkdir(join(workspacePath, 'discovery-output'), { recursive: true });
+    const managedProject = await createProjectRegistry({ configStore })
+      .registerManagedWorkspace(workspacePath);
+    const chain = await createChain(app, managedProject.id, {
+      steps: [{ id: 'discover', kind: 'instruction', instruction: 'Review the discovery result.' }],
+      inputs: [],
+    });
+    const previousResultPath = join(workspacePath, 'discovery-output', 'approved-result.loom.json');
+    await writeFile(previousResultPath, '{"previous":"result"}');
+    await configStore.update({
+      discoveryWorkspaces: [{
+        id: workspaceId,
+        projectId: managedProject.id,
+        chainId: chain.id,
+        harness: 'opencode',
+        createdAt: CREATED_AT,
+        handoffFingerprint: 'a'.repeat(64),
+        autoImport: false,
+        runId: 'run-previous',
+        resultFingerprint: 'b'.repeat(64),
+        importedDraftId: 'draft-previous',
+      }],
+    });
+    trustConfig = JSON.stringify({ trustedFolders: [workspacePath] });
+
+    const started = await postRun(app, managedProject.id, {
+      chainId: chain.id,
+      mode: 'supervised',
+    });
+
+    expect(started.statusCode).toBe(201);
+    const run = (started.body as { run: Run }).run;
+    expect(await configStore.get()).toMatchObject({
+      discoveryWorkspaces: [{
+        id: workspaceId,
+        runId: run.id,
+      }],
+    });
+    expect((await configStore.get()).discoveryWorkspaces[0]).not.toHaveProperty('resultFingerprint');
+    expect((await configStore.get()).discoveryWorkspaces[0]).not.toHaveProperty('importedDraftId');
+    await expect(access(previousResultPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    const done = await postAction(app, run.id, { action: 'done' });
+    expect(done.statusCode).toBe(422);
+    expect(envelope(done.body)).toMatchObject({
+      error: { code: 'DISCOVERY_RESULT_REVIEW_REQUIRED' },
+    });
+  });
+
   it('re-runs preflight, snapshots the chain, and starts a supervised run', async () => {
     const harness = await buildTestApp();
     const chain = await createChain(harness.app, harness.projectId);

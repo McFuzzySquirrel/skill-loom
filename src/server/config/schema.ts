@@ -67,6 +67,20 @@ export const TestWorkspaceRecordSchema = z.strictObject({
 });
 export type TestWorkspaceRecord = z.infer<typeof TestWorkspaceRecordSchema>;
 
+export const DiscoveryWorkspaceRecordSchema = z.strictObject({
+  id: z.uuid(),
+  projectId: NonEmptyStringSchema,
+  chainId: NonEmptyStringSchema,
+  harness: HarnessIdSchema,
+  createdAt: z.iso.datetime({ offset: true }),
+  handoffFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  autoImport: z.boolean(),
+  runId: NonEmptyStringSchema.optional(),
+  resultFingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  importedDraftId: NonEmptyStringSchema.optional(),
+});
+export type DiscoveryWorkspaceRecord = z.infer<typeof DiscoveryWorkspaceRecordSchema>;
+
 const GitRemoteSchema = z.string().trim().min(1).max(2_048).refine((value) => {
   const scpRemote = /^git@[^/:\\\s]+:[^\\\s?#]+(?:\.git)?$/i;
   if (scpRemote.test(value)) {
@@ -130,6 +144,7 @@ export const LoomConfigSchema = z.strictObject({
   sharedBundleDirectory: NonEmptyStringSchema.optional(),
   recentProjects: z.array(RecentProjectSchema).default([]),
   testWorkspaces: z.array(TestWorkspaceRecordSchema).default([]),
+  discoveryWorkspaces: z.array(DiscoveryWorkspaceRecordSchema).default([]),
   uiPreferences: UiPreferencesSchema.default({}),
 });
 export type LoomConfig = z.infer<typeof LoomConfigSchema>;
@@ -146,6 +161,7 @@ export const ConfigUpdateSchema = z.strictObject({
   sharedBundleDirectory: NonEmptyStringSchema.nullable().optional(),
   recentProjects: z.array(RecentProjectSchema).optional(),
   testWorkspaces: z.array(TestWorkspaceRecordSchema).optional(),
+  discoveryWorkspaces: z.array(DiscoveryWorkspaceRecordSchema).optional(),
   uiPreferences: UiPreferencesSchema.optional(),
 });
 export type ConfigUpdate = z.infer<typeof ConfigUpdateSchema>;
@@ -164,5 +180,6 @@ export const CONFIG_TOP_LEVEL_FIELDS = [
   'sharedBundleDirectory',
   'recentProjects',
   'testWorkspaces',
+  'discoveryWorkspaces',
   'uiPreferences',
 ] as const;
