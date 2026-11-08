@@ -472,6 +472,11 @@ export function ScenarioCatalogPage({
           developers. Explore the steps and adapt them to your work; there are many
           workflows beyond this collection.
         </p>
+        <p className="field__hint">
+          Looking to assemble a new reusable workflow from refreshed remote skills?{' '}
+          <Link to="/discovery">Open discovery</Link>. Example recipes can be copied into
+          an open project.
+        </p>
       </header>
 
       {catalogState.status === 'ready' ? (

@@ -94,6 +94,11 @@ export function ProjectsPage() {
           Choose a local project folder to browse its skills and chains. Nothing leaves
           this machine.
         </p>
+        <p className="field__hint">
+          Want to explore reusable skills without opening a repository?{' '}
+          <Link to="/discovery">Start a discovery handoff</Link> or{' '}
+          <Link to="/library">browse saved work</Link>.
+        </p>
       </header>
 
       <div className="projects-layout">

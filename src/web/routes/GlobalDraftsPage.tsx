@@ -152,6 +152,9 @@ export function GlobalDraftsPage({ api = globalDraftsApi }: GlobalDraftsPageProp
           then explicitly copy a draft into a project when it is ready.
         </p>
         <div className="panel__actions">
+          <Link className="button button--secondary" to="/discovery">
+            Discover reusable workflows
+          </Link>
           <button
             type="button"
             className="button"
@@ -171,7 +174,7 @@ export function GlobalDraftsPage({ api = globalDraftsApi }: GlobalDraftsPageProp
 
       {discoveryOpen ? (
         <form className="panel" onSubmit={(event) => void startDiscovery(event)} data-testid="scenario-discovery-form">
-          <h2 className="section-title">Start a project-independent scenario</h2>
+          <h2 className="section-title">Start a manual goal draft</h2>
           <div className="field">
             <label className="field__label" htmlFor={goalId}>What outcome do you want?</label>
             <textarea
@@ -185,7 +188,8 @@ export function GlobalDraftsPage({ api = globalDraftsApi }: GlobalDraftsPageProp
               disabled={discoveryBusy}
             />
             <p className="field__hint" id={`${goalId}-hint`}>
-              This becomes a draft instruction. Keep credentials and private runtime values out;
+              This seeds a draft instruction; it does not recommend or assemble a scenario.
+              Keep credentials and private runtime values out;
               add values that should be collected later as named inputs.
             </p>
           </div>

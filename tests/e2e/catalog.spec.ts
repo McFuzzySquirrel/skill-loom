@@ -98,6 +98,19 @@ test.afterAll(async () => {
   }
 });
 
+test.afterEach(async ({ request }) => {
+  const response = await request.get('/api/settings/extra-skill-directories');
+  expect(response.ok()).toBe(true);
+  const { extraSkillDirectories } = await response.json() as { extraSkillDirectories: string[] };
+  for (const directory of [extraDirectory, secondExtraDirectory]) {
+    if (!extraSkillDirectories.includes(directory)) continue;
+    const removed = await request.delete(
+      `/api/settings/extra-skill-directories?path=${encodeURIComponent(directory)}`,
+    );
+    expect(removed.ok()).toBe(true);
+  }
+});
+
 function collectConsoleErrors(page: Page): string[] {
   const errors: string[] = [];
   page.on('console', (message) => {

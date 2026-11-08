@@ -6,7 +6,7 @@
 
 [![Node.js >=24](https://img.shields.io/badge/Node.js-%3E%3D24-339933?logo=nodedotjs&logoColor=white)](package.json)
 
-Skill Loom is a local workspace for designing, saving, and bundling reusable workflows built from agent skills and standalone instructions. Its chain library keeps reusable templates in one place; portable `.loom.json` bundles can be reviewed and moved into other repositories. Optional local testing is available, and portable bundles can be run by a compatible agent CLI.
+Skill Loom is a local workspace for discovering, designing, saving, and bundling reusable workflows built from agent skills and standalone instructions. Start with a goal: prepare a reviewed, project-independent discovery handoff, open a repository to build or run chains, or browse examples and saved work. Portable `.loom.json` bundles can be reviewed and moved into other repositories.
 
 Skill Loom does not author skills and does not execute a skill as a callable command. Each chain step is sent to a local harness as a prompt; skills are **model-invoked** context. The chain order is prompt order, **not a guarantee** that a harness loads or fires a named skill. A harness may decline to load a skill even when preflight resolved it.
 
@@ -58,9 +58,10 @@ The product promise is deliberately narrow:
 | Capability | What it does |
 |---|---|
 | Global chain library | Keep reusable chain templates outside any project, then copy them into a project to adapt or test. |
-| Project-independent drafts | Start from an outcome, register and refresh optional remote repositories, select pinned skills and agents, and build without installing content into an existing project. |
+| Project-independent workflows | Select skills from already refreshed pinned snapshots, review complete package contents, and prepare a standalone discovery handoff for an existing compatible CLI session. Manual goal drafts remain a separate authoring path. |
 | Portable chain bundles | Export a saved chain with complete referenced skill packages as `.loom.json`; version 2 also preserves one selected native agent. Review, download, and move it into another repository or installation. |
-| Shared bundle library | Publish reviewed bundles without overwriting existing files to a configured local or mounted directory, then browse and import them from Skill Loom. |
+| Shared bundle library | Review and publish a locally selected bundle without a project, or browse, download, and explicitly import a shared bundle into a project. Publication never overwrites existing files. |
+| Start and library overview | Choose discovery, project work, or saved libraries from `/`; drafts, templates, shared bundles, and scenario examples remain distinct. |
 | Chain builder | Create a chain bound to one harness, add skill or standalone instruction steps, optionally select one exact remote native agent, reorder steps, and declare named inputs. |
 | Projects | Register existing folders or create new ones, browse the filesystem, optionally initialize Git, and keep a recent-project list. Removing a recent entry never deletes project files. |
 | Skill catalog | Discover OpenCode filesystem skills and Copilot CLI skills, read `SKILL.md` metadata, search, add extra global directories, and copy non-project packages into the shared `.agents/skills/` root. |
@@ -142,6 +143,7 @@ The full decision directory is in [docs/adr/README.md](docs/adr/README.md).
 - `scripts/` — Documentation gate, package smoke test, and live harness probes.
 - `docs/` — User, administrator, and operations guides, ADRs, release notes, support ownership, and live evidence.
 - `.github/skills/` — Project-maintained Copilot skills and their references.
+- `skill/scenario-discovery/` — Mirrored standalone project-independent discovery skill and helpers.
 - `.opencode/agents/` and `.opencode/skills/` — OpenCode agent definitions and mirrored project skills.
 - `<project>/.agents/skills/` — Shared destination for new project skill copies and bundle imports; OpenCode also discovers legacy `.opencode/skills/`.
 - `dist/` — Build output for the server and web UI; generated, not source.

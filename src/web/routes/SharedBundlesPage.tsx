@@ -9,6 +9,7 @@ import {
   type SharedLibrarySnapshot,
 } from '../api/sharedBundles';
 import { ImportBundleDialog } from '../components/ImportBundleDialog';
+import { BundleContents } from '../components/BundleContents';
 import { InlineError } from '../components/InlineError';
 import { useStatusAnnouncer } from '../components/StatusRegion';
 import { Link, useRouter } from '../router';
@@ -42,6 +43,11 @@ export function SharedBundlesPage() {
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [loadingBundleId, setLoadingBundleId] = useState<string | null>(null);
   const [importingBundle, setImportingBundle] = useState<ChainBundle | null>(null);
+  const [reviewingBundle, setReviewingBundle] = useState<{ name: string; bundle: ChainBundle } | null>(null);
+  const [uploadName, setUploadName] = useState('');
+  const [uploadPreview, setUploadPreview] = useState<{ bundle: ChainBundle; reviewFingerprint: string } | null>(null);
+  const [uploadContentsReviewed, setUploadContentsReviewed] = useState(false);
+  const [uploadRedistributionReviewed, setUploadRedistributionReviewed] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const projects = projectsState.status === 'ready' ? projectsState.projects : [];
@@ -90,20 +96,116 @@ export function SharedBundlesPage() {
     }
   };
 
-  const openBundle = async (entry: SharedLibraryEntry) => {
-    if (entry.status !== 'available' || selectedProjectId === '') return;
+  const readBundle = async (entry: SharedLibraryEntry) => {
+    if (entry.status !== 'available') return;
     setLoadingBundleId(entry.id);
     setError(null);
     try {
       const bundle = await sharedBundlesApi.read(entry.id);
-      setImportingBundle(bundle);
+      setReviewingBundle({ name: entry.name ?? entry.filename, bundle });
     } catch (caught) {
-      const apiError = toApiClientError(caught, 'The shared bundle could not be opened.');
+      const apiError = toApiClientError(caught, 'The shared bundle could not be reviewed.');
+      setError(apiError);
+      announce(`Shared bundle could not be reviewed: ${apiError.message}`, 'assertive');
+    } finally {
+      setLoadingBundleId(null);
+    }
+  };
+
+  const openImport = async (entry: SharedLibraryEntry) => {
+    if (entry.status !== 'available' || selectedProjectId === '') return;
+    setLoadingBundleId(entry.id);
+    setError(null);
+    try {
+      setImportingBundle(await sharedBundlesApi.read(entry.id));
+    } catch (caught) {
+      const apiError = toApiClientError(caught, 'The shared bundle could not be opened for import.');
       setError(apiError);
       announce(`Shared bundle could not be opened: ${apiError.message}`, 'assertive');
     } finally {
       setLoadingBundleId(null);
     }
+  };
+
+  const previewUpload = async (file: File | undefined) => {
+    setUploadPreview(null);
+    setUploadContentsReviewed(false);
+    setUploadRedistributionReviewed(false);
+    setError(null);
+    if (!file) return;
+    setBusy(true);
+    try {
+      if (!file.name.endsWith('.loom.json')) {
+        throw new ApiClientError('Choose a Skill Loom `.loom.json` chain bundle.', { code: 'BUNDLE_INVALID', status: 422 });
+      }
+      if (file.size > 30 * 1024 * 1024) {
+        throw new ApiClientError('Bundle files must be smaller than 30 MiB.', { code: 'BUNDLE_TOO_LARGE', status: 413 });
+      }
+      let raw: unknown;
+      try {
+        raw = JSON.parse(await file.text()) as unknown;
+      } catch {
+        throw new ApiClientError('The selected bundle is not valid JSON.', { code: 'BUNDLE_INVALID', status: 422 });
+      }
+      const preview = await sharedBundlesApi.previewUpload(raw);
+      setUploadPreview(preview);
+      setUploadName(preview.bundle.chain.name);
+      announce(`Reviewed ${preview.bundle.chain.name} from the selected local bundle.`);
+    } catch (caught) {
+      const apiError = toApiClientError(caught, 'The local bundle could not be reviewed.');
+      setError(apiError);
+      announce(`Local bundle review failed: ${apiError.message}`, 'assertive');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const publishUpload = async () => {
+    if (
+      uploadPreview === null ||
+      uploadName.trim() === '' ||
+      !uploadContentsReviewed ||
+      !uploadRedistributionReviewed ||
+      busy
+    ) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const entry = await sharedBundlesApi.publishUpload({
+        bundle: uploadPreview.bundle,
+        displayName: uploadName.trim(),
+        contentsReviewed: true,
+        redistributionReviewed: true,
+        reviewFingerprint: uploadPreview.reviewFingerprint,
+      });
+      await reload();
+      setUploadPreview(null);
+      setUploadName('');
+      setUploadContentsReviewed(false);
+      setUploadRedistributionReviewed(false);
+      announce(`Added ${entry.name ?? entry.filename} to the shared bundle library.`);
+      heading.current?.focus();
+    } catch (caught) {
+      const apiError = toApiClientError(caught, 'The reviewed bundle could not be published.');
+      setError(apiError);
+      announce(`Shared bundle publication failed: ${apiError.message}`, 'assertive');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const downloadReviewedBundle = () => {
+    if (reviewingBundle === null) return;
+    const blob = new Blob([`${JSON.stringify(reviewingBundle.bundle, null, 2)}\n`], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${reviewingBundle.name.replace(/[^A-Za-z0-9._-]+/g, '-')}.loom.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    announce('Downloaded the reviewed shared bundle.');
   };
 
   const imported = (chain: Chain) => {
@@ -125,8 +227,69 @@ export function SharedBundlesPage() {
         <div className="panel__actions">
           <Link className="button button--secondary" to="/drafts">Chain drafts</Link>
           <Link className="button button--secondary" to="/chains">Local templates</Link>
+          <Link className="button button--secondary" to="/library">Library overview</Link>
+          <a className="button button--secondary" href="/api/portable-skill">
+            Download loom-run-bundle
+          </a>
         </div>
+        <p className="field__hint">
+          The portable runner works inside a compatible host and does not launch a harness.
+          It cannot prepare v2 bundles with selected native agents; use Skill Loom's managed
+          designer and run flow for those bundles.
+        </p>
       </header>
+
+      <section className="panel" aria-labelledby="shared-upload-title">
+        <h2 className="section-title" id="shared-upload-title">Review and add bundle</h2>
+        <p>
+          Choose a local `.loom.json` file to validate and inspect it before publication.
+          The browser sends the file contents to this local server; it does not send a
+          filesystem path. Adding a bundle does not execute it, install skills, or establish
+          redistribution rights.
+        </p>
+        <div className="field">
+          <label className="field__label" htmlFor="shared-upload-file">Local chain bundle (.loom.json)</label>
+          <input
+            id="shared-upload-file"
+            type="file"
+            accept=".loom.json,application/json"
+            disabled={busy}
+            onChange={(event) => void previewUpload(event.target.files?.[0])}
+          />
+        </div>
+        {uploadPreview ? (
+          <>
+            <BundleContents bundle={uploadPreview.bundle} />
+            <div className="field">
+              <label className="field__label" htmlFor="shared-upload-name">Library display name</label>
+              <input
+                className="input"
+                id="shared-upload-name"
+                value={uploadName}
+                maxLength={100}
+                onChange={(event) => setUploadName(event.target.value)}
+                disabled={busy}
+              />
+            </div>
+            <label className="checkbox-field">
+              <input type="checkbox" checked={uploadContentsReviewed} onChange={(event) => setUploadContentsReviewed(event.target.checked)} disabled={busy} />
+              <span>I reviewed every instruction and package file for sensitive content.</span>
+            </label>
+            <label className="checkbox-field">
+              <input type="checkbox" checked={uploadRedistributionReviewed} onChange={(event) => setUploadRedistributionReviewed(event.target.checked)} disabled={busy} />
+              <span>I separately reviewed applicable licenses and redistribution rights.</span>
+            </label>
+            <button
+              type="button"
+              className="button"
+              onClick={() => void publishUpload()}
+              disabled={busy || uploadName.trim() === '' || !uploadContentsReviewed || !uploadRedistributionReviewed}
+            >
+              {busy ? 'Publishing…' : 'Publish reviewed bundle'}
+            </button>
+          </>
+        ) : null}
+      </section>
 
       <section className="panel" aria-labelledby="shared-directory-title">
         <h2 className="section-title" id="shared-directory-title">Shared directory</h2>
@@ -198,7 +361,7 @@ export function SharedBundlesPage() {
           </select>
         </div>
       ) : projectsState.status === 'ready' ? (
-        <p className="state-note">Open a project before importing a shared bundle.</p>
+        <p className="state-note">You can review and download bundles without a project. Open a project only when you want to import one.</p>
       ) : null}
 
       {error !== null ? (
@@ -239,15 +402,21 @@ export function SharedBundlesPage() {
               <button
                 type="button"
                 className="button button--secondary"
-                onClick={() => void openBundle(entry)}
-                disabled={
-                  entry.status !== 'available' ||
-                  selectedProjectId === '' ||
-                  loadingBundleId !== null
-                }
+                onClick={() => void readBundle(entry)}
+                disabled={entry.status !== 'available' || loadingBundleId !== null}
               >
-                {loadingBundleId === entry.id ? 'Opening…' : 'Review and import'}
+                {loadingBundleId === entry.id ? 'Opening…' : 'Review and download'}
               </button>
+              {entry.status === 'available' ? (
+                <button
+                  type="button"
+                  className="button button--secondary"
+                  onClick={() => void openImport(entry)}
+                  disabled={selectedProjectId === '' || loadingBundleId !== null}
+                >
+                  {selectedProjectId === '' ? 'Import into project (choose a project)' : 'Import into project'}
+                </button>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -260,6 +429,17 @@ export function SharedBundlesPage() {
           onImported={imported}
           onClose={() => setImportingBundle(null)}
         />
+      ) : null}
+      {reviewingBundle !== null ? (
+        <section className="panel" aria-labelledby="shared-review-title">
+          <h2 className="section-title" id="shared-review-title">Review shared bundle: {reviewingBundle.name}</h2>
+          <p>Review and download do not require a project. Downloading does not import, install, or run the bundle.</p>
+          <BundleContents bundle={reviewingBundle.bundle} />
+          <div className="panel__actions">
+            <button type="button" className="button" onClick={downloadReviewedBundle}>Download reviewed bundle</button>
+            <button type="button" className="button button--secondary" onClick={() => setReviewingBundle(null)}>Close review</button>
+          </div>
+        </section>
       ) : null}
     </section>
   );

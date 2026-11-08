@@ -16,6 +16,7 @@
  */
 
 import { execFile, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
@@ -230,6 +231,77 @@ async function createDemoProject(root, folder, description, skills, withGit) {
     }
   }
   return realpath(projectPath);
+}
+
+async function seedRemoteSnapshot(baseURL, configDirectory) {
+  const repository = 'https://github.com/skill-loom/demo-skills.git';
+  const { source } = await api(baseURL, '/api/settings/remote-skill-sources', {
+    method: 'POST',
+    body: JSON.stringify({ repository, ref: 'main' }),
+  });
+  const revision = 'a'.repeat(40);
+  const snapshotRoot = join(configDirectory, 'catalog-sources', source.id, revision);
+  const packages = [];
+
+  for (const skill of SKILLS.slice(0, 4)) {
+    const repositoryPath = `skills/${skill.name}`;
+    const directory = createHash('sha256').update(repositoryPath).digest('hex');
+    const skillPath = `SKILL.md`;
+    const content = Buffer.from(
+      `---\nname: ${skill.name}\ndescription: ${skill.description}\n---\n\n# ${skill.title}\n\n${skill.body}\n`,
+      'utf8',
+    );
+    const fingerprint = createHash('sha256')
+      .update(skillPath)
+      .update('\0')
+      .update('-')
+      .update('\0')
+      .update(content)
+      .digest('hex');
+    const packageRoot = join(snapshotRoot, 'packages', directory);
+    await mkdir(packageRoot, { recursive: true, mode: 0o700 });
+    await writeFile(join(packageRoot, skillPath), content, { mode: 0o644 });
+    packages.push({
+      name: skill.name,
+      description: skill.description,
+      repositoryPath,
+      directory,
+      files: 1,
+      bytes: content.byteLength,
+      fingerprint,
+    });
+  }
+
+  await writeFile(
+    join(snapshotRoot, 'snapshot.json'),
+    `${JSON.stringify({
+      version: 1,
+      sourceId: source.id,
+      repository,
+      revision,
+      packages,
+      agents: [],
+    }, null, 2)}\n`,
+    { mode: 0o600 },
+  );
+  const firstPackage = packages[0];
+  if (firstPackage === undefined) {
+    throw new Error('The visual-tour snapshot fixture has no candidate packages.');
+  }
+  await api(baseURL, '/api/discovery/handoffs', {
+    method: 'POST',
+    body: JSON.stringify({
+      goal: 'Review release readiness and prepare an actionable handoff.',
+      harness: 'opencode',
+      candidates: [{
+        sourceId: source.id,
+        revision,
+        repositoryPath: firstPackage.repositoryPath,
+        fingerprint: firstPackage.fingerprint,
+      }],
+    }),
+  });
+  return source;
 }
 
 async function writeFakeOpenCode(binDirectory) {
@@ -513,6 +585,7 @@ async function main() {
     log('Seeding the isolated demo workspace...');
     const atlas = await openProject(baseURL, atlasPath);
     await openProject(baseURL, ledgerPath);
+    await seedRemoteSnapshot(baseURL, configDirectory);
 
     const chain = await createChain(baseURL, atlas.id, {
       name: 'Release readiness',
@@ -538,6 +611,30 @@ async function main() {
     await saveTemplate(baseURL, atlas.id, chain.id, 'Release readiness template');
     await saveTemplate(baseURL, atlas.id, secondChain.id, 'Incident follow-up template');
 
+    const sharedDirectory = join(temporaryRoot, 'shared-bundles');
+    await mkdir(sharedDirectory, { recursive: true });
+    await api(baseURL, '/api/shared-bundles/config', {
+      method: 'PUT',
+      body: JSON.stringify({ directory: sharedDirectory }),
+    });
+    const { bundle } = await api(
+      baseURL,
+      `/api/projects/${atlas.id}/chains/${chain.id}/bundle`,
+    );
+    const reviewFingerprint = createHash('sha256')
+      .update(JSON.stringify(bundle), 'utf8')
+      .digest('hex');
+    await api(baseURL, '/api/shared-bundles/publish-upload', {
+      method: 'POST',
+      body: JSON.stringify({
+        bundle,
+        displayName: 'Release readiness example',
+        contentsReviewed: true,
+        redistributionReviewed: true,
+        reviewFingerprint,
+      }),
+    });
+
     browser = await chromium.launch();
     const page = await browser.newPage({
       viewport: pngViewport,
@@ -546,33 +643,62 @@ async function main() {
     });
 
     log('Capturing full-size tour images...');
+    await goto(page, baseURL, '/');
+    await page.getByRole('heading', { level: 1, name: 'What would you like to do?' }).waitFor();
+    await capturePng(page, '01-start.png');
+
+    await goto(page, baseURL, '/discovery');
+    await page.getByRole('heading', { level: 1, name: 'Discover reusable workflows' }).waitFor();
+    await page.getByRole('checkbox', { name: /Select repo-audit/ }).check();
+    await capturePng(page, '02-discovery.png');
+    await page.getByRole('checkbox', { name: /Select repo-audit/ }).uncheck();
+
+    await goto(page, baseURL, '/library');
+    await page.getByRole('heading', { level: 1, name: 'Libraries and saved work' }).waitFor();
+    await capturePng(page, '03-library-overview.png');
+
     await openProjects(page, baseURL, projectsRoot);
-    await capturePng(page, '01-projects.png');
+    await capturePng(page, '04-projects.png');
 
     await openWorkspace(page, baseURL, atlas);
-    await capturePng(page, '02-project-workspace.png');
+    await capturePng(page, '05-project-workspace.png');
 
     await openBuilder(page, baseURL, atlas, chain);
     await page.setViewportSize(designerViewport);
-    await capturePng(page, '03-workflow-designer.png', false);
+    await capturePng(page, '06-workflow-designer.png', false);
     await page.setViewportSize(pngViewport);
 
     await openPreflight(page, baseURL, atlas, chain);
-    await capturePng(page, '04-preflight.png');
+    await capturePng(page, '07-preflight.png');
 
     const runId = await startRun(page);
     await openTerminal(page, baseURL, runId);
-    await capturePng(page, '05-terminal.png', false);
+    await capturePng(page, '08-terminal.png', false);
 
     await openRunDetails(page, baseURL, runId);
-    await capturePng(page, '06-run-details.png');
+    await capturePng(page, '09-run-details.png');
 
     await openLibrary(page, baseURL);
-    await capturePng(page, '07-chain-library.png');
+    await capturePng(page, '10-chain-library.png');
+
+    await goto(page, baseURL, '/shared-bundles');
+    await page.getByRole('heading', { level: 1, name: 'Shared bundle library' }).waitFor();
+    await page.getByText('Release readiness', { exact: true }).waitFor();
+    await capturePng(page, '11-shared-bundles.png');
 
     log('Capturing slow GIF frames...');
     await page.setViewportSize(gifViewport);
     const frames = [];
+
+    await goto(page, baseURL, '/');
+    frames.push(await captureGifFrame(page));
+
+    await goto(page, baseURL, '/discovery');
+    await page.getByRole('heading', { level: 1, name: 'Discover reusable workflows' }).waitFor();
+    frames.push(await captureGifFrame(page, page.getByRole('heading', { name: '3. Candidate skills' })));
+
+    await goto(page, baseURL, '/library');
+    frames.push(await captureGifFrame(page));
 
     await openProjects(page, baseURL, projectsRoot);
     frames.push(await captureGifFrame(page));
@@ -594,6 +720,9 @@ async function main() {
 
     await openLibrary(page, baseURL);
     frames.push(await captureGifFrame(page, page.getByTestId('global-chain-list')));
+
+    await goto(page, baseURL, '/shared-bundles');
+    frames.push(await captureGifFrame(page, page.getByRole('heading', { name: 'Shared bundle library' })));
 
     await encodeGif(frames, gifPath);
     log(`  saved docs/assets/skill-loom-tour.gif (${String(frames.length)} frames)`);

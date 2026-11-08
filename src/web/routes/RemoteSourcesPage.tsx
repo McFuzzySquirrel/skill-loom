@@ -9,6 +9,7 @@ import {
 import type { ApiClientError } from '../api/client';
 import { InlineError } from '../components/InlineError';
 import { useStatusAnnouncer } from '../components/StatusRegion';
+import { Link } from '../router';
 
 export function RemoteSourcesPage({ api = catalogApi }: { api?: CatalogApi }) {
   const repositoryId = useId();
@@ -119,6 +120,10 @@ export function RemoteSourcesPage({ api = catalogApi }: { api?: CatalogApi }) {
         <p className="field__hint">
           Use HTTPS or SSH URLs without embedded passwords or tokens. Private repository
           authentication must already be configured for Git on this machine.
+        </p>
+        <p className="field__hint">
+          After explicitly refreshing snapshots,{' '}
+          <Link to="/discovery">select candidate skills for a reusable workflow handoff</Link>.
         </p>
       </header>
 

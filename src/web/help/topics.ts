@@ -12,6 +12,30 @@ export const HELP_TOPICS = {
     article: 'user-guide',
     anchor: 'sign-in-and-first-use',
   },
+  start: {
+    title: 'Choose a workflow',
+    summary: 'Start with your goal: discover reusable workflows, open a repository, or browse examples and saved work.',
+    article: 'user-guide',
+    anchor: 'main-workflows',
+  },
+  discovery: {
+    title: 'Discover reusable workflows',
+    summary: 'Select and review enabled skills from already refreshed remote snapshots. Discovery prepares a handoff for an existing compatible CLI session; it does not launch a model or execute skills.',
+    article: 'user-guide',
+    anchor: 'discover-candidate-skills-and-prepare-a-handoff',
+  },
+  sharedBundles: {
+    title: 'Shared bundles',
+    summary: 'Review and publish a locally selected bundle without a project, or review and download a library entry. Import remains a separate project-scoped action.',
+    article: 'user-guide',
+    anchor: 'import-a-shared-chain',
+  },
+  libraries: {
+    title: 'Libraries and saved work',
+    summary: 'Drafts, chain templates, shared bundles, and scenario examples have different purposes and remain separate.',
+    article: 'user-guide',
+    anchor: 'reuse-a-chain',
+  },
   projects: {
     title: 'Projects',
     summary: 'Open a recent project or browse to a local folder. Removing a recent entry does not delete its files.',
@@ -164,9 +188,9 @@ export const HELP_TOPICS = {
   },
   discoverySkill: {
     title: 'Discover workflows with scenario-discovery',
-    summary: 'The skill inventories project-local skills, proposes a chain, and builds a reviewable bundle. It does not import or run the bundle.',
+    summary: 'The skill can inspect project-local packages or validate a project-independent handoff, propose scenarios, and build a reviewable bundle. It does not import or run the bundle.',
     article: 'user-guide',
-    anchor: 'discover-and-package-project-workflows',
+    anchor: 'discover-candidate-skills-and-prepare-a-handoff',
   },
   runnerSkill: {
     title: 'Run a bundle with loom-run-bundle',
@@ -179,6 +203,11 @@ export const HELP_TOPICS = {
 export type HelpTopicId = keyof typeof HELP_TOPICS;
 
 const PAGE_TOPICS: ReadonlyArray<[RegExp, HelpTopicId]> = [
+  [/^\/$/, 'start'],
+  [/^\/discovery$/, 'discovery'],
+  [/^\/library$/, 'libraries'],
+  [/^\/shared-bundles$/, 'sharedBundles'],
+  [/^\/drafts(?:\/|$)/, 'library'],
   [/^\/help(?:\/|$)/, 'help'],
   [/^\/projects\/[^/]+\/chains\/[^/]+\/run$/, 'runStart'],
   [/^\/projects\/[^/]+\/chains\/[^/]+$/, 'builder'],

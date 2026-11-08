@@ -143,10 +143,11 @@ export function HelpPage() {
                 <HelpPopover topic="discoverySkill" />
               </div>
               <p>
-                <strong>scenario-discovery</strong> inspects enabled project-local skills,
-                proposes a useful ordered workflow, and builds a reviewed <code>.loom.json</code>
-                bundle. Review the proposed chain and file inventory before confirming. This skill
-                does not import or execute the result.
+                <strong>scenario-discovery</strong> supports two separate modes: project-local
+                discovery, or an offline-validated handoff from the project-independent discovery
+                page. It proposes a useful ordered workflow and builds a reviewed <code>.loom.json</code>
+                bundle from selected packages only. Review the proposed chain and complete file
+                inventory before confirming. This skill does not import or execute the result.
               </p>
               <p>
                 <HelpPopover topic="runnerSkill" />{' '}

@@ -3270,6 +3270,108 @@ main:focus {
   gap: 0.25rem;
 }
 
+.workspace-sidebar .app-nav__heading {
+  margin: var(--space-2) 0 0;
+  padding: 0.25rem 0.7rem 0;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.journey-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+.journey-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: clamp(1.25rem, 3vw, 2rem);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 8%);
+}
+
+.journey-card h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.journey-card p {
+  max-width: 48ch;
+  margin: 0 0 auto;
+  padding-bottom: var(--space-3);
+  color: var(--text-muted);
+  text-wrap: pretty;
+}
+
+.discovery-source,
+.discovery-candidate {
+  min-width: 0;
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-inset);
+}
+
+.discovery-source h3,
+.discovery-candidate h3 {
+  margin: 0 0 var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.discovery-candidate-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.discovery-candidate-list .discovery-candidate {
+  margin: 0;
+}
+
+.discovery-candidate__select {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.discovery-candidate__select input {
+  flex: 0 0 auto;
+  margin-top: 0.3rem;
+}
+
+.discovery-candidate__inspection,
+.discovery-candidate > details {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.discovery-candidate pre {
+  max-height: 24rem;
+  overflow: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .workspace-sidebar .app-nav a,
 .workspace-project-nav a,
 .workspace-run-nav a {

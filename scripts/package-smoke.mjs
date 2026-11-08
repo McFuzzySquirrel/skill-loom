@@ -33,6 +33,11 @@ function assertPackageContents(files) {
     'package/dist/skills/loom-run-bundle.zip',
     'package/dist/skills/loom-run-bundle/SKILL.md',
     'package/dist/skills/loom-run-bundle/scripts/loom-bundle.mjs',
+    'package/dist/skills/scenario-discovery-v1.zip',
+    'package/dist/skills/scenario-discovery/VERSION',
+    'package/dist/skills/scenario-discovery/LICENSE',
+    'package/dist/skills/scenario-discovery/scripts/read-handoff.mjs',
+    'package/dist/skills/scenario-discovery/scripts/build-from-handoff.mjs',
   ];
   for (const path of required) {
     if (!files.includes(path)) {
@@ -158,6 +163,34 @@ async function smokePortableSkill(temporaryRoot) {
   }
 }
 
+async function smokeScenarioDiscoverySkill() {
+  const archive = await readFile(join(repoRoot, 'dist', 'skills', 'scenario-discovery-v1.zip'));
+  const files = unzipSync(archive);
+  const required = [
+    'scenario-discovery/VERSION',
+    'scenario-discovery/LICENSE',
+    'scenario-discovery/SKILL.md',
+    'scenario-discovery/scripts/build-bundle.mjs',
+    'scenario-discovery/scripts/handoff-validator.mjs',
+    'scenario-discovery/scripts/read-handoff.mjs',
+    'scenario-discovery/scripts/build-from-handoff.mjs',
+  ];
+  for (const path of required) {
+    if (!files[path]) throw new Error(`The scenario-discovery archive is missing ${path}.`);
+  }
+  for (const directory of [
+    join(repoRoot, '.github', 'skills', 'scenario-discovery'),
+    join(repoRoot, 'skill', 'scenario-discovery'),
+  ]) {
+    for (const path of required.slice(2)) {
+      const sourceFile = await readFile(join(directory, path.slice('scenario-discovery/'.length)));
+      if (!sourceFile.equals(files[path])) {
+        throw new Error(`The scenario-discovery package is missing or out of sync: ${directory}/${path}`);
+      }
+    }
+  }
+}
+
 async function main() {
   await mkdir(join(repoRoot, '.tmp'), { recursive: true });
   const temporaryRoot = await mkdtemp(join(repoRoot, '.tmp', 'package-smoke-'));
@@ -199,6 +232,7 @@ async function main() {
     const files = listed.stdout.split(/\r?\n/).filter(Boolean);
     assertPackageContents(files);
     await smokePortableSkill(temporaryRoot);
+    await smokeScenarioDiscoverySkill();
 
     const version = await execFileAsync(
       npxCommand,
