@@ -10,6 +10,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { basename, join } from 'node:path';
+import { publishSkillEntry } from '../../portable/install-skill.js';
 import type { ScenarioSkillSource } from '../../shared/presets.js';
 import { SHARED_PROJECT_SKILLS_SEGMENTS, sharedProjectSkillRoot } from './project-paths.js';
 import { snapshotPackageFingerprint, snapshotReviewFingerprint } from './snapshot-fingerprint.js';
@@ -88,6 +89,13 @@ export function projectSkillRootFor(_harness: SkillHarness, projectPath: string)
 
 export async function copySkillIntoProject(
   input: CopySkillIntoProjectInput,
+): Promise<CopySkillIntoProjectResult> {
+  return copySkillIntoProjectWithNotice(input);
+}
+
+async function copySkillIntoProjectWithNotice(
+  input: CopySkillIntoProjectInput,
+  notice?: string,
 ): Promise<CopySkillIntoProjectResult> {
   const { entry, projectPath, harness, allowNameSuffix = true } = input;
 
@@ -172,12 +180,29 @@ export async function copySkillIntoProject(
     allowNameSuffix,
   );
 
-  const budget = { files: 0, bytes: 0, entries: 0 };
+  const budget: CopyBudget = { files: 0, bytes: 0, entries: 0 };
   try {
     await copyDirectory(sourceDirectory, destination, budget);
-    if (entry.source === 'remote' && remoteContent !== undefined) {
-      await verifyRemoteCopy(destination, remoteContent, entry.id);
+    if (budget.entry === undefined) {
+      throw new CatalogCopyError(
+        CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
+        'The skill package no longer contains its SKILL.md entry.',
+        { skillId: entry.id },
+      );
     }
+    if (notice !== undefined) {
+      await writeFile(join(destination, 'SKILL-LOOM-SOURCE.md'), notice, {
+        encoding: 'utf8',
+        flag: 'wx',
+        mode: 0o644,
+      });
+    }
+    if (entry.source === 'remote' && remoteContent !== undefined) {
+      await verifyRemoteCopy(destination, remoteContent, entry.id, budget.entry);
+    }
+    await publishSkillEntry(destination, budget.entry.content, Number(budget.entry.mode & 0o777n), {
+      enforceFileMode: true,
+    });
   } catch (error) {
     await removePartialCopy(
       destination,
@@ -200,11 +225,12 @@ export async function copySkillIntoProject(
     root: string,
     snapshot: NonNullable<SkillEntry[typeof REMOTE_SNAPSHOT_CONTENT]>,
     skillId: string,
+    entry: { content: Buffer; mode: bigint },
   ): Promise<void> {
     const files: Array<{ path: string; content: Buffer; executable: boolean }> = [];
     const remainingExecutables = snapshot.executablePaths === undefined
       ? undefined : new Set(snapshot.executablePaths);
-    let bytes = 0;
+    let bytes = entry.content.length;
     let entries = 0;
     const unsafe = () => new CatalogCopyError(
       CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
@@ -235,6 +261,11 @@ export async function copySkillIntoProject(
         files.push({ path: relativePath, content, executable: recordedExecutable ?? executable });
       }
     }
+    const recordedExecutable = remainingExecutables?.delete('SKILL.md');
+    const executable = (entry.mode & 0o111n) !== 0n;
+    if (recordedExecutable !== undefined && process.platform !== 'win32' &&
+        executable !== recordedExecutable) throw unsafe();
+    files.push({ path: 'SKILL.md', content: entry.content, executable: recordedExecutable ?? executable });
     await visit(root, '', 0);
     if ((remainingExecutables?.size ?? 0) !== 0 ||
         snapshotPackageFingerprint(files) !== snapshot.fingerprint ||
@@ -296,10 +327,6 @@ export async function copyBundledScenarioSkill(
     );
   }
 
-  const result = await copySkillIntoProject({
-    ...input,
-    allowNameSuffix: false,
-  });
   const notice = [
     '# Skill source and attribution',
     '',
@@ -315,28 +342,7 @@ export async function copyBundledScenarioSkill(
     '',
   ].join('\n');
 
-  try {
-    await writeFile(join(result.destinationPath, 'SKILL-LOOM-SOURCE.md'), notice, {
-      encoding: 'utf8',
-      flag: 'wx',
-      mode: 0o644,
-    });
-  } catch (error) {
-    await removePartialCopy(
-      result.destinationPath,
-      input.entry.id,
-      'A bundled skill package could not be removed after its attribution notice failed.',
-      error,
-    );
-    throw new CatalogCopyError(
-      CATALOG_COPY_ERROR_CODES.COPY_FAILED,
-      'The bundled skill attribution notice could not be written.',
-      { skillId: input.entry.id, reason: errnoCode(error) },
-      { cause: error },
-    );
-  }
-
-  return result;
+  return copySkillIntoProjectWithNotice({ ...input, allowNameSuffix: false }, notice);
 }
 
 async function removePartialCopy(
@@ -450,10 +456,17 @@ async function reserveDestination(
   );
 }
 
+interface CopyBudget {
+  files: number;
+  bytes: number;
+  entries: number;
+  entry?: { content: Buffer; mode: bigint };
+}
+
 async function copyDirectory(
   source: string,
   destination: string,
-  budget: { files: number; bytes: number; entries: number },
+  budget: CopyBudget,
   depth = 0,
 ): Promise<void> {
   const directory = await lstat(source);
@@ -525,6 +538,10 @@ async function copyDirectory(
         'The skill package changed during copying.',
         { path: sourcePath },
       );
+    }
+    if (depth === 0 && entry.name === 'SKILL.md') {
+      budget.entry = checked;
+      continue;
     }
     await writeFile(destinationPath, checked.content, {
       flag: 'wx',

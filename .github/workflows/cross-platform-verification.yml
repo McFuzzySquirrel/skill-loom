@@ -48,7 +48,7 @@ jobs:
       - if: inputs.suite == 'chain-bundles'
         run: npx vitest run tests/unit/git-file-modes.test.ts tests/integration/chain-bundles.test.ts
       - if: inputs.suite == 'skill-install'
-        run: npx vitest run tests/unit/install-skill.test.ts tests/unit/portable-runtime.test.ts tests/integration/chain-bundles.test.ts
+        run: npx vitest run tests/unit/install-skill.test.ts tests/unit/catalog-copy-publication.test.ts tests/unit/catalog-copy.test.ts tests/unit/portable-runtime.test.ts tests/integration/chain-bundles.test.ts tests/integration/presets-routes.test.ts
       - if: inputs.suite == 'windows-baseline'
         run: npx vitest run tests/unit/chain-store.test.ts tests/unit/config.test.ts tests/unit/run-store.test.ts tests/unit/catalog-copy.test.ts tests/unit/harness-registry.test.ts tests/integration/server.test.ts
       - if: inputs.suite == 'remote-copy'

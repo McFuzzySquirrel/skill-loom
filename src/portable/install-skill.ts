@@ -34,11 +34,10 @@ export async function writeBundleSkillFiles(
     }
   }
 
-  async function writeFile(target: string, file: BundleSkill['files'][number], onCreate?: () => void): Promise<void> {
+  async function writeFile(target: string, file: BundleSkill['files'][number]): Promise<void> {
     const handle = await open(target, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
       file.executable ? 0o755 : 0o644);
     try {
-      onCreate?.();
       await handle.writeFile(decodeBundleFile(file.content));
       if (options.enforceFileMode) await handle.chmod(file.executable ? 0o755 : 0o644);
       await handle.sync();
@@ -54,10 +53,27 @@ export async function writeBundleSkillFiles(
     await writeFile(target, file);
   }
 
+  await publishSkillEntry(destination, decodeBundleFile(entry.content), entry.executable ? 0o755 : 0o644, options);
+}
+
+export async function publishSkillEntry(
+  destination: string,
+  content: Uint8Array,
+  mode: number,
+  options: { enforceFileMode?: boolean; publish?: typeof link } = {},
+): Promise<void> {
   const temporary = join(dirname(destination), `.loom-skill-${randomUUID()}.tmp`);
   let created = false;
   try {
-    await writeFile(temporary, entry, () => { created = true; });
+    const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, mode);
+    created = true;
+    try {
+      await handle.writeFile(content);
+      if (options.enforceFileMode) await handle.chmod(mode);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
     await (options.publish ?? link)(temporary, join(destination, 'SKILL.md'));
   } finally {
     if (created) await unlink(temporary);
