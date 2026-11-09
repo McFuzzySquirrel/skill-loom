@@ -540,6 +540,50 @@ test.describe('Run start and preflight', () => {
     expect(saved.agent).toEqual(agent);
   });
 
+  test('rejects a stale automatic-permission opt-in without overwriting a concurrent edit', async ({
+    page,
+    request,
+  }) => {
+    const projectPath = join(fixtureRoot, `opt-in-stale-project-${runSuffix}`);
+    await mkdir(projectPath, { recursive: true });
+    const project = await openFixtureProject(request, projectPath);
+    const chain = await createChain(request, project.id, {
+      name: `Opt-in stale ${runSuffix}`,
+      harness: 'copilot',
+      sessionMode: 'fork',
+      steps: [{ id: 'step-copilot', skillName: 'deploy-helper', instruction: 'Deploy.' }],
+    });
+
+    await gotoRunStart(page, project.id, chain.id, chain.name);
+    await page.getByTestId('run-mode-automatic').check();
+    await page.getByTestId('preflight-run').click();
+    await page.getByTestId('permission-opt-in').click();
+
+    const chainPath = `/api/projects/${project.id}/chains/${chain.id}`;
+    const currentResponse = await request.get(chainPath);
+    expect(currentResponse.ok()).toBe(true);
+    const current = (await currentResponse.json()) as { chain: StoredChain; revision: string };
+    const concurrentName = `${chain.name} edited`;
+    const edit = await request.put(chainPath, {
+      headers: { 'x-loom-chain-revision': current.revision },
+      data: { ...current.chain, name: concurrentName },
+    });
+    expect(edit.status()).toBe(200);
+
+    const save = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PUT' && new URL(response.url()).pathname === chainPath,
+    );
+    await page.getByTestId('permission-opt-in-confirm').click();
+    expect((await save).status()).toBe(409);
+    await expect(page.getByTestId('permission-error')).toContainText(
+      'The chain changed since it was loaded.',
+    );
+    const saved = await getChain(request, project.id, chain.id);
+    expect(saved.name).toBe(concurrentName);
+    expect(saved.automaticPermissionOptIn).toBe(false);
+  });
+
   test('starts trust, verifies it, and persists the exact automatic-permission opt-in', async ({
     page,
     request,
