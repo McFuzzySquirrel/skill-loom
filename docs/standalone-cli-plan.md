@@ -375,6 +375,11 @@ passed with that invocation; this is not live harness verification.
 One combined browser run timed out waiting for a duplicated chain to appear
 after choosing another harness; fourteen isolated reruns passed. The cause was not
 established, so the combined-journey failure remains an open verification issue.
+Cross-harness duplication now creates the requested copy in one server mutation
+instead of creating it and then issuing a separate update. A changed-harness
+copy deliberately omits the native agent; a same-harness copy preserves it.
+This removes a partial-copy failure window but is not proof of the earlier
+browser timeout's cause.
 
 Create the claim before managed run creation or portable package installation.
 When the operation succeeds, its record identifies the same claim; when it fails,

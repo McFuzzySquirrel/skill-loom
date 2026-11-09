@@ -31,6 +31,7 @@ import {
 } from '../chains/store.js';
 import { ConfigError } from '../config/store.js';
 import type { ConfigStore } from '../config/store.js';
+import { HarnessIdSchema } from '../config/schema.js';
 import {
   createProjectRegistry,
   isProjectId,
@@ -64,6 +65,7 @@ const chainPayloadSchema = z.strictObject({
 
 const duplicatePayloadSchema = z.strictObject({
   name: z.string().optional(),
+  harness: HarnessIdSchema.optional(),
   uniqueName: z.boolean().optional(),
 });
 
@@ -309,6 +311,7 @@ export const chainRoutes: FastifyPluginAsync<ChainRoutesOptions> = async (
         const projectPath = await resolveProjectPath(registry, request.params.projectId);
         const chain = await service.duplicate(projectPath, request.params.chainId, {
           ...(parsed.data.name === undefined ? {} : { name: parsed.data.name }),
+          ...(parsed.data.harness === undefined ? {} : { harness: parsed.data.harness }),
           uniqueName: wantsUniqueName(query.data.uniqueName, parsed.data.uniqueName),
         });
         return reply.code(201).send(chainResponse(chain));

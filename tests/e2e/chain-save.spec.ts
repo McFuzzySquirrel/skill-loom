@@ -530,6 +530,15 @@ test.describe('Chain inputs and save', () => {
       page.getByText(/per-step harness switching is unsupported/i).first(),
     ).toBeVisible();
 
+    let updateRequests = 0;
+    await page.route(`**/api/projects/${project.id}/chains/*`, async (route) => {
+      if (route.request().method() === 'PUT') {
+        updateRequests += 1;
+        await route.abort();
+      } else {
+        await route.continue();
+      }
+    });
     await page.getByTestId('harness-duplicate-target').selectOption('copilot');
     await page.getByTestId('harness-duplicate-action').click();
 
@@ -567,6 +576,7 @@ test.describe('Chain inputs and save', () => {
     const copyBody = (await copyAfter.json()) as { chain: StoredChain };
     expect(copyBody.chain.harness).toBe('copilot');
     expect(copyBody.chain.inputs).toHaveLength(1);
+    expect(updateRequests).toBe(0);
   });
 
   test('keeps unsaved edits when another client changes the chain', async ({ page, request }) => {

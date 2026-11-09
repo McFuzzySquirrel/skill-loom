@@ -103,6 +103,8 @@ function assertRevision(existing: Chain, expectedRevision: string | undefined): 
 export interface DuplicateChainOptions {
   /** Optional explicit name for the copy; defaults to "<source> copy". */
   name?: string;
+  /** Select a different harness when creating the copy. */
+  harness?: Chain['harness'];
   /** Reject an explicit copy name that already exists (409). */
   uniqueName?: boolean;
 }
@@ -235,12 +237,13 @@ class ProjectChainService implements ChainService {
     const timestamp = this.timestamp();
     const draft: ChainDraft = {
       name,
-      harness: source.harness,
+      harness: options.harness ?? source.harness,
       sessionMode: source.sessionMode,
       steps: source.steps,
       inputs: source.inputs,
       automaticPermissionOptIn: source.automaticPermissionOptIn,
-      ...(source.agent === undefined ? {} : { agent: source.agent }),
+      ...(source.agent === undefined || (options.harness !== undefined && options.harness !== source.harness)
+        ? {} : { agent: source.agent }),
     };
 
     const candidate = this.buildChain(draft, this.nextId(name), timestamp, timestamp);

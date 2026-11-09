@@ -117,6 +117,7 @@ export interface ChainRequestOptions {
 export interface DuplicateChainOptions extends ChainRequestOptions {
   /** Optional explicit copy name; the server otherwise uses "<name> copy". */
   name?: string;
+  harness?: ChainHarness;
 }
 
 export interface DeleteChainResult {
@@ -565,6 +566,9 @@ export function createChainsApi(fetchImpl: FetchLike = fetch): ChainsApi {
       const body: Record<string, unknown> = {};
       if (options.name !== undefined) {
         body.name = options.name;
+      }
+      if (options.harness !== undefined) {
+        body.harness = options.harness;
       }
       const value = await requestJson<unknown>(
         withUniqueName(`${chainPath(projectId, chainId)}/duplicate`, options.uniqueName),

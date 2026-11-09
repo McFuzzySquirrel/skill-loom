@@ -271,6 +271,21 @@ describe('chain CRUD through src/server/app.ts', () => {
     expect(duplicated.statusCode).toBe(201);
     expect(chainOf(duplicated.body).agent).toEqual(agent);
 
+    const sameHarness = await duplicateChain(app, projectId, chain.id, { harness: 'opencode' });
+    expect(sameHarness.statusCode).toBe(201);
+    expect(chainOf(sameHarness.body).agent).toEqual(agent);
+
+    const differentHarness = await duplicateChain(app, projectId, chain.id, { harness: 'copilot' });
+    expect(differentHarness.statusCode).toBe(201);
+    const copy = chainOf(differentHarness.body);
+    expect(copy).toMatchObject({ harness: 'copilot', steps: chain.steps, inputs: chain.inputs });
+    expect(copy).not.toHaveProperty('agent');
+    expect(chainOf((await getChain(app, projectId, chain.id)).body).agent).toEqual(agent);
+
+    const invalidHarness = await duplicateChain(app, projectId, chain.id, { harness: 'unknown' });
+    expect(invalidHarness.statusCode).toBe(422);
+    expect(chainsOf((await listChains(app, projectId)).body)).toHaveLength(4);
+
     const updated = await updateChain(app, projectId, chain.id, {
       ...chain,
       harness: 'copilot',
