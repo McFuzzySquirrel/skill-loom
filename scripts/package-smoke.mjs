@@ -324,6 +324,39 @@ async function main() {
       throw new Error(`Unexpected --version output: ${version.stdout.trim()}`);
     }
 
+    const installedRoot = join(temporaryRoot, 'installed-package');
+    await mkdir(installedRoot);
+    await writeFile(join(installedRoot, 'package.json'), '{"private":true}\n');
+    await execFileAsync(
+      npmCommand,
+      ['install', '--no-audit', '--no-fund', '--no-package-lock', '--no-save', tarball],
+      { cwd: installedRoot, maxBuffer: 20 * 1024 * 1024, env: { ...process.env, CI: '1' } },
+    );
+    const terminalProbe = `
+      const { pathToFileURL } = require('node:url');
+      (async () => {
+        const path = require.resolve('skill-loom-cli/dist/src/server/terminal/pty.js');
+        const { createTerminalSession } = await import(pathToFileURL(path).href);
+        const session = createTerminalSession({
+          executable: process.execPath,
+          args: ['-e', "process.stdout.write('PACKAGED_PTY_OK\\\\n')"],
+        });
+        const timeout = setTimeout(() => {
+          session.kill();
+          throw new Error('Packaged PTY timed out.');
+        }, 10000);
+        session.onExit(({ exitCode }) => {
+          clearTimeout(timeout);
+          if (exitCode !== 0 || !session.getBufferedOutput().includes('PACKAGED_PTY_OK')) {
+            throw new Error('Packaged PTY did not produce the expected output.');
+          }
+        });
+      })().catch((error) => { console.error(error); process.exitCode = 1; });
+    `;
+    await execFileAsync(process.execPath, ['-e', terminalProbe], {
+      cwd: installedRoot, maxBuffer: 20 * 1024 * 1024, timeout: 15_000,
+    });
+
     const port = await findFreePort();
     child = spawn(
       process.execPath,

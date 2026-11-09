@@ -12,7 +12,7 @@ on:
         description: Test scope
         type: choice
         default: full
-        options: [full, claims, portable, workspaces, library, terminal, terminal-macos-helper]
+        options: [full, claims, portable, workspaces, library, package, terminal, terminal-macos-helper]
 
 permissions:
   contents: read
@@ -45,6 +45,8 @@ jobs:
         run: npx vitest run tests/unit/test-workspaces.test.ts tests/integration/test-workspace-routes.test.ts
       - if: inputs.suite == 'library'
         run: npx vitest run tests/unit/shared-library.test.ts tests/unit/shared-library-sync.test.ts
+      - if: inputs.suite == 'package'
+        run: npm run test:package
       - if: (inputs.suite == 'terminal' || inputs.suite == 'terminal-macos-helper') && runner.os == 'macOS'
         run: |
           node -e "const fs = require('node:fs'); for (const p of ['node_modules/node-pty/build/Release/spawn-helper', 'node_modules/node-pty/prebuilds/darwin-' + process.arch + '/spawn-helper']) { if (fs.existsSync(p)) { const s = fs.statSync(p); let executable = true; try { fs.accessSync(p, fs.constants.X_OK); } catch { executable = false; } console.log(JSON.stringify({path: p, mode: (s.mode & 0o777).toString(8), executable})); } }"

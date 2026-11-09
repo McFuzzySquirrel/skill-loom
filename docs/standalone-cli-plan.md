@@ -87,9 +87,10 @@ These are requirements to implement and verify, not current guarantees:
    The focused claim suite has passed on all three platforms (four existing
    Windows cases skipped), but an earlier macOS race failed once and remains
    under investigation. A clean hosted macOS ARM64 install gave `node-pty`
-   1.1.0's prebuilt `spawn-helper` mode `0644`; the focused terminal suite
-   passed after granting owner execute permission in an isolated probe.
-   Normal installs have not been fixed, and the full suite remains failing.
+   1.1.0's prebuilt `spawn-helper` mode `0644`. The package postinstall now
+   grants owner execute permission to a private regular helper, and a clean
+   macOS runner passed the focused terminal suite without a manual repair.
+   The full cross-platform suite remains failing.
    Workspace storage currently rejects a config path whose real path differs
    from its configured spelling, including paths under macOS `/var` aliases;
    canonicalizing test fixtures allowed the focused macOS workspace suite to
@@ -98,8 +99,9 @@ These are requirements to implement and verify, not current guarantees:
    directories, missing-executable expectations, and timeouts. Passing
    POSIX signals to `node-pty` on Windows caused deferred asynchronous errors;
    the transport now requests Windows termination without a POSIX signal,
-   and the focused Windows terminal suite has passed. This does not verify
-   termination before PTY readiness or descendant containment.
+   and the focused Windows terminal suite has passed, including a termination
+   request before a child emits its delayed first output. A child that never
+   emits output and descendant containment remain unverified.
 
 ### Versioned CLI and process interface
 
