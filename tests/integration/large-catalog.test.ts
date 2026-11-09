@@ -89,8 +89,8 @@ describe('large remote catalog', () => {
     const skillBlob = git(['hash-object', '-w', '--stdin'], skill);
     const agentBlob = git(['hash-object', '-w', '--stdin'], agent);
     const packageTree = git(['mktree'], `100644 blob ${skillBlob}\tSKILL.md\n`);
-    const skillsTree = git(['mktree'], `040000 tree ${packageTree}\tdemo\n`);
-    const agentTree = git(['mktree'], `100644 blob ${agentBlob}\treviewer.md\n`);
+    const skillsTree = git(['mktree'], `040000 tree ${packageTree}\tdemo\n040000 tree ${packageTree}\tsecond\n`);
+    const agentTree = git(['mktree'], `100644 blob ${agentBlob}\treviewer.md\n100644 blob ${agentBlob}\tsecond.md\n`);
     const openCodeTree = git(['mktree'], `040000 tree ${agentTree}\tagents\n`);
     const tree = git(['mktree'], `040000 tree ${openCodeTree}\t.opencode\n040000 tree ${skillsTree}\tskills\n`);
     const commit = git(
@@ -113,14 +113,18 @@ describe('large remote catalog', () => {
       const skillBytes = Buffer.byteLength(skill);
       const agentBytes = Buffer.byteLength(agent);
       for (const [dimension, threshold] of [
-        ['maxFiles', 2],
+        ['maxPackages', 2],
+        ['maxAgents', 2],
+        ['maxFiles', 4],
         ['maxPackageBytes', agentBytes],
-        ['maxSnapshotBytes', skillBytes + agentBytes],
+        ['maxSnapshotBytes', 2 * (skillBytes + agentBytes)],
       ] as const) {
         for (const delta of [-1, 0, 1]) {
           const limit = threshold + delta;
           await store.update({
             remoteCatalogLimits: {
+              maxPackages: dimension === 'maxPackages' ? limit : 100,
+              maxAgents: dimension === 'maxAgents' ? limit : 100,
               maxFiles: dimension === 'maxFiles' ? limit : 100,
               maxPackageBytes: dimension === 'maxPackageBytes' ? limit : 1_000,
               maxSnapshotBytes: dimension === 'maxSnapshotBytes' ? limit : 2_000,
@@ -134,8 +138,8 @@ describe('large remote catalog', () => {
             expect(await listRemoteSkillSnapshots(store.getConfigDir(), 'budget')).toEqual([original]);
           } else {
             await expect(refresh).resolves.toMatchObject({
-              packages: [{ bytes: skillBytes }],
-              agents: [{ bytes: agentBytes }],
+              packages: [{ bytes: skillBytes }, { bytes: skillBytes }],
+              agents: [{ bytes: agentBytes }, { bytes: agentBytes }],
             });
           }
           expect((await readdir(root)).filter((name) => name.startsWith('skill-loom-source-'))).toEqual([]);

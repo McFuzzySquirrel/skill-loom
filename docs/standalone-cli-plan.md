@@ -111,7 +111,8 @@ changed content. Real child-process tests exercise stdout and stderr output
 limits below, at, and above the threshold and verify staging cleanup. A real Git
 fixture also checks mixed skill and native-agent file counts, per-item bytes,
 and aggregate snapshot bytes below, at, and above their limits, preserving the
-previous snapshot after rejection. Read-only CLI
+previous snapshot after rejection. The same real-Git fixture now exercises
+package and native-agent count limits at those boundaries as well. Read-only CLI
 source and snapshot listing, verified candidate paths for content review, deterministic
 snapshot and project-catalog search pages, a shared lazy run owner, and authenticated Unix local
 control for source and limit mutations are available. Project registration,
