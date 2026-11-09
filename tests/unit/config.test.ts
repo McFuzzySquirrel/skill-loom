@@ -1,3 +1,5 @@
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { access, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -451,6 +453,44 @@ describe('atomic writes', () => {
     expect(await readFile(target, 'utf8')).toBe(original);
     expect(temporaryFiles(await readdir(root))).toEqual([]);
   });
+
+  it.runIf(process.platform === 'win32')('retries an actual Windows file-sharing violation', async () => {
+    const root = await makeRoot();
+    const target = join(root, 'config.json');
+    const script = join(root, 'lock.ps1');
+    await writeFile(target, '{"old":true}\n');
+    await writeFile(script, [
+      'param([string]$path)',
+      '$handle = [System.IO.File]::Open($path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)',
+      "try { [Console]::WriteLine('LOCKED'); [Console]::In.ReadLine() | Out-Null } finally { $handle.Dispose() }",
+    ].join('\n'));
+    const locker = spawn('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', script, target]);
+    const exited = once(locker, 'exit');
+    let attempts = 0;
+    try {
+      const [ready] = await once(locker.stdout, 'data', { signal: AbortSignal.timeout(10_000) });
+      expect(String(ready)).toContain('LOCKED');
+      await atomicWriteJson(target, { new: true }, {
+        renameFile: async (source, destination) => {
+          attempts += 1;
+          await rename(source, destination);
+        },
+        delay: async () => {
+          locker.stdin.end('\n');
+          const [code] = await exited;
+          expect(code).toBe(0);
+        },
+      });
+      expect(attempts).toBe(2);
+      expect(JSON.parse(await readFile(target, 'utf8'))).toEqual({ new: true });
+      expect(temporaryFiles(await readdir(root))).toEqual([]);
+    } finally {
+      if (locker.exitCode === null && locker.signalCode === null) {
+        locker.kill();
+        await exited;
+      }
+    }
+  }, 30_000);
 
   it('surfaces a store write failure as a typed error without a partial target', async () => {
     const root = await makeRoot();
