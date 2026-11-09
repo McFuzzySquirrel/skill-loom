@@ -131,7 +131,8 @@ These are requirements to implement and verify, not current guarantees:
    The chain-bundle integration suite passed on hosted Windows (`42648524051`),
    including rejection of executable bundle installation before skills are
    written. POSIX file-mode and graceful signal tests do not establish Windows
-   ACL privacy or graceful Windows process shutdown.
+   ACL privacy or graceful Windows process shutdown. A focused Windows baseline
+   passed (`42648789532`), with those platform-specific checks skipped.
    The focused Git blob-reader suite also passed on all three hosted platforms
    (`42647505376`), including timeout and direct-child reaping; this does not
    verify descendant containment.

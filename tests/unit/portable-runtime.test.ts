@@ -560,6 +560,73 @@ describe('portable bundle execution', () => {
     });
   });
 
+  it('reports underlying errors during repeated cross-process claim races', async () => {
+    const script = `
+      import { executePortableRequest } from './src/portable/runtime.ts';
+      const request = JSON.parse(process.argv[1]);
+      try {
+        await executePortableRequest(request);
+        console.log(JSON.stringify({ ok: true }));
+      } catch (error) {
+        console.log(JSON.stringify({
+          ok: false, name: error?.name, code: error?.code, syscall: error?.syscall,
+          message: error?.message,
+        }));
+      }
+    `;
+    const invoke = (request: object) => new Promise<{
+      ok: boolean; name?: string; code?: string; syscall?: string; message?: string;
+    }>((resolve, reject) => {
+      const child = spawn(process.execPath, [
+        '--disable-warning=ExperimentalWarning', '--import', 'tsx', '--input-type=module',
+        '-e', script, JSON.stringify(request),
+      ], { cwd: process.cwd(), stdio: ['ignore', 'pipe', 'pipe'] });
+      let output = '';
+      let stderr = '';
+      child.stdout.setEncoding('utf8').on('data', (chunk: string) => { output += chunk; });
+      child.stderr.setEncoding('utf8').on('data', (chunk: string) => { stderr += chunk; });
+      child.once('error', reject);
+      child.once('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(`Race fixture exited ${String(code)}: ${stderr}`));
+          return;
+        }
+        try {
+          resolve(JSON.parse(output) as { ok: boolean; code?: string });
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+    for (let iteration = 0; iteration < 12; iteration += 1) {
+      const raceProject = join(root, `race-${String(iteration)}`);
+      await mkdir(raceProject);
+      const initial = await reviewProjectCoordination(raceProject);
+      await enableReviewedProjectProtocol(raceProject, initial.reviewDigest, true);
+      const inspected = await executePortableRequest({
+        command: 'inspect', projectPath: raceProject, bundlePath,
+      }) as { reviewDigest: string };
+      const request = {
+        command: 'prepare', projectPath: raceProject, bundlePath,
+        input: {
+          installConfirmed: true, reviewDigest: inspected.reviewDigest, actualHost: 'opencode',
+          progression: 'supervised', inputs: { task: 'the change' },
+          sessionDecision: {
+            requested: 'shared', mechanism: 'current-conversation', description: 'Current conversation.', confirmed: true,
+          },
+        },
+      };
+      const results = await Promise.all([invoke(request), invoke(request)]);
+      expect(results.filter((result) => result.ok).length, JSON.stringify(results)).toBeLessThanOrEqual(1);
+      for (const result of results.filter((result) => !result.ok)) {
+        expect([
+          'RUN_LOCKED', 'RUN_ACTIVE_CONFLICT', 'REVIEW_STALE',
+          'PROJECT_CLAIM_BUSY', 'PROJECT_CLAIM_CONFLICT',
+        ], JSON.stringify(results)).toContain(result.code);
+      }
+    }
+  }, 120_000);
+
   it('blocks a step when another unfinished legacy portable run exists', async () => {
     const first = await prepare();
     const directory = join(project, '.loom', 'portable-runs');
