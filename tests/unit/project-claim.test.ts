@@ -1,7 +1,7 @@
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { statSync } from 'node:fs';
-import { copyFile, link, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { copyFile, link, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -14,7 +14,7 @@ const roots: string[] = [];
 const execFileAsync = promisify(execFile);
 
 async function project(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'loom-project-claim-'));
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-project-claim-')));
   roots.push(root);
   return root;
 }
@@ -33,6 +33,19 @@ afterEach(async () => {
 });
 
 describe('project claim transaction', () => {
+  it('uses the canonical identity for a project reached through an alias', async () => {
+    const root = await project();
+    const aliasRoot = await realpath(await mkdtemp(join(tmpdir(), 'loom-project-alias-')));
+    roots.push(aliasRoot);
+    const alias = join(aliasRoot, 'project');
+    await symlink(root, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    await withProjectClaimTransaction(alias, async (tx) => {
+      expect(tx.identity.projectPath).toBe(root);
+      tx.acquire(claim(root));
+    });
+    await withProjectClaimTransaction(root, async (tx) => expect(tx.read()).toEqual(claim(root)));
+  });
+
   it('migrates version-one claims and fails closed after retirement', async () => {
     const root = await project();
     await mkdir(join(root, '.loom'));

@@ -76,9 +76,14 @@ These are requirements to implement and verify, not current guarantees:
    reattachment, and independently reviewed retries. Live harness tests require
    separate approval and cannot be replaced by fake-process tests. Document
    unsupported configurations and fail closed until each acceptance gate passes.
-   The manually approved cross-platform verification workflow runs offline
+   The manually triggered cross-platform verification workflow runs offline
    typechecking, documentation checks, and Vitest on hosted runners; it does not
    provision a VM, run live harnesses, or by itself verify containment.
+   The initial full Node 24 matrix passed on Linux but failed on macOS
+   (28 of 62 test files) and Windows (38 of 62; two skipped). Failures include
+   noncanonical temporary paths, PTY startup, and Windows-specific filesystem
+   behavior; these are not yet all diagnosed. The workflow retains the full
+   suite and permits explicit focused runs while the failures are resolved.
 
 ### Versioned CLI and process interface
 
