@@ -92,11 +92,13 @@ These are requirements to implement and verify, not current guarantees:
    1.1.0's prebuilt `spawn-helper` mode `0644`. The package postinstall now
    grants owner execute permission to a private regular helper, and a clean
    macOS runner passed the focused terminal suite without a manual repair.
-   The latest full hosted Windows run (`42643752970`) failed 12 of 65 test
-   files (17 tests failed, 864 passed, 58 skipped); three files were skipped.
+   The latest full hosted Windows run (`42647682895`) failed 9 of 66 test
+   files (12 tests failed, 873 passed, 58 skipped); three files were skipped.
    Remaining failures include platform-specific fixtures and executable mode
    handling, and still need diagnosis before Windows suite coverage can be
-   claimed.
+   claimed. That run also exposed intermittent managed-claim timing and a
+   concurrent portable request returning a generic error; these remain under
+   investigation and are not evidence of safe descendant cleanup.
    The preflight unit suite subsequently passed on hosted Windows after its
    synthetic paths were made platform-absolute (`42642647286`). POSIX
    `chmod(000)` permission tests do not test Windows ACLs and are skipped there;
@@ -124,6 +126,8 @@ These are requirements to implement and verify, not current guarantees:
    where `O_NOFOLLOW` is insufficient; hosted Linux, macOS and Windows
    (`42647120313`) passed the focused tests, including both standalone helper
    mirrors. These checks do not lock files against concurrent writers.
+   The full portable-runtime unit suite subsequently passed on hosted Windows
+   (`42647762226`); executable-mode installation and reuse remain blocked.
    The focused Git blob-reader suite also passed on all three hosted platforms
    (`42647505376`), including timeout and direct-child reaping; this does not
    verify descendant containment.

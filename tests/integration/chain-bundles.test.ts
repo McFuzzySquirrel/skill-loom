@@ -12,7 +12,7 @@ import { MAX_BUNDLE_BYTES, MAX_BUNDLE_REQUEST_BYTES, parseBundle } from '../../s
 import { createChainService, type ChainService } from '../../src/server/chains/service.js';
 import { createConfigStore } from '../../src/server/config/store.js';
 import { callControl, startControlServer } from '../../src/server/control.js';
-import type { SkillEntry, SkillDiscoveryResult } from '../../src/server/catalog/types.js';
+import { REMOTE_SNAPSHOT_CONTENT, type SkillEntry, type SkillDiscoveryResult } from '../../src/server/catalog/types.js';
 import type { Chain } from '../../src/server/chains/model.js';
 import type { BundlePreview, ChainBundle } from '../../src/shared/bundles.js';
 
@@ -373,7 +373,7 @@ describe('portable chain bundles', () => {
     expect(await readFile(join(target, '.opencode', 'agents', agentPath), 'utf8')).toBe(agentText);
   });
 
-  it('round-trips full packages, binary files and script modes with fresh identity and consent', async () => {
+  it('round-trips full packages and supported script modes with fresh identity and consent', async () => {
     const bundle = await exported();
     expect(bundle.chain.inputs).toEqual([{ name: 'task', required: true }]);
     expect(JSON.stringify(bundle)).not.toContain(root);
@@ -393,11 +393,28 @@ describe('portable chain bundles', () => {
     const destination = join(target, '.agents', 'skills', 'review');
     expect(await readFile(join(destination, 'SKILL.md'), 'utf8')).toBe(skillText);
     expect(await readFile(join(destination, 'asset.bin'))).toEqual(binary);
-    expect((await lstat(join(destination, 'scripts', 'check.sh'))).mode & 0o111).not.toBe(0);
+    const executableBits = (await lstat(join(destination, 'scripts', 'check.sh'))).mode & 0o111;
+    if (process.platform === 'win32') {
+      expect(executableBits).toBe(0);
+      expect(bundle.skills[0]?.files.find((file) => file.path === 'scripts/check.sh')?.executable).toBe(false);
+    } else {
+      expect(executableBits).not.toBe(0);
+    }
     expect((await chains.get(target, imported.id)).steps).toEqual(chain.steps);
     expect(await scanOpenCodeSkills({ projectPath: target, homeDirectory: join(root, 'home') }).then(
       (result) => result.entries.some((entry) => entry.name === 'review' && entry.packagePath === destination),
     )).toBe(true);
+  });
+
+  it.runIf(process.platform === 'win32')('blocks executable bundle installation before writing skills', async () => {
+    const bundle = await exported();
+    const script = bundle.skills[0]?.files.find((file) => file.path === 'scripts/check.sh');
+    expect(script).toBeDefined();
+    if (script === undefined) throw new Error('Expected the bundled script.');
+    script.executable = true;
+    const response = await request('import', bundle, { confirmed: true });
+    expect(response.statusCode).toBe(422);
+    expect(await readdir(target)).toEqual(['.loom']);
   });
 
   it('requires explicit confirmation and never writes during preview', async () => {
@@ -550,6 +567,10 @@ describe('portable chain bundles', () => {
           sourceId: 'repo-one',
           revision: firstRevision,
           repositoryPath: 'skills/review',
+          [REMOTE_SNAPSHOT_CONTENT]: {
+            fingerprint: createHash('sha256').update('SKILL.md\0-\0').update(firstText).digest('hex'),
+            executablePaths: [],
+          },
         }),
         catalogEntry({
           id: 'remote-selected',
@@ -559,6 +580,10 @@ describe('portable chain bundles', () => {
           sourceId: 'repo-one',
           revision: selectedRevision,
           repositoryPath: 'skills/review',
+          [REMOTE_SNAPSHOT_CONTENT]: {
+            fingerprint: createHash('sha256').update('SKILL.md\0-\0').update(selectedText).digest('hex'),
+            executablePaths: [],
+          },
         }),
       ],
       warnings: [],
