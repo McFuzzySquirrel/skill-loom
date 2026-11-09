@@ -233,19 +233,52 @@ and DACL writes, broker-handle duplication and job breakaway; it assigns the
 first process while suspended and checks the AppContainer SID and exact job
 membership of three process generations. The fixture retains real process
 handles to measure termination after finish, abort and actual broker death,
-not just PID disappearance. Native acceptance is **not passing**. After
+not just PID disappearance. The ordinary-process component probe now passes
+(`42709619361`). After
 fixing fixture compilation/loading, missing Windows profile environment
 variables and a no-op .NET ACL probe, run `42707844292` progressed through the
 real write/DACL, broker-access and breakaway checks and captured three distinct
 AppContainer/job members, but failed the expected active-job membership count.
-The diagnostic follow-up (`42708231042`) reports bounded kernel job membership;
-its result could not be retrieved after GitHub authentication began returning
-HTTP 401. Do not ignore additional job members or assert lifecycle cleanup
-until that evidence is resolved. No production code is changed by the fixture.
-This uses ordinary detached new-process-group children,
-not ConPTY: it cannot establish terminal or conhost cleanup,
-CLI-owner-death handling, alternate skill/config resolution or production
-broker safety. No managed execution gate is enabled by this experiment.
+The diagnostic follow-up (`42708231042`) identified one additional system
+`conhost.exe`, not a fourth actor. The fixture now captures the original
+console host handle, verifies its system executable path and job membership,
+requires an exact four-process census, and proves that this host terminates
+alongside the original actors after finish, abort and actual broker death.
+It does not simply accept an increased count or kill a later reused PID.
+
+An extension passed real ConPTY AppContainer launch, input/output and resize,
+plus finish, abort and broker death (`42710196637`).
+Unlike the ordinary console host, a ConPTY host is created by the broker,
+outside the actors' job; the experiment explicitly captures and tracks this
+separate original host rather than assuming it belongs to the job.
+The first ConPTY attempt (`42709975264`) exposed invalid initial standard
+handles inside the AppContainer. Explicitly opening the attached `CONIN$` and
+`CONOUT$` devices works, but is not by itself proof that an ordinary CLI can
+use inherited standard streams. A follow-up checks a child with explicitly
+inherited input/output/error handles, actual standard input and flushed
+standard output; that native probe passed (`42710432360`). A production launcher must
+implement and verify this bootstrap, not assume stock `node-pty` provides it.
+The fixture also has separate owner-lease-loss cases (anonymous pipe EOF) for
+ordinary processes and ConPTY. These measure owner disconnection separately
+from forcibly terminating the broker; they do not substitute a PID check for
+the lease. The final native component probe passed (`42710717572`), including
+these lease cases, actual inherited stdin/stdout/stderr, protected file/DACL
+denials, broker-handle/breakaway denial, and original actor/console-host handle
+termination across all eight scope cases. Output draining must finish
+naturally and propagates errors. This verifies components, not a production
+execution backend or actual user/service-process-death handling.
+No production code is changed by these fixtures. CLI-owner-death handling,
+alternate skill/config resolution and production broker safety remain open.
+No managed execution gate is enabled by this experiment.
+
+The next implementation milestone is the production broker boundary, not
+more process-count proxies: authenticated bounded requests, exact immutable
+reviewed-tree staging and complete harness/config/skill resolution, native
+initial placement and terminal bootstrapping, durable scope inventory,
+service-death handling, crash/restart reconciliation and authoritative cleanup
+before claim release. Installation/signing and credential/project access
+grants must be specified before production provisioning. None of the native
+fixtures installs a production helper or runs a live harness.
 
 ## Existing implementation and important constraints
 
