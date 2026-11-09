@@ -193,10 +193,24 @@ content, and measures setuid execution with an inherited sandbox. Its setuid
 reporter only prints its real/effective UID and exits; it cannot execute
 commands or write privileged files. The distinct, non-setuid launcher requires
 root, clears supplementary groups, drops to an explicit unprivileged UID and
-only then executes the fixture. The test removes its own marked account and
-restores ownership of explicitly named files before deleting its temporary
-directory. A measurement is not proof of containment, privileged-exec denial,
-live authentication, or safe production broker installation.
+only then executes the fixture. Native run `42702130262` verified read access,
+actual write denial, ordinary sandboxed execution, permitted fork/`setsid`,
+and denied direct, inherited and hard-linked setuid execution. The initial
+run `42701653128` failed because the measurement expected the setuid reporter
+to execute; macOS instead rejected the privileged exec with `EPERM`. The
+stronger probe now checks that exact denial separately from successful
+ordinary execution rather than interpreting any failure as confinement.
+
+The fixture additionally measures detached descendants across direct-worker
+completion, explicit abort and actual owner-process death. Its cleanup worker
+irreversibly drops to the dedicated UID before signalling specific enumerated
+PIDs, so the kernel rechecks permissions if an unrelated PID is reused. A
+separate privileged query checks for remaining live UID processes before
+deleting the marker-bound account. Failed verification refuses account
+deletion and fails the fixture. The test restores ownership of explicitly
+named files before deleting its temporary directory. These component
+measurements are not a production containment backend, authenticated broker,
+live authentication, harness-resolution proof, or safe broker installer.
 
 ## Existing implementation and important constraints
 

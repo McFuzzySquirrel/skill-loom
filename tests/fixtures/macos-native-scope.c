@@ -44,7 +44,11 @@ static int inspect_scope(uid_t uid, int terminate) {
       free(pids);
       return -1;
     }
-    if (info.pbi_uid != uid || info.pbi_status == SZOMB) continue;
+    if (info.pbi_uid != uid) continue;
+    if (info.pbi_status == SZOMB) {
+      if (!terminate) remaining++;
+      continue;
+    }
     remaining++;
     // The cleanup worker has irreversibly dropped to this unique UID. The
     // kernel rechecks signal permission, even if a PID is reused after lookup.
