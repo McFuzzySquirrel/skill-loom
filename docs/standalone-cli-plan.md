@@ -109,9 +109,11 @@ These are requirements to implement and verify, not current guarantees:
    itself. The focused macOS catalog and discovery suite now passes with
    canonical fixtures; Windows previously had ten failures, including snapshot
    content validation and
-   `EPERM` when publishing an already-existing snapshot directory. Git
-   executable modes also need a verified Windows representation; do not
-   bypass fingerprint checks.
+   `EPERM` when publishing an already-existing snapshot directory. A hosted
+   filesystem probe observed `0644` to `0755` on Linux and macOS, but `0666`
+   before and after `chmod(0755)` on Windows. Git executable modes therefore
+   need a verified representation carried through snapshot validation,
+   handoff, bundle export, and installation; do not bypass fingerprint checks.
 
 ### Versioned CLI and process interface
 
