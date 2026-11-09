@@ -48,9 +48,17 @@ static void worker(const char *path) {
   const pid_t nested = fork();
   if (nested < 0) fail("fork nested probe");
   if (nested == 0) {
-    if (unshare(CLONE_NEWUSER | CLONE_NEWNS) != 0) _exit(errno == EPERM ? 0 : 1);
+    if (unshare(CLONE_NEWUSER | CLONE_NEWNS) != 0) {
+      if (errno == EPERM) _exit(0);
+      fprintf(stderr, "Nested namespace creation failed with errno %d.\n", errno);
+      _exit(1);
+    }
     errno = 0;
-    if (mount(NULL, path, NULL, MS_BIND | MS_REMOUNT, NULL) == 0 || errno != EPERM) _exit(1);
+    const int changed = mount(NULL, path, NULL, MS_BIND | MS_REMOUNT, NULL);
+    if (changed == 0 || errno != EPERM) {
+      fprintf(stderr, "Nested read-only remount returned %d with errno %d.\n", changed, errno);
+      _exit(1);
+    }
     _exit(0);
   }
   int status;
