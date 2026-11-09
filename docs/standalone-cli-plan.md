@@ -76,6 +76,9 @@ These are requirements to implement and verify, not current guarantees:
    reattachment, and independently reviewed retries. Live harness tests require
    separate approval and cannot be replaced by fake-process tests. Document
    unsupported configurations and fail closed until each acceptance gate passes.
+   The manually approved cross-platform verification workflow runs offline
+   typechecking, documentation checks, and Vitest on hosted runners; it does not
+   provision a VM, run live harnesses, or by itself verify containment.
 
 ### Versioned CLI and process interface
 
