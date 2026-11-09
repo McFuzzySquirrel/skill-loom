@@ -38,6 +38,9 @@ function assertPackageContents(files) {
     'package/dist/skills/scenario-discovery/LICENSE',
     'package/dist/skills/scenario-discovery/scripts/read-handoff.mjs',
     'package/dist/skills/scenario-discovery/scripts/build-from-handoff.mjs',
+    'package/dist/skills/loom-chain-workflow.zip',
+    'package/dist/skills/loom-chain-workflow/SKILL.md',
+    'package/dist/skills/loom-chain-workflow/LICENSE',
   ];
   for (const path of required) {
     if (!files.includes(path)) {
@@ -246,6 +249,27 @@ async function smokeScenarioDiscoverySkill() {
   }
 }
 
+async function smokeChainWorkflowSkill() {
+  const archive = await readFile(join(repoRoot, 'dist', 'skills', 'loom-chain-workflow.zip'));
+  const files = unzipSync(archive);
+  const skill = files['loom-chain-workflow/SKILL.md'];
+  const license = files['loom-chain-workflow/LICENSE'];
+  if (!skill || !license || Object.keys(files).length !== 2) {
+    throw new Error('The loom-chain-workflow archive has unexpected or missing files.');
+  }
+  for (const directory of [
+    join(repoRoot, '.github', 'skills', 'loom-chain-workflow'),
+    join(repoRoot, 'skill', 'loom-chain-workflow'),
+  ]) {
+    if (!(await readFile(join(directory, 'SKILL.md'))).equals(skill)) {
+      throw new Error(`The loom-chain-workflow package is missing or out of sync: ${directory}`);
+    }
+  }
+  if (!(await readFile(join(repoRoot, 'LICENSE'))).equals(license)) {
+    throw new Error('The loom-chain-workflow archive has an unexpected license.');
+  }
+}
+
 async function main() {
   await mkdir(join(repoRoot, '.tmp'), { recursive: true });
   const temporaryRoot = await mkdtemp(join(repoRoot, '.tmp', 'package-smoke-'));
@@ -288,6 +312,7 @@ async function main() {
     assertPackageContents(files);
     await smokePortableSkill(temporaryRoot);
     await smokeScenarioDiscoverySkill();
+    await smokeChainWorkflowSkill();
 
     const version = await execFileAsync(
       npxCommand,
@@ -322,6 +347,17 @@ async function main() {
     const health = await waitForHealth(port);
     if (health.status !== 'ok') {
       throw new Error('Packaged server health response is not ok.');
+    }
+    const workflowResponse = await fetch(
+      `http://127.0.0.1:${String(port)}/api/portable-skill/loom-chain-workflow`,
+    );
+    if (!workflowResponse.ok ||
+        workflowResponse.headers.get('content-type') !== 'application/zip' ||
+        workflowResponse.headers.get('cache-control') !== 'no-store' ||
+        !Buffer.from(await workflowResponse.arrayBuffer()).equals(
+          await readFile(join(repoRoot, 'dist', 'skills', 'loom-chain-workflow.zip')),
+        )) {
+      throw new Error('The packaged server did not serve the chain workflow skill archive.');
     }
 
     const projectPath = join(temporaryRoot, 'scenario-project');

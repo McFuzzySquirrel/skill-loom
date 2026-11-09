@@ -101,6 +101,17 @@ function packageContent(name: string): string {
   return Buffer.from(`---\nname: ${name}\ndescription: Fixture.\n---\nReview.\n`).toString('base64');
 }
 
+test('downloads the CLI workflow skill with the keyboard', async ({ page }) => {
+  await page.goto('/discovery');
+  const link = page.getByRole('link', { name: 'Download CLI workflow skill' });
+  await expect(link).toHaveAttribute('href', '/api/portable-skill/loom-chain-workflow');
+  await link.focus();
+  await expect(link).toBeFocused();
+  const download = page.waitForEvent('download');
+  await page.keyboard.press('Enter');
+  expect((await download).suggestedFilename()).toBe('loom-chain-workflow.zip');
+});
+
 test('discovery bulk-selects hidden candidates and downloads only an explicitly reviewed handoff', async ({
   page,
 }) => {

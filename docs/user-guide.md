@@ -81,6 +81,15 @@ Review the contents and redistribution rights separately before downloading. Bro
 
 If your host does not already have the updated skill, download **scenario-discovery v1** from the discovery page. Install the `scenario-discovery/` directory into a host-discovered skill location, then refresh or restart the host. The helper requires Node.js 24+ and structured process arguments. Handoff-created v1 bundles do not include native-agent definitions; use Skill Loom's managed designer and run flow for chains requiring a selected agent.
 
+For a CLI-led workflow across discovery, optional workspace testing, reviewed
+import, and current-session execution, the discovery page also offers
+**Download CLI workflow skill**. Install `loom-chain-workflow/` alongside the
+separately distributed `scenario-discovery/` and `loom-run-bundle/` skills,
+then ask your host to use `loom-chain-workflow`. It preserves separate approvals
+for review, testing, installation, and execution; a workspace is not an OS
+sandbox. Skill-bearing CLI-managed starts and portable selected-agent starts
+remain blocked.
+
 ### Start a project-independent draft from a goal
 
 Open **Drafts** and choose **Start from a goal**. This is a manual authoring path, not automatic discovery or scenario recommendation. Describe the outcome, choose OpenCode or Copilot CLI, and optionally enter HTTPS/SSH repository URLs with branch, tag, or commit refs. On submit, Skill Loom registers and explicitly refreshes each source into pinned snapshots, then creates a draft whose first standalone instruction records the requested outcome. Earlier sources remain registered if a later repository fails; the error is shown so you can correct or remove them from **Remote skill repositories**.

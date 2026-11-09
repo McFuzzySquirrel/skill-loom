@@ -249,6 +249,10 @@ rather than retaining remote snapshot bindings. The fixture enables project
 coordination and separately reviews and clears the retained claim. It uses
 simulated approval and does not execute a real agent, package script, or live
 model.
+The `loom-chain-workflow` skill now composes the installed discovery and
+portable runner skills with CLI workspace testing and reviewed import. It
+preserves separate approvals and documents the existing managed-start and native
+agent blocks; its instructions are not proof that a host follows them.
 After retrying an interrupted run, the UI now reconnects its run event stream
 and observes subsequent actions from other clients. One earlier Playwright run
 under concurrent test load showed a blank recovered terminal; isolated repeats

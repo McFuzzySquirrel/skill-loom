@@ -158,6 +158,7 @@ The full decision directory is in [docs/adr/README.md](docs/adr/README.md).
 - `docs/` — User, administrator, and operations guides, ADRs, release notes, support ownership, and live evidence.
 - `.github/skills/` — Project-maintained Copilot skills and their references.
 - `skill/scenario-discovery/` — Mirrored standalone project-independent discovery skill and helpers.
+- `skill/loom-chain-workflow/` — Mirrored CLI workflow skill that coordinates discovery, optional workspace testing, reviewed import, and current-session execution using the companion skills.
 - `.opencode/agents/` and `.opencode/skills/` — OpenCode agent definitions and mirrored project skills.
 - `<project>/.agents/skills/` — Shared destination for new project skill copies and bundle imports; OpenCode also discovers legacy `.opencode/skills/`.
 - `dist/` — Build output for the server and web UI; generated, not source.

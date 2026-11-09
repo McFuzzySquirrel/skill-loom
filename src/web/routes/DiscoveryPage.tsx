@@ -683,10 +683,14 @@ export function DiscoveryPage() {
           <a className="button button--secondary" href="/api/portable-skill/scenario-discovery">
             Download scenario-discovery v1
           </a>
+          <a className="button button--secondary" href="/api/portable-skill/loom-chain-workflow">
+            Download CLI workflow skill
+          </a>
         </div>
         <p className="field__hint">
           The managed workspace installs only Skill Loom's bundled discovery skill. The
-          handoff itself remains a separate validated data file.
+          handoff itself remains a separate validated data file. The CLI workflow skill also
+          requires the separately installed scenario-discovery and loom-run-bundle skills.
         </p>
       </section>
     </section>
