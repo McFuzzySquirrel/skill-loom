@@ -301,10 +301,11 @@ rules. Portable mutations now participate in this transaction: when the
 internal protocol is enabled, preparation commits a claim before package
 installation, and step, record, and resume require the matching claim. Claims
 remain after failures and terminal outcomes until separately reviewed clearing.
-After committing a new claim, the initial mutation waits up to one second to
-reacquire the transaction if a competing process briefly holds it. If that
-wait expires, no mutation is dispatched and the retained claim still requires
-review and reconciliation.
+After committing a new claim, the initial mutation asynchronously retries for
+up to one second if a competing process briefly holds the transaction. Only
+lock acquisition is retried, never a callback that has started. If the wait
+expires, no mutation is dispatched and the retained claim still requires review
+and reconciliation.
 In legacy mode portable mutations serialize with protocol enablement but do not
 create a claim. Managed starts now claim before run creation or harness spawn
 when the internal protocol is enabled. Explicit actions, signal-driven

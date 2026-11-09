@@ -177,14 +177,26 @@ export async function withClaimedProjectRun<T>(
   task: (claim: ProjectClaim) => Promise<T>,
   waitForLock = false,
 ): Promise<T> {
-  return withProjectClaimTransaction(projectPath, async (tx) => {
-    if (tx.protocol() === null) throw new ProjectCoordinationError('PROJECT_PROTOCOL_NOT_ENABLED');
-    const claim = tx.read();
-    if (claim === null || claim.kind !== expected.kind || claim.runId !== expected.runId) {
-      throw new ProjectClaimError('PROJECT_CLAIM_MISMATCH', 'The project claim does not match this run.');
+  const deadline = performance.now() + 1000;
+  for (;;) {
+    let entered = false;
+    try {
+      return await withProjectClaimTransaction(projectPath, async (tx) => {
+        entered = true;
+        if (tx.protocol() === null) throw new ProjectCoordinationError('PROJECT_PROTOCOL_NOT_ENABLED');
+        const claim = tx.read();
+        if (claim === null || claim.kind !== expected.kind || claim.runId !== expected.runId) {
+          throw new ProjectClaimError('PROJECT_CLAIM_MISMATCH', 'The project claim does not match this run.');
+        }
+        return task(claim);
+      });
+    } catch (error) {
+      const remaining = deadline - performance.now();
+      if (!waitForLock || entered || !(error instanceof ProjectClaimError) ||
+          error.code !== 'PROJECT_CLAIM_BUSY' || remaining <= 0) throw error;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(25, remaining)));
     }
-    return task(claim);
-  }, waitForLock);
+  }
 }
 
 /**

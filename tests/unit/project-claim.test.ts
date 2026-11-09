@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
-import { withProjectClaimTransaction, withProjectRetirementTransaction, type ProjectClaim } from '../../src/shared/project-claim.js';
+import { ProjectClaimError, withProjectClaimTransaction, withProjectRetirementTransaction, type ProjectClaim } from '../../src/shared/project-claim.js';
+import { withClaimedProjectRun } from '../../src/shared/project-coordination.js';
 
 const roots: string[] = [];
 const execFileAsync = promisify(execFile);
@@ -157,7 +158,10 @@ describe('project claim transaction', () => {
     { heldMs: 2000, succeeds: false },
   ])('bounds the post-claim lock wait when another process holds it for $heldMs ms', async ({ heldMs, succeeds }) => {
     const root = await project();
-    await withProjectClaimTransaction(root, async () => undefined);
+    await withProjectClaimTransaction(root, async (tx) => {
+      tx.enableProtocol('2026-01-01T00:00:00.000Z');
+      tx.acquire(claim(root));
+    });
     const child = spawn(process.execPath, [
       '--disable-warning=ExperimentalWarning', '--import', 'tsx', '--input-type=module', '-e',
       `
@@ -165,17 +169,17 @@ describe('project claim transaction', () => {
         await withProjectClaimTransaction(process.argv[1], async () => {
           process.stdout.write('locked');
           await new Promise(resolve => process.stdin.once('data', resolve));
-          await new Promise(resolve => setTimeout(resolve, Number(process.argv[2])));
         });
         setInterval(() => {}, 1000);
       `,
-      root, String(heldMs),
+      root,
     ], { cwd: process.cwd(), stdio: ['pipe', 'pipe', 'pipe'] });
+    let releaseTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       expect((await once(child.stdout, 'data'))[0].toString()).toBe('locked');
-      child.stdin.write('release');
+      releaseTimer = setTimeout(() => child.stdin.write('release'), heldMs);
       let calls = 0;
-      const operation = withProjectClaimTransaction(root, async () => { calls += 1; }, true);
+      const operation = withClaimedProjectRun(root, claim(root), async () => { calls += 1; }, true);
       if (succeeds) {
         await expect(operation).resolves.toBeUndefined();
         expect(calls).toBe(1);
@@ -184,9 +188,24 @@ describe('project claim transaction', () => {
         expect(calls).toBe(0);
       }
     } finally {
+      clearTimeout(releaseTimer);
       child.kill('SIGKILL');
       await once(child, 'exit');
     }
+  });
+
+  it('does not retry a claimed mutation that itself reports a busy error', async () => {
+    const root = await project();
+    await withProjectClaimTransaction(root, async (tx) => {
+      tx.enableProtocol('2026-01-01T00:00:00.000Z');
+      tx.acquire(claim(root));
+    });
+    let calls = 0;
+    await expect(withClaimedProjectRun(root, claim(root), async () => {
+      calls += 1;
+      throw new ProjectClaimError('PROJECT_CLAIM_BUSY', 'Injected callback error.');
+    }, true)).rejects.toMatchObject({ code: 'PROJECT_CLAIM_BUSY' });
+    expect(calls).toBe(1);
   });
 
   it.skipIf(process.platform === 'win32')('admits only one of two separate processes racing to claim a project', async () => {
