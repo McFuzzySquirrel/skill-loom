@@ -134,13 +134,25 @@ fixture creates no retained descendants and reaps each child. Reproduce with
 the explicit `macos-native-boundary` workflow suite. Do not equate that
 suite's passing negative assertions with containment support.
 
-A prerequisite probe in the current Linux development environment
-also successfully entered a private user/mount/PID namespace using `unshare`;
-no global cgroup or namespace settings were changed. This identifies another
-native Linux candidate, not an implemented or verified execution backend.
-It still needs protected mount construction, initial placement, capability
-removal, terminal handling, owner-death cleanup, recovery, harness-resolution
-proof and native regression coverage.
+The opted-in `linux-native-scope` fixture passed on a disposable hosted Linux
+runner (`42705643981`). It uses private user/mount/PID namespaces, a read-only
+bind mount and a capability-free worker. Read access succeeds while actual
+writes fail with `EROFS`; direct remount and nested-namespace bypass attempts
+are denied. The initial hosted failures (`42704300696`, `42705365685`) were an
+over-specific remount assertion: this host returns `EACCES`, whereas the local
+kernel returns `EPERM`. The strengthened probe accepts only those permission
+denials and additionally requires successful reads and `EROFS` writes inside
+the nested namespace before and after the remount attempt. Arbitrary errors
+or an inaccessible file do not satisfy the check.
+
+The fixture verifies that the original namespace supervisor, worker and two
+detached descendant generations are reaped after direct-worker completion,
+abort and actual owner-process death. It captures kernel process start-time
+identities rather than trusting PID absence or terminal closure. No global
+cgroup or namespace settings were changed. This is native component evidence,
+not an execution backend: terminal integration, protected whole-tree staging,
+alternate harness-resolution proof, authenticated broker requests and durable
+crash/restart recovery remain unimplemented.
 
 Native Windows still needs a restricted execution identity plus race-free
 job assignment and ConPTY lifecycle integration; a job object alone does not
@@ -205,12 +217,35 @@ The fixture additionally measures detached descendants across direct-worker
 completion, explicit abort and actual owner-process death. Its cleanup worker
 irreversibly drops to the dedicated UID before signalling specific enumerated
 PIDs, so the kernel rechecks permissions if an unrelated PID is reused. A
-separate privileged query checks for remaining live UID processes before
+separate privileged query checks for all remaining UID processes, including
+zombies, before
 deleting the marker-bound account. Failed verification refuses account
 deletion and fails the fixture. The test restores ownership of explicitly
 named files before deleting its temporary directory. These component
 measurements are not a production containment backend, authenticated broker,
 live authentication, harness-resolution proof, or safe broker installer.
+The strict zombie-aware native scope check passed (`42703635835`), followed by
+the shared owner-proxy and hosted-runner guard verification (`42704304515`).
+
+The opted-in `windows-native-scope` experiment creates a disposable AppContainer
+profile and ACLs only on its temporary fixture tree. It attempts reviewed-file
+and DACL writes, broker-handle duplication and job breakaway; it assigns the
+first process while suspended and checks the AppContainer SID and exact job
+membership of three process generations. The fixture retains real process
+handles to measure termination after finish, abort and actual broker death,
+not just PID disappearance. Native acceptance is **not passing**. After
+fixing fixture compilation/loading, missing Windows profile environment
+variables and a no-op .NET ACL probe, run `42707844292` progressed through the
+real write/DACL, broker-access and breakaway checks and captured three distinct
+AppContainer/job members, but failed the expected active-job membership count.
+The diagnostic follow-up (`42708231042`) reports bounded kernel job membership;
+its result could not be retrieved after GitHub authentication began returning
+HTTP 401. Do not ignore additional job members or assert lifecycle cleanup
+until that evidence is resolved. No production code is changed by the fixture.
+This uses ordinary detached new-process-group children,
+not ConPTY: it cannot establish terminal or conhost cleanup,
+CLI-owner-death handling, alternate skill/config resolution or production
+broker safety. No managed execution gate is enabled by this experiment.
 
 ## Existing implementation and important constraints
 
