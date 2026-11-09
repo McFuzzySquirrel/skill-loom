@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -230,6 +231,114 @@ describe('discovery handoff route', () => {
       await writeFile(candidateFile, 'changed');
       expect(await callControl(store.getConfigDir(), 'discovery.handoff', input))
         .toMatchObject({ ok: false, error: { code: 'DISCOVERY_SNAPSHOT_UNSAFE' } });
+    } finally {
+      await control.close();
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('carries a reviewed catalog selection through CLI import and a portable session', async () => {
+    const { listRemoteSkillSnapshots } = await import('../../src/server/catalog/remote.js');
+    const snapshot = (await listRemoteSkillSnapshots(store.getConfigDir(), 'test-source'))[0]!;
+    const selected = snapshot.packages[0]!;
+    const identity = {
+      sourceId: snapshot.sourceId, revision: snapshot.revision,
+      repositoryPath: selected.repositoryPath, fingerprint: selected.fingerprint,
+    };
+    const projectPath = join(root, 'target-project');
+    await mkdir(projectPath);
+    const control = await startControlServer(store, { services: app.loomServices, runOwner: app.loomRunOwner });
+    const cli = async (args: string[], input: unknown): Promise<unknown> => {
+      let output = '';
+      let error = '';
+      const code = await runCli([...args, '--config-dir', store.getConfigDir()], {
+        env: {}, stdin: Readable.from([JSON.stringify(input)]),
+        stdout: { write: (chunk) => { output += String(chunk); return true; }, isTTY: false },
+        stderr: { write: (chunk) => { error += String(chunk); return true; } },
+      });
+      expect(code, error).toBe(0);
+      return (JSON.parse(output) as { result: unknown }).result;
+    };
+    const portable = (args: string[], input?: unknown): Record<string, unknown> => {
+      const result = spawnSync(process.execPath, [
+        '--disable-warning=ExperimentalWarning',
+        join(process.cwd(), '.github', 'skills', 'loom-run-bundle', 'scripts', 'loom-bundle.mjs'),
+        ...args,
+      ], { encoding: 'utf8', input: input === undefined ? '' : JSON.stringify(input) });
+      expect(result.status, result.stderr).toBe(0);
+      return JSON.parse(result.stdout) as Record<string, unknown>;
+    };
+    try {
+      const opened = await cli(['project', 'open'], { path: projectPath }) as { project: { id: string } };
+      const projectId = opened.project.id;
+      const handoff = await cli(['discovery', 'handoff'], {
+        goal: 'Review a change', harness: 'opencode', candidates: [identity],
+      });
+      expect(DiscoveryHandoffSchema.safeParse(handoff).success).toBe(true);
+      const handoffPath = join(root, 'selection.loom-discovery.json');
+      const manifestPath = join(root, 'approved.json');
+      const bundlePath = join(root, 'approved.loom.json');
+      await writeFile(handoffPath, JSON.stringify(handoff));
+      await writeFile(manifestPath, JSON.stringify({
+        chain: {
+          name: 'Approved review', harness: 'opencode', sessionMode: 'shared',
+          steps: [{ id: 'review', kind: 'skill', skillName: 'handoff-skill', instruction: 'Review {{scope}}.' }],
+          inputs: [{ name: 'scope', required: true }],
+        },
+        candidates: [identity],
+      }));
+      const build = spawnSync(process.execPath, [
+        join(process.cwd(), '.github', 'skills', 'scenario-discovery', 'scripts', 'build-from-handoff.mjs'),
+        '--handoff', handoffPath, '--manifest', manifestPath, '--out', bundlePath,
+      ], { encoding: 'utf8' });
+      expect(build.status, build.stderr).toBe(0);
+      const review = await cli(['bundle', 'review'], { projectId, bundlePath }) as { reviewDigest: string };
+      const imported = await cli(['bundle', 'import'], {
+        projectId, bundlePath, reviewDigest: review.reviewDigest, confirmed: true,
+      }) as { chain: { id: string } };
+      const uiChain = await app.inject(`/api/projects/${projectId}/chains/${imported.chain.id}`);
+      expect(uiChain.statusCode).toBe(200);
+      expect(uiChain.json()).toMatchObject({ chain: { name: 'Approved review copy', steps: [{ skillName: 'handoff-skill' }] } });
+      expect(await readFile(join(projectPath, '.agents', 'skills', 'handoff-skill', 'SKILL.md'), 'utf8')).toBe(skillContent);
+
+      const coordination = await cli(['project', 'coordination-review'], { projectId }) as { review: { reviewDigest: string } };
+      await cli(['project', 'coordination-action'], {
+        projectId, request: {
+          action: 'enable', reviewDigest: coordination.review.reviewDigest,
+          stoppedConfirmed: true, oldClientsStoppedConfirmed: true,
+        },
+      });
+      const inspected = portable(['inspect', '--bundle', bundlePath, '--project', projectPath]);
+      const prepared = portable(['prepare', '--bundle', bundlePath, '--project', projectPath], {
+        reviewDigest: inspected.reviewDigest, installConfirmed: true, reuseSkills: ['handoff-skill'],
+        actualHost: 'opencode', progression: 'supervised', inputs: { scope: 'the fixture' },
+        sessionDecision: {
+          requested: 'shared', mechanism: 'current-conversation', description: 'Current conversation.', confirmed: true,
+        },
+      });
+      const runId = prepared.runId as string;
+      const step = portable(['step', '--project', projectPath, '--run-id', runId], {
+        revision: prepared.revision, confirmed: true,
+      });
+      expect(step).toMatchObject({
+        step: {
+          instruction: 'Skill: handoff-skill\n\nInstruction:\nReview the fixture.',
+          skillPath: join(projectPath, '.agents', 'skills', 'handoff-skill'),
+        },
+      });
+      const finished = portable(['record', '--project', projectPath, '--run-id', runId], {
+        revision: step.revision, outcome: 'done', confirmed: true, summary: 'Fixture review reported complete.',
+      });
+      expect(finished).toMatchObject({ status: 'completed' });
+      const claimed = await cli(['project', 'coordination-review'], { projectId }) as {
+        review: { reviewDigest: string; claim: { kind: string; runId: string } };
+      };
+      expect(claimed.review.claim).toMatchObject({ kind: 'portable', runId });
+      await cli(['project', 'coordination-action'], {
+        projectId, request: {
+          action: 'clear', reviewDigest: claimed.review.reviewDigest,
+          stoppedConfirmed: true, oldClientsStoppedConfirmed: true,
+        },
+      });
     } finally {
       await control.close();
     }

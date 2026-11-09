@@ -512,7 +512,10 @@ describe('portable bundle execution', () => {
     expect(results.filter((result) => result.code === 0)).toHaveLength(1);
     const success = JSON.parse(results.find((result) => result.code === 0)!.stdout) as { runId: string };
     const rejected = results.find((result) => result.code !== 0)!;
-    expect(['RUN_LOCKED', 'RUN_ACTIVE_CONFLICT', 'REVIEW_STALE', 'PROJECT_CLAIM_BUSY'])
+    expect([
+      'RUN_LOCKED', 'RUN_ACTIVE_CONFLICT', 'REVIEW_STALE', 'PROJECT_CLAIM_BUSY',
+      ...(mode === 'enabled' ? ['PROJECT_CLAIM_CONFLICT'] : []),
+    ])
       .toContain((JSON.parse(rejected.stderr) as { error: { code: string } }).error.code);
     const review = await reviewProjectCoordination(project);
     expect(review.records).toEqual([expect.objectContaining({ kind: 'portable', runId: success.runId, unresolved: true })]);

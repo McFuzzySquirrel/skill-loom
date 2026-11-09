@@ -762,6 +762,60 @@ test.describe('Terminal-dominant run view', () => {
     await expect(page.getByText('Claim: None.')).toBeVisible();
   });
 
+  test('stops retrying terminal attachments that are repeatedly rejected', async ({ page, request }) => {
+    test.setTimeout(60_000);
+    const { project } = await openFixtureProject(request, 'terminal-conflict');
+    const chain = await createChain(request, project.id, `Terminal conflict ${runSuffix}`, [{
+      id: 'terminal-conflict-step', skillName: 'deploy-helper', instruction: 'Hold until aborted.',
+    }]);
+    const run = await createRun(request, project.id, chain.id, 'supervised');
+    let attempts = 0;
+    await page.routeWebSocket(/\/api\/terminal\//, (socket) => {
+      attempts += 1;
+      socket.send(JSON.stringify({
+        type: 'error', code: 'TERMINAL_SUBSCRIBER_CONFLICT', message: 'Another subscriber is attached.',
+      }));
+      socket.close({ code: 1008, reason: 'TERMINAL_SUBSCRIBER_CONFLICT' });
+    });
+    await gotoRun(page, run.id);
+    await expect.poll(() => attempts, { timeout: 15_000 }).toBe(9);
+    await expect(page.getByTestId('run-terminal').getByText('Terminal disconnected. Reopen the terminal to try attaching again.')).toBeVisible();
+    await expect(page.getByRole('status')).toHaveText('Terminal disconnected. Reopen the terminal to try attaching again.');
+    expect(attempts).toBe(9);
+    await page.waitForTimeout(900);
+    expect(attempts).toBe(9);
+  });
+
+  test('renews the terminal retry budget after an attachment is accepted', async ({ page, request }) => {
+    test.setTimeout(60_000);
+    const { project } = await openFixtureProject(request, 'terminal-retry');
+    const chain = await createChain(request, project.id, `Terminal retry ${runSuffix}`, [{
+      id: 'terminal-retry-step', skillName: 'deploy-helper', instruction: 'Hold until aborted.',
+    }]);
+    const run = await createRun(request, project.id, chain.id, 'supervised');
+    let attempts = 0;
+    await page.routeWebSocket(/\/api\/terminal\//, async (socket) => {
+      attempts += 1;
+      if (attempts >= 9) {
+        socket.send(JSON.stringify({ type: 'ready', sessionId: 'loom_run_fixture', pid: 1, cols: 80, rows: 24 }));
+        if (attempts === 9) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 100));
+          socket.close({ code: 1001, reason: 'transient disconnect' });
+        }
+        return;
+      }
+      socket.send(JSON.stringify({
+        type: 'error', code: 'TERMINAL_SUBSCRIBER_CONFLICT', message: 'Another subscriber is attached.',
+      }));
+      socket.close({ code: 1008, reason: 'TERMINAL_SUBSCRIBER_CONFLICT' });
+    });
+    await gotoRun(page, run.id);
+    await expect.poll(() => attempts, { timeout: 15_000 }).toBe(10);
+    await expect(page.getByTestId('run-terminal').getByText('Terminal disconnected.', { exact: false })).toHaveCount(0);
+    await page.waitForTimeout(900);
+    expect(attempts).toBe(10);
+  });
+
   test('automatic mode advances only on the harness signal and exposes Pause, Resume, Run next, and Abort', async ({
     page,
     request,

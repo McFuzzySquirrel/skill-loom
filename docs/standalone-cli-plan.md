@@ -223,6 +223,12 @@ An integration journey now exports the same project skill bundle through CLI
 and UI, then inspects, prepares, steps, explicitly recovers an interrupted
 attempt, and records its outcome in a separate project using a simulated
 portable host. This does not constitute live harness evidence.
+An integrated fixture now carries a pinned catalog selection through the CLI
+handoff, standalone discovery bundle builder, reviewed CLI import, UI chain
+inspection, and the standalone portable helper's supervised step and
+agent-reported completion. It enables project coordination and separately
+reviews and clears the retained claim. The fixture uses simulated approval and
+does not execute a real agent, package script, or live model.
 After retrying an interrupted run, the UI now reconnects its run event stream
 and observes subsequent actions from other clients. One earlier Playwright run
 under concurrent test load showed a blank recovered terminal; isolated repeats
@@ -231,6 +237,10 @@ subsequent isolated runs passed, but neither failure's cause has been
 established. The reconnect test now attaches redacted WebSocket frame metadata
 on a terminal-output assertion failure to help distinguish transport from
 rendering failures without recording terminal contents.
+Repeated terminal attachment rejections now consume the retry budget until the
+server actually accepts a subscriber; an exhausted retry is visibly reported
+and announced. This fixes an independently reproduced unbounded retry loop,
+but does not establish the cause of the earlier blank-terminal failures.
 
 ### Remaining project coordination design
 
@@ -299,7 +309,9 @@ exclusive owner mutation barrier, and service shutdown waits for an in-flight
 action to finish. Descendant cleanup remains
 unverified, so the operator must confirm prior work and older clients have
 stopped; cross-mode protection is not complete for older clients or unrelated
-processes.
+processes. An integration fixture verifies that a separate-process portable
+claim blocks a managed start, and that a managed claim blocks portable
+preparation; neither conflicting operation is allowed to dispatch work.
 Startup recovery now holds the project transaction when handling its matching
 profile pointer and leaves that pointer and run unchanged when a claim exists or
 the protocol is enabled; it reports `RUN_RECOVERY_CLAIMED`. It creates the

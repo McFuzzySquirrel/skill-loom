@@ -1,4 +1,5 @@
 import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -51,7 +52,7 @@ import {
   type ApiErrorEnvelope,
 } from '../../src/shared/api.js';
 import {
-  adoptReviewedLegacyRun, enableReviewedProjectProtocol, reviewProjectCoordination,
+  adoptReviewedLegacyRun, clearReviewedProjectClaim, enableReviewedProjectProtocol, reviewProjectCoordination,
 } from '../../src/shared/project-coordination.js';
 import { withProjectClaimTransaction } from '../../src/shared/project-claim.js';
 
@@ -1981,6 +1982,72 @@ describe('interrupted run recovery', () => {
     expect(terminal.spawns).toHaveLength(before);
     expect((await reviewProjectCoordination(project)).claim).toMatchObject({ kind: 'managed', runId: run.id });
     expect((await postAction(first.app, run.id, { action: 'abort' })).statusCode).toBe(200);
+  });
+
+  it('prevents managed and separate-process portable runs from claiming the same project', async () => {
+    const harness = await buildTestApp();
+    const chain = await createChain(harness.app, harness.projectId);
+    const initial = await reviewProjectCoordination(project);
+    await enableReviewedProjectProtocol(project, initial.reviewDigest, true);
+    const bundlePath = join(root, 'portable-race.loom.json');
+    await writeFile(bundlePath, JSON.stringify({
+      format: 'skill-loom-chain', version: 1,
+      chain: {
+        name: 'Portable test', harness: 'opencode', sessionMode: 'shared',
+        steps: [{ id: 'one', kind: 'instruction', instruction: 'Review.' }], inputs: [],
+      },
+      skills: [],
+    }));
+    const helper = (args: string[], input?: unknown) => new Promise<{ code: number | null; output: string; error: string }>((resolve, reject) => {
+      const child = spawn(process.execPath, [
+        '--disable-warning=ExperimentalWarning',
+        join(process.cwd(), '.github', 'skills', 'loom-run-bundle', 'scripts', 'loom-bundle.mjs'),
+        ...args,
+      ], { stdio: ['pipe', 'pipe', 'pipe'] });
+      let output = '';
+      let error = '';
+      child.stdout.on('data', (chunk: Buffer) => { output += chunk.toString(); });
+      child.stderr.on('data', (chunk: Buffer) => { error += chunk.toString(); });
+      child.once('error', reject);
+      child.once('close', (code) => resolve({ code, output, error }));
+      child.stdin.end(input === undefined ? '' : JSON.stringify(input));
+    });
+    const inspect = await helper(['inspect', '--bundle', bundlePath, '--project', project]);
+    expect(inspect.code, inspect.error).toBe(0);
+    const reviewDigest = (JSON.parse(inspect.output) as { reviewDigest: string }).reviewDigest;
+    const prepareInput = {
+      reviewDigest, installConfirmed: true, actualHost: 'opencode', progression: 'supervised', inputs: {},
+      sessionDecision: {
+        requested: 'shared', mechanism: 'current-conversation', description: 'Current conversation.', confirmed: true,
+      },
+    };
+    const prepared = await helper(['prepare', '--bundle', bundlePath, '--project', project], prepareInput);
+    expect(prepared.code, prepared.error).toBe(0);
+    const portableRun = JSON.parse(prepared.output) as { runId: string; revision: number };
+    const before = terminal.spawns.length;
+    const blockedManaged = await postRun(harness.app, harness.projectId, {
+      chainId: chain.id, inputs: { task: 'ship it' },
+    });
+    expect(blockedManaged.statusCode).toBe(409);
+    expect(envelope(blockedManaged.body).error.code).toBe('PROJECT_CLAIM_CONFLICT');
+    expect(terminal.spawns).toHaveLength(before);
+    const aborted = await helper(['record', '--project', project, '--run-id', portableRun.runId], {
+      revision: portableRun.revision, action: 'abort',
+    });
+    expect(aborted.code, aborted.error).toBe(0);
+    const portableReview = await reviewProjectCoordination(project);
+    expect(portableReview.claim).toMatchObject({ kind: 'portable', runId: portableRun.runId });
+    await clearReviewedProjectClaim(project, portableReview.reviewDigest, true, true);
+    const managedRun = await createRun(harness.app, harness.projectId, chain);
+    const newInspect = await helper(['inspect', '--bundle', bundlePath, '--project', project]);
+    expect(newInspect.code, newInspect.error).toBe(0);
+    const blockedPortable = await helper(['prepare', '--bundle', bundlePath, '--project', project], {
+      ...prepareInput, reviewDigest: (JSON.parse(newInspect.output) as { reviewDigest: string }).reviewDigest,
+    });
+    expect(blockedPortable.code).toBe(1);
+    expect(JSON.parse(blockedPortable.error)).toMatchObject({ error: { code: 'PROJECT_CLAIM_CONFLICT' } });
+    expect((await reviewProjectCoordination(project)).claim).toMatchObject({ kind: 'managed', runId: managedRun.id });
+    expect((await postAction(harness.app, managedRun.id, { action: 'abort' })).statusCode).toBe(200);
   });
 
   it('retains a managed claim across automatic transitions and completion', async () => {

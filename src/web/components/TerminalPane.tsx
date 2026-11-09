@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -6,6 +6,7 @@ import { Terminal, type ITheme } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import type { TerminalServerMessage } from '../../shared/terminal';
 import { useAppearance } from '../ThemeProvider';
+import { useStatusAnnouncer } from './StatusRegion';
 
 /**
  * xterm.js pane for a server-owned PTY.
@@ -102,12 +103,15 @@ export function TerminalPane({
   dense = false,
 }: TerminalPaneProps) {
   const { resolved } = useAppearance();
+  const { announce } = useStatusAnnouncer();
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const onExitFocusRef = useRef(onExitFocus);
   onExitFocusRef.current = onExitFocus;
 
   useEffect(() => {
+    setConnectionError(null);
     const container = containerRef.current;
     if (container === null) {
       return;
@@ -166,7 +170,6 @@ export function TerminalPane({
         if (disposed) {
           return;
         }
-        reconnectAttempts = 0;
         fit();
         send({ type: 'resize', cols: terminal.cols, rows: terminal.rows });
       });
@@ -182,6 +185,11 @@ export function TerminalPane({
           return;
         }
 
+        if (message.type === 'ready') {
+          reconnectAttempts = 0;
+          setConnectionError(null);
+          return;
+        }
         if (message.type === 'output') {
           terminal.write(message.data);
           return;
@@ -209,6 +217,11 @@ export function TerminalPane({
             openSocket();
           }, 400);
           return;
+        }
+        if (!sessionEnded) {
+          const message = 'Terminal disconnected. Reopen the terminal to try attaching again.';
+          setConnectionError(message);
+          announce(message);
         }
         terminal.write('\r\n[terminal disconnected]\r\n');
       });
@@ -271,7 +284,7 @@ export function TerminalPane({
       terminalRef.current = null;
       terminal.dispose();
     };
-  }, [sessionId, terminalPath, reconnectOnClose]);
+  }, [sessionId, terminalPath, reconnectOnClose, announce]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
@@ -307,6 +320,7 @@ export function TerminalPane({
           </p>
         )}
       </div>
+      {connectionError === null ? null : <p className="field__hint">{connectionError}</p>}
       <div className="terminal-pane__screen" ref={containerRef} role="group" aria-label={label} data-testid={screenTestId} />
       {dense ? null : <p className="field__hint">{exitHint}</p>}
     </div>
