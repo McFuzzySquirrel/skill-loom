@@ -29,6 +29,7 @@
     "build:web": "vite build",
     "build:server": "tsc -p tsconfig.server.json && node scripts/copy-scenario-skills.mjs",
     "build:portable-skill": "node scripts/build-portable-skill.mjs",
+    "update:scenario-modes": "tsx scripts/update-scenario-modes.ts",
     "prepack": "npm run build",
     "start": "node dist/src/server/index.js",
     "typecheck": "npm run typecheck:server && npm run typecheck:web",

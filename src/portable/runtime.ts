@@ -17,6 +17,7 @@ import {
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { ChainBundle, BundleSkill } from '../shared/bundles.js';
 import { chainStepName } from '../shared/chain.js';
+import { syncDirectory } from '../shared/sync-directory.js';
 import { beginCoordinatedProjectRun, withCoordinatedProjectRun } from '../shared/project-coordination.js';
 import { frontmatterString, parseSkillFrontmatter } from '../server/catalog/frontmatter.js';
 import {
@@ -29,6 +30,7 @@ import {
   parseBundle,
 } from './bundle.js';
 import { writeBundleSkillFiles } from './install-skill.js';
+import { discardInstalledModeIndex, installedExecutableFlag, readInstalledModeIndex, type InstalledModeReceipt } from './installed-modes.js';
 import {
   MAX_ATTEMPTS_PER_STEP,
   MAX_PORTABLE_STEPS,
@@ -245,7 +247,7 @@ export async function openCheckedFile(
   }
 }
 
-async function readBoundedFile(path: string, limit: number): Promise<{ content: Buffer; executable: boolean }> {
+export async function readBoundedFile(path: string, limit: number): Promise<{ content: Buffer; executable: boolean }> {
   const { handle, verifyPath } = await openCheckedFile(path, 'PACKAGE_UNSAFE', 'PACKAGE_CHANGED');
   try {
     const info = await handle.stat();
@@ -281,6 +283,7 @@ export async function treeFingerprint(
   limits: { files: number; bytes: number; entries?: number; inventoryBytes?: number } = { files: MAX_BUNDLE_FILES, bytes: MAX_BUNDLE_BYTES },
 ): Promise<string> {
   const hash = treeHash();
+  const modeIndex = await readInstalledModeIndex(directory);
   let bytes = 0;
   let files = 0;
   let entryCount = 0;
@@ -307,6 +310,7 @@ export async function treeFingerprint(
     }
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const entry of entries) {
+      if (prefix === '' && entry.name === '.loom' && modeIndex !== null) continue;
       const path = join(root, entry.name);
       const relativePath = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
       const info = await lstat(path);
@@ -319,6 +323,9 @@ export async function treeFingerprint(
         files += 1;
         if (files > limits.files) fail('PACKAGE_TOO_LARGE', 'The existing package exceeds the portable review file limit.');
         const file = await readBoundedFile(path, limits.bytes - bytes);
+        if (modeIndex !== null) {
+          file.executable = installedExecutableFlag(modeIndex, relativePath, file.executable);
+        }
         bytes += file.content.length;
         hashTreeEntry(hash, relativePath, file);
         if (inventory !== undefined) {
@@ -333,6 +340,9 @@ export async function treeFingerprint(
     }
   }
   await visit(directory, '', 0);
+  if (modeIndex !== null && files !== modeIndex.files.length) {
+    fail('PACKAGE_CHANGED', 'Installed files no longer match their executable-mode metadata. Restore the complete reviewed package.');
+  }
   return hash.digest('hex');
 }
 
@@ -342,7 +352,7 @@ async function installSkills(
   reuseSkills: string[],
   differingReuseConfirmed: boolean,
   reviewedFingerprints: ReadonlyMap<string, string | null>,
-): Promise<{ installedSkills: PortableRun['installedSkills']; createdDirectories: string[] }> {
+): Promise<{ installedSkills: PortableRun['installedSkills']; createdDirectories: string[]; createdModes: InstalledModeReceipt[] }> {
   const root = await ensureSkillRoot(project);
   const reuse = new Set(reuseSkills);
   if (reuse.size !== reuseSkills.length || [...reuse].some((name) =>
@@ -351,6 +361,7 @@ async function installSkills(
   }
   const installed: PortableRun['installedSkills'] = [];
   const created: string[] = [];
+  const createdModes: InstalledModeReceipt[] = [];
   try {
     for (const skill of bundle.skills) {
       const destination = join(root, skill.directory);
@@ -398,17 +409,25 @@ async function installSkills(
       if (reuse.has(skill.name)) fail('REUSE_MISSING', `Skill "${skill.name}" selected for reuse is missing.`);
       await mkdir(destination, { mode: 0o755 });
       created.push(destination);
-      await writeBundleSkillFiles(destination, skill.files, { directoryMode: 0o700, enforceFileMode: true });
+      const modes = await writeBundleSkillFiles(destination, skill.files, {
+        directoryMode: 0o700, enforceFileMode: true, recordExecutableModes: process.platform === 'win32',
+      });
+      if (modes !== undefined) createdModes.push(modes);
+      const installedFingerprint = await treeFingerprint(destination);
+      if (installedFingerprint !== packageFingerprint(skill.files)) {
+        fail('PACKAGE_CHANGED', 'The newly installed skill differs from the reviewed bundle.');
+      }
       installed.push({
         name: skill.name,
         directory: skill.directory,
-        fingerprint: await treeFingerprint(destination),
+        fingerprint: installedFingerprint,
         reused: false,
       });
     }
-    return { installedSkills: installed, createdDirectories: created };
+    return { installedSkills: installed, createdDirectories: created, createdModes };
   } catch (error) {
     await Promise.all(created.map((path) => rm(path, { recursive: true, force: true })));
+    await Promise.all(createdModes.map(discardInstalledModeIndex));
     if (error instanceof PortableRunError || error instanceof BundleError) throw error;
     throw new PortableRunError('INSTALL_FAILED', 'Skill installation failed; newly created package directories were rolled back.');
   }
@@ -500,22 +519,6 @@ async function atomicWriteText(target: string, value: string, exclusive = false)
   } catch (error) {
     await rm(temporary, { force: true });
     throw error;
-  }
-}
-
-async function syncDirectory(path: string): Promise<void> {
-  const directory = await open(path, constants.O_RDONLY);
-  try {
-    try {
-      await directory.sync();
-    } catch (error) {
-      if (!isErrno(error, 'EINVAL') && !isErrno(error, 'EISDIR') &&
-        !isErrno(error, 'EPERM') && !isErrno(error, 'ENOTSUP')) {
-        throw error;
-      }
-    }
-  } finally {
-    await directory.close();
   }
 }
 
@@ -819,9 +822,6 @@ export async function executePortableRequest(request: PortableRequest): Promise<
     if (reviewed.reviewDigest !== input.reviewDigest) {
       fail('REVIEW_STALE', 'The bundle, project, or existing package state changed since inspection; review it again.');
     }
-    if (process.platform === 'win32' && bundle.skills.some((skill) => skill.files.some((file) => file.executable))) {
-      fail('EXECUTABLE_MODES_UNSUPPORTED', 'Windows cannot yet preserve executable modes when installing or reusing bundle skills.');
-    }
     const directory = await ensureRunDirectory(project);
     const id = randomUUID();
     return beginCoordinatedProjectRun(project, 'portable', id, () => withRunLock(directory, async () => {
@@ -830,7 +830,7 @@ export async function executePortableRequest(request: PortableRequest): Promise<
       if (current.reviewDigest !== input.reviewDigest) {
         fail('REVIEW_STALE', 'The bundle, project, or existing package state changed since inspection; review it again.');
       }
-      const { installedSkills, createdDirectories } = await installSkills(
+      const { installedSkills, createdDirectories, createdModes } = await installSkills(
         bundle,
         project,
         reuseSkills as string[],
@@ -864,6 +864,7 @@ export async function executePortableRequest(request: PortableRequest): Promise<
         await writeRun(directory, run, true);
       } catch (error) {
         await Promise.all(createdDirectories.map((path) => rm(path, { recursive: true, force: true })));
+        await Promise.all(createdModes.map(discardInstalledModeIndex));
         throw error;
       }
       return { ok: true, runId: id, revision: run.revision, status: run.status, installedSkills };

@@ -4,6 +4,11 @@ import { link, lstat, mkdir, open, realpath, unlink } from 'node:fs/promises';
 import { dirname, join, relative, sep } from 'node:path';
 import type { BundleSkill } from '../shared/bundles.js';
 import { BundleError, decodeBundleFile, validatePackagePath } from './bundle.js';
+import {
+  discardInstalledModeIndex,
+  writeInstalledModeIndex,
+  type InstalledModeReceipt,
+} from './installed-modes.js';
 
 /**
  * Publish nested skill entries from deepest to shallowest after all other files,
@@ -12,8 +17,8 @@ import { BundleError, decodeBundleFile, validatePackagePath } from './bundle.js'
 export async function writeBundleSkillFiles(
   destination: string,
   files: BundleSkill['files'],
-  options: { directoryMode: number; enforceFileMode?: boolean; publish?: typeof link } = { directoryMode: 0o700 },
-): Promise<void> {
+  options: { directoryMode: number; enforceFileMode?: boolean; publish?: typeof link; recordExecutableModes?: boolean } = { directoryMode: 0o700 },
+): Promise<InstalledModeReceipt | undefined> {
   if (!files.some((file) => file.path === 'SKILL.md')) {
     throw new BundleError('BUNDLE_INVALID', 'Each skill package must include SKILL.md.');
   }
@@ -47,22 +52,33 @@ export async function writeBundleSkillFiles(
     }
   }
 
-  const entries = files.filter((file) => file.path.split('/').at(-1) === 'SKILL.md');
-  for (const file of files) {
-    if (file.path.split('/').at(-1) === 'SKILL.md') continue;
-    const target = join(destination, ...file.path.split('/'));
-    await ensureParent(target);
-    await writeFile(target, file);
-  }
+  const modes = options.recordExecutableModes
+    ? await writeInstalledModeIndex(destination, files.map((file) => ({
+      ...file, content: decodeBundleFile(file.content),
+    })))
+    : undefined;
+  try {
+    const entries = files.filter((file) => file.path.split('/').at(-1) === 'SKILL.md');
+    for (const file of files) {
+      if (file.path.split('/').at(-1) === 'SKILL.md') continue;
+      const target = join(destination, ...file.path.split('/'));
+      await ensureParent(target);
+      await writeFile(target, file);
+    }
 
-  entries.sort((left, right) => right.path.split('/').length - left.path.split('/').length);
-  for (const entry of entries) {
-    const target = join(destination, ...entry.path.split('/'));
-    await ensureParent(target);
-    await publishSkillEntry(dirname(target), decodeBundleFile(entry.content), entry.executable ? 0o755 : 0o644, {
-      ...options,
-      temporaryRoot: dirname(destination),
-    });
+    entries.sort((left, right) => right.path.split('/').length - left.path.split('/').length);
+    for (const entry of entries) {
+      const target = join(destination, ...entry.path.split('/'));
+      await ensureParent(target);
+      await publishSkillEntry(dirname(target), decodeBundleFile(entry.content), entry.executable ? 0o755 : 0o644, {
+        ...options,
+        temporaryRoot: dirname(destination),
+      });
+    }
+    return modes;
+  } catch (error) {
+    if (modes !== undefined) await discardInstalledModeIndex(modes);
+    throw error;
   }
 }
 

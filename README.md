@@ -250,6 +250,7 @@ The packed package contains `dist/src`, `dist/web`, the compiled package metadat
 | Install dependencies | `npm install` | Native `node-pty` build requires the toolchain above. |
 | Development | `npm run dev` | API on 7373, Vite UI on 5173. |
 | Build | `npm run build` | Web then server. |
+| Bundled skill modes | `npm run update:scenario-modes` | Regenerate the content-bound manifest from current files and Git index modes after changing bundled scenario packages. |
 | Start built app | `npm start` | Serves `dist/web` and the API on 7373. |
 | Typecheck | `npm run typecheck` | Runs server and web project checks. |
 | Unit tests | `npm run test:unit` | Vitest, Node environment. |

@@ -48,7 +48,7 @@ jobs:
       - if: inputs.suite == 'chain-bundles'
         run: npx vitest run tests/unit/git-file-modes.test.ts tests/integration/chain-bundles.test.ts
       - if: inputs.suite == 'skill-install'
-        run: npx vitest run tests/unit/install-skill.test.ts tests/unit/catalog-copy-publication.test.ts tests/unit/catalog-copy.test.ts tests/unit/portable-runtime.test.ts tests/integration/chain-bundles.test.ts tests/integration/presets-routes.test.ts
+        run: npx vitest run tests/unit/installed-modes.test.ts tests/unit/bundled-modes.test.ts tests/unit/install-skill.test.ts tests/unit/catalog-copy-publication.test.ts tests/unit/catalog-copy.test.ts tests/unit/portable-runtime.test.ts tests/integration/chain-bundles.test.ts tests/integration/catalog-routes.test.ts tests/integration/presets-routes.test.ts
       - if: inputs.suite == 'windows-baseline'
         run: npx vitest run tests/unit/chain-store.test.ts tests/unit/config.test.ts tests/unit/run-store.test.ts tests/unit/catalog-copy.test.ts tests/unit/harness-registry.test.ts tests/integration/server.test.ts
       - if: inputs.suite == 'remote-copy'
@@ -64,7 +64,7 @@ jobs:
       - if: inputs.suite == 'profile-alias' && runner.os != 'Windows'
         run: npx vitest run tests/integration/discovery-routes.test.ts -t "using a alias config path"
       - if: inputs.suite == 'snapshot-modes'
-        run: npx vitest run tests/unit/catalog-remote.test.ts tests/integration/discovery-routes.test.ts tests/unit/scenario-discovery-handoff-helper.test.ts tests/unit/portable-runtime.test.ts -t "binds versioned Git|exports fingerprint-bound|prepares exact pinned|validates a complete handoff|refuses executable bundle installation|using a alias config path"
+        run: npx vitest run tests/unit/catalog-remote.test.ts tests/integration/discovery-routes.test.ts tests/unit/scenario-discovery-handoff-helper.test.ts tests/unit/portable-runtime.test.ts -t "binds versioned Git|exports fingerprint-bound|prepares exact pinned|validates a complete handoff|prepares executable bundle installation|using a alias config path"
       - if: inputs.suite == 'macos-baseline'
         run: npx vitest run tests/integration/catalog-routes.test.ts tests/integration/chain-bundles.test.ts tests/integration/control.test.ts tests/integration/presets-routes.test.ts tests/unit/agent-copy.test.ts tests/unit/catalog-opencode.test.ts tests/unit/catalog-merge.test.ts tests/unit/chain-store.test.ts tests/unit/cli.test.ts tests/unit/portable-runtime.test.ts tests/unit/project-registry.test.ts tests/unit/run-store.test.ts
       - if: inputs.suite == 'preflight'

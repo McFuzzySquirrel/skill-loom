@@ -10,6 +10,8 @@ import { importReviewedBundle, reviewBundleImport } from '../../src/server/bundl
 import { createCatalogService } from '../../src/server/catalog/merge.js';
 import { scanOpenCodeSkills } from '../../src/server/catalog/opencode.js';
 import { snapshotReviewFingerprint } from '../../src/server/catalog/snapshot-fingerprint.js';
+import { treeFingerprint, packageFingerprint } from '../../src/portable/runtime.js';
+import { readInstalledModeIndex } from '../../src/portable/installed-modes.js';
 import { MAX_BUNDLE_BYTES, MAX_BUNDLE_REQUEST_BYTES, parseBundle } from '../../src/server/chains/bundle.js';
 import { createChainService, type ChainService } from '../../src/server/chains/service.js';
 import { createConfigStore } from '../../src/server/config/store.js';
@@ -433,15 +435,69 @@ describe('portable chain bundles', () => {
     )).toBe(true);
   });
 
-  it.runIf(process.platform === 'win32')('blocks executable bundle installation before writing skills', async () => {
+  it('installs, reviews, reuses and re-exports executable bundles without losing intent', async () => {
     const bundle = await exported();
     const script = bundle.skills[0]?.files.find((file) => file.path === 'scripts/check.sh');
     expect(script).toBeDefined();
     if (script === undefined) throw new Error('Expected the bundled script.');
     script.executable = true;
     const response = await request('import', bundle, { confirmed: true });
-    expect(response.statusCode).toBe(422);
-    expect(await readdir(target)).toEqual(['.loom']);
+    expect(response.statusCode, response.body).toBe(201);
+    const destination = join(target, '.agents', 'skills', 'review');
+    expect(await treeFingerprint(destination)).toBe(packageFingerprint(bundle.skills[0]!.files));
+    if (process.platform === 'win32') expect(await readInstalledModeIndex(destination)).not.toBeNull();
+    expect((await request('import', bundle, { confirmed: true, reuseSkills: ['review'] })).statusCode).toBe(201);
+    const imported = response.json<{ chain: Chain }>().chain;
+    const roundTrip = await app.inject({ method: 'GET', url: `/api/projects/${targetId}/chains/${imported.id}/bundle` });
+    expect(roundTrip.statusCode, roundTrip.body).toBe(200);
+    const reexported = roundTrip.json<{ bundle: ChainBundle }>().bundle;
+    expect(reexported.skills).toEqual(bundle.skills);
+    if (process.platform === 'win32') {
+      execFileSync('git', ['-C', target, 'init', '--quiet']);
+      execFileSync('git', ['-C', target, 'config', 'core.filemode', 'false']);
+      execFileSync('git', ['-C', target, 'add', '--', '.agents', '.loom/package-modes']);
+      const stagedBefore = execFileSync('git', [
+        '-C', target, 'ls-files', '--stage', '--', '.agents/skills/review/scripts/check.sh',
+      ], { encoding: 'utf8' });
+      expect(stagedBefore).toMatch(/^100644 /);
+      const despiteIndex = await app.inject({ method: 'GET', url: `/api/projects/${targetId}/chains/${imported.id}/bundle` });
+      expect(despiteIndex.json<{ bundle: ChainBundle }>().bundle.skills).toEqual(bundle.skills);
+      execFileSync('git', ['-C', target, 'update-index', '--chmod=+x', '--', '.agents/skills/review/scripts/check.sh']);
+      expect(execFileSync('git', [
+        '-C', target, 'ls-files', '--stage', '--', '.agents/skills/review/scripts/check.sh',
+      ], { encoding: 'utf8' })).toMatch(/^100755 /);
+    }
+    await writeFile(join(destination, 'scripts', 'check.sh'), '#!/bin/sh\nexit 1\n');
+    const edited = await app.inject({ method: 'GET', url: `/api/projects/${targetId}/chains/${imported.id}/bundle` });
+    expect(edited.statusCode, edited.body).toBe(200);
+    expect(edited.json<{ bundle: ChainBundle }>().bundle.skills[0]?.files.find(
+      (file) => file.path === 'scripts/check.sh',
+    )).toMatchObject({ executable: true, content: Buffer.from('#!/bin/sh\nexit 1\n').toString('base64') });
+  });
+
+  it.runIf(process.platform === 'win32')('blocks installed export when both mode records are deleted, even with staged files', async () => {
+    const bundle = await exported();
+    const response = await request('import', bundle, { confirmed: true });
+    expect(response.statusCode).toBe(201);
+    const installed = response.json<{ chain: Chain }>().chain;
+    execFileSync('git', ['-C', target, 'init', '--quiet']);
+    execFileSync('git', ['-C', target, 'add', '--', '.agents']);
+    await rm(join(target, '.agents', 'skills', 'review', '.loom'), { recursive: true });
+    await rm(join(target, '.loom', 'package-modes'), { recursive: true });
+    const result = await app.inject({ method: 'GET', url: `/api/projects/${targetId}/chains/${installed.id}/bundle` });
+    expect(result.statusCode).toBe(422);
+    expect(result.json()).toMatchObject({ error: { code: 'BUNDLE_SOURCE_UNAVAILABLE' } });
+  });
+
+  it('reuses the reviewed package path even when the bundle names another directory', async () => {
+    const bundle = await exported();
+    const renamed = structuredClone(bundle);
+    renamed.skills[0]!.directory = 'local-review';
+    expect((await request('import', renamed, { confirmed: true })).statusCode).toBe(201);
+    const reused = await request('import', bundle, { confirmed: true, reuseSkills: ['review'] });
+    expect(reused.statusCode, reused.body).toBe(201);
+    expect(await readFile(join(target, '.agents', 'skills', 'local-review', 'SKILL.md'), 'utf8')).toBe(skillText);
+    await expect(lstat(join(target, '.agents', 'skills', 'review'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('requires explicit confirmation and never writes during preview', async () => {

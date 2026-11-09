@@ -5272,7 +5272,7 @@ function eu(e, t) {
 	let n = V(t) ? t.value : t;
 	for (let r of e) if (B(r) && (r.key === t || r.key === n || V(r.key) && r.key.value === n)) return r;
 }
-var K = class extends gl {
+var tu = class extends gl {
 	static get tagName() {
 		return "tag:yaml.org,2002:map";
 	}
@@ -5335,16 +5335,16 @@ var K = class extends gl {
 			onComment: t
 		});
 	}
-}, tu = {
+}, nu = {
 	collection: "map",
 	default: !0,
-	nodeClass: K,
+	nodeClass: tu,
 	tag: "tag:yaml.org,2002:map",
 	resolve(e, t) {
 		return Vc(e) || t("Expected a mapping for this tag"), e;
 	},
-	createNode: (e, t, n) => K.from(e, t, n)
-}, nu = class extends gl {
+	createNode: (e, t, n) => tu.from(e, t, n)
+}, ru = class extends gl {
 	static get tagName() {
 		return "tag:yaml.org,2002:seq";
 	}
@@ -5355,21 +5355,21 @@ var K = class extends gl {
 		this.items.push(e);
 	}
 	delete(e) {
-		let t = ru(e);
+		let t = iu(e);
 		return typeof t == "number" && this.items.splice(t, 1).length > 0;
 	}
 	get(e, t) {
-		let n = ru(e);
+		let n = iu(e);
 		if (typeof n != "number") return;
 		let r = this.items[n];
 		return !t && V(r) ? r.value : r;
 	}
 	has(e) {
-		let t = ru(e);
+		let t = iu(e);
 		return typeof t == "number" && t < this.items.length;
 	}
 	set(e, t) {
-		let n = ru(e);
+		let n = iu(e);
 		if (typeof n != "number") throw Error(`Expected a valid index, not ${e}.`);
 		let r = this.items[n];
 		V(r) && ul(t) ? r.value = t : this.items[n] = t;
@@ -5408,21 +5408,21 @@ var K = class extends gl {
 		return i;
 	}
 };
-function ru(e) {
+function iu(e) {
 	let t = V(e) ? e.value : e;
 	return t && typeof t == "string" && (t = Number(t)), typeof t == "number" && Number.isInteger(t) && t >= 0 ? t : null;
 }
 // node_modules/yaml/browser/dist/schema/common/seq.js
-var iu = {
+var au = {
 	collection: "seq",
 	default: !0,
-	nodeClass: nu,
+	nodeClass: ru,
 	tag: "tag:yaml.org,2002:seq",
 	resolve(e, t) {
 		return Hc(e) || t("Expected a sequence for this tag"), e;
 	},
-	createNode: (e, t, n) => nu.from(e, t, n)
-}, au = {
+	createNode: (e, t, n) => ru.from(e, t, n)
+}, ou = {
 	identify: (e) => typeof e == "string",
 	default: !0,
 	tag: "tag:yaml.org,2002:str",
@@ -5430,26 +5430,26 @@ var iu = {
 	stringify(e, t, n, r) {
 		return t = Object.assign({ actualString: !0 }, t), Pl(e, t, n, r);
 	}
-}, ou = {
+}, su = {
 	identify: (e) => e == null,
 	createNode: () => new W(null),
 	default: !0,
 	tag: "tag:yaml.org,2002:null",
 	test: /^(?:~|[Nn]ull|NULL)?$/,
 	resolve: () => new W(null),
-	stringify: ({ source: e }, t) => typeof e == "string" && ou.test.test(e) ? e : t.options.nullStr
-}, su = {
+	stringify: ({ source: e }, t) => typeof e == "string" && su.test.test(e) ? e : t.options.nullStr
+}, cu = {
 	identify: (e) => typeof e == "boolean",
 	default: !0,
 	tag: "tag:yaml.org,2002:bool",
 	test: /^(?:[Tt]rue|TRUE|[Ff]alse|FALSE)$/,
 	resolve: (e) => new W(e[0] === "t" || e[0] === "T"),
 	stringify({ source: e, value: t }, n) {
-		return e && su.test.test(e) && t === (e[0] === "t" || e[0] === "T") ? e : t ? n.options.trueStr : n.options.falseStr;
+		return e && cu.test.test(e) && t === (e[0] === "t" || e[0] === "T") ? e : t ? n.options.trueStr : n.options.falseStr;
 	}
 };
 // node_modules/yaml/browser/dist/stringify/stringifyNumber.js
-function cu({ format: e, minFractionDigits: t, tag: n, value: r }) {
+function lu({ format: e, minFractionDigits: t, tag: n, value: r }) {
 	if (typeof r == "bigint") return String(r);
 	let i = typeof r == "number" ? r : Number(r);
 	if (!isFinite(i)) return isNaN(i) ? ".nan" : i < 0 ? "-.inf" : ".inf";
@@ -5463,14 +5463,14 @@ function cu({ format: e, minFractionDigits: t, tag: n, value: r }) {
 	return a;
 }
 // node_modules/yaml/browser/dist/schema/core/float.js
-var lu = {
+var uu = {
 	identify: (e) => typeof e == "number",
 	default: !0,
 	tag: "tag:yaml.org,2002:float",
 	test: /^(?:[-+]?\.(?:inf|Inf|INF)|\.nan|\.NaN|\.NAN)$/,
 	resolve: (e) => e.slice(-3).toLowerCase() === "nan" ? NaN : e[0] === "-" ? -Infinity : Infinity,
-	stringify: cu
-}, uu = {
+	stringify: lu
+}, du = {
 	identify: (e) => typeof e == "number",
 	default: !0,
 	tag: "tag:yaml.org,2002:float",
@@ -5479,9 +5479,9 @@ var lu = {
 	resolve: (e) => parseFloat(e),
 	stringify(e) {
 		let t = Number(e.value);
-		return isFinite(t) ? t.toExponential() : cu(e);
+		return isFinite(t) ? t.toExponential() : lu(e);
 	}
-}, du = {
+}, fu = {
 	identify: (e) => typeof e == "number",
 	default: !0,
 	tag: "tag:yaml.org,2002:float",
@@ -5490,59 +5490,59 @@ var lu = {
 		let t = new W(parseFloat(e)), n = e.indexOf(".");
 		return n !== -1 && e[e.length - 1] === "0" && (t.minFractionDigits = e.length - n - 1), t;
 	},
-	stringify: cu
-}, fu = (e) => typeof e == "bigint" || Number.isInteger(e), pu = (e, t, n, { intAsBigInt: r }) => r ? BigInt(e) : parseInt(e.substring(t), n);
-function mu(e, t, n) {
+	stringify: lu
+}, pu = (e) => typeof e == "bigint" || Number.isInteger(e), mu = (e, t, n, { intAsBigInt: r }) => r ? BigInt(e) : parseInt(e.substring(t), n);
+function hu(e, t, n) {
 	let { value: r } = e;
-	return fu(r) && r >= 0 ? n + r.toString(t) : cu(e);
+	return pu(r) && r >= 0 ? n + r.toString(t) : lu(e);
 }
-var hu = {
-	identify: (e) => fu(e) && e >= 0,
+var gu = {
+	identify: (e) => pu(e) && e >= 0,
 	default: !0,
 	tag: "tag:yaml.org,2002:int",
 	format: "OCT",
 	test: /^0o[0-7]+$/,
-	resolve: (e, t, n) => pu(e, 2, 8, n),
-	stringify: (e) => mu(e, 8, "0o")
-}, gu = {
-	identify: fu,
+	resolve: (e, t, n) => mu(e, 2, 8, n),
+	stringify: (e) => hu(e, 8, "0o")
+}, _u = {
+	identify: pu,
 	default: !0,
 	tag: "tag:yaml.org,2002:int",
 	test: /^[-+]?[0-9]+$/,
-	resolve: (e, t, n) => pu(e, 0, 10, n),
-	stringify: cu
-}, _u = {
-	identify: (e) => fu(e) && e >= 0,
+	resolve: (e, t, n) => mu(e, 0, 10, n),
+	stringify: lu
+}, vu = {
+	identify: (e) => pu(e) && e >= 0,
 	default: !0,
 	tag: "tag:yaml.org,2002:int",
 	format: "HEX",
 	test: /^0x[0-9a-fA-F]+$/,
-	resolve: (e, t, n) => pu(e, 2, 16, n),
-	stringify: (e) => mu(e, 16, "0x")
-}, vu = [
-	tu,
-	iu,
+	resolve: (e, t, n) => mu(e, 2, 16, n),
+	stringify: (e) => hu(e, 16, "0x")
+}, yu = [
+	nu,
 	au,
 	ou,
 	su,
-	hu,
+	cu,
 	gu,
 	_u,
-	lu,
+	vu,
 	uu,
-	du
+	du,
+	fu
 ];
 // node_modules/yaml/browser/dist/schema/json/schema.js
-function yu(e) {
+function bu(e) {
 	return typeof e == "bigint" || Number.isInteger(e);
 }
-var bu = ({ value: e }) => JSON.stringify(e), xu = [
+var xu = ({ value: e }) => JSON.stringify(e), Su = [
 	{
 		identify: (e) => typeof e == "string",
 		default: !0,
 		tag: "tag:yaml.org,2002:str",
 		resolve: (e) => e,
-		stringify: bu
+		stringify: xu
 	},
 	{
 		identify: (e) => e == null,
@@ -5551,7 +5551,7 @@ var bu = ({ value: e }) => JSON.stringify(e), xu = [
 		tag: "tag:yaml.org,2002:null",
 		test: /^null$/,
 		resolve: () => null,
-		stringify: bu
+		stringify: xu
 	},
 	{
 		identify: (e) => typeof e == "boolean",
@@ -5559,15 +5559,15 @@ var bu = ({ value: e }) => JSON.stringify(e), xu = [
 		tag: "tag:yaml.org,2002:bool",
 		test: /^true$|^false$/,
 		resolve: (e) => e === "true",
-		stringify: bu
+		stringify: xu
 	},
 	{
-		identify: yu,
+		identify: bu,
 		default: !0,
 		tag: "tag:yaml.org,2002:int",
 		test: /^-?(?:0|[1-9][0-9]*)$/,
 		resolve: (e, t, { intAsBigInt: n }) => n ? BigInt(e) : parseInt(e, 10),
-		stringify: ({ value: e }) => yu(e) ? e.toString() : JSON.stringify(e)
+		stringify: ({ value: e }) => bu(e) ? e.toString() : JSON.stringify(e)
 	},
 	{
 		identify: (e) => typeof e == "number",
@@ -5575,16 +5575,16 @@ var bu = ({ value: e }) => JSON.stringify(e), xu = [
 		tag: "tag:yaml.org,2002:float",
 		test: /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]*)?(?:[eE][-+]?[0-9]+)?$/,
 		resolve: (e) => parseFloat(e),
-		stringify: bu
+		stringify: xu
 	}
-], Su = [tu, iu].concat(xu, {
+], Cu = [nu, au].concat(Su, {
 	default: !0,
 	tag: "",
 	test: /^/,
 	resolve(e, t) {
 		return t(`Unresolved plain scalar ${JSON.stringify(e)}`), e;
 	}
-}), Cu = {
+}), wu = {
 	identify: (e) => e instanceof Uint8Array,
 	default: !1,
 	tag: "tag:yaml.org,2002:binary",
@@ -5617,7 +5617,7 @@ var bu = ({ value: e }) => JSON.stringify(e), xu = [
 	}
 };
 // node_modules/yaml/browser/dist/schema/yaml-1.1/pairs.js
-function wu(e, t) {
+function Tu(e, t) {
 	if (Hc(e)) for (let n = 0; n < e.items.length; ++n) {
 		let r = e.items[n];
 		if (!B(r)) {
@@ -5636,8 +5636,8 @@ function wu(e, t) {
 	else t("Expected a sequence for this tag");
 	return e;
 }
-function Tu(e, t, n) {
-	let { replacer: r } = n, i = new nu(e);
+function Eu(e, t, n) {
+	let { replacer: r } = n, i = new ru(e);
 	i.tag = "tag:yaml.org,2002:pairs";
 	let a = 0;
 	if (t && Symbol.iterator in Object(t)) for (let e of t) {
@@ -5655,15 +5655,15 @@ function Tu(e, t, n) {
 	}
 	return i;
 }
-var Eu = {
+var Du = {
 	collection: "seq",
 	default: !1,
 	tag: "tag:yaml.org,2002:pairs",
-	resolve: wu,
-	createNode: Tu
-}, Du = class e extends nu {
+	resolve: Tu,
+	createNode: Eu
+}, Ou = class e extends ru {
 	constructor() {
-		super(), this.add = K.prototype.add.bind(this), this.delete = K.prototype.delete.bind(this), this.get = K.prototype.get.bind(this), this.has = K.prototype.has.bind(this), this.set = K.prototype.set.bind(this), this.tag = e.tag;
+		super(), this.add = tu.prototype.add.bind(this), this.delete = tu.prototype.delete.bind(this), this.get = tu.prototype.get.bind(this), this.has = tu.prototype.has.bind(this), this.set = tu.prototype.set.bind(this), this.tag = e.tag;
 	}
 	toJSON(e, t) {
 		if (!t) return super.toJSON(e);
@@ -5677,50 +5677,50 @@ var Eu = {
 		return n;
 	}
 	static from(e, t, n) {
-		let r = Tu(e, t, n), i = new this();
+		let r = Eu(e, t, n), i = new this();
 		return i.items = r.items, i;
 	}
 };
-Du.tag = "tag:yaml.org,2002:omap";
-var Ou = {
+Ou.tag = "tag:yaml.org,2002:omap";
+var ku = {
 	collection: "seq",
 	identify: (e) => e instanceof Map,
-	nodeClass: Du,
+	nodeClass: Ou,
 	default: !1,
 	tag: "tag:yaml.org,2002:omap",
 	resolve(e, t) {
-		let n = wu(e, t), r = [];
+		let n = Tu(e, t), r = [];
 		for (let { key: e } of n.items) V(e) && (r.includes(e.value) ? t(`Ordered maps must not include duplicate keys: ${e.value}`) : r.push(e.value));
-		return Object.assign(new Du(), n);
+		return Object.assign(new Ou(), n);
 	},
-	createNode: (e, t, n) => Du.from(e, t, n)
+	createNode: (e, t, n) => Ou.from(e, t, n)
 };
 // node_modules/yaml/browser/dist/schema/yaml-1.1/bool.js
-function ku({ value: e, source: t }, n) {
-	return t && (e ? Au : ju).test.test(t) ? t : e ? n.options.trueStr : n.options.falseStr;
+function Au({ value: e, source: t }, n) {
+	return t && (e ? ju : Mu).test.test(t) ? t : e ? n.options.trueStr : n.options.falseStr;
 }
-var Au = {
+var ju = {
 	identify: (e) => e === !0,
 	default: !0,
 	tag: "tag:yaml.org,2002:bool",
 	test: /^(?:Y|y|[Yy]es|YES|[Tt]rue|TRUE|[Oo]n|ON)$/,
 	resolve: () => new W(!0),
-	stringify: ku
-}, ju = {
+	stringify: Au
+}, Mu = {
 	identify: (e) => e === !1,
 	default: !0,
 	tag: "tag:yaml.org,2002:bool",
 	test: /^(?:N|n|[Nn]o|NO|[Ff]alse|FALSE|[Oo]ff|OFF)$/,
 	resolve: () => new W(!1),
-	stringify: ku
-}, Mu = {
+	stringify: Au
+}, Nu = {
 	identify: (e) => typeof e == "number",
 	default: !0,
 	tag: "tag:yaml.org,2002:float",
 	test: /^(?:[-+]?\.(?:inf|Inf|INF)|\.nan|\.NaN|\.NAN)$/,
 	resolve: (e) => e.slice(-3).toLowerCase() === "nan" ? NaN : e[0] === "-" ? -Infinity : Infinity,
-	stringify: cu
-}, Nu = {
+	stringify: lu
+}, Pu = {
 	identify: (e) => typeof e == "number",
 	default: !0,
 	tag: "tag:yaml.org,2002:float",
@@ -5729,9 +5729,9 @@ var Au = {
 	resolve: (e) => parseFloat(e.replace(/_/g, "")),
 	stringify(e) {
 		let t = Number(e.value);
-		return isFinite(t) ? t.toExponential() : cu(e);
+		return isFinite(t) ? t.toExponential() : lu(e);
 	}
-}, Pu = {
+}, Fu = {
 	identify: (e) => typeof e == "number",
 	default: !0,
 	tag: "tag:yaml.org,2002:float",
@@ -5744,9 +5744,9 @@ var Au = {
 		}
 		return t;
 	},
-	stringify: cu
-}, Fu = (e) => typeof e == "bigint" || Number.isInteger(e);
-function Iu(e, t, n, { intAsBigInt: r }) {
+	stringify: lu
+}, Iu = (e) => typeof e == "bigint" || Number.isInteger(e);
+function Lu(e, t, n, { intAsBigInt: r }) {
 	let i = e[0];
 	if ((i === "-" || i === "+") && (t += 1), e = e.substring(t).replace(/_/g, ""), r) {
 		switch (n) {
@@ -5764,46 +5764,46 @@ function Iu(e, t, n, { intAsBigInt: r }) {
 	let a = parseInt(e, n);
 	return i === "-" ? -1 * a : a;
 }
-function Lu(e, t, n) {
+function Ru(e, t, n) {
 	let { value: r } = e;
-	if (Fu(r)) {
+	if (Iu(r)) {
 		let e = r.toString(t);
 		return r < 0 ? "-" + n + e.substr(1) : n + e;
 	}
-	return cu(e);
+	return lu(e);
 }
-var Ru = {
-	identify: Fu,
+var zu = {
+	identify: Iu,
 	default: !0,
 	tag: "tag:yaml.org,2002:int",
 	format: "BIN",
 	test: /^[-+]?0b[0-1_]+$/,
-	resolve: (e, t, n) => Iu(e, 2, 2, n),
-	stringify: (e) => Lu(e, 2, "0b")
-}, zu = {
-	identify: Fu,
+	resolve: (e, t, n) => Lu(e, 2, 2, n),
+	stringify: (e) => Ru(e, 2, "0b")
+}, Bu = {
+	identify: Iu,
 	default: !0,
 	tag: "tag:yaml.org,2002:int",
 	format: "OCT",
 	test: /^[-+]?0[0-7_]+$/,
-	resolve: (e, t, n) => Iu(e, 1, 8, n),
-	stringify: (e) => Lu(e, 8, "0")
-}, Bu = {
-	identify: Fu,
+	resolve: (e, t, n) => Lu(e, 1, 8, n),
+	stringify: (e) => Ru(e, 8, "0")
+}, Vu = {
+	identify: Iu,
 	default: !0,
 	tag: "tag:yaml.org,2002:int",
 	test: /^[-+]?[0-9][0-9_]*$/,
-	resolve: (e, t, n) => Iu(e, 0, 10, n),
-	stringify: cu
-}, Vu = {
-	identify: Fu,
+	resolve: (e, t, n) => Lu(e, 0, 10, n),
+	stringify: lu
+}, Hu = {
+	identify: Iu,
 	default: !0,
 	tag: "tag:yaml.org,2002:int",
 	format: "HEX",
 	test: /^[-+]?0x[0-9a-fA-F_]+$/,
-	resolve: (e, t, n) => Iu(e, 2, 16, n),
-	stringify: (e) => Lu(e, 16, "0x")
-}, Hu = class e extends K {
+	resolve: (e, t, n) => Lu(e, 2, 16, n),
+	stringify: (e) => Ru(e, 16, "0x")
+}, Uu = class e extends tu {
 	constructor(t) {
 		super(t), this.tag = e.tag;
 	}
@@ -5834,153 +5834,153 @@ var Ru = {
 		return i;
 	}
 };
-Hu.tag = "tag:yaml.org,2002:set";
-var Uu = {
+Uu.tag = "tag:yaml.org,2002:set";
+var Wu = {
 	collection: "map",
 	identify: (e) => e instanceof Set,
-	nodeClass: Hu,
+	nodeClass: Uu,
 	default: !1,
 	tag: "tag:yaml.org,2002:set",
-	createNode: (e, t, n) => Hu.from(e, t, n),
+	createNode: (e, t, n) => Uu.from(e, t, n),
 	resolve(e, t) {
 		if (Vc(e)) {
-			if (e.hasAllNullValues(!0)) return Object.assign(new Hu(), e);
+			if (e.hasAllNullValues(!0)) return Object.assign(new Uu(), e);
 			t("Set items must all have null values");
 		} else t("Expected a mapping for this tag");
 		return e;
 	}
 };
 // node_modules/yaml/browser/dist/schema/yaml-1.1/timestamp.js
-function Wu(e, t) {
+function Gu(e, t) {
 	let n = e[0], r = n === "-" || n === "+" ? e.substring(1) : e, i = (e) => t ? BigInt(e) : Number(e), a = r.replace(/_/g, "").split(":").reduce((e, t) => e * i(60) + i(t), i(0));
 	return n === "-" ? i(-1) * a : a;
 }
-function Gu(e) {
+function Ku(e) {
 	let { value: t } = e, n = (e) => e;
 	if (typeof t == "bigint") n = (e) => BigInt(e);
-	else if (isNaN(t) || !isFinite(t)) return cu(e);
+	else if (isNaN(t) || !isFinite(t)) return lu(e);
 	let r = "";
 	t < 0 && (r = "-", t *= n(-1));
 	let i = n(60), a = [t % i];
 	return t < 60 ? a.unshift(0) : (t = (t - a[0]) / i, a.unshift(t % i), t >= 60 && (t = (t - a[0]) / i, a.unshift(t))), r + a.map((e) => String(e).padStart(2, "0")).join(":").replace(/000000\d*$/, "");
 }
-var Ku = {
+var qu = {
 	identify: (e) => typeof e == "bigint" || Number.isInteger(e),
 	default: !0,
 	tag: "tag:yaml.org,2002:int",
 	format: "TIME",
 	test: /^[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+$/,
-	resolve: (e, t, { intAsBigInt: n }) => Wu(e, n),
-	stringify: Gu
-}, qu = {
+	resolve: (e, t, { intAsBigInt: n }) => Gu(e, n),
+	stringify: Ku
+}, Ju = {
 	identify: (e) => typeof e == "number",
 	default: !0,
 	tag: "tag:yaml.org,2002:float",
 	format: "TIME",
 	test: /^[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+\.[0-9_]*$/,
-	resolve: (e) => Wu(e, !1),
-	stringify: Gu
-}, Ju = {
+	resolve: (e) => Gu(e, !1),
+	stringify: Ku
+}, Yu = {
 	identify: (e) => e instanceof Date,
 	default: !0,
 	tag: "tag:yaml.org,2002:timestamp",
 	test: RegExp("^([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})(?:(?:t|T|[ \\t]+)([0-9]{1,2}):([0-9]{1,2}):([0-9]{1,2}(\\.[0-9]+)?)(?:[ \\t]*(Z|[-+][012]?[0-9](?::[0-9]{2})?))?)?$"),
 	resolve(e) {
-		let t = e.match(Ju.test);
+		let t = e.match(Yu.test);
 		if (!t) throw Error("!!timestamp expects a date, starting with yyyy-mm-dd");
 		let [, n, r, i, a, o, s] = t.map(Number), c = t[7] ? Number((t[7] + "00").substr(1, 3)) : 0, l = Date.UTC(n, r - 1, i, a || 0, o || 0, s || 0, c), u = t[8];
 		if (u && u !== "Z") {
-			let e = Wu(u, !1);
+			let e = Gu(u, !1);
 			Math.abs(e) < 30 && (e *= 60), l -= 6e4 * e;
 		}
 		return new Date(l);
 	},
 	stringify: ({ value: e }) => e?.toISOString().replace(/(T00:00:00)?\.000Z$/, "") ?? ""
-}, Yu = [
-	tu,
-	iu,
+}, Xu = [
+	nu,
 	au,
 	ou,
-	Au,
+	su,
 	ju,
-	Ru,
+	Mu,
 	zu,
 	Bu,
 	Vu,
-	Mu,
+	Hu,
 	Nu,
 	Pu,
-	Cu,
+	Fu,
+	wu,
 	Hl,
-	Ou,
-	Eu,
-	Uu,
-	Ku,
+	ku,
+	Du,
+	Wu,
 	qu,
-	Ju
-], Xu = /* @__PURE__ */ new Map([
-	["core", vu],
+	Ju,
+	Yu
+], Zu = /* @__PURE__ */ new Map([
+	["core", yu],
 	["failsafe", [
-		tu,
-		iu,
-		au
+		nu,
+		au,
+		ou
 	]],
-	["json", Su],
-	["yaml11", Yu],
-	["yaml-1.1", Yu]
-]), Zu = {
-	binary: Cu,
-	bool: su,
-	float: du,
-	floatExp: uu,
-	floatNaN: lu,
-	floatTime: qu,
-	int: gu,
-	intHex: _u,
-	intOct: hu,
-	intTime: Ku,
-	map: tu,
+	["json", Cu],
+	["yaml11", Xu],
+	["yaml-1.1", Xu]
+]), Qu = {
+	binary: wu,
+	bool: cu,
+	float: fu,
+	floatExp: du,
+	floatNaN: uu,
+	floatTime: Ju,
+	int: _u,
+	intHex: vu,
+	intOct: gu,
+	intTime: qu,
+	map: nu,
 	merge: Hl,
-	null: ou,
-	omap: Ou,
-	pairs: Eu,
-	seq: iu,
-	set: Uu,
-	timestamp: Ju
-}, Qu = {
-	"tag:yaml.org,2002:binary": Cu,
+	null: su,
+	omap: ku,
+	pairs: Du,
+	seq: au,
+	set: Wu,
+	timestamp: Yu
+}, $u = {
+	"tag:yaml.org,2002:binary": wu,
 	"tag:yaml.org,2002:merge": Hl,
-	"tag:yaml.org,2002:omap": Ou,
-	"tag:yaml.org,2002:pairs": Eu,
-	"tag:yaml.org,2002:set": Uu,
-	"tag:yaml.org,2002:timestamp": Ju
+	"tag:yaml.org,2002:omap": ku,
+	"tag:yaml.org,2002:pairs": Du,
+	"tag:yaml.org,2002:set": Wu,
+	"tag:yaml.org,2002:timestamp": Yu
 };
-function $u(e, t, n) {
-	let r = Xu.get(t);
+function ed(e, t, n) {
+	let r = Zu.get(t);
 	if (r && !e) return n && !r.includes(Hl) ? r.concat(Hl) : r.slice();
 	let i = r;
 	if (!i) {
 		if (Array.isArray(e)) i = [];
 		else {
-			let e = Array.from(Xu.keys()).filter((e) => e !== "yaml11").map((e) => JSON.stringify(e)).join(", ");
+			let e = Array.from(Zu.keys()).filter((e) => e !== "yaml11").map((e) => JSON.stringify(e)).join(", ");
 			throw Error(`Unknown schema "${t}"; use one of ${e} or define customTags array`);
 		}
 	}
 	if (Array.isArray(e)) for (let t of e) i = i.concat(t);
 	else typeof e == "function" && (i = e(i.slice()));
 	return n && (i = i.concat(Hl)), i.reduce((e, t) => {
-		let n = typeof t == "string" ? Zu[t] : t;
+		let n = typeof t == "string" ? Qu[t] : t;
 		if (!n) {
-			let e = JSON.stringify(t), n = Object.keys(Zu).map((e) => JSON.stringify(e)).join(", ");
+			let e = JSON.stringify(t), n = Object.keys(Qu).map((e) => JSON.stringify(e)).join(", ");
 			throw Error(`Unknown custom tag ${e}; use one of ${n}`);
 		}
 		return e.includes(n) || e.push(n), e;
 	}, []);
 }
 // node_modules/yaml/browser/dist/schema/Schema.js
-var ed = (e, t) => e.key < t.key ? -1 : +(e.key > t.key), td = class e {
+var td = (e, t) => e.key < t.key ? -1 : +(e.key > t.key), nd = class e {
 	constructor({ compat: e, customTags: t, merge: n, resolveKnownTags: r, schema: i, sortMapEntries: a, toStringDefaults: o }) {
-		this.compat = Array.isArray(e) ? $u(e, "compat") : e ? $u(null, e) : null, this.name = typeof i == "string" && i || "core", this.knownTags = r ? Qu : {}, this.tags = $u(t, this.name, n), this.toStringOptions = o ?? null, Object.defineProperty(this, Pc, { value: tu }), Object.defineProperty(this, Ic, { value: au }), Object.defineProperty(this, Lc, { value: iu }), this.sortMapEntries = typeof a == "function" ? a : a === !0 ? ed : null;
+		this.compat = Array.isArray(e) ? ed(e, "compat") : e ? ed(null, e) : null, this.name = typeof i == "string" && i || "core", this.knownTags = r ? $u : {}, this.tags = ed(t, this.name, n), this.toStringOptions = o ?? null, Object.defineProperty(this, Pc, { value: nu }), Object.defineProperty(this, Ic, { value: ou }), Object.defineProperty(this, Lc, { value: au }), this.sortMapEntries = typeof a == "function" ? a : a === !0 ? td : null;
 	}
 	clone() {
 		let t = Object.create(e.prototype, Object.getOwnPropertyDescriptors(this));
@@ -5988,7 +5988,7 @@ var ed = (e, t) => e.key < t.key ? -1 : +(e.key > t.key), td = class e {
 	}
 };
 // node_modules/yaml/browser/dist/stringify/stringifyDocument.js
-function nd(e, t) {
+function rd(e, t) {
 	let n = [], r = t.directives === !0;
 	if (t.directives !== !1 && e.directives) {
 		let t = e.directives.toString(e);
@@ -6025,7 +6025,7 @@ function nd(e, t) {
 	return n.join("\n") + "\n";
 }
 // node_modules/yaml/browser/dist/doc/Document.js
-var rd = class e {
+var id = class e {
 	constructor(e, t, n) {
 		this.commentBefore = null, this.comment = null, this.errors = [], this.warnings = [], Object.defineProperty(this, Rc, { value: Nc });
 		let r = null;
@@ -6049,10 +6049,10 @@ var rd = class e {
 		return t.commentBefore = this.commentBefore, t.comment = this.comment, t.errors = this.errors.slice(), t.warnings = this.warnings.slice(), t.options = Object.assign({}, this.options), this.directives && (t.directives = this.directives.clone()), t.schema = this.schema.clone(), t.contents = U(this.contents) ? this.contents.clone(t.schema) : this.contents, this.range && (t.range = this.range.slice()), t;
 	}
 	add(e) {
-		id(this.contents) && this.contents.add(e);
+		ad(this.contents) && this.contents.add(e);
 	}
 	addIn(e, t) {
-		id(this.contents) && this.contents.addIn(e, t);
+		ad(this.contents) && this.contents.addIn(e, t);
 	}
 	createAlias(e, t) {
 		if (!e.anchor) {
@@ -6083,10 +6083,10 @@ var rd = class e {
 		return new G(this.createNode(e, null, n), this.createNode(t, null, n));
 	}
 	delete(e) {
-		return id(this.contents) ? this.contents.delete(e) : !1;
+		return ad(this.contents) ? this.contents.delete(e) : !1;
 	}
 	deleteIn(e) {
-		return hl(e) ? this.contents != null && (this.contents = null, !0) : id(this.contents) ? this.contents.deleteIn(e) : !1;
+		return hl(e) ? this.contents != null && (this.contents = null, !0) : ad(this.contents) ? this.contents.deleteIn(e) : !1;
 	}
 	get(e, t) {
 		return H(this.contents) ? this.contents.get(e, t) : void 0;
@@ -6101,10 +6101,10 @@ var rd = class e {
 		return hl(e) ? this.contents !== void 0 : H(this.contents) ? this.contents.hasIn(e) : !1;
 	}
 	set(e, t) {
-		this.contents == null ? this.contents = ml(this.schema, [e], t) : id(this.contents) && this.contents.set(e, t);
+		this.contents == null ? this.contents = ml(this.schema, [e], t) : ad(this.contents) && this.contents.set(e, t);
 	}
 	setIn(e, t) {
-		hl(e) ? this.contents = t : this.contents == null ? this.contents = ml(this.schema, Array.from(e), t) : id(this.contents) && this.contents.setIn(e, t);
+		hl(e) ? this.contents = t : this.contents == null ? this.contents = ml(this.schema, Array.from(e), t) : ad(this.contents) && this.contents.setIn(e, t);
 	}
 	setSchema(e, t = {}) {
 		typeof e == "number" && (e = String(e));
@@ -6132,7 +6132,7 @@ var rd = class e {
 			}
 		}
 		if (t.schema instanceof Object) this.schema = t.schema;
-		else if (n) this.schema = new td(Object.assign(n, t));
+		else if (n) this.schema = new nd(Object.assign(n, t));
 		else throw Error("With a null YAML version, the { schema: Schema } option is required");
 	}
 	toJS({ json: e, jsonArg: t, mapAsMap: n, maxAliasCount: r, onAnchor: i, reviver: a } = {}) {
@@ -6161,27 +6161,27 @@ var rd = class e {
 			let t = JSON.stringify(e.indent);
 			throw Error(`"indent" option must be a positive integer, not ${t}`);
 		}
-		return nd(this, e);
+		return rd(this, e);
 	}
 };
-function id(e) {
+function ad(e) {
 	if (H(e)) return !0;
 	throw Error("Expected a YAML collection as document contents");
 }
 // node_modules/yaml/browser/dist/errors.js
-var ad = class extends Error {
+var od = class extends Error {
 	constructor(e, t, n, r) {
 		super(), this.name = e, this.code = n, this.message = r, this.pos = t;
 	}
-}, od = class extends ad {
+}, sd = class extends od {
 	constructor(e, t, n) {
 		super("YAMLParseError", e, t, n);
 	}
-}, sd = class extends ad {
+}, cd = class extends od {
 	constructor(e, t, n) {
 		super("YAMLWarning", e, t, n);
 	}
-}, cd = (e, t) => (n) => {
+}, ld = (e, t) => (n) => {
 	if (n.pos[0] === -1) return;
 	n.linePos = n.pos.map((e) => t.linePos(e));
 	let { line: r, col: i } = n.linePos[0];
@@ -6203,7 +6203,7 @@ var ad = class extends Error {
 	}
 };
 // node_modules/yaml/browser/dist/compose/resolve-props.js
-function ld(e, { flow: t, indicator: n, next: r, offset: i, onError: a, parentIndent: o, startOnNewline: s }) {
+function ud(e, { flow: t, indicator: n, next: r, offset: i, onError: a, parentIndent: o, startOnNewline: s }) {
 	let c = !1, l = s, u = s, d = "", f = "", p = !1, m = !1, h = null, g = null, _ = null, v = null, y = null, ee = null, b = null;
 	for (let i of e) switch (m &&= (i.type !== "space" && i.type !== "newline" && i.type !== "comma" && a(i.offset, "MISSING_CHAR", "Tags and anchors must be separated from the next token by white space"), !1), h &&= (l && i.type !== "comment" && i.type !== "newline" && a(h, "TAB_AS_INDENT", "Tabs are not allowed as indentation"), null), i.type) {
 		case "space":
@@ -6248,7 +6248,7 @@ function ld(e, { flow: t, indicator: n, next: r, offset: i, onError: a, parentIn
 	};
 }
 // node_modules/yaml/browser/dist/compose/util-contains-newline.js
-function ud(e) {
+function dd(e) {
 	if (!e) return null;
 	switch (e.type) {
 		case "alias":
@@ -6266,34 +6266,34 @@ function ud(e) {
 				if (t.sep) {
 					for (let e of t.sep) if (e.type === "newline") return !0;
 				}
-				if (ud(t.key) || ud(t.value)) return !0;
+				if (dd(t.key) || dd(t.value)) return !0;
 			}
 			return !1;
 		default: return !0;
 	}
 }
 // node_modules/yaml/browser/dist/compose/util-flow-indent-check.js
-function dd(e, t, n) {
+function fd(e, t, n) {
 	if (t?.type === "flow-collection") {
 		let r = t.end[0];
-		r.indent === e && (r.source === "]" || r.source === "}") && ud(t) && n(r, "BAD_INDENT", "Flow end indicator should be more indented than parent", !0);
+		r.indent === e && (r.source === "]" || r.source === "}") && dd(t) && n(r, "BAD_INDENT", "Flow end indicator should be more indented than parent", !0);
 	}
 }
 // node_modules/yaml/browser/dist/compose/util-map-includes.js
-function fd(e, t, n) {
+function pd(e, t, n) {
 	let { uniqueKeys: r } = e.options;
 	if (r === !1) return !1;
 	let i = typeof r == "function" ? r : (e, t) => e === t || V(e) && V(t) && e.value === t.value;
 	return t.some((e) => i(e.key, n));
 }
 // node_modules/yaml/browser/dist/compose/resolve-block-map.js
-var pd = "All mapping items must start at the same column";
-function md({ composeNode: e, composeEmptyNode: t }, n, r, i, a) {
-	let o = new ((a?.nodeClass) ?? K)(n.schema);
+var md = "All mapping items must start at the same column";
+function hd({ composeNode: e, composeEmptyNode: t }, n, r, i, a) {
+	let o = new ((a?.nodeClass) ?? tu)(n.schema);
 	n.atRoot &&= !1;
 	let s = r.offset, c = null;
 	for (let a of r.items) {
-		let { start: l, key: u, sep: d, value: f } = a, p = ld(l, {
+		let { start: l, key: u, sep: d, value: f } = a, p = ud(l, {
 			indicator: "explicit-key-ind",
 			next: u ?? d?.[0],
 			offset: s,
@@ -6302,16 +6302,16 @@ function md({ composeNode: e, composeEmptyNode: t }, n, r, i, a) {
 			startOnNewline: !0
 		}), m = !p.found;
 		if (m) {
-			if (u && (u.type === "block-seq" ? i(s, "BLOCK_AS_IMPLICIT_KEY", "A block sequence may not be used as an implicit map key") : "indent" in u && u.indent !== r.indent && i(s, "BAD_INDENT", pd)), !p.anchor && !p.tag && !d) {
+			if (u && (u.type === "block-seq" ? i(s, "BLOCK_AS_IMPLICIT_KEY", "A block sequence may not be used as an implicit map key") : "indent" in u && u.indent !== r.indent && i(s, "BAD_INDENT", md)), !p.anchor && !p.tag && !d) {
 				c = p.end, p.comment && (o.comment ? o.comment += "\n" + p.comment : o.comment = p.comment);
 				continue;
 			}
-			(p.newlineAfterProp || ud(u)) && i(u ?? l[l.length - 1], "MULTILINE_IMPLICIT_KEY", "Implicit keys need to be on a single line");
-		} else p.found?.indent !== r.indent && i(s, "BAD_INDENT", pd);
+			(p.newlineAfterProp || dd(u)) && i(u ?? l[l.length - 1], "MULTILINE_IMPLICIT_KEY", "Implicit keys need to be on a single line");
+		} else p.found?.indent !== r.indent && i(s, "BAD_INDENT", md);
 		n.atKey = !0;
 		let h = p.end, g = u ? e(n, u, p, i) : t(n, h, l, null, p, i);
-		n.schema.compat && dd(r.indent, u, i), n.atKey = !1, fd(n, o.items, g) && i(h, "DUPLICATE_KEY", "Map keys must be unique");
-		let _ = ld(d ?? [], {
+		n.schema.compat && fd(r.indent, u, i), n.atKey = !1, pd(n, o.items, g) && i(h, "DUPLICATE_KEY", "Map keys must be unique");
+		let _ = ud(d ?? [], {
 			indicator: "map-value-ind",
 			next: f,
 			offset: g.range[2],
@@ -6322,7 +6322,7 @@ function md({ composeNode: e, composeEmptyNode: t }, n, r, i, a) {
 		if (s = _.end, _.found) {
 			m && (f?.type === "block-map" && !_.hasNewline && i(s, "BLOCK_AS_IMPLICIT_KEY", "Nested mappings are not allowed in compact mappings"), n.options.strict && p.start < _.found.offset - 1024 && i(g.range, "KEY_OVER_1024_CHARS", "The : indicator must be at most 1024 chars after the start of an implicit block mapping key"));
 			let c = f ? e(n, f, _, i) : t(n, s, d, null, _, i);
-			n.schema.compat && dd(r.indent, f, i), s = c.range[2];
+			n.schema.compat && fd(r.indent, f, i), s = c.range[2];
 			let l = new G(g, c);
 			n.options.keepSourceTokens && (l.srcToken = a), o.items.push(l);
 		} else {
@@ -6338,12 +6338,12 @@ function md({ composeNode: e, composeEmptyNode: t }, n, r, i, a) {
 	], o;
 }
 // node_modules/yaml/browser/dist/compose/resolve-block-seq.js
-function hd({ composeNode: e, composeEmptyNode: t }, n, r, i, a) {
-	let o = new ((a?.nodeClass) ?? nu)(n.schema);
+function gd({ composeNode: e, composeEmptyNode: t }, n, r, i, a) {
+	let o = new ((a?.nodeClass) ?? ru)(n.schema);
 	n.atRoot &&= !1, n.atKey &&= !1;
 	let s = r.offset, c = null;
 	for (let { start: a, value: l } of r.items) {
-		let u = ld(a, {
+		let u = ud(a, {
 			indicator: "seq-item-ind",
 			next: l,
 			offset: s,
@@ -6359,7 +6359,7 @@ function hd({ composeNode: e, composeEmptyNode: t }, n, r, i, a) {
 			}
 		}
 		let d = l ? e(n, l, u, i) : t(n, u.end, a, null, u, i);
-		n.schema.compat && dd(r.indent, l, i), s = d.range[2], o.items.push(d);
+		n.schema.compat && fd(r.indent, l, i), s = d.range[2], o.items.push(d);
 	}
 	return o.range = [
 		r.offset,
@@ -6368,7 +6368,7 @@ function hd({ composeNode: e, composeEmptyNode: t }, n, r, i, a) {
 	], o;
 }
 // node_modules/yaml/browser/dist/compose/resolve-end.js
-function gd(e, t, n, r) {
+function _d(e, t, n, r) {
 	let i = "";
 	if (e) {
 		let a = !1, o = "";
@@ -6398,15 +6398,15 @@ function gd(e, t, n, r) {
 	};
 }
 // node_modules/yaml/browser/dist/compose/resolve-flow-collection.js
-var _d = "Block collections are not allowed within flow collections", vd = (e) => e && (e.type === "block-map" || e.type === "block-seq");
-function yd({ composeNode: e, composeEmptyNode: t }, n, r, i, a) {
-	let o = r.start.source === "{", s = o ? "flow map" : "flow sequence", c = new ((a?.nodeClass) ?? (o ? K : nu))(n.schema);
+var vd = "Block collections are not allowed within flow collections", yd = (e) => e && (e.type === "block-map" || e.type === "block-seq");
+function bd({ composeNode: e, composeEmptyNode: t }, n, r, i, a) {
+	let o = r.start.source === "{", s = o ? "flow map" : "flow sequence", c = new ((a?.nodeClass) ?? (o ? tu : ru))(n.schema);
 	c.flow = !0;
 	let l = n.atRoot;
 	l && (n.atRoot = !1), n.atKey &&= !1;
 	let u = r.offset + r.start.source.length;
 	for (let a = 0; a < r.items.length; ++a) {
-		let l = r.items[a], { start: d, key: f, sep: p, value: m } = l, h = ld(d, {
+		let l = r.items[a], { start: d, key: f, sep: p, value: m } = l, h = ud(d, {
 			flow: s,
 			indicator: "explicit-key-ind",
 			next: f ?? p?.[0],
@@ -6420,7 +6420,7 @@ function yd({ composeNode: e, composeEmptyNode: t }, n, r, i, a) {
 				a === 0 && h.comma ? i(h.comma, "UNEXPECTED_TOKEN", `Unexpected , in ${s}`) : a < r.items.length - 1 && i(h.start, "UNEXPECTED_TOKEN", `Unexpected empty item in ${s}`), h.comment && (c.comment ? c.comment += "\n" + h.comment : c.comment = h.comment), u = h.end;
 				continue;
 			}
-			!o && n.options.strict && ud(f) && i(f, "MULTILINE_IMPLICIT_KEY", "Implicit keys of flow sequence pairs need to be on a single line");
+			!o && n.options.strict && dd(f) && i(f, "MULTILINE_IMPLICIT_KEY", "Implicit keys of flow sequence pairs need to be on a single line");
 		}
 		if (a === 0) h.comma && i(h.comma, "UNEXPECTED_TOKEN", `Unexpected , in ${s}`);
 		else if (h.comma || i(h.start, "MISSING_CHAR", `Missing , between ${s} items`), h.comment) {
@@ -6440,12 +6440,12 @@ function yd({ composeNode: e, composeEmptyNode: t }, n, r, i, a) {
 		}
 		if (!o && !p && !h.found) {
 			let r = m ? e(n, m, h, i) : t(n, h.end, p, null, h, i);
-			c.items.push(r), u = r.range[2], vd(m) && i(r.range, "BLOCK_IN_FLOW", _d);
+			c.items.push(r), u = r.range[2], yd(m) && i(r.range, "BLOCK_IN_FLOW", vd);
 		} else {
 			n.atKey = !0;
 			let a = h.end, g = f ? e(n, f, h, i) : t(n, a, d, null, h, i);
-			vd(f) && i(g.range, "BLOCK_IN_FLOW", _d), n.atKey = !1;
-			let _ = ld(p ?? [], {
+			yd(f) && i(g.range, "BLOCK_IN_FLOW", vd), n.atKey = !1;
+			let _ = ud(p ?? [], {
 				flow: s,
 				indicator: "map-value-ind",
 				next: m,
@@ -6467,13 +6467,13 @@ function yd({ composeNode: e, composeEmptyNode: t }, n, r, i, a) {
 				}
 			} else m && ("source" in m && m.source?.[0] === ":" ? i(m, "MISSING_CHAR", `Missing space after : in ${s}`) : i(_.start, "MISSING_CHAR", `Missing , or : between ${s} items`));
 			let v = m ? e(n, m, _, i) : _.found ? t(n, _.end, p, null, _, i) : null;
-			v ? vd(m) && i(v.range, "BLOCK_IN_FLOW", _d) : _.comment && (g.comment ? g.comment += "\n" + _.comment : g.comment = _.comment);
+			v ? yd(m) && i(v.range, "BLOCK_IN_FLOW", vd) : _.comment && (g.comment ? g.comment += "\n" + _.comment : g.comment = _.comment);
 			let y = new G(g, v);
 			if (n.options.keepSourceTokens && (y.srcToken = l), o) {
 				let e = c;
-				fd(n, e.items, g) && i(a, "DUPLICATE_KEY", "Map keys must be unique"), e.items.push(y);
+				pd(n, e.items, g) && i(a, "DUPLICATE_KEY", "Map keys must be unique"), e.items.push(y);
 			} else {
-				let e = new K(n.schema);
+				let e = new tu(n.schema);
 				e.flow = !0, e.items.push(y);
 				let t = (v ?? g).range;
 				e.range = [
@@ -6492,7 +6492,7 @@ function yd({ composeNode: e, composeEmptyNode: t }, n, r, i, a) {
 		i(u, l ? "MISSING_CHAR" : "BAD_INDENT", t), f && f.source.length !== 1 && p.unshift(f);
 	}
 	if (p.length > 0) {
-		let e = gd(p, m, n.options.strict, i);
+		let e = _d(p, m, n.options.strict, i);
 		e.comment && (c.comment ? c.comment += "\n" + e.comment : c.comment = e.comment), c.range = [
 			r.offset,
 			m,
@@ -6506,30 +6506,30 @@ function yd({ composeNode: e, composeEmptyNode: t }, n, r, i, a) {
 	return c;
 }
 // node_modules/yaml/browser/dist/compose/compose-collection.js
-function bd(e, t, n, r, i, a) {
-	let o = n.type === "block-map" ? md(e, t, n, r, a) : n.type === "block-seq" ? hd(e, t, n, r, a) : yd(e, t, n, r, a), s = o.constructor;
+function xd(e, t, n, r, i, a) {
+	let o = n.type === "block-map" ? hd(e, t, n, r, a) : n.type === "block-seq" ? gd(e, t, n, r, a) : bd(e, t, n, r, a), s = o.constructor;
 	return i === "!" || i === s.tagName ? (o.tag = s.tagName, o) : (i && (o.tag = i), o);
 }
-function xd(e, t, n, r, i) {
+function Sd(e, t, n, r, i) {
 	let a = r.tag, o = a ? t.directives.tagName(a.source, (e) => i(a, "TAG_RESOLVE_FAILED", e)) : null;
 	if (n.type === "block-seq") {
 		let { anchor: e, newlineAfterProp: t } = r, n = e && a ? e.offset > a.offset ? e : a : e ?? a;
 		n && (!t || t.offset < n.offset) && i(n, "MISSING_CHAR", "Missing newline after block sequence props");
 	}
 	let s = n.type === "block-map" ? "map" : n.type === "block-seq" ? "seq" : n.start.source === "{" ? "map" : "seq";
-	if (!a || !o || o === "!" || o === K.tagName && s === "map" || o === nu.tagName && s === "seq") return bd(e, t, n, i, o);
+	if (!a || !o || o === "!" || o === tu.tagName && s === "map" || o === ru.tagName && s === "seq") return xd(e, t, n, i, o);
 	let c = t.schema.tags.find((e) => e.tag === o && e.collection === s);
 	if (!c) {
 		let r = t.schema.knownTags[o];
 		if (r?.collection === s) t.schema.tags.push(Object.assign({}, r, { default: !1 })), c = r;
-		else return r ? i(a, "BAD_COLLECTION_TYPE", `${r.tag} used for ${s} collection, but expects ${r.collection ?? "scalar"}`, !0) : i(a, "TAG_RESOLVE_FAILED", `Unresolved tag: ${o}`, !0), bd(e, t, n, i, o);
+		else return r ? i(a, "BAD_COLLECTION_TYPE", `${r.tag} used for ${s} collection, but expects ${r.collection ?? "scalar"}`, !0) : i(a, "TAG_RESOLVE_FAILED", `Unresolved tag: ${o}`, !0), xd(e, t, n, i, o);
 	}
-	let l = bd(e, t, n, i, o, c), u = c.resolve?.(l, (e) => i(a, "TAG_RESOLVE_FAILED", e), t.options) ?? l, d = U(u) ? u : new W(u);
+	let l = xd(e, t, n, i, o, c), u = c.resolve?.(l, (e) => i(a, "TAG_RESOLVE_FAILED", e), t.options) ?? l, d = U(u) ? u : new W(u);
 	return d.range = l.range, d.tag = o, c?.format && (d.format = c.format), d;
 }
 // node_modules/yaml/browser/dist/compose/resolve-block-scalar.js
-function Sd(e, t, n) {
-	let r = t.offset, i = Cd(t, e.options.strict, n);
+function Cd(e, t, n) {
+	let r = t.offset, i = wd(t, e.options.strict, n);
 	if (!i) return {
 		value: "",
 		type: null,
@@ -6540,7 +6540,7 @@ function Sd(e, t, n) {
 			r
 		]
 	};
-	let a = i.mode === ">" ? W.BLOCK_FOLDED : W.BLOCK_LITERAL, o = t.source ? wd(t.source) : [], s = o.length;
+	let a = i.mode === ">" ? W.BLOCK_FOLDED : W.BLOCK_LITERAL, o = t.source ? Td(t.source) : [], s = o.length;
 	for (let e = o.length - 1; e >= 0; --e) {
 		let t = o[e][1];
 		if (t === "" || t === "\r") s = e;
@@ -6603,7 +6603,7 @@ function Sd(e, t, n) {
 		]
 	};
 }
-function Cd({ offset: e, props: t }, n, r) {
+function wd({ offset: e, props: t }, n, r) {
 	/* istanbul ignore if should not happen */
 	if (t[0].type !== "block-scalar-header") return r(t[0], "IMPOSSIBLE", "Block scalar header not found"), null;
 	let { source: i } = t[0], a = i[0], o = 0, s = "", c = -1;
@@ -6646,23 +6646,23 @@ function Cd({ offset: e, props: t }, n, r) {
 		length: d
 	};
 }
-function wd(e) {
+function Td(e) {
 	let t = e.split(/\n( *)/), n = t[0], r = n.match(/^( *)/), i = [r?.[1] ? [r[1], n.slice(r[1].length)] : ["", n]];
 	for (let e = 1; e < t.length; e += 2) i.push([t[e], t[e + 1]]);
 	return i;
 }
 // node_modules/yaml/browser/dist/compose/resolve-flow-scalar.js
-function Td(e, t, n) {
+function Ed(e, t, n) {
 	let { offset: r, type: i, source: a, end: o } = e, s, c, l = (e, t, i) => n(r + e, t, i);
 	switch (i) {
 		case "scalar":
-			s = W.PLAIN, c = Ed(a, l);
+			s = W.PLAIN, c = Dd(a, l);
 			break;
 		case "single-quoted-scalar":
-			s = W.QUOTE_SINGLE, c = Dd(a, l);
+			s = W.QUOTE_SINGLE, c = Od(a, l);
 			break;
 		case "double-quoted-scalar":
-			s = W.QUOTE_DOUBLE, c = kd(a, l);
+			s = W.QUOTE_DOUBLE, c = Ad(a, l);
 			break;
 		/* istanbul ignore next should not happen */
 		default: return n(e, "UNEXPECTED_TOKEN", `Expected a flow scalar value, but found: ${i}`), {
@@ -6676,7 +6676,7 @@ function Td(e, t, n) {
 			]
 		};
 	}
-	let u = r + a.length, d = gd(o, u, t, n);
+	let u = r + a.length, d = _d(o, u, t, n);
 	return {
 		value: c,
 		type: s,
@@ -6688,7 +6688,7 @@ function Td(e, t, n) {
 		]
 	};
 }
-function Ed(e, t) {
+function Dd(e, t) {
 	let n = "";
 	switch (e[0]) {
 		/* istanbul ignore next should not happen */
@@ -6708,12 +6708,12 @@ function Ed(e, t) {
 		case "@":
 		case "`": n = `reserved character ${e[0]}`;
 	}
-	return n && t(0, "BAD_SCALAR_START", `Plain value cannot start with ${n}`), Od(e);
+	return n && t(0, "BAD_SCALAR_START", `Plain value cannot start with ${n}`), kd(e);
 }
-function Dd(e, t) {
-	return (e[e.length - 1] !== "'" || e.length === 1) && t(e.length, "MISSING_CHAR", "Missing closing 'quote"), Od(e.slice(1, -1)).replace(/''/g, "'");
+function Od(e, t) {
+	return (e[e.length - 1] !== "'" || e.length === 1) && t(e.length, "MISSING_CHAR", "Missing closing 'quote"), kd(e.slice(1, -1)).replace(/''/g, "'");
 }
-function Od(e) {
+function kd(e) {
 	let t = /(.*?)\r?\n/sy, n = t.exec(e);
 	if (!n) return e;
 	let r, i;
@@ -6730,22 +6730,22 @@ function Od(e) {
 	let c = /[ \t]*(.*)/sy;
 	return c.lastIndex = s, n = c.exec(e), a + o + (n?.[1] ?? "");
 }
-function kd(e, t) {
+function Ad(e, t) {
 	let n = "";
 	for (let r = 1; r < e.length - 1; ++r) {
 		let i = e[r];
 		if (i !== "\r" || e[r + 1] !== "\n") {
 			if (i === "\n") {
-				let { fold: t, offset: i } = Ad(e, r);
+				let { fold: t, offset: i } = jd(e, r);
 				n += t, r = i;
 			} else if (i === "\\") {
-				let i = e[++r], a = jd[i];
+				let i = e[++r], a = Md[i];
 				if (a) n += a;
 				else if (i === "\n") for (i = e[r + 1]; i === " " || i === "	";) i = e[++r + 1];
 				else if (i === "\r" && e[r + 1] === "\n") for (i = e[++r + 1]; i === " " || i === "	";) i = e[++r + 1];
 				else if (i === "x" || i === "u" || i === "U") {
 					let a = i === "x" ? 2 : i === "u" ? 4 : 8;
-					n += Md(e, r + 1, a, t), r += a;
+					n += Nd(e, r + 1, a, t), r += a;
 				} else {
 					let i = e.substr(r - 1, 2);
 					t(r - 1, "BAD_DQ_ESCAPE", `Invalid escape sequence ${i}`), n += i;
@@ -6759,7 +6759,7 @@ function kd(e, t) {
 	}
 	return (e[e.length - 1] !== "\"" || e.length === 1) && t(e.length, "MISSING_CHAR", "Missing closing \"quote"), n;
 }
-function Ad(e, t) {
+function jd(e, t) {
 	let n = "", r = e[t + 1];
 	for (; (r === " " || r === "	" || r === "\n" || r === "\r") && (r !== "\r" || e[t + 2] === "\n");) r === "\n" && (n += "\n"), t += 1, r = e[t + 1];
 	return n ||= " ", {
@@ -6767,7 +6767,7 @@ function Ad(e, t) {
 		offset: t
 	};
 }
-var jd = {
+var Md = {
 	0: "\0",
 	a: "\x07",
 	b: "\b",
@@ -6787,7 +6787,7 @@ var jd = {
 	"\\": "\\",
 	"	": "	"
 };
-function Md(e, t, n, r) {
+function Nd(e, t, n, r) {
 	let i = e.substr(t, n), a = i.length === n && /^[0-9a-fA-F]+$/.test(i) ? parseInt(i, 16) : NaN;
 	try {
 		return String.fromCodePoint(a);
@@ -6797,9 +6797,9 @@ function Md(e, t, n, r) {
 	}
 }
 // node_modules/yaml/browser/dist/compose/compose-scalar.js
-function Nd(e, t, n, r) {
-	let { value: i, type: a, comment: o, range: s } = t.type === "block-scalar" ? Sd(e, t, r) : Td(t, e.options.strict, r), c = n ? e.directives.tagName(n.source, (e) => r(n, "TAG_RESOLVE_FAILED", e)) : null, l;
-	l = e.options.stringKeys && e.atKey ? e.schema[Ic] : c ? Pd(e.schema, i, c, n, r) : t.type === "scalar" ? Fd(e, i, t, r) : e.schema[Ic];
+function Pd(e, t, n, r) {
+	let { value: i, type: a, comment: o, range: s } = t.type === "block-scalar" ? Cd(e, t, r) : Ed(t, e.options.strict, r), c = n ? e.directives.tagName(n.source, (e) => r(n, "TAG_RESOLVE_FAILED", e)) : null, l;
+	l = e.options.stringKeys && e.atKey ? e.schema[Ic] : c ? Fd(e.schema, i, c, n, r) : t.type === "scalar" ? Id(e, i, t, r) : e.schema[Ic];
 	let u;
 	try {
 		let a = l.resolve(i, (e) => r(n ?? t, "TAG_RESOLVE_FAILED", e), e.options);
@@ -6810,7 +6810,7 @@ function Nd(e, t, n, r) {
 	}
 	return u.range = s, u.source = i, a && (u.type = a), c && (u.tag = c), l.format && (u.format = l.format), o && (u.comment = o), u;
 }
-function Pd(e, t, n, r, i) {
+function Fd(e, t, n, r, i) {
 	if (n === "!") return e[Ic];
 	let a = [];
 	for (let t of e.tags) if (!t.collection && t.tag === n) {
@@ -6824,7 +6824,7 @@ function Pd(e, t, n, r, i) {
 		test: void 0
 	})), o) : (i(r, "TAG_RESOLVE_FAILED", `Unresolved tag: ${n}`, n !== "tag:yaml.org,2002:str"), e[Ic]);
 }
-function Fd({ atKey: e, directives: t, schema: n }, r, i, a) {
+function Id({ atKey: e, directives: t, schema: n }, r, i, a) {
 	let o = n.tags.find((t) => (t.default === !0 || e && t.default === "key") && t.test?.test(r)) || n[Ic];
 	if (n.compat) {
 		let e = n.compat.find((e) => e.default && e.test?.test(r)) ?? n[Ic];
@@ -6833,7 +6833,7 @@ function Fd({ atKey: e, directives: t, schema: n }, r, i, a) {
 	return o;
 }
 // node_modules/yaml/browser/dist/compose/util-empty-scalar-position.js
-function Id(e, t, n) {
+function Ld(e, t, n) {
 	if (t) {
 		n ??= t.length;
 		for (let r = n - 1; r >= 0; --r) {
@@ -6852,48 +6852,48 @@ function Id(e, t, n) {
 	return e;
 }
 // node_modules/yaml/browser/dist/compose/compose-node.js
-var Ld = {
-	composeNode: Rd,
-	composeEmptyNode: zd
+var Rd = {
+	composeNode: zd,
+	composeEmptyNode: Bd
 };
-function Rd(e, t, n, r) {
+function zd(e, t, n, r) {
 	let i = e.atKey, { spaceBefore: a, comment: o, anchor: s, tag: c } = n, l, u = !0;
 	switch (t.type) {
 		case "alias":
-			l = Bd(e, t, r), (s || c) && r(t, "ALIAS_PROPS", "An alias node must not specify any properties");
+			l = Vd(e, t, r), (s || c) && r(t, "ALIAS_PROPS", "An alias node must not specify any properties");
 			break;
 		case "scalar":
 		case "single-quoted-scalar":
 		case "double-quoted-scalar":
 		case "block-scalar":
-			l = Nd(e, t, c, r), s && (l.anchor = s.source.substring(1));
+			l = Pd(e, t, c, r), s && (l.anchor = s.source.substring(1));
 			break;
 		case "block-map":
 		case "block-seq":
 		case "flow-collection":
 			try {
-				l = xd(Ld, e, t, n, r), s && (l.anchor = s.source.substring(1));
+				l = Sd(Rd, e, t, n, r), s && (l.anchor = s.source.substring(1));
 			} catch (e) {
 				r(t, "RESOURCE_EXHAUSTION", e instanceof Error ? e.message : String(e));
 			}
 			break;
 		default: r(t, "UNEXPECTED_TOKEN", t.type === "error" ? t.message : `Unsupported token (type: ${t.type})`), u = !1;
 	}
-	return l ??= zd(e, t.offset, void 0, null, n, r), s && l.anchor === "" && r(s, "BAD_ALIAS", "Anchor cannot be an empty string"), i && e.options.stringKeys && (!V(l) || typeof l.value != "string" || l.tag && l.tag !== "tag:yaml.org,2002:str") && r(c ?? t, "NON_STRING_KEY", "With stringKeys, all keys must be strings"), a && (l.spaceBefore = !0), o && (t.type === "scalar" && t.source === "" ? l.comment = o : l.commentBefore = o), e.options.keepSourceTokens && u && (l.srcToken = t), l;
+	return l ??= Bd(e, t.offset, void 0, null, n, r), s && l.anchor === "" && r(s, "BAD_ALIAS", "Anchor cannot be an empty string"), i && e.options.stringKeys && (!V(l) || typeof l.value != "string" || l.tag && l.tag !== "tag:yaml.org,2002:str") && r(c ?? t, "NON_STRING_KEY", "With stringKeys, all keys must be strings"), a && (l.spaceBefore = !0), o && (t.type === "scalar" && t.source === "" ? l.comment = o : l.commentBefore = o), e.options.keepSourceTokens && u && (l.srcToken = t), l;
 }
-function zd(e, t, n, r, { spaceBefore: i, comment: a, anchor: o, tag: s, end: c }, l) {
-	let u = Nd(e, {
+function Bd(e, t, n, r, { spaceBefore: i, comment: a, anchor: o, tag: s, end: c }, l) {
+	let u = Pd(e, {
 		type: "scalar",
-		offset: Id(t, n, r),
+		offset: Ld(t, n, r),
 		indent: -1,
 		source: ""
 	}, s, l);
 	return o && (u.anchor = o.source.substring(1), u.anchor === "" && l(o, "BAD_ALIAS", "Anchor cannot be an empty string")), i && (u.spaceBefore = !0), a && (u.comment = a, u.range[2] = c), u;
 }
-function Bd({ options: e }, { offset: t, source: n, end: r }, i) {
+function Vd({ options: e }, { offset: t, source: n, end: r }, i) {
 	let a = new cl(n.substring(1));
 	a.source === "" && i(t, "BAD_ALIAS", "Alias cannot be an empty string"), a.source.endsWith(":") && i(t + n.length - 1, "BAD_ALIAS", "Alias ending in : is ambiguous", !0);
-	let o = t + n.length, s = gd(r, o, e.strict, i);
+	let o = t + n.length, s = _d(r, o, e.strict, i);
 	return a.range = [
 		t,
 		o,
@@ -6901,14 +6901,14 @@ function Bd({ options: e }, { offset: t, source: n, end: r }, i) {
 	], s.comment && (a.comment = s.comment), a;
 }
 // node_modules/yaml/browser/dist/compose/compose-doc.js
-function Vd(e, t, { offset: n, start: r, value: i, end: a }, o) {
-	let s = new rd(void 0, Object.assign({ _directives: t }, e)), c = {
+function Hd(e, t, { offset: n, start: r, value: i, end: a }, o) {
+	let s = new id(void 0, Object.assign({ _directives: t }, e)), c = {
 		atKey: !1,
 		atRoot: !0,
 		directives: s.directives,
 		options: s.options,
 		schema: s.schema
-	}, l = ld(r, {
+	}, l = ud(r, {
 		indicator: "doc-start",
 		next: i ?? a?.[0],
 		offset: n,
@@ -6916,8 +6916,8 @@ function Vd(e, t, { offset: n, start: r, value: i, end: a }, o) {
 		parentIndent: 0,
 		startOnNewline: !0
 	});
-	l.found && (s.directives.docStart = !0, i && (i.type === "block-map" || i.type === "block-seq") && !l.hasNewline && o(l.end, "MISSING_CHAR", "Block collection cannot start on same line with directives-end marker")), s.contents = i ? Rd(c, i, l, o) : zd(c, l.end, r, null, l, o);
-	let u = s.contents.range[2], d = gd(a, u, !1, o);
+	l.found && (s.directives.docStart = !0, i && (i.type === "block-map" || i.type === "block-seq") && !l.hasNewline && o(l.end, "MISSING_CHAR", "Block collection cannot start on same line with directives-end marker")), s.contents = i ? zd(c, i, l, o) : Bd(c, l.end, r, null, l, o);
+	let u = s.contents.range[2], d = _d(a, u, !1, o);
 	return d.comment && (s.comment = d.comment), s.range = [
 		n,
 		u,
@@ -6925,13 +6925,13 @@ function Vd(e, t, { offset: n, start: r, value: i, end: a }, o) {
 	], s;
 }
 // node_modules/yaml/browser/dist/compose/composer.js
-function Hd(e) {
+function Ud(e) {
 	if (typeof e == "number") return [e, e + 1];
 	if (Array.isArray(e)) return e.length === 2 ? e : [e[0], e[1]];
 	let { offset: t, source: n } = e;
 	return [t, t + (typeof n == "string" ? n.length : 1)];
 }
-function Ud(e) {
+function Wd(e) {
 	let t = "", n = !1, r = !1;
 	for (let i = 0; i < e.length; ++i) {
 		let a = e[i];
@@ -6950,15 +6950,15 @@ function Ud(e) {
 		afterEmptyLine: r
 	};
 }
-var Wd = class {
+var Gd = class {
 	constructor(e = {}) {
 		this.doc = null, this.atDirectives = !1, this.prelude = [], this.errors = [], this.warnings = [], this.onError = (e, t, n, r) => {
-			let i = Hd(e);
-			r ? this.warnings.push(new sd(i, t, n)) : this.errors.push(new od(i, t, n));
+			let i = Ud(e);
+			r ? this.warnings.push(new cd(i, t, n)) : this.errors.push(new sd(i, t, n));
 		}, this.directives = new el({ version: e.version || "1.2" }), this.options = e;
 	}
 	decorate(e, t) {
-		let { comment: n, afterEmptyLine: r } = Ud(this.prelude);
+		let { comment: n, afterEmptyLine: r } = Wd(this.prelude);
 		if (n) {
 			let i = e.contents;
 			if (t) e.comment = e.comment ? `${e.comment}\n${n}` : n;
@@ -6981,7 +6981,7 @@ var Wd = class {
 	}
 	streamInfo() {
 		return {
-			comment: Ud(this.prelude).comment,
+			comment: Wd(this.prelude).comment,
 			directives: this.directives,
 			errors: this.errors,
 			warnings: this.warnings
@@ -6995,12 +6995,12 @@ var Wd = class {
 		switch (e.type) {
 			case "directive":
 				this.directives.add(e.source, (t, n, r) => {
-					let i = Hd(e);
+					let i = Ud(e);
 					i[0] += t, this.onError(i, "BAD_DIRECTIVE", n, r);
 				}), this.prelude.push(e.source), this.atDirectives = !0;
 				break;
 			case "document": {
-				let t = Vd(this.options, this.directives, e, this.onError);
+				let t = Hd(this.options, this.directives, e, this.onError);
 				this.atDirectives && !t.directives.docStart && this.onError(e, "MISSING_CHAR", "Missing directives-end/doc-start indicator line"), this.decorate(t, !1), this.doc && (yield this.doc), this.doc = t, this.atDirectives = !1;
 				break;
 			}
@@ -7011,17 +7011,17 @@ var Wd = class {
 				this.prelude.push(e.source);
 				break;
 			case "error": {
-				let t = e.source ? `${e.message}: ${JSON.stringify(e.source)}` : e.message, n = new od(Hd(e), "UNEXPECTED_TOKEN", t);
+				let t = e.source ? `${e.message}: ${JSON.stringify(e.source)}` : e.message, n = new sd(Ud(e), "UNEXPECTED_TOKEN", t);
 				this.atDirectives || !this.doc ? this.errors.push(n) : this.doc.errors.push(n);
 				break;
 			}
 			case "doc-end": {
 				if (!this.doc) {
-					this.errors.push(new od(Hd(e), "UNEXPECTED_TOKEN", "Unexpected doc-end without preceding document"));
+					this.errors.push(new sd(Ud(e), "UNEXPECTED_TOKEN", "Unexpected doc-end without preceding document"));
 					break;
 				}
 				this.doc.directives.docEnd = !0;
-				let t = gd(e.end, e.offset + e.source.length, this.doc.options.strict, this.onError);
+				let t = _d(e.end, e.offset + e.source.length, this.doc.options.strict, this.onError);
 				if (this.decorate(this.doc, !0), t.comment) {
 					let e = this.doc.comment;
 					this.doc.comment = e ? `${e}\n${t.comment}` : t.comment;
@@ -7029,13 +7029,13 @@ var Wd = class {
 				this.doc.range[2] = t.offset;
 				break;
 			}
-			default: this.errors.push(new od(Hd(e), "UNEXPECTED_TOKEN", `Unsupported token ${e.type}`));
+			default: this.errors.push(new sd(Ud(e), "UNEXPECTED_TOKEN", `Unsupported token ${e.type}`));
 		}
 	}
 	*end(e = !1, t = -1) {
 		if (this.doc) this.decorate(this.doc, !0), yield this.doc, this.doc = null;
 		else if (e) {
-			let e = new rd(void 0, Object.assign({ _directives: this.directives }, this.options));
+			let e = new id(void 0, Object.assign({ _directives: this.directives }, this.options));
 			this.atDirectives && this.onError(t, "MISSING_CHAR", "Missing directives-end indicator line"), e.range = [
 				0,
 				t,
@@ -7043,14 +7043,14 @@ var Wd = class {
 			], this.decorate(e, !1), yield e;
 		}
 	}
-}, Gd = Symbol("break visit"), Kd = Symbol("skip children"), qd = Symbol("remove item");
-function Jd(e, t) {
+}, Kd = Symbol("break visit"), qd = Symbol("skip children"), Jd = Symbol("remove item");
+function Yd(e, t) {
 	"type" in e && e.type === "document" && (e = {
 		start: e.start,
 		value: e.value
-	}), Yd(Object.freeze([]), e, t);
+	}), Xd(Object.freeze([]), e, t);
 }
-Jd.BREAK = Gd, Jd.SKIP = Kd, Jd.REMOVE = qd, Jd.itemAtPath = (e, t) => {
+Yd.BREAK = Kd, Yd.SKIP = qd, Yd.REMOVE = Jd, Yd.itemAtPath = (e, t) => {
 	let n = e;
 	for (let [e, r] of t) {
 		let t = n?.[e];
@@ -7058,29 +7058,29 @@ Jd.BREAK = Gd, Jd.SKIP = Kd, Jd.REMOVE = qd, Jd.itemAtPath = (e, t) => {
 		else return;
 	}
 	return n;
-}, Jd.parentCollection = (e, t) => {
-	let n = Jd.itemAtPath(e, t.slice(0, -1)), r = t[t.length - 1][0], i = n?.[r];
+}, Yd.parentCollection = (e, t) => {
+	let n = Yd.itemAtPath(e, t.slice(0, -1)), r = t[t.length - 1][0], i = n?.[r];
 	if (i && "items" in i) return i;
 	throw Error("Parent collection not found");
 };
-function Yd(e, t, n) {
+function Xd(e, t, n) {
 	let r = n(t, e);
 	if (typeof r == "symbol") return r;
 	for (let i of ["key", "value"]) {
 		let a = t[i];
 		if (a && "items" in a) {
 			for (let t = 0; t < a.items.length; ++t) {
-				let r = Yd(Object.freeze(e.concat([[i, t]])), a.items[t], n);
+				let r = Xd(Object.freeze(e.concat([[i, t]])), a.items[t], n);
 				if (typeof r == "number") t = r - 1;
-				else if (r === Gd) return Gd;
-				else r === qd && (a.items.splice(t, 1), --t);
+				else if (r === Kd) return Kd;
+				else r === Jd && (a.items.splice(t, 1), --t);
 			}
 			typeof r == "function" && i === "key" && (r = r(t, e));
 		}
 	}
 	return typeof r == "function" ? r(t, e) : r;
 }
-function Xd(e) {
+function Zd(e) {
 	switch (e) {
 		case "﻿": return "byte-order-mark";
 		case "": return "doc-mode";
@@ -7116,7 +7116,7 @@ function Xd(e) {
 	return null;
 }
 // node_modules/yaml/browser/dist/parse/lexer.js
-function Zd(e) {
+function Qd(e) {
 	switch (e) {
 		case void 0:
 		case " ":
@@ -7126,7 +7126,7 @@ function Zd(e) {
 		default: return !1;
 	}
 }
-var Qd = /* @__PURE__ */ new Set("0123456789ABCDEFabcdef"), $d = /* @__PURE__ */ new Set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-#;/?:@&=+$_.!~*'()"), ef = /* @__PURE__ */ new Set(",[]{}"), tf = /* @__PURE__ */ new Set(" ,[]{}\n\r	"), nf = (e) => !e || tf.has(e), rf = class {
+var $d = /* @__PURE__ */ new Set("0123456789ABCDEFabcdef"), ef = /* @__PURE__ */ new Set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-#;/?:@&=+$_.!~*'()"), tf = /* @__PURE__ */ new Set(",[]{}"), nf = /* @__PURE__ */ new Set(" ,[]{}\n\r	"), rf = (e) => !e || nf.has(e), af = class {
 	constructor() {
 		this.atEnd = !1, this.blockScalarIndent = -1, this.blockScalarKeep = !1, this.buffer = "", this.flowKey = !1, this.flowLevel = 0, this.indentNext = 0, this.indentValue = 0, this.lineEndPos = null, this.next = null, this.pos = 0;
 	}
@@ -7160,7 +7160,7 @@ var Qd = /* @__PURE__ */ new Set("0123456789ABCDEFabcdef"), $d = /* @__PURE__ */
 		}
 		if (t === "-" || t === ".") {
 			let t = this.buffer.substr(e, 3);
-			if ((t === "---" || t === "...") && Zd(this.buffer[e + 3])) return -1;
+			if ((t === "---" || t === "...") && Qd(this.buffer[e + 3])) return -1;
 		}
 		return e;
 	}
@@ -7222,14 +7222,14 @@ var Qd = /* @__PURE__ */ new Set("0123456789ABCDEFabcdef"), $d = /* @__PURE__ */
 		if (e === "-" || e === ".") {
 			if (!this.atEnd && !this.hasChars(4)) return this.setNext("line-start");
 			let e = this.peek(3);
-			if ((e === "---" || e === "...") && Zd(this.charAt(3))) return yield* this.pushCount(3), this.indentValue = 0, this.indentNext = 0, e === "---" ? "doc" : "stream";
+			if ((e === "---" || e === "...") && Qd(this.charAt(3))) return yield* this.pushCount(3), this.indentValue = 0, this.indentNext = 0, e === "---" ? "doc" : "stream";
 		}
-		return this.indentValue = yield* this.pushSpaces(!1), this.indentNext > this.indentValue && !Zd(this.charAt(1)) && (this.indentNext = this.indentValue), yield* this.parseBlockStart();
+		return this.indentValue = yield* this.pushSpaces(!1), this.indentNext > this.indentValue && !Qd(this.charAt(1)) && (this.indentNext = this.indentValue), yield* this.parseBlockStart();
 	}
 	*parseBlockStart() {
 		let [e, t] = this.peek(2);
 		if (!t && !this.atEnd) return this.setNext("block-start");
-		if ((e === "-" || e === "?" || e === ":") && Zd(t)) {
+		if ((e === "-" || e === "?" || e === ":") && Qd(t)) {
 			let e = (yield* this.pushCount(1)) + (yield* this.pushSpaces(!0));
 			return this.indentNext = this.indentValue + 1, this.indentValue += e, "block-start";
 		}
@@ -7247,7 +7247,7 @@ var Qd = /* @__PURE__ */ new Set("0123456789ABCDEFabcdef"), $d = /* @__PURE__ */
 			case "[": return yield* this.pushCount(1), this.flowKey = !1, this.flowLevel = 1, "flow";
 			case "}":
 			case "]": return yield* this.pushCount(1), "doc";
-			case "*": return yield* this.pushUntil(nf), "doc";
+			case "*": return yield* this.pushUntil(rf), "doc";
 			case "\"":
 			case "'": return yield* this.parseQuotedScalar();
 			case "|":
@@ -7262,7 +7262,7 @@ var Qd = /* @__PURE__ */ new Set("0123456789ABCDEFabcdef"), $d = /* @__PURE__ */
 		while (e + t > 0);
 		let r = this.getLine();
 		if (r === null) return this.setNext("flow");
-		if ((n !== -1 && n < this.indentNext && r[0] !== "#" || n === 0 && (r.startsWith("---") || r.startsWith("...")) && Zd(r[3])) && (n !== this.indentNext - 1 || this.flowLevel !== 1 || r[0] !== "]" && r[0] !== "}")) return this.flowLevel = 0, yield "", yield* this.parseLineStart();
+		if ((n !== -1 && n < this.indentNext && r[0] !== "#" || n === 0 && (r.startsWith("---") || r.startsWith("...")) && Qd(r[3])) && (n !== this.indentNext - 1 || this.flowLevel !== 1 || r[0] !== "]" && r[0] !== "}")) return this.flowLevel = 0, yield "", yield* this.parseLineStart();
 		let i = 0;
 		for (; r[i] === ",";) i += yield* this.pushCount(1), i += yield* this.pushSpaces(!0), this.flowKey = !1;
 		switch (i += yield* this.pushIndicators(), r[i]) {
@@ -7272,12 +7272,12 @@ var Qd = /* @__PURE__ */ new Set("0123456789ABCDEFabcdef"), $d = /* @__PURE__ */
 			case "[": return yield* this.pushCount(1), this.flowKey = !1, this.flowLevel += 1, "flow";
 			case "}":
 			case "]": return yield* this.pushCount(1), this.flowKey = !0, --this.flowLevel, this.flowLevel ? "flow" : "doc";
-			case "*": return yield* this.pushUntil(nf), "flow";
+			case "*": return yield* this.pushUntil(rf), "flow";
 			case "\"":
 			case "'": return this.flowKey = !0, yield* this.parseQuotedScalar();
 			case ":": {
 				let e = this.charAt(1);
-				if (this.flowKey || Zd(e) || e === ",") return this.flowKey = !1, yield* this.pushCount(1), yield* this.pushSpaces(!0), "flow";
+				if (this.flowKey || Qd(e) || e === ",") return this.flowKey = !1, yield* this.pushCount(1), yield* this.pushSpaces(!0), "flow";
 			}
 			default: return this.flowKey = !1, yield* this.parsePlainScalar();
 		}
@@ -7315,7 +7315,7 @@ var Qd = /* @__PURE__ */ new Set("0123456789ABCDEFabcdef"), $d = /* @__PURE__ */
 			else if (t > "0" && t <= "9") this.blockScalarIndent = Number(t) - 1;
 			else if (t !== "-") break;
 		}
-		return yield* this.pushUntil((e) => Zd(e) || e === "#");
+		return yield* this.pushUntil((e) => Qd(e) || e === "#");
 	}
 	*parseBlockScalar() {
 		let e = this.pos - 1, t = 0, n;
@@ -7365,18 +7365,18 @@ var Qd = /* @__PURE__ */ new Set("0123456789ABCDEFabcdef"), $d = /* @__PURE__ */
 		let e = this.flowLevel > 0, t = this.pos - 1, n = this.pos - 1, r;
 		for (; r = this.buffer[++n];) if (r === ":") {
 			let r = this.buffer[n + 1];
-			if (Zd(r) || e && ef.has(r)) break;
+			if (Qd(r) || e && tf.has(r)) break;
 			t = n;
-		} else if (Zd(r)) {
+		} else if (Qd(r)) {
 			let i = this.buffer[n + 1];
-			if (r === "\r" && (i === "\n" ? (n += 1, r = "\n", i = this.buffer[n + 1]) : t = n), i === "#" || e && ef.has(i)) break;
+			if (r === "\r" && (i === "\n" ? (n += 1, r = "\n", i = this.buffer[n + 1]) : t = n), i === "#" || e && tf.has(i)) break;
 			if (r === "\n") {
 				let e = this.continueScalar(n + 1);
 				if (e === -1) break;
 				n = Math.max(n, e - 2);
 			}
 		} else {
-			if (e && ef.has(r)) break;
+			if (e && tf.has(r)) break;
 			t = n;
 		}
 		return !r && !this.atEnd ? this.setNext("plain-scalar") : (yield "", yield* this.pushToIndex(t + 1, !0), e ? "flow" : "doc");
@@ -7396,13 +7396,13 @@ var Qd = /* @__PURE__ */ new Set("0123456789ABCDEFabcdef"), $d = /* @__PURE__ */
 					e += yield* this.pushTag(), e += yield* this.pushSpaces(!0);
 					continue loop;
 				case "&":
-					e += yield* this.pushUntil(nf), e += yield* this.pushSpaces(!0);
+					e += yield* this.pushUntil(rf), e += yield* this.pushSpaces(!0);
 					continue loop;
 				case "-":
 				case "?":
 				case ":": {
 					let t = this.flowLevel > 0, n = this.charAt(1);
-					if (Zd(n) || t && ef.has(n)) {
+					if (Qd(n) || t && tf.has(n)) {
 						t ? this.flowKey &&= !1 : this.indentNext = this.indentValue + 1, e += yield* this.pushCount(1), e += yield* this.pushSpaces(!0);
 						continue loop;
 					}
@@ -7415,13 +7415,13 @@ var Qd = /* @__PURE__ */ new Set("0123456789ABCDEFabcdef"), $d = /* @__PURE__ */
 	*pushTag() {
 		if (this.charAt(1) === "<") {
 			let e = this.pos + 2, t = this.buffer[e];
-			for (; !Zd(t) && t !== ">";) t = this.buffer[++e];
+			for (; !Qd(t) && t !== ">";) t = this.buffer[++e];
 			return yield* this.pushToIndex(t === ">" ? e + 1 : e, !1);
 		}
 		{
 			let e = this.pos + 1, t = this.buffer[e];
-			for (; t;) if ($d.has(t)) t = this.buffer[++e];
-			else if (t === "%" && Qd.has(this.buffer[e + 1]) && Qd.has(this.buffer[e + 2])) t = this.buffer[e += 3];
+			for (; t;) if (ef.has(t)) t = this.buffer[++e];
+			else if (t === "%" && $d.has(this.buffer[e + 1]) && $d.has(this.buffer[e + 2])) t = this.buffer[e += 3];
 			else break;
 			return yield* this.pushToIndex(e, !1);
 		}
@@ -7443,7 +7443,7 @@ var Qd = /* @__PURE__ */ new Set("0123456789ABCDEFabcdef"), $d = /* @__PURE__ */
 		for (; !e(n);) n = this.buffer[++t];
 		return yield* this.pushToIndex(t, !1);
 	}
-}, af = class {
+}, of = class {
 	constructor() {
 		this.lineStarts = [], this.addNewLine = (e) => this.lineStarts.push(e), this.linePos = (e) => {
 			let t = 0, n = this.lineStarts.length;
@@ -7468,11 +7468,11 @@ var Qd = /* @__PURE__ */ new Set("0123456789ABCDEFabcdef"), $d = /* @__PURE__ */
 	}
 };
 // node_modules/yaml/browser/dist/parse/parser.js
-function of(e, t) {
+function sf(e, t) {
 	for (let n = 0; n < e.length; ++n) if (e[n].type === t) return !0;
 	return !1;
 }
-function sf(e) {
+function cf(e) {
 	for (let t = 0; t < e.length; ++t) switch (e[t].type) {
 		case "space":
 		case "comment":
@@ -7481,7 +7481,7 @@ function sf(e) {
 	}
 	return -1;
 }
-function cf(e) {
+function lf(e) {
 	switch (e?.type) {
 		case "alias":
 		case "scalar":
@@ -7491,7 +7491,7 @@ function cf(e) {
 		default: return !1;
 	}
 }
-function lf(e) {
+function uf(e) {
 	switch (e.type) {
 		case "document": return e.start;
 		case "block-map": {
@@ -7503,7 +7503,7 @@ function lf(e) {
 		default: return [];
 	}
 }
-function uf(e) {
+function df(e) {
 	if (e.length === 0) return [];
 	let t = e.length;
 	loop: for (; --t >= 0;) switch (e[t].type) {
@@ -7516,16 +7516,16 @@ function uf(e) {
 	for (; e[++t]?.type === "space";);
 	return e.splice(t, e.length);
 }
-function df(e, t) {
+function ff(e, t) {
 	if (t.length < 1e5) Array.prototype.push.apply(e, t);
 	else for (let n = 0; n < t.length; ++n) e.push(t[n]);
 }
-function ff(e) {
-	if (e.start.type === "flow-seq-start") for (let t of e.items) t.sep && !t.value && !of(t.start, "explicit-key-ind") && !of(t.sep, "map-value-ind") && (t.key && (t.value = t.key), delete t.key, cf(t.value) ? t.value.end ? df(t.value.end, t.sep) : t.value.end = t.sep : df(t.start, t.sep), delete t.sep);
+function pf(e) {
+	if (e.start.type === "flow-seq-start") for (let t of e.items) t.sep && !t.value && !sf(t.start, "explicit-key-ind") && !sf(t.sep, "map-value-ind") && (t.key && (t.value = t.key), delete t.key, lf(t.value) ? t.value.end ? ff(t.value.end, t.sep) : t.value.end = t.sep : ff(t.start, t.sep), delete t.sep);
 }
-var pf = class {
+var mf = class {
 	constructor(e) {
-		this.atNewLine = !0, this.atScalar = !1, this.indent = 0, this.offset = 0, this.onKeyLine = !1, this.stack = [], this.source = "", this.type = "", this.lexer = new rf(), this.onNewLine = e;
+		this.atNewLine = !0, this.atScalar = !1, this.indent = 0, this.offset = 0, this.onKeyLine = !1, this.stack = [], this.source = "", this.type = "", this.lexer = new af(), this.onNewLine = e;
 	}
 	*parse(e, t = !1) {
 		this.onNewLine && this.offset === 0 && this.onNewLine(0);
@@ -7537,7 +7537,7 @@ var pf = class {
 			this.atScalar = !1, yield* this.step(), this.offset += e.length;
 			return;
 		}
-		let t = Xd(e);
+		let t = Zd(e);
 		if (!t) {
 			let t = `Not a YAML token: ${e}`;
 			yield* this.pop({
@@ -7620,7 +7620,7 @@ var pf = class {
 		else if (this.stack.length === 0) yield t;
 		else {
 			let e = this.peek(1);
-			switch (t.type === "block-scalar" ? t.indent = "indent" in e ? e.indent : 0 : t.type === "flow-collection" && e.type === "document" && (t.indent = 0), t.type === "flow-collection" && ff(t), e.type) {
+			switch (t.type === "block-scalar" ? t.indent = "indent" in e ? e.indent : 0 : t.type === "flow-collection" && e.type === "document" && (t.indent = 0), t.type === "flow-collection" && pf(t), e.type) {
 				case "document":
 					e.value = t;
 					break;
@@ -7672,7 +7672,7 @@ var pf = class {
 			}
 			if ((e.type === "document" || e.type === "block-map" || e.type === "block-seq") && (t.type === "block-map" || t.type === "block-seq")) {
 				let n = t.items[t.items.length - 1];
-				n && !n.sep && !n.value && n.start.length > 0 && sf(n.start) === -1 && (t.indent === 0 || n.start.every((e) => e.type !== "comment" || e.indent < t.indent)) && (e.type === "document" ? e.end = n.start : e.items.push({ start: n.start }), t.items.splice(-1, 1));
+				n && !n.sep && !n.value && n.start.length > 0 && cf(n.start) === -1 && (t.indent === 0 || n.start.every((e) => e.type !== "comment" || e.indent < t.indent)) && (e.type === "document" ? e.end = n.start : e.items.push({ start: n.start }), t.items.splice(-1, 1));
 			}
 		}
 	}
@@ -7713,7 +7713,7 @@ var pf = class {
 		if (e.value) return yield* this.lineEnd(e);
 		switch (this.type) {
 			case "doc-start":
-				sf(e.start) === -1 ? e.start.push(this.sourceToken) : (yield* this.pop(), yield* this.step());
+				cf(e.start) === -1 ? e.start.push(this.sourceToken) : (yield* this.pop(), yield* this.step());
 				return;
 			case "anchor":
 			case "tag":
@@ -7733,7 +7733,7 @@ var pf = class {
 	}
 	*scalar(e) {
 		if (this.type === "map-value-ind") {
-			let t = uf(lf(this.peek(2))), n;
+			let t = df(uf(this.peek(2))), n;
 			e.end ? (n = e.end, n.push(this.sourceToken), delete e.end) : n = [this.sourceToken];
 			let r = {
 				type: "block-map",
@@ -7783,7 +7783,7 @@ var pf = class {
 					if (this.atIndentedComment(t.start, e.indent)) {
 						let n = e.items[e.items.length - 2]?.value?.end;
 						if (Array.isArray(n)) {
-							df(n, t.start), n.push(this.sourceToken), e.items.pop();
+							ff(n, t.start), n.push(this.sourceToken), e.items.pop();
 							return;
 						}
 					}
@@ -7832,12 +7832,12 @@ var pf = class {
 				case "map-value-ind":
 					if (t.explicitKey) {
 						if (!t.sep) {
-							if (of(t.start, "newline")) Object.assign(t, {
+							if (sf(t.start, "newline")) Object.assign(t, {
 								key: null,
 								sep: [this.sourceToken]
 							});
 							else {
-								let e = uf(t.start);
+								let e = df(t.start);
 								this.stack.push({
 									type: "block-map",
 									offset: this.offset,
@@ -7854,7 +7854,7 @@ var pf = class {
 							key: null,
 							sep: [this.sourceToken]
 						});
-						else if (of(t.sep, "map-value-ind")) this.stack.push({
+						else if (sf(t.sep, "map-value-ind")) this.stack.push({
 							type: "block-map",
 							offset: this.offset,
 							indent: this.indent,
@@ -7864,8 +7864,8 @@ var pf = class {
 								sep: [this.sourceToken]
 							}]
 						});
-						else if (cf(t.key) && !of(t.sep, "newline")) {
-							let e = uf(t.start), n = t.key, r = t.sep;
+						else if (lf(t.key) && !sf(t.sep, "newline")) {
+							let e = df(t.start), n = t.key, r = t.sep;
 							r.push(this.sourceToken), delete t.key, delete t.sep, this.stack.push({
 								type: "block-map",
 								offset: this.offset,
@@ -7881,7 +7881,7 @@ var pf = class {
 						start: i,
 						key: null,
 						sep: [this.sourceToken]
-					}) : of(t.sep, "map-value-ind") ? this.stack.push({
+					}) : sf(t.sep, "map-value-ind") ? this.stack.push({
 						type: "block-map",
 						offset: this.offset,
 						indent: this.indent,
@@ -7915,7 +7915,7 @@ var pf = class {
 					let r = this.startBlockValue(e);
 					if (r) {
 						if (r.type === "block-seq") {
-							if (!t.explicitKey && t.sep && !of(t.sep, "newline")) {
+							if (!t.explicitKey && t.sep && !sf(t.sep, "newline")) {
 								yield* this.pop({
 									type: "error",
 									offset: this.offset,
@@ -7949,7 +7949,7 @@ var pf = class {
 					if (this.atIndentedComment(t.start, e.indent)) {
 						let n = e.items[e.items.length - 2]?.value?.end;
 						if (Array.isArray(n)) {
-							df(n, t.start), n.push(this.sourceToken), e.items.pop();
+							ff(n, t.start), n.push(this.sourceToken), e.items.pop();
 							return;
 						}
 					}
@@ -7963,7 +7963,7 @@ var pf = class {
 				return;
 			case "seq-item-ind":
 				if (this.indent !== e.indent) break;
-				t.value || of(t.start, "seq-item-ind") ? e.items.push({ start: [this.sourceToken] }) : t.start.push(this.sourceToken);
+				t.value || sf(t.start, "seq-item-ind") ? e.items.push({ start: [this.sourceToken] }) : t.start.push(this.sourceToken);
 				return;
 		}
 		if (this.indent > e.indent) {
@@ -8032,8 +8032,8 @@ var pf = class {
 			let t = this.peek(2);
 			if (t.type === "block-map" && (this.type === "map-value-ind" && t.indent === e.indent || this.type === "newline" && !t.items[t.items.length - 1].sep)) yield* this.pop(), yield* this.step();
 			else if (this.type === "map-value-ind" && t.type !== "flow-collection") {
-				let n = uf(lf(t));
-				ff(e);
+				let n = df(uf(t));
+				pf(e);
 				let r = e.end.splice(1, e.end.length);
 				r.push(this.sourceToken);
 				let i = {
@@ -8092,7 +8092,7 @@ var pf = class {
 			};
 			case "explicit-key-ind": {
 				this.onKeyLine = !0;
-				let t = uf(lf(e));
+				let t = df(uf(e));
 				return t.push(this.sourceToken), {
 					type: "block-map",
 					offset: this.offset,
@@ -8105,7 +8105,7 @@ var pf = class {
 			}
 			case "map-value-ind": {
 				this.onKeyLine = !0;
-				let t = uf(lf(e));
+				let t = df(uf(e));
 				return {
 					type: "block-map",
 					offset: this.offset,
@@ -8142,26 +8142,26 @@ var pf = class {
 	}
 };
 // node_modules/yaml/browser/dist/public-api.js
-function mf(e) {
+function hf(e) {
 	let t = e.prettyErrors !== !1;
 	return {
-		lineCounter: e.lineCounter || t && new af() || null,
+		lineCounter: e.lineCounter || t && new of() || null,
 		prettyErrors: t
 	};
 }
-function hf(e, t = {}) {
-	let { lineCounter: n, prettyErrors: r } = mf(t), i = new pf(n?.addNewLine), a = new Wd(t), o = null;
+function gf(e, t = {}) {
+	let { lineCounter: n, prettyErrors: r } = hf(t), i = new mf(n?.addNewLine), a = new Gd(t), o = null;
 	for (let t of a.compose(i.parse(e), !0, e.length)) if (!o) o = t;
 	else if (o.options.logLevel !== "silent") {
-		o.errors.push(new od(t.range.slice(0, 2), "MULTIPLE_DOCS", "Source contains multiple documents; please use YAML.parseAllDocuments()"));
+		o.errors.push(new sd(t.range.slice(0, 2), "MULTIPLE_DOCS", "Source contains multiple documents; please use YAML.parseAllDocuments()"));
 		break;
 	}
-	return r && n && (o.errors.forEach(cd(e, n)), o.warnings.forEach(cd(e, n))), o;
+	return r && n && (o.errors.forEach(ld(e, n)), o.warnings.forEach(ld(e, n))), o;
 }
-function gf(e, t, n) {
+function _f(e, t, n) {
 	let r;
 	typeof t == "function" ? r = t : n === void 0 && t && typeof t == "object" && (n = t);
-	let i = hf(e, n);
+	let i = gf(e, n);
 	if (!i) return null;
 	if (i.warnings.forEach((e) => Bl(i.options.logLevel, e)), i.errors.length > 0) {
 		if (i.options.logLevel !== "silent") throw i.errors[0];
@@ -8170,25 +8170,25 @@ function gf(e, t, n) {
 	return i.toJS(Object.assign({ reviver: r }, n));
 }
 // src/server/catalog/frontmatter.ts
-var _f = {
+var vf = {
 	UNTERMINATED: "FRONTMATTER_UNTERMINATED",
 	INVALID_YAML: "FRONTMATTER_INVALID_YAML",
 	NOT_A_MAPPING: "FRONTMATTER_NOT_A_MAPPING"
-}, vf = class extends Error {
+}, yf = class extends Error {
 	code;
 	constructor(e, t, n = {}) {
 		super(t, n.cause === void 0 ? void 0 : { cause: n.cause }), this.name = new.target.name, this.code = e;
 	}
-}, yf = /^---[ \t]*(\r?\n|$)/, bf = /^---[ \t]*$/m;
-function xf(e) {
-	let t = Cf(e), n = yf.exec(t);
+}, bf = /^---[ \t]*(\r?\n|$)/, xf = /^---[ \t]*$/m;
+function Sf(e) {
+	let t = wf(e), n = bf.exec(t);
 	if (!n) return {
 		present: !1,
 		data: {},
 		body: t
 	};
-	let r = t.slice(n[0].length), i = bf.exec(r);
-	if (!i) throw new vf(_f.UNTERMINATED, "The SKILL.md frontmatter is missing its closing \"---\" delimiter.");
+	let r = t.slice(n[0].length), i = xf.exec(r);
+	if (!i) throw new yf(vf.UNTERMINATED, "The SKILL.md frontmatter is missing its closing \"---\" delimiter.");
 	let a = r.slice(0, i.index), o = r.slice(i.index + i[0].length).replace(/^\r?\n/, "");
 	if (a.trim() === "") return {
 		present: !0,
@@ -8197,61 +8197,61 @@ function xf(e) {
 	};
 	let s;
 	try {
-		s = gf(a);
+		s = _f(a);
 	} catch (e) {
-		throw new vf(_f.INVALID_YAML, "The SKILL.md frontmatter is not valid YAML.", { cause: e });
+		throw new yf(vf.INVALID_YAML, "The SKILL.md frontmatter is not valid YAML.", { cause: e });
 	}
 	if (s == null) return {
 		present: !0,
 		data: {},
 		body: o
 	};
-	if (!wf(s)) throw new vf(_f.NOT_A_MAPPING, "The SKILL.md frontmatter must be a YAML mapping.");
+	if (!Tf(s)) throw new yf(vf.NOT_A_MAPPING, "The SKILL.md frontmatter must be a YAML mapping.");
 	return {
 		present: !0,
 		data: s,
 		body: o
 	};
 }
-function Sf(e, t) {
+function Cf(e, t) {
 	if (!Object.hasOwn(e, t)) return;
 	let n = e[t];
 	if (typeof n != "string") return;
 	let r = n.trim();
 	return r === "" ? void 0 : r;
 }
-function Cf(e) {
+function wf(e) {
 	return e.charCodeAt(0) === 65279 ? e.slice(1) : e;
 }
-function wf(e) {
+function Tf(e) {
 	return typeof e == "object" && !!e && !Array.isArray(e);
 }
 // src/shared/chain.ts
-function Tf(e) {
+function Ef(e) {
 	return e.label?.trim() || (e.kind === "instruction" ? "Instruction" : e.skillName);
 }
-var Ef = ["opencode", "copilot"], Df = L(Ef), q = N().trim().min(1), Of = I({
-	opencode: q.optional(),
-	copilot: q.optional()
-}), kf = I({
-	id: q,
-	canonicalPath: q,
-	displayName: q,
+var Df = ["opencode", "copilot"], Of = L(Df), K = N().trim().min(1), kf = I({
+	opencode: K.optional(),
+	copilot: K.optional()
+}), Af = I({
+	id: K,
+	canonicalPath: K,
+	displayName: K,
 	lastOpenedAt: z({ offset: !0 }),
 	managedWorkspace: R(!0).optional()
-}), Af = I({
+}), jf = I({
 	version: R(1),
 	projectDevice: N().regex(/^[0-9]+$/),
 	projectInode: N().regex(/^[0-9]+$/)
-}), jf = I({
+}), Mf = I({
 	id: Cs(),
-	projectId: q,
-	sourceProjectId: q.optional(),
-	sourceChainId: q.optional(),
-	sourceDraftId: q.optional(),
-	chainId: q,
+	projectId: K,
+	sourceProjectId: K.optional(),
+	sourceChainId: K.optional(),
+	sourceDraftId: K.optional(),
+	chainId: K,
 	createdAt: z({ offset: !0 }),
-	retirement: Af.optional()
+	retirement: jf.optional()
 }).superRefine((e, t) => {
 	(e.sourceProjectId !== void 0 && e.sourceChainId !== void 0) == (e.sourceDraftId !== void 0) && t.addIssue({
 		code: "custom",
@@ -8260,19 +8260,19 @@ var Ef = ["opencode", "copilot"], Df = L(Ef), q = N().trim().min(1), Of = I({
 		code: "custom",
 		message: "A project source requires both project and chain ids."
 	});
-}), Mf = I({
+}), Nf = I({
 	id: Cs(),
-	projectId: q,
-	chainId: q,
-	harness: Df,
+	projectId: K,
+	chainId: K,
+	harness: Of,
 	createdAt: z({ offset: !0 }),
 	handoffFingerprint: N().regex(/^[a-f0-9]{64}$/),
 	autoImport: Gs(),
-	runId: q.optional(),
+	runId: K.optional(),
 	resultFingerprint: N().regex(/^[a-f0-9]{64}$/).optional(),
-	importedDraftId: q.optional(),
-	retirement: Af.optional()
-}), Nf = N().trim().min(1).max(2048).refine((e) => {
+	importedDraftId: K.optional(),
+	retirement: jf.optional()
+}), Pf = N().trim().min(1).max(2048).refine((e) => {
 	if (/^git@[^/:\\\s]+:[^\\\s?#]+(?:\.git)?$/i.test(e)) return !0;
 	let t;
 	try {
@@ -8281,7 +8281,7 @@ var Ef = ["opencode", "copilot"], Df = L(Ef), q = N().trim().min(1), Of = I({
 		return !1;
 	}
 	return (t.protocol === "https:" || t.protocol === "ssh:") && (t.username === "" || t.protocol === "ssh:" && t.username === "git") && t.password === "" && t.search === "" && t.hash === "" && t.hostname !== "";
-}, "Use an HTTPS or SSH Git remote without embedded credentials or query parameters."), Pf = N().trim().min(1).max(255).refine((e) => /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(e) && !e.includes("..") && !e.includes("//") && !e.includes("@{") && !e.endsWith("/") && !e.endsWith(".") && !e.split("/").some((e) => e.endsWith(".lock")), "Use a branch, tag, or full commit hash."), Ff = {
+}, "Use an HTTPS or SSH Git remote without embedded credentials or query parameters."), Ff = N().trim().min(1).max(255).refine((e) => /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(e) && !e.includes("..") && !e.includes("//") && !e.includes("@{") && !e.endsWith("/") && !e.endsWith(".") && !e.split("/").some((e) => e.endsWith(".lock")), "Use a branch, tag, or full commit hash."), If = {
 	maxPackages: 100,
 	maxAgents: 100,
 	maxFiles: 2e3,
@@ -8292,7 +8292,7 @@ var Ef = ["opencode", "copilot"], Df = L(Ef), q = N().trim().min(1), Of = I({
 	maxCommandOutputBytes: 2097152,
 	cloneTimeoutMs: 12e4,
 	commandTimeoutMs: 15e3
-}, If = {
+}, Lf = {
 	maxPackages: 1e4,
 	maxAgents: 1e4,
 	maxFiles: 2e5,
@@ -8303,149 +8303,149 @@ var Ef = ["opencode", "copilot"], Df = L(Ef), q = N().trim().min(1), Of = I({
 	maxCommandOutputBytes: 67108864,
 	cloneTimeoutMs: 18e5,
 	commandTimeoutMs: 18e5
-}, Lf = (e) => Vs().int().min(1).max(e), Rf = {
-	maxPackages: Lf(If.maxPackages),
-	maxAgents: Lf(If.maxAgents),
-	maxFiles: Lf(If.maxFiles),
-	maxPackageBytes: Lf(If.maxPackageBytes),
-	maxSnapshotBytes: Lf(If.maxSnapshotBytes),
-	maxStagingBytes: Lf(If.maxStagingBytes),
-	maxStagingEntries: Lf(If.maxStagingEntries),
-	maxCommandOutputBytes: Lf(If.maxCommandOutputBytes),
-	cloneTimeoutMs: Lf(If.cloneTimeoutMs),
-	commandTimeoutMs: Lf(If.commandTimeoutMs)
-}, zf = I(Rf).partial(), Bf = I(Rf), Vf = I({
+}, Rf = (e) => Vs().int().min(1).max(e), zf = {
+	maxPackages: Rf(Lf.maxPackages),
+	maxAgents: Rf(Lf.maxAgents),
+	maxFiles: Rf(Lf.maxFiles),
+	maxPackageBytes: Rf(Lf.maxPackageBytes),
+	maxSnapshotBytes: Rf(Lf.maxSnapshotBytes),
+	maxStagingBytes: Rf(Lf.maxStagingBytes),
+	maxStagingEntries: Rf(Lf.maxStagingEntries),
+	maxCommandOutputBytes: Rf(Lf.maxCommandOutputBytes),
+	cloneTimeoutMs: Rf(Lf.cloneTimeoutMs),
+	commandTimeoutMs: Rf(Lf.commandTimeoutMs)
+}, Bf = I(zf).partial(), Vf = I(zf), Hf = I({
 	id: N().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),
-	repository: Nf,
-	ref: Pf.optional()
-}), Hf = Vf.extend({ limits: zf.optional() }), Uf = ac(N(), qs()), Wf = {
-	harnessCommands: Of.default({}),
-	extraSkillDirectories: F(q).default([]),
-	sharedBundleDirectory: q.optional(),
-	recentProjects: F(kf).default([]),
-	testWorkspaces: F(jf).default([]),
-	discoveryWorkspaces: F(Mf).default([]),
-	uiPreferences: Uf.default({})
+	repository: Pf,
+	ref: Ff.optional()
+}), Uf = Hf.extend({ limits: Bf.optional() }), Wf = ac(N(), qs()), Gf = {
+	harnessCommands: kf.default({}),
+	extraSkillDirectories: F(K).default([]),
+	sharedBundleDirectory: K.optional(),
+	recentProjects: F(Af).default([]),
+	testWorkspaces: F(Mf).default([]),
+	discoveryWorkspaces: F(Nf).default([]),
+	uiPreferences: Wf.default({})
 };
 I({
 	version: R(1),
-	...Wf,
-	remoteSkillSources: F(Vf).default([])
+	...Gf,
+	remoteSkillSources: F(Hf).default([])
 }), I({
 	version: R(2),
-	harnessCommands: Wf.harnessCommands,
-	extraSkillDirectories: Wf.extraSkillDirectories,
-	remoteSkillSources: F(Hf).default([]),
-	remoteCatalogLimits: Bf.default(Ff),
-	sharedBundleDirectory: Wf.sharedBundleDirectory,
-	recentProjects: Wf.recentProjects,
-	testWorkspaces: Wf.testWorkspaces,
-	discoveryWorkspaces: Wf.discoveryWorkspaces,
-	uiPreferences: Wf.uiPreferences
+	harnessCommands: Gf.harnessCommands,
+	extraSkillDirectories: Gf.extraSkillDirectories,
+	remoteSkillSources: F(Uf).default([]),
+	remoteCatalogLimits: Vf.default(If),
+	sharedBundleDirectory: Gf.sharedBundleDirectory,
+	recentProjects: Gf.recentProjects,
+	testWorkspaces: Gf.testWorkspaces,
+	discoveryWorkspaces: Gf.discoveryWorkspaces,
+	uiPreferences: Gf.uiPreferences
 }), I({
-	harnessCommands: Of.optional(),
-	extraSkillDirectories: F(q).optional(),
-	remoteSkillSources: F(Hf).optional(),
-	remoteCatalogLimits: zf.optional(),
-	sharedBundleDirectory: q.nullable().optional(),
-	recentProjects: F(kf).optional(),
-	testWorkspaces: F(jf).optional(),
-	discoveryWorkspaces: F(Mf).optional(),
-	uiPreferences: Uf.optional()
+	harnessCommands: kf.optional(),
+	extraSkillDirectories: F(K).optional(),
+	remoteSkillSources: F(Uf).optional(),
+	remoteCatalogLimits: Bf.optional(),
+	sharedBundleDirectory: K.nullable().optional(),
+	recentProjects: F(Af).optional(),
+	testWorkspaces: F(Mf).optional(),
+	discoveryWorkspaces: F(Nf).optional(),
+	uiPreferences: Wf.optional()
 });
-var Gf = L([
+var Kf = L([
 	"shared",
 	"fresh",
 	"fork"
-]), Kf = /^[A-Za-z][A-Za-z0-9_]*$/, qf = N().trim().min(1), Jf = z({ offset: !0 }), Yf = I({
-	harness: Df,
-	name: qf,
+]), qf = /^[A-Za-z][A-Za-z0-9_]*$/, Jf = N().trim().min(1), Yf = z({ offset: !0 }), Xf = I({
+	harness: Of,
+	name: Jf,
 	sourceId: N().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),
 	revision: N().regex(/^[a-f0-9]{40,64}$/),
-	repositoryPath: qf.max(4096),
-	agentPath: qf.max(4096),
+	repositoryPath: Jf.max(4096),
+	agentPath: Jf.max(4096),
 	fingerprint: N().regex(/^[a-f0-9]{64}$/)
-}), Xf = I({
+}), Zf = I({
 	sourceId: N().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),
 	revision: N().regex(/^[a-f0-9]{40,64}$/),
-	repositoryPath: qf.max(4096)
-}), Zf = {
-	id: qf,
-	instruction: qf,
-	label: qf.optional()
-}, Qf = tc("kind", [I({
-	...Zf,
+	repositoryPath: Jf.max(4096)
+}), Qf = {
+	id: Jf,
+	instruction: Jf,
+	label: Jf.optional()
+}, $f = tc("kind", [I({
+	...Qf,
 	kind: R("skill").optional(),
-	skillName: qf,
-	skillBinding: Xf.optional()
+	skillName: Jf,
+	skillBinding: Zf.optional()
 }), I({
-	...Zf,
+	...Qf,
 	kind: R("instruction"),
 	skillName: Ys().optional()
-})]), $f = I({
-	name: N().regex(Kf),
-	label: qf.optional(),
+})]), ep = I({
+	name: N().regex(qf),
+	label: Jf.optional(),
 	required: Gs().default(!1),
 	defaultValue: N().optional()
-}), ep = {
-	id: qf,
-	name: qf,
-	harness: Df,
-	sessionMode: Gf,
-	steps: F(Qf).min(1),
-	inputs: F($f).default([]),
+}), tp = {
+	id: Jf,
+	name: Jf,
+	harness: Of,
+	sessionMode: Kf,
+	steps: F($f).min(1),
+	inputs: F(ep).default([]),
 	automaticPermissionOptIn: Gs().default(!1),
-	createdAt: Jf,
-	updatedAt: Jf
-}, tp = tc("kind", [I({
-	...Zf,
+	createdAt: Yf,
+	updatedAt: Yf
+}, np = tc("kind", [I({
+	...Qf,
 	kind: R("skill").optional(),
-	skillName: qf
+	skillName: Jf
 }), I({
-	...Zf,
+	...Qf,
 	kind: R("instruction"),
 	skillName: Ys().optional()
-})]), np = {
-	...ep,
-	steps: F(tp).min(1)
-}, rp = I({
+})]), rp = {
+	...tp,
+	steps: F(np).min(1)
+}, ip = I({
 	version: R(1),
-	...np
-}), ip = I({
+	...rp
+}), ap = I({
 	version: R(2),
-	...np,
-	agent: Yf.optional()
-}), J = I({
+	...rp,
+	agent: Xf.optional()
+}), q = I({
 	version: R(3),
-	...ep,
-	agent: Yf.optional()
-}), ap = {
+	...tp,
+	agent: Xf.optional()
+}), op = {
 	DUPLICATE_STEP_ID: "chain_duplicate_step_id",
 	DUPLICATE_INPUT_NAME: "chain_duplicate_input_name",
 	PLACEHOLDER_INVALID: "chain_placeholder_invalid",
 	PLACEHOLDER_UNKNOWN: "chain_placeholder_unknown",
 	AGENT_HARNESS_MISMATCH: "chain_agent_harness_mismatch",
 	SKILL_BINDING_CONFLICT: "chain_skill_binding_conflict"
-}, op = { INPUT_UNUSED: "chain_input_unused" }, sp = class extends Error {
+}, sp = { INPUT_UNUSED: "chain_input_unused" }, cp = class extends Error {
 	code;
 	details;
 	constructor(e, t, n = {}, r = {}) {
 		super(t, r.cause === void 0 ? void 0 : { cause: r.cause }), this.name = new.target.name, this.code = e, this.details = n;
 	}
-}, cp = class extends sp {
+}, lp = class extends cp {
 	issues;
 	constructor(e) {
 		super("CHAIN_INVALID", "The chain is not valid.", { issues: e }), this.issues = e;
 	}
 };
-function lp(e) {
-	if (!yp(e)) return e;
+function up(e) {
+	if (!bp(e)) return e;
 	if (!Object.hasOwn(e, "version")) return {
 		...e,
 		version: 3
 	};
 	if (e.version === 1 || e.version === 2) {
-		let t = (e.version === 1 ? rp : ip).safeParse(e);
+		let t = (e.version === 1 ? ip : ap).safeParse(e);
 		return t.success ? {
 			...t.data,
 			version: 3
@@ -8453,50 +8453,50 @@ function lp(e) {
 	}
 	return e;
 }
-function up(e) {
-	let t = J.safeParse(e);
-	if (!t.success) throw new cp(vp(t.error.issues));
+function dp(e) {
+	let t = q.safeParse(e);
+	if (!t.success) throw new lp(yp(t.error.issues));
 	let n = t.data, r = [];
 	if (n.agent !== void 0 && n.agent.harness !== n.harness && r.push({
 		path: "agent.harness",
-		code: ap.AGENT_HARNESS_MISMATCH,
+		code: op.AGENT_HARNESS_MISMATCH,
 		message: `The selected ${n.agent.harness} agent is incompatible with the ${n.harness} chain harness.`
-	}), pp(n, r), mp(n, r), hp(n, r), gp(n, r), r.length > 0) throw new cp(r);
+	}), mp(n, r), hp(n, r), gp(n, r), _p(n, r), r.length > 0) throw new lp(r);
 	return {
 		chain: n,
-		warnings: fp(n)
+		warnings: pp(n)
 	};
 }
-function dp(e) {
-	return up(e).chain;
-}
 function fp(e) {
+	return dp(e).chain;
+}
+function pp(e) {
 	let t = /* @__PURE__ */ new Set();
-	for (let n of e.steps) for (let e of _p(n.instruction)) t.add(e.name);
+	for (let n of e.steps) for (let e of vp(n.instruction)) t.add(e.name);
 	let n = [];
 	return e.inputs.forEach((e, r) => {
 		t.has(e.name) || n.push({
 			path: `inputs.${String(r)}.name`,
-			code: op.INPUT_UNUSED,
+			code: sp.INPUT_UNUSED,
 			message: `Input "${e.name}" is declared but never used in an instruction.`,
 			inputName: e.name
 		});
 	}), n;
 }
-function pp(e, t) {
+function mp(e, t) {
 	let n = /* @__PURE__ */ new Map();
 	e.steps.forEach((e, r) => {
 		let i = n.get(e.id);
 		i === void 0 ? n.set(e.id, r) : t.push({
 			path: `steps.${String(r)}.id`,
-			code: ap.DUPLICATE_STEP_ID,
+			code: op.DUPLICATE_STEP_ID,
 			message: `Step id "${e.id}" is already used by step ${String(i + 1)}.`,
 			stepId: e.id,
 			stepIndex: r
 		});
 	});
 }
-function mp(e, t) {
+function hp(e, t) {
 	let n = /* @__PURE__ */ new Map();
 	e.steps.forEach((e, r) => {
 		if (e.kind === "instruction") return;
@@ -8511,42 +8511,42 @@ function mp(e, t) {
 			stepIndex: r
 		}) : o.binding !== a && t.push({
 			path: `steps.${String(r)}.skillBinding`,
-			code: ap.SKILL_BINDING_CONFLICT,
+			code: op.SKILL_BINDING_CONFLICT,
 			message: `Skill steps named "${e.skillName}" cannot select different packages in one chain.`,
 			stepId: e.id,
 			stepIndex: r
 		});
 	});
 }
-function hp(e, t) {
+function gp(e, t) {
 	let n = /* @__PURE__ */ new Map();
 	e.inputs.forEach((e, r) => {
 		let i = n.get(e.name);
 		i === void 0 ? n.set(e.name, r) : t.push({
 			path: `inputs.${String(r)}.name`,
-			code: ap.DUPLICATE_INPUT_NAME,
+			code: op.DUPLICATE_INPUT_NAME,
 			message: `Input name "${e.name}" is already declared by input ${String(i + 1)}.`,
 			inputName: e.name
 		});
 	});
 }
-function gp(e, t) {
+function _p(e, t) {
 	let n = new Set(e.inputs.map((e) => e.name));
 	e.steps.forEach((e, r) => {
 		let i = /* @__PURE__ */ new Set();
-		for (let a of _p(e.instruction)) {
+		for (let a of vp(e.instruction)) {
 			if (i.has(a.name)) continue;
-			let o = Tf(e);
-			a.name === "" || !Kf.test(a.name) ? (i.add(a.name), t.push({
+			let o = Ef(e);
+			a.name === "" || !qf.test(a.name) ? (i.add(a.name), t.push({
 				path: `steps.${String(r)}.instruction`,
-				code: ap.PLACEHOLDER_INVALID,
+				code: op.PLACEHOLDER_INVALID,
 				message: `Step "${o}" contains an invalid placeholder "${a.raw}".`,
 				stepId: e.id,
 				stepIndex: r,
 				inputName: a.name
 			})) : n.has(a.name) || (i.add(a.name), t.push({
 				path: `steps.${String(r)}.instruction`,
-				code: ap.PLACEHOLDER_UNKNOWN,
+				code: op.PLACEHOLDER_UNKNOWN,
 				message: `Step "${o}" references undeclared input "${a.name}".`,
 				stepId: e.id,
 				stepIndex: r,
@@ -8555,7 +8555,7 @@ function gp(e, t) {
 		}
 	});
 }
-function _p(e) {
+function vp(e) {
 	let t = [];
 	for (let n of e.matchAll(/\{\{([^{}]*)\}\}/g)) {
 		let e = n[1] ?? "";
@@ -8566,83 +8566,83 @@ function _p(e) {
 	}
 	return t;
 }
-function vp(e) {
+function yp(e) {
 	return e.map((e) => ({
 		path: e.path.map((e) => String(e)).join("."),
 		code: e.code,
 		message: e.message
 	}));
 }
-function yp(e) {
+function bp(e) {
 	return typeof e == "object" && !!e && !Array.isArray(e);
 }
 // src/portable/bundle.ts
-var bp = 20971520, xp = 2e3, Sp = 31457280, Cp = class extends Error {
+var xp = 20971520, Sp = 2e3, Cp = 31457280, wp = class extends Error {
 	code;
 	constructor(e, t) {
 		super(t), this.code = e, this.name = "BundleError";
 	}
-}, wp = /^(?:\.env(?:\..*)?|\.git|\.loom|\.ssh|node_modules|credentials(?:\..*)?)$/i, Tp = I({
+}, Tp = /^(?:\.env(?:\..*)?|\.git|\.loom|\.ssh|node_modules|credentials(?:\..*)?)$/i, Ep = I({
 	path: N().min(1).max(512),
-	content: N().max(Math.ceil(bp / 3) * 4),
+	content: N().max(Math.ceil(xp / 3) * 4),
 	executable: Gs()
-}), Ep = I({
+}), Dp = I({
 	format: R("skill-loom-chain"),
 	version: R(1),
 	chain: I({
-		name: J.shape.name,
-		harness: J.shape.harness,
-		sessionMode: J.shape.sessionMode,
-		steps: J.shape.steps,
-		inputs: J.shape.inputs
+		name: q.shape.name,
+		harness: q.shape.harness,
+		sessionMode: q.shape.sessionMode,
+		steps: q.shape.steps,
+		inputs: q.shape.inputs
 	}),
 	skills: F(I({
 		name: N().trim().min(1).max(128),
 		directory: N().min(1).max(128).regex(/^[^/\\]+$/),
-		files: F(Tp).min(1).max(xp)
+		files: F(Ep).min(1).max(Sp)
 	})).max(100)
-}), Dp = I({
+}), Op = I({
 	name: N().trim().min(1).max(128),
-	harness: J.shape.harness,
+	harness: q.shape.harness,
 	agentPath: N().min(1).max(512),
 	fingerprint: N().regex(/^[a-f0-9]{64}$/),
-	content: N().max(Math.ceil(bp / 3) * 4)
-}), Op = I({
+	content: N().max(Math.ceil(xp / 3) * 4)
+}), kp = I({
 	format: R("skill-loom-chain"),
 	version: R(2),
 	chain: I({
-		name: J.shape.name,
-		harness: J.shape.harness,
-		sessionMode: J.shape.sessionMode,
-		steps: J.shape.steps,
-		inputs: J.shape.inputs,
-		agent: Yf.optional()
+		name: q.shape.name,
+		harness: q.shape.harness,
+		sessionMode: q.shape.sessionMode,
+		steps: q.shape.steps,
+		inputs: q.shape.inputs,
+		agent: Xf.optional()
 	}),
 	skills: F(I({
 		name: N().trim().min(1).max(128),
 		directory: N().min(1).max(128).regex(/^[^/\\]+$/),
-		files: F(Tp).min(1).max(xp)
+		files: F(Ep).min(1).max(Sp)
 	})).max(100),
-	agents: F(Dp).max(1)
+	agents: F(Op).max(1)
 });
-function Y(e) {
-	throw new Cp("BUNDLE_INVALID", e);
-}
-function kp(e) {
-	let t = e.split("/");
-	(t.length > 32 || t.some((e) => e === "." || e === ".." || !/^[^\\/:*?"<>|\x00-\x1f]+$/.test(e) || /[. ]$/.test(e) || wp.test(e) || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(e))) && Y("The bundle contains an unsafe or excluded package path.");
+function J(e) {
+	throw new wp("BUNDLE_INVALID", e);
 }
 function Ap(e) {
-	(e.length % 4 != 0 || /[^A-Za-z0-9+/=]/.test(e)) && Y("Package file contents must be canonical base64.");
-	let t = Buffer.from(e, "base64");
-	return t.toString("base64") !== e && Y("Package file contents are not canonical base64."), t;
+	let t = e.split("/");
+	(t.length > 32 || t.some((e) => e === "." || e === ".." || !/^[^\\/:*?"<>|\x00-\x1f]+$/.test(e) || /[. ]$/.test(e) || Tp.test(e) || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(e))) && J("The bundle contains an unsafe or excluded package path.");
 }
 function jp(e) {
-	return [...new Set(e.steps.flatMap((e) => "skillName" in e && typeof e.skillName == "string" ? [e.skillName] : []))];
+	(e.length % 4 != 0 || /[^A-Za-z0-9+/=]/.test(e)) && J("Package file contents must be canonical base64.");
+	let t = Buffer.from(e, "base64");
+	return t.toString("base64") !== e && J("Package file contents are not canonical base64."), t;
 }
 function Mp(e) {
+	return [...new Set(e.steps.flatMap((e) => "skillName" in e && typeof e.skillName == "string" ? [e.skillName] : []))];
+}
+function Np(e) {
 	let t = e.version === 2 ? e.chain.agent : void 0;
-	return dp({
+	return fp({
 		...e.chain,
 		...t === void 0 ? {} : { agent: t },
 		version: 3,
@@ -8652,67 +8652,83 @@ function Mp(e) {
 		automaticPermissionOptIn: !1
 	});
 }
-function Np(e) {
-	let t = Pp(e) ? e.version : void 0, n = t === 1 ? Ep.safeParse(e) : t === 2 ? Op.safeParse(e) : null;
-	n === null && Y("The file is not a supported Skill Loom chain bundle."), n.success || Y("The file is not a supported Skill Loom chain bundle.");
-	let r = n.data, i = Mp(r), a = new Set(jp(i)), o = /* @__PURE__ */ new Set(), s = /* @__PURE__ */ new Set(), c = 0, l = 0;
+function Pp(e) {
+	let t = Fp(e) ? e.version : void 0, n = t === 1 ? Dp.safeParse(e) : t === 2 ? kp.safeParse(e) : null;
+	n === null && J("The file is not a supported Skill Loom chain bundle."), n.success || J("The file is not a supported Skill Loom chain bundle.");
+	let r = n.data, i = Np(r), a = new Set(Mp(i)), o = /* @__PURE__ */ new Set(), s = /* @__PURE__ */ new Set(), c = 0, l = 0;
 	for (let e of r.skills) {
-		kp(e.directory);
+		Ap(e.directory);
 		let t = e.directory.toLowerCase();
-		(o.has(e.name) || s.has(t) || !a.has(e.name)) && Y("The bundle contains duplicate or unreferenced skill packages."), o.add(e.name), s.add(t);
+		(o.has(e.name) || s.has(t) || !a.has(e.name)) && J("The bundle contains duplicate or unreferenced skill packages."), o.add(e.name), s.add(t);
 		let n = /* @__PURE__ */ new Set();
 		for (let t of e.files) {
-			kp(t.path);
+			Ap(t.path);
 			let e = t.path.toLowerCase();
-			if (n.has(e) && Y("The bundle contains duplicate package file paths."), n.add(e), c += Ap(t.content).length, l += 1, c > 20971520 || l > 2e3) throw new Cp("BUNDLE_TOO_LARGE", "Bundles are limited to 20 MiB and 2,000 files.");
+			if (n.has(e) && J("The bundle contains duplicate package file paths."), n.add(e), c += jp(t.content).length, l += 1, c > 20971520 || l > 2e3) throw new wp("BUNDLE_TOO_LARGE", "Bundles are limited to 20 MiB and 2,000 files.");
 		}
 		for (let e of n) {
 			let t = e.split("/");
-			for (; t.length > 1;) t.pop(), n.has(t.join("/")) && Y("A package file conflicts with a directory.");
+			for (; t.length > 1;) t.pop(), n.has(t.join("/")) && J("A package file conflicts with a directory.");
 		}
 		let r = e.files.find((e) => e.path === "SKILL.md");
-		r || Y("Each skill package must include SKILL.md.");
+		r || J("Each skill package must include SKILL.md.");
 		let i;
 		try {
-			i = Sf(xf(Ap(r.content).toString("utf8")).data, "name") ?? e.directory;
+			i = Cf(Sf(jp(r.content).toString("utf8")).data, "name") ?? e.directory;
 		} catch {
-			Y("A bundled SKILL.md has invalid frontmatter.");
+			J("A bundled SKILL.md has invalid frontmatter.");
 		}
-		i !== e.name && Y("A bundled skill name does not match its SKILL.md or directory.");
+		i !== e.name && J("A bundled skill name does not match its SKILL.md or directory.");
 	}
-	if (o.size !== a.size && Y("The bundle is missing a referenced skill package."), r.version === 2) {
+	if (o.size !== a.size && J("The bundle is missing a referenced skill package."), r.version === 2) {
 		let e = r.chain.agent;
-		if (e === void 0 != (r.agents.length === 0) && Y("The bundle agent inventory does not match the selected native agent."), e !== void 0) {
+		if (e === void 0 != (r.agents.length === 0) && J("The bundle agent inventory does not match the selected native agent."), e !== void 0) {
 			let t = r.agents[0];
-			t !== void 0 && t.name === e.name && t.harness === e.harness && t.agentPath === e.agentPath && t.fingerprint === e.fingerprint && Fp(t.agentPath, t.harness) || Y("The bundled native agent does not match the chain selection.");
-			let n = Ap(t.content);
-			if (c += n.length, l += 1, c > 20971520 || l > 2e3) throw new Cp("BUNDLE_TOO_LARGE", "Bundles are limited to 20 MiB and 2,000 files.");
-			d("sha256").update(n).digest("hex") !== t.fingerprint && Y("The bundled native agent fingerprint does not match its content.");
+			t !== void 0 && t.name === e.name && t.harness === e.harness && t.agentPath === e.agentPath && t.fingerprint === e.fingerprint && Ip(t.agentPath, t.harness) || J("The bundled native agent does not match the chain selection.");
+			let n = jp(t.content);
+			if (c += n.length, l += 1, c > 20971520 || l > 2e3) throw new wp("BUNDLE_TOO_LARGE", "Bundles are limited to 20 MiB and 2,000 files.");
+			d("sha256").update(n).digest("hex") !== t.fingerprint && J("The bundled native agent fingerprint does not match its content.");
 		}
 	}
 	return r;
 }
-function Pp(e) {
+function Fp(e) {
 	return typeof e == "object" && !!e && !Array.isArray(e);
 }
-function Fp(e, t) {
+function Ip(e, t) {
 	let n = e.split("/");
-	return e.startsWith("/") || e.includes("\\") || n.some((e) => e === "" || e === "." || e === ".." || !/^[^\\/:*?"<>|\x00-\x1f]+$/.test(e) || /[. ]$/.test(e) || wp.test(e) || /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(e)) ? !1 : t === "opencode" ? e.endsWith(".md") : e.endsWith(".agent.md");
+	return e.startsWith("/") || e.includes("\\") || n.some((e) => e === "" || e === "." || e === ".." || !/^[^\\/:*?"<>|\x00-\x1f]+$/.test(e) || /[. ]$/.test(e) || Tp.test(e) || /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(e)) ? !1 : t === "opencode" ? e.endsWith(".md") : e.endsWith(".agent.md");
+}
+// src/shared/sync-directory.ts
+async function Lp(t) {
+	let n;
+	try {
+		n = await g(t, e.O_RDONLY), await n.sync();
+	} catch (e) {
+		if (!(e instanceof Error && "code" in e && [
+			"EINVAL",
+			"EISDIR",
+			"EPERM",
+			"ENOTSUP"
+		].includes(String(e.code)))) throw e;
+	} finally {
+		await n?.close();
+	}
 }
 // src/shared/project-claim.ts
-var Ip = "project-claim.sqlite", Lp = 1280266061, Rp = 2, zp = Lp, Bp = 8388608, Vp = 1048576, Hp = "CREATE TABLE claim (id INTEGER PRIMARY KEY CHECK (id = 1), document TEXT NOT NULL)", Up = "CREATE TABLE protocol (id INTEGER PRIMARY KEY CHECK (id = 1), document TEXT NOT NULL)", Wp = "CREATE TABLE lifecycle (id INTEGER PRIMARY KEY CHECK (id = 1), document TEXT NOT NULL)", Gp = I({
+var Rp = "project-claim.sqlite", zp = 1280266061, Bp = 2, Vp = zp, Hp = 8388608, Up = 1048576, Wp = "CREATE TABLE claim (id INTEGER PRIMARY KEY CHECK (id = 1), document TEXT NOT NULL)", Gp = "CREATE TABLE protocol (id INTEGER PRIMARY KEY CHECK (id = 1), document TEXT NOT NULL)", Kp = "CREATE TABLE lifecycle (id INTEGER PRIMARY KEY CHECK (id = 1), document TEXT NOT NULL)", qp = I({
 	version: R(1),
 	projectPath: N(),
 	projectDevice: N().regex(/^[0-9]+$/),
 	projectInode: N().regex(/^[0-9]+$/),
 	enabledAt: z({ offset: !0 })
-}), Kp = I({
+}), Jp = I({
 	version: R(1),
 	projectPath: N(),
 	projectDevice: N().regex(/^[0-9]+$/),
 	projectInode: N().regex(/^[0-9]+$/),
 	retiredAt: z({ offset: !0 })
-}), qp = I({
+}), Yp = I({
 	version: R(1),
 	projectPath: N().refine((e) => i(e) && !e.includes("\0")),
 	projectDevice: N().regex(/^[0-9]+$/),
@@ -8720,67 +8736,67 @@ var Ip = "project-claim.sqlite", Lp = 1280266061, Rp = 2, zp = Lp, Bp = 8388608,
 	kind: L(["managed", "portable"]),
 	runId: N().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),
 	createdAt: z({ offset: !0 })
-}).refine((e) => e.kind !== "portable" || /^[a-f0-9-]{36}$/.test(e.runId)), X = class extends Error {
+}).refine((e) => e.kind !== "portable" || /^[a-f0-9-]{36}$/.test(e.runId)), Y = class extends Error {
 	code;
 	constructor(e, t, n) {
 		super(t, n), this.code = e, this.name = "ProjectClaimError";
 	}
-}, Jp = /* @__PURE__ */ new Map();
-function Yp(e, t) {
+}, Xp = /* @__PURE__ */ new Map();
+function Zp(e, t) {
 	return e instanceof Error && "code" in e && e.code === t;
 }
-function Z(e, t) {
-	return new X("PROJECT_CLAIM_UNSAFE", e, t === void 0 ? void 0 : { cause: t });
+function X(e, t) {
+	return new Y("PROJECT_CLAIM_UNSAFE", e, t === void 0 ? void 0 : { cause: t });
 }
-async function Xp(t) {
-	if (!i(t) || t.includes("\0")) throw Z("The project path must be absolute.");
+async function Qp(t) {
+	if (!i(t) || t.includes("\0")) throw X("The project path must be absolute.");
 	let n = await v(t), r = await b(n, { bigint: !0 });
-	if (!r.isDirectory()) throw Z("The project is not a directory.");
+	if (!r.isDirectory()) throw X("The project is not a directory.");
 	let o = a(n, ".loom");
 	try {
 		await h(o, { mode: 448 });
 	} catch (e) {
-		if (!Yp(e, "EEXIST")) throw e;
+		if (!Zp(e, "EEXIST")) throw e;
 	}
 	let c = await m(o);
-	if (!c.isDirectory() || c.isSymbolicLink() || await v(o) !== o) throw Z("The project coordination directory is unsafe.");
-	await Zp(o);
-	let l = a(o, Ip);
+	if (!c.isDirectory() || c.isSymbolicLink() || await v(o) !== o) throw X("The project coordination directory is unsafe.");
+	await $p(o);
+	let l = a(o, Rp);
 	try {
 		await m(l);
 	} catch (t) {
-		if (!Yp(t, "ENOENT")) throw Z("The project claim database could not be inspected.", t);
+		if (!Zp(t, "ENOENT")) throw X("The project claim database could not be inspected.", t);
 		let n = `${l}.${f()}.tmp`;
 		await (await g(n, e.O_WRONLY | e.O_CREAT | e.O_EXCL | e.O_NOFOLLOW, 384)).close();
 		try {
 			let e = new te(n);
 			try {
-				e.exec(`PRAGMA synchronous = FULL; BEGIN EXCLUSIVE; ${Hp}; ${Up}; ${Wp}; PRAGMA user_version = ${Rp}; PRAGMA application_id = ${zp}; COMMIT`);
+				e.exec(`PRAGMA synchronous = FULL; BEGIN EXCLUSIVE; ${Wp}; ${Gp}; ${Kp}; PRAGMA user_version = ${Bp}; PRAGMA application_id = ${Vp}; COMMIT`);
 			} finally {
 				e.close();
 			}
 			try {
-				await p(n, l), await Qp(o);
+				await p(n, l), await em(o);
 			} catch (e) {
-				if (!Yp(e, "EEXIST")) throw e;
+				if (!Zp(e, "EEXIST")) throw e;
 			}
 		} finally {
 			await x(n);
 		}
-		await Qp(o);
+		await em(o);
 	}
 	let u = await m(l);
 	for (let e = 0; u.nlink !== 1 && e < 10; e++) await new Promise((e) => setTimeout(e, 10)), u = await m(l);
-	if (!u.isFile() || u.isSymbolicLink() || u.nlink !== 1 || u.size > Bp || s(await v(l)) !== l) throw Z("The project claim database is unsafe.");
+	if (!u.isFile() || u.isSymbolicLink() || u.nlink !== 1 || u.size > Hp || s(await v(l)) !== l) throw X("The project claim database is unsafe.");
 	for (let e of [
 		"-journal",
 		"-wal",
 		"-shm"
 	]) try {
 		let t = await m(l + e);
-		if (!t.isFile() || t.isSymbolicLink() || t.nlink !== 1 || t.size > Bp) throw Z("A project claim database sidecar is unsafe.");
+		if (!t.isFile() || t.isSymbolicLink() || t.nlink !== 1 || t.size > Hp) throw X("A project claim database sidecar is unsafe.");
 	} catch (e) {
-		if (!Yp(e, "ENOENT")) throw e;
+		if (!Zp(e, "ENOENT")) throw e;
 	}
 	return {
 		identity: {
@@ -8791,146 +8807,146 @@ async function Xp(t) {
 		path: l
 	};
 }
-async function Zp(t) {
+async function $p(t) {
 	let n;
 	try {
 		n = await g(a(t, ".gitignore"), e.O_RDWR | e.O_CREAT | e.O_APPEND | e.O_NOFOLLOW, 384);
 		let r = await n.stat();
-		if (!r.isFile() || r.nlink !== 1 || r.size > Vp) throw Z("The project ignore file is unsafe.");
+		if (!r.isFile() || r.nlink !== 1 || r.size > Up) throw X("The project ignore file is unsafe.");
 		let i = await n.readFile("utf8");
-		i.split(/\r?\n/).filter((e) => e !== "").at(-1) !== `${Ip}*` && (await n.writeFile(`${i === "" || i.endsWith("\n") ? "" : "\n"}${Ip}*\n`, "utf8"), await n.sync(), await Qp(t));
+		i.split(/\r?\n/).filter((e) => e !== "").at(-1) !== `${Rp}*` && (await n.writeFile(`${i === "" || i.endsWith("\n") ? "" : "\n"}${Rp}*\n`, "utf8"), await n.sync(), await em(t));
 	} catch (e) {
-		throw e instanceof X ? e : Z("The project ignore file could not be updated.", e);
+		throw e instanceof Y ? e : X("The project ignore file could not be updated.", e);
 	} finally {
 		await n?.close();
 	}
 }
-async function Qp(t) {
+async function em(t) {
 	let n = await g(t, e.O_RDONLY);
 	try {
 		try {
 			await n.sync();
 		} catch (e) {
-			if (!Yp(e, "EINVAL") && !Yp(e, "EISDIR") && !Yp(e, "EPERM") && !Yp(e, "ENOTSUP")) throw e;
+			if (!Zp(e, "EINVAL") && !Zp(e, "EISDIR") && !Zp(e, "EPERM") && !Zp(e, "ENOTSUP")) throw e;
 		}
 	} finally {
 		await n.close();
 	}
 }
-function $p(e, t) {
-	if (typeof e != "string" || Buffer.byteLength(e, "utf8") > 4096) throw Z("The project claim is invalid.");
+function tm(e, t) {
+	if (typeof e != "string" || Buffer.byteLength(e, "utf8") > 4096) throw X("The project claim is invalid.");
 	let n;
 	try {
 		n = JSON.parse(e);
 	} catch (e) {
-		throw Z("The project claim is invalid.", e);
+		throw X("The project claim is invalid.", e);
 	}
-	let r = qp.safeParse(n);
-	if (!r.success || r.data.projectPath !== t.projectPath || r.data.projectDevice !== t.projectDevice || r.data.projectInode !== t.projectInode) throw Z("The project claim is invalid or belongs to another project.");
+	let r = Yp.safeParse(n);
+	if (!r.success || r.data.projectPath !== t.projectPath || r.data.projectDevice !== t.projectDevice || r.data.projectInode !== t.projectInode) throw X("The project claim is invalid or belongs to another project.");
 	return r.data;
 }
-async function em(e, t) {
-	return tm(e, t, !1);
+async function nm(e, t) {
+	return rm(e, t, !1);
 }
-async function tm(e, t, n) {
-	if (!i(e) || e.includes("\0")) throw Z("The project path must be absolute.");
+async function rm(e, t, n) {
+	if (!i(e) || e.includes("\0")) throw X("The project path must be absolute.");
 	let r;
 	try {
 		r = await v(e);
 	} catch (e) {
-		throw Z("The project coordination path could not be resolved.", e);
+		throw X("The project coordination path could not be resolved.", e);
 	}
-	let a = (Jp.get(r) ?? Promise.resolve()).then(async () => {
+	let a = (Xp.get(r) ?? Promise.resolve()).then(async () => {
 		let e, i;
 		try {
-			({identity: e, path: i} = await Xp(r));
+			({identity: e, path: i} = await Qp(r));
 		} catch (e) {
-			throw e instanceof X ? e : Z("The project claim database could not be prepared.", e);
+			throw e instanceof Y ? e : X("The project claim database could not be prepared.", e);
 		}
 		let a, o = !1, s = !0, c = !1;
 		try {
 			a = new te(i), a.exec("PRAGMA busy_timeout = 0; PRAGMA synchronous = FULL; BEGIN EXCLUSIVE"), o = !0;
 			let r = a.prepare("PRAGMA user_version").get()?.user_version;
-			if (r !== 1 && r !== Rp) throw Z("The project claim database has an unsupported or incomplete version.");
-			if (a.prepare("PRAGMA application_id").get()?.application_id !== zp) throw Z("The project claim database identity is invalid.");
-			if (a.prepare("PRAGMA journal_mode").get()?.journal_mode !== "delete") throw Z("The project claim database journal mode is unsupported.");
+			if (r !== 1 && r !== Bp) throw X("The project claim database has an unsupported or incomplete version.");
+			if (a.prepare("PRAGMA application_id").get()?.application_id !== Vp) throw X("The project claim database identity is invalid.");
+			if (a.prepare("PRAGMA journal_mode").get()?.journal_mode !== "delete") throw X("The project claim database journal mode is unsupported.");
 			let l = a.prepare("SELECT type, name, sql FROM sqlite_master").all();
-			if (l.length !== (r === 1 ? 2 : 3) || !l.some((e) => e.type === "table" && e.name === "claim" && e.sql === Hp) || !l.some((e) => e.type === "table" && e.name === "protocol" && e.sql === Up) || r === Rp && !l.some((e) => e.type === "table" && e.name === "lifecycle" && e.sql === Wp)) throw Z("The project claim database schema is invalid.");
-			if (a.prepare("PRAGMA quick_check").get()?.quick_check !== "ok") throw Z("The project claim database is corrupt.");
-			r === 1 && a.exec(`${Wp}; PRAGMA user_version = ${Rp}`);
+			if (l.length !== (r === 1 ? 2 : 3) || !l.some((e) => e.type === "table" && e.name === "claim" && e.sql === Wp) || !l.some((e) => e.type === "table" && e.name === "protocol" && e.sql === Gp) || r === Bp && !l.some((e) => e.type === "table" && e.name === "lifecycle" && e.sql === Kp)) throw X("The project claim database schema is invalid.");
+			if (a.prepare("PRAGMA quick_check").get()?.quick_check !== "ok") throw X("The project claim database is corrupt.");
+			r === 1 && a.exec(`${Kp}; PRAGMA user_version = ${Bp}`);
 			let u = a, d = () => {
-				if (!s) throw Z("The project claim transaction is no longer active.");
+				if (!s) throw X("The project claim transaction is no longer active.");
 				let t = u.prepare("SELECT id, document FROM claim").all();
 				if (t.length === 0) return null;
-				if (t.length !== 1 || t[0]?.id !== 1) throw Z("The project claim database contains invalid rows.");
-				return $p(t[0].document, e);
+				if (t.length !== 1 || t[0]?.id !== 1) throw X("The project claim database contains invalid rows.");
+				return tm(t[0].document, e);
 			}, f = () => {
-				if (!s) throw Z("The project claim transaction is no longer active.");
+				if (!s) throw X("The project claim transaction is no longer active.");
 				let t = u.prepare("SELECT id, document FROM protocol").all();
 				if (t.length === 0) return null;
-				if (t.length !== 1 || t[0]?.id !== 1 || typeof t[0].document != "string" || Buffer.byteLength(t[0].document, "utf8") > 4096) throw Z("The project protocol record is invalid.");
+				if (t.length !== 1 || t[0]?.id !== 1 || typeof t[0].document != "string" || Buffer.byteLength(t[0].document, "utf8") > 4096) throw X("The project protocol record is invalid.");
 				let n;
 				try {
 					n = JSON.parse(t[0].document);
 				} catch (e) {
-					throw Z("The project protocol record is invalid.", e);
+					throw X("The project protocol record is invalid.", e);
 				}
-				let r = Gp.safeParse(n);
-				if (!r.success || r.data.projectPath !== e.projectPath || r.data.projectDevice !== e.projectDevice || r.data.projectInode !== e.projectInode) throw Z("The project protocol record is invalid or belongs to another project.");
+				let r = qp.safeParse(n);
+				if (!r.success || r.data.projectPath !== e.projectPath || r.data.projectDevice !== e.projectDevice || r.data.projectInode !== e.projectInode) throw X("The project protocol record is invalid or belongs to another project.");
 				return r.data;
 			}, p = () => {
-				if (!s) throw Z("The project claim transaction is no longer active.");
+				if (!s) throw X("The project claim transaction is no longer active.");
 				let t = u.prepare("SELECT id, document FROM lifecycle").all();
 				if (t.length === 0) return !1;
-				if (t.length !== 1 || t[0]?.id !== 1 || typeof t[0].document != "string" || Buffer.byteLength(t[0].document, "utf8") > 4096) throw Z("The project retirement record is invalid.");
+				if (t.length !== 1 || t[0]?.id !== 1 || typeof t[0].document != "string" || Buffer.byteLength(t[0].document, "utf8") > 4096) throw X("The project retirement record is invalid.");
 				let n;
 				try {
 					n = JSON.parse(t[0].document);
 				} catch (e) {
-					throw Z("The project retirement record is invalid.", e);
+					throw X("The project retirement record is invalid.", e);
 				}
-				let r = Kp.safeParse(n);
-				if (!r.success || r.data.projectPath !== e.projectPath || r.data.projectDevice !== e.projectDevice || r.data.projectInode !== e.projectInode) throw Z("The project retirement record is invalid or belongs to another project.");
+				let r = Jp.safeParse(n);
+				if (!r.success || r.data.projectPath !== e.projectPath || r.data.projectDevice !== e.projectDevice || r.data.projectInode !== e.projectInode) throw X("The project retirement record is invalid or belongs to another project.");
 				return !0;
 			}, m = () => {
-				if (p()) throw new X("PROJECT_CLAIM_RETIRED", "This workspace is being removed and cannot start or change runs.");
+				if (p()) throw new Y("PROJECT_CLAIM_RETIRED", "This workspace is being removed and cannot start or change runs.");
 			}, h = {
 				identity: e,
 				protocol: f,
 				enableProtocol(t) {
 					if (m(), f() !== null) return;
-					let n = Gp.safeParse({
+					let n = qp.safeParse({
 						version: 1,
 						...e,
 						enabledAt: t
 					});
-					if (!n.success) throw Z("The project protocol record is invalid.");
+					if (!n.success) throw X("The project protocol record is invalid.");
 					u.prepare("INSERT INTO protocol (id, document) VALUES (1, ?)").run(JSON.stringify(n.data));
 				},
 				read: d,
 				acquire(t) {
 					m();
-					let n = qp.safeParse(t);
-					if (!n.success || n.data.projectPath !== e.projectPath || n.data.projectDevice !== e.projectDevice || n.data.projectInode !== e.projectInode) throw Z("The new project claim is invalid.");
-					if (d() !== null) throw new X("PROJECT_CLAIM_CONFLICT", "Another operation already claims this project.");
+					let n = Yp.safeParse(t);
+					if (!n.success || n.data.projectPath !== e.projectPath || n.data.projectDevice !== e.projectDevice || n.data.projectInode !== e.projectInode) throw X("The new project claim is invalid.");
+					if (d() !== null) throw new Y("PROJECT_CLAIM_CONFLICT", "Another operation already claims this project.");
 					u.prepare("INSERT INTO claim (id, document) VALUES (1, ?)").run(JSON.stringify(n.data));
 				},
 				release(e) {
 					m();
 					let t = d();
-					if (t === null || t.kind !== e.kind || t.runId !== e.runId) throw new X("PROJECT_CLAIM_MISMATCH", "The project claim does not match this run.");
+					if (t === null || t.kind !== e.kind || t.runId !== e.runId) throw new Y("PROJECT_CLAIM_MISMATCH", "The project claim does not match this run.");
 					u.prepare("DELETE FROM claim WHERE id = 1").run();
 				},
 				retired: p,
 				retire(t) {
 					if (p()) return;
-					if (d() !== null) throw new X("PROJECT_CLAIM_CONFLICT", "A claimed project cannot be retired.");
-					let n = Kp.safeParse({
+					if (d() !== null) throw new Y("PROJECT_CLAIM_CONFLICT", "A claimed project cannot be retired.");
+					let n = Jp.safeParse({
 						version: 1,
 						...e,
 						retiredAt: t
 					});
-					if (!n.success) throw Z("The project retirement record is invalid.");
+					if (!n.success) throw X("The project retirement record is invalid.");
 					u.prepare("INSERT INTO lifecycle (id, document) VALUES (1, ?)").run(JSON.stringify(n.data));
 				}
 			};
@@ -8948,16 +8964,16 @@ async function tm(e, t, n) {
 			} catch (t) {
 				throw AggregateError([e, t], "The project claim transaction and rollback failed.");
 			}
-			throw c || e instanceof X ? e : typeof e == "object" && e && "errcode" in e && typeof e.errcode == "number" && (e.errcode & 255) == 5 ? new X("PROJECT_CLAIM_BUSY", "Another process is updating the project claim.", { cause: e }) : Z("The project claim transaction failed.", e);
+			throw c || e instanceof Y ? e : typeof e == "object" && e && "errcode" in e && typeof e.errcode == "number" && (e.errcode & 255) == 5 ? new Y("PROJECT_CLAIM_BUSY", "Another process is updating the project claim.", { cause: e }) : X("The project claim transaction failed.", e);
 		} finally {
 			a?.close();
 		}
 	}), o = a.then(() => void 0, () => void 0);
-	return Jp.set(r, o), o.then(() => {
-		Jp.get(r) === o && Jp.delete(r);
+	return Xp.set(r, o), o.then(() => {
+		Xp.get(r) === o && Xp.delete(r);
 	}), a;
 }
-var nm = 8192, rm = 1e3, im = /^[a-f0-9-]{36}$/, am = ac(N().regex(/^[A-Za-z][A-Za-z0-9_]*$/), N().max(16384)), om = I({
+var im = 8192, am = 1e3, om = /^[a-f0-9-]{36}$/, sm = ac(N().regex(/^[A-Za-z][A-Za-z0-9_]*$/), N().max(16384)), cm = I({
 	number: Vs().int().positive(),
 	status: L([
 		"running",
@@ -8968,17 +8984,17 @@ var nm = 8192, rm = 1e3, im = /^[a-f0-9-]{36}$/, am = ac(N().regex(/^[A-Za-z][A-
 	]),
 	startedAt: z({ offset: !0 }),
 	finishedAt: z({ offset: !0 }).nullable(),
-	summary: N().max(nm).nullable(),
+	summary: N().max(im).nullable(),
 	reason: N().max(2e3).nullable()
-}), sm = I({
+}), lm = I({
 	version: R(1),
-	id: N().regex(im),
+	id: N().regex(om),
 	revision: Vs().int().positive(),
 	projectPath: N().min(1),
 	bundleFingerprint: N().regex(/^[a-f0-9]{64}$/),
 	bundle: kc((e) => {
 		try {
-			return Np(e), !0;
+			return Pp(e), !0;
 		} catch {
 			return !1;
 		}
@@ -9006,7 +9022,7 @@ var nm = 8192, rm = 1e3, im = /^[a-f0-9-]{36}$/, am = ac(N().regex(/^[A-Za-z][A-
 		description: N().trim().min(1).max(500),
 		confirmed: Gs()
 	}),
-	resolvedInputs: am,
+	resolvedInputs: sm,
 	skillFingerprintVersion: R(2).optional(),
 	installedSkills: F(I({
 		name: N(),
@@ -9028,18 +9044,18 @@ var nm = 8192, rm = 1e3, im = /^[a-f0-9-]{36}$/, am = ac(N().regex(/^[A-Za-z][A-
 	steps: F(I({
 		id: N().min(1),
 		index: Vs().int().min(0),
-		attempts: F(om).max(50)
-	})).min(1).max(rm),
+		attempts: F(cm).max(50)
+	})).min(1).max(am),
 	createdAt: z({ offset: !0 }),
 	updatedAt: z({ offset: !0 })
 });
-function cm(e, t, n) {
-	let r = sm.safeParse(e);
+function um(e, t, n) {
+	let r = lm.safeParse(e);
 	if (!r.success || r.data.projectPath !== t || r.data.id !== n) return null;
-	let i = Np(r.data.bundle);
+	let i = Pp(r.data.bundle);
 	return d("sha256").update(JSON.stringify(i)).digest("hex") !== r.data.bundleFingerprint || i.chain.steps.length !== r.data.steps.length || i.chain.steps.some((e, t) => r.data.steps[t]?.id !== e.id) ? null : r.data;
 }
-var lm = L(["supervised", "automatic"]), um = L([
+var dm = L(["supervised", "automatic"]), fm = L([
 	"starting",
 	"running",
 	"awaiting-user",
@@ -9048,66 +9064,66 @@ var lm = L(["supervised", "automatic"]), um = L([
 	"completed",
 	"aborted",
 	"interrupted"
-]), dm = L([
+]), pm = L([
 	"pending",
 	"running",
 	"done",
 	"failed",
 	"skipped",
 	"interrupted"
-]), fm = L([
+]), mm = L([
 	"none",
 	"native",
 	"handoff"
-]), pm = L([
+]), hm = L([
 	"unknown",
 	"not-observable",
 	"observed",
 	"not-observed"
-]), mm = 32768, hm = 2e3, gm = N().trim().min(1), _m = z({ offset: !0 }), vm = N().max(hm).nullable().default(null);
+]), gm = 32768, _m = 2e3, vm = N().trim().min(1), ym = z({ offset: !0 }), bm = N().max(_m).nullable().default(null);
 ac(N(), N().nullable());
-var ym = N().refine(Mm, { message: `A step tail must be at most 200 lines and ${String(mm)} bytes.` }).default(""), bm = {
-	id: gm,
+var xm = N().refine(Pm, { message: `A step tail must be at most 200 lines and ${String(gm)} bytes.` }).default(""), Sm = {
+	id: vm,
 	index: Vs().int().min(0),
-	label: gm.nullable().default(null),
-	status: dm,
-	startedAt: _m.nullable().default(null),
-	finishedAt: _m.nullable().default(null),
+	label: vm.nullable().default(null),
+	status: pm,
+	startedAt: ym.nullable().default(null),
+	finishedAt: ym.nullable().default(null),
 	exitCode: Vs().int().nullable().default(null),
-	sessionId: gm.nullable().default(null),
-	forkMechanism: fm,
-	skillObservation: pm.default("unknown"),
-	tail: ym,
-	reason: vm
-}, xm = tc("kind", [I({
-	...bm,
+	sessionId: vm.nullable().default(null),
+	forkMechanism: mm,
+	skillObservation: hm.default("unknown"),
+	tail: xm,
+	reason: bm
+}, Cm = tc("kind", [I({
+	...Sm,
 	kind: R("skill").optional(),
-	skillName: gm
+	skillName: vm
 }), I({
-	...bm,
+	...Sm,
 	kind: R("instruction"),
 	skillName: Ys().optional()
-})]), Sm = I({
+})]), wm = I({
 	version: R(1),
-	id: gm,
-	projectId: gm,
-	chainId: gm,
-	harness: L(Ef),
-	mode: lm,
-	sessionMode: Gf,
-	chainSnapshot: J,
+	id: vm,
+	projectId: vm,
+	chainId: vm,
+	harness: L(Df),
+	mode: dm,
+	sessionMode: Kf,
+	chainSnapshot: q,
 	resolvedInputs: ac(N(), N()).default({}),
-	status: um,
+	status: fm,
 	currentStepIndex: Vs().int().min(0),
-	createdAt: _m,
-	updatedAt: _m,
-	startedAt: _m.nullable().default(null),
-	finishedAt: _m.nullable().default(null),
-	sessionId: gm.nullable().default(null),
-	forkMechanism: fm,
-	steps: F(xm).min(1),
-	reason: vm
-}), Cm = {
+	createdAt: ym,
+	updatedAt: ym,
+	startedAt: ym.nullable().default(null),
+	finishedAt: ym.nullable().default(null),
+	sessionId: vm.nullable().default(null),
+	forkMechanism: mm,
+	steps: F(Cm).min(1),
+	reason: bm
+}), Tm = {
 	STEP_COUNT_MISMATCH: "run_step_count_mismatch",
 	STEP_ID_MISMATCH: "run_step_id_mismatch",
 	STEP_INDEX_MISMATCH: "run_step_index_mismatch",
@@ -9116,82 +9132,82 @@ var ym = N().refine(Mm, { message: `A step tail must be at most 200 lines and ${
 	INPUT_UNDECLARED: "run_input_undeclared",
 	INPUT_REQUIRED: "run_input_required",
 	TAIL_TOO_LARGE: "run_tail_too_large"
-}, wm = class extends Error {
+}, Em = class extends Error {
 	code;
 	details;
 	constructor(e, t, n = {}, r = {}) {
 		super(t, r.cause === void 0 ? void 0 : { cause: r.cause }), this.name = new.target.name, this.code = e, this.details = n;
 	}
-}, Tm = class extends wm {
+}, Dm = class extends Em {
 	issues;
 	constructor(e) {
 		super("RUN_INVALID", "The run record is not valid.", { issues: e }), this.issues = e;
 	}
-}, Em = class extends wm {
+}, Om = class extends Em {
 	constructor(e) {
 		super("RUN_UNSUPPORTED_VERSION", "The run uses an unsupported version.", {
-			version: Fm(e),
+			version: Lm(e),
 			supportedVersion: 1
 		});
 	}
 };
-function Dm(e) {
-	if (!Pm(e)) return e;
+function km(e) {
+	if (!Im(e)) return e;
 	let t = e.chainSnapshot;
 	return {
 		...e,
 		...Object.hasOwn(e, "version") ? {} : { version: 1 },
-		...t === void 0 ? {} : { chainSnapshot: lp(t) }
+		...t === void 0 ? {} : { chainSnapshot: up(t) }
 	};
 }
-function Om(e) {
-	if (Pm(e) && Object.hasOwn(e, "version") && e.version !== 1) throw new Em(e.version);
-	return km(Dm(e));
+function Am(e) {
+	if (Im(e) && Object.hasOwn(e, "version") && e.version !== 1) throw new Om(e.version);
+	return jm(km(e));
 }
-function km(e) {
-	let t = Sm.safeParse(e);
-	if (!t.success) throw new Tm(Nm(t.error.issues));
+function jm(e) {
+	let t = wm.safeParse(e);
+	if (!t.success) throw new Dm(Fm(t.error.issues));
 	let n = t.data, r = [], i = n.chainSnapshot.steps;
 	n.steps.length !== i.length && r.push({
 		path: "steps",
-		code: Cm.STEP_COUNT_MISMATCH,
+		code: Tm.STEP_COUNT_MISMATCH,
 		message: `The run has ${String(n.steps.length)} step records for ${String(i.length)} snapshot steps.`
 	}), n.steps.forEach((e, t) => {
 		let n = i[t];
 		n !== void 0 && (e.index !== t && r.push({
 			path: `steps.${String(t)}.index`,
-			code: Cm.STEP_INDEX_MISMATCH,
+			code: Tm.STEP_INDEX_MISMATCH,
 			stepId: e.id,
 			stepIndex: t,
 			message: `Step record ${String(t)} records index ${String(e.index)}.`
 		}), e.id !== n.id && r.push({
 			path: `steps.${String(t)}.id`,
-			code: Cm.STEP_ID_MISMATCH,
+			code: Tm.STEP_ID_MISMATCH,
 			stepId: e.id,
 			stepIndex: t,
 			message: `Step record ${String(t)} does not match the frozen snapshot step id.`
 		}), (e.skillName !== n.skillName || e.kind === "instruction" != (n.kind === "instruction")) && r.push({
 			path: `steps.${String(t)}.skillName`,
-			code: Cm.STEP_SKILL_MISMATCH,
+			code: Tm.STEP_SKILL_MISMATCH,
 			stepId: e.id,
 			stepIndex: t,
 			message: `Step record ${String(t)} does not match the frozen snapshot skill.`
-		}), Mm(e.tail) || r.push({
+		}), Pm(e.tail) || r.push({
 			path: `steps.${String(t)}.tail`,
-			code: Cm.TAIL_TOO_LARGE,
+			code: Tm.TAIL_TOO_LARGE,
 			stepId: e.id,
 			stepIndex: t,
-			message: `The step tail exceeds 200 lines or ${String(mm)} bytes.`
+			message: `The step tail exceeds 200 lines or ${String(gm)} bytes.`
 		}));
 	}), (n.currentStepIndex < 0 || n.currentStepIndex >= n.steps.length) && r.push({
 		path: "currentStepIndex",
-		code: Cm.CURRENT_STEP_OUT_OF_RANGE,
+		code: Tm.CURRENT_STEP_OUT_OF_RANGE,
 		message: "The current step index is outside the frozen step list."
 	});
 	let a = new Map(n.chainSnapshot.inputs.map((e) => [e.name, e]));
 	for (let e of Object.keys(n.resolvedInputs)) a.has(e) || r.push({
 		path: `resolvedInputs.${e}`,
-		code: Cm.INPUT_UNDECLARED,
+		code: Tm.INPUT_UNDECLARED,
 		inputName: e,
 		message: `Resolved input "${e}" is not declared by the frozen chain.`
 	});
@@ -9199,34 +9215,34 @@ function km(e) {
 		let t = n.resolvedInputs[e.name] ?? "";
 		e.required && t.trim() === "" && r.push({
 			path: `resolvedInputs.${e.name}`,
-			code: Cm.INPUT_REQUIRED,
+			code: Tm.INPUT_REQUIRED,
 			inputName: e.name,
 			message: `Required input "${e.name}" is unresolved.`
 		});
 	}
-	if (r.length > 0) throw new Tm(r);
+	if (r.length > 0) throw new Dm(r);
 	return n;
 }
-function Am(e) {
+function Mm(e) {
 	return e === "" ? 0 : e.split("\n").length;
 }
-function jm(e) {
+function Nm(e) {
 	return Buffer.byteLength(e, "utf8");
 }
-function Mm(e) {
-	return Am(e) <= 200 && jm(e) <= 32768;
+function Pm(e) {
+	return Mm(e) <= 200 && Nm(e) <= 32768;
 }
-function Nm(e) {
+function Fm(e) {
 	return e.map((e) => ({
 		path: e.path.map((e) => String(e)).join("."),
 		code: e.code,
 		message: e.message
 	}));
 }
-function Pm(e) {
+function Im(e) {
 	return typeof e == "object" && !!e && !Array.isArray(e);
 }
-function Fm(e) {
+function Lm(e) {
 	return e === null || [
 		"string",
 		"number",
@@ -9234,28 +9250,28 @@ function Fm(e) {
 	].includes(typeof e) ? e : Array.isArray(e) ? "array" : typeof e;
 }
 // src/shared/project-run-records.ts
-var Im = 1e3, Lm = 67108864, Rm = 31457280, zm = /^[a-z0-9][a-z0-9_-]{0,63}$/, Bm = class extends Error {
+var Rm = 1e3, zm = 67108864, Bm = 31457280, Vm = /^[a-z0-9][a-z0-9_-]{0,63}$/, Hm = class extends Error {
 	code = "PROJECT_RUN_RECORDS_UNSAFE";
 	constructor(e, t) {
 		super(e, t), this.name = "ProjectRunRecordsError";
 	}
 };
-function Vm(e) {
+function Um(e) {
 	return e instanceof Error && "code" in e && e.code === "ENOENT";
 }
-async function Hm(t, n) {
+async function Wm(t, n) {
 	let r = await g(t, e.O_RDONLY | e.O_NOFOLLOW | e.O_NONBLOCK);
 	try {
-		let e = await r.stat({ bigint: !0 }), t = Math.min(Rm, n);
-		if (!e.isFile() || e.nlink !== 1n || e.size > BigInt(t)) throw new Bm("A project run record is unsafe or exceeds the scan budget.");
+		let e = await r.stat({ bigint: !0 }), t = Math.min(Bm, n);
+		if (!e.isFile() || e.nlink !== 1n || e.size > BigInt(t)) throw new Hm("A project run record is unsafe or exceeds the scan budget.");
 		let i = Buffer.alloc(Number(e.size)), a = 0;
 		for (; a < i.length;) {
 			let { bytesRead: e } = await r.read(i, a, i.length - a, a);
-			if (e === 0) throw new Bm("A project run record changed during inspection.");
+			if (e === 0) throw new Hm("A project run record changed during inspection.");
 			a += e;
 		}
 		let o = await r.stat({ bigint: !0 });
-		if (e.dev !== o.dev || e.ino !== o.ino || e.size !== o.size || e.mtimeNs !== o.mtimeNs || e.ctimeNs !== o.ctimeNs) throw new Bm("A project run record changed during inspection.");
+		if (e.dev !== o.dev || e.ino !== o.ino || e.size !== o.size || e.mtimeNs !== o.mtimeNs || e.ctimeNs !== o.ctimeNs) throw new Hm("A project run record changed during inspection.");
 		let s = new TextDecoder("utf-8", { fatal: !0 }).decode(i);
 		return {
 			document: JSON.parse(s),
@@ -9266,28 +9282,28 @@ async function Hm(t, n) {
 		await r.close();
 	}
 }
-async function Um(e) {
+async function Gm(e) {
 	let t = [], n = 0;
 	for (let r of ["managed", "portable"]) {
 		let i = a(e, ".loom", r === "managed" ? "runs" : "portable-runs"), o;
 		try {
 			o = await m(i);
 		} catch (e) {
-			if (Vm(e)) continue;
-			throw new Bm("The project run directory could not be inspected.", { cause: e });
+			if (Um(e)) continue;
+			throw new Hm("The project run directory could not be inspected.", { cause: e });
 		}
-		if (!o.isDirectory() || o.isSymbolicLink() || await v(i) !== i) throw new Bm("The project run directory is unsafe.");
+		if (!o.isDirectory() || o.isSymbolicLink() || await v(i) !== i) throw new Hm("The project run directory is unsafe.");
 		let s = await _(i);
 		for await (let o of s) {
 			if (!o.name.endsWith(".json")) continue;
 			let s = o.name.slice(0, -5);
-			if (!(r === "managed" ? zm : im).test(s)) throw new Bm("A project run record has an invalid name.");
-			if (t.length >= Im) throw new Bm("The project run record count exceeds the scan budget.");
+			if (!(r === "managed" ? Vm : om).test(s)) throw new Hm("A project run record has an invalid name.");
+			if (t.length >= Rm) throw new Hm("The project run record count exceeds the scan budget.");
 			try {
-				let c = await Hm(a(i, o.name), Lm - n);
+				let c = await Wm(a(i, o.name), zm - n);
 				if (n += c.bytes, r === "managed") {
-					let e = Om(c.document);
-					if (e.id !== s) throw new Bm("A project run record id does not match its filename.");
+					let e = Am(c.document);
+					if (e.id !== s) throw new Hm("A project run record id does not match its filename.");
 					t.push({
 						kind: r,
 						runId: s,
@@ -9296,8 +9312,8 @@ async function Um(e) {
 						unresolved: e.status !== "completed" && e.status !== "aborted" || e.steps.some((e) => e.status === "running")
 					});
 				} else {
-					let n = cm(c.document, e, s);
-					if (n === null) throw new Bm("A portable run record is invalid.");
+					let n = um(c.document, e, s);
+					if (n === null) throw new Hm("A portable run record is invalid.");
 					let i = n.resumeRequired || n.steps.some((e) => e.attempts.some((e) => e.status === "running"));
 					t.push({
 						kind: r,
@@ -9308,47 +9324,47 @@ async function Um(e) {
 					});
 				}
 			} catch (e) {
-				throw e instanceof Bm ? e : new Bm("A project run record could not be validated.", { cause: e });
+				throw e instanceof Hm ? e : new Hm("A project run record could not be validated.", { cause: e });
 			}
 		}
 	}
 	return t.sort((e, t) => e.kind.localeCompare(t.kind) || e.runId.localeCompare(t.runId));
 }
 // src/shared/project-coordination.ts
-var Wm = class extends Error {
+var Km = class extends Error {
 	code;
 	records;
 	constructor(e, t = []) {
 		super(e === "PROJECT_PROTOCOL_NOT_ENABLED" ? "Review and enable coordinated project execution before starting a run." : e === "PROJECT_REVIEW_STALE" ? "Project coordination evidence changed; review it again." : e === "PROJECT_CONFIRMATION_REQUIRED" ? "Confirm that prior work, processes, and older clients have stopped." : "Existing project runs have unresolved ownership and require explicit reconciliation."), this.code = e, this.records = t, this.name = "ProjectCoordinationError";
 	}
 };
-async function Gm(e, t, n, r = !1) {
+async function qm(e, t, n, r = !1) {
 	let i = performance.now() + 1e3;
 	for (;;) {
 		let a = !1;
 		try {
-			return await em(e, async (e) => {
-				if (a = !0, e.protocol() === null) throw new Wm("PROJECT_PROTOCOL_NOT_ENABLED");
+			return await nm(e, async (e) => {
+				if (a = !0, e.protocol() === null) throw new Km("PROJECT_PROTOCOL_NOT_ENABLED");
 				let r = e.read();
-				if (r === null || r.kind !== t.kind || r.runId !== t.runId) throw new X("PROJECT_CLAIM_MISMATCH", "The project claim does not match this run.");
+				if (r === null || r.kind !== t.kind || r.runId !== t.runId) throw new Y("PROJECT_CLAIM_MISMATCH", "The project claim does not match this run.");
 				return n(r);
 			});
 		} catch (e) {
 			let t = i - performance.now();
-			if (!r || a || !(e instanceof X) || e.code !== "PROJECT_CLAIM_BUSY" || t <= 0) throw e;
+			if (!r || a || !(e instanceof Y) || e.code !== "PROJECT_CLAIM_BUSY" || t <= 0) throw e;
 			await new Promise((e) => setTimeout(e, Math.min(25, t)));
 		}
 	}
 }
-async function Km(e, t, n, r, i = /* @__PURE__ */ new Date()) {
-	let a = await em(e, async (e) => {
-		if (e.read() !== null) throw new X("PROJECT_CLAIM_CONFLICT", "Another operation already claims this project.");
+async function Jm(e, t, n, r, i = /* @__PURE__ */ new Date()) {
+	let a = await nm(e, async (e) => {
+		if (e.read() !== null) throw new Y("PROJECT_CLAIM_CONFLICT", "Another operation already claims this project.");
 		if (e.protocol() === null) return {
 			kind: "legacy",
 			value: await r()
 		};
-		let a = (await Um(e.identity.projectPath)).filter((e) => e.unresolved);
-		if (a.length > 0) throw new Wm("PROJECT_RECONCILIATION_REQUIRED", a);
+		let a = (await Gm(e.identity.projectPath)).filter((e) => e.unresolved);
+		if (a.length > 0) throw new Km("PROJECT_RECONCILIATION_REQUIRED", a);
 		return e.acquire({
 			version: 1,
 			...e.identity,
@@ -9357,24 +9373,190 @@ async function Km(e, t, n, r, i = /* @__PURE__ */ new Date()) {
 			createdAt: i.toISOString()
 		}), { kind: "claimed" };
 	});
-	return a.kind === "legacy" ? a.value : Gm(e, {
+	return a.kind === "legacy" ? a.value : qm(e, {
 		kind: t,
 		runId: n
 	}, r, !0);
 }
-async function qm(e, t, n) {
-	return em(e, async (e) => {
+async function Ym(e, t, n) {
+	return nm(e, async (e) => {
 		let r = e.protocol(), i = e.read();
 		if (r !== null) {
-			if (i === null || i.kind !== t.kind || i.runId !== t.runId) throw new X("PROJECT_CLAIM_MISMATCH", "The project claim does not match this run.");
-		} else if (i !== null) throw new X("PROJECT_CLAIM_CONFLICT", "Another operation already claims this project.");
+			if (i === null || i.kind !== t.kind || i.runId !== t.runId) throw new Y("PROJECT_CLAIM_MISMATCH", "The project claim does not match this run.");
+		} else if (i !== null) throw new Y("PROJECT_CLAIM_CONFLICT", "Another operation already claims this project.");
 		return n(i);
 	});
 }
+// src/portable/installed-modes.ts
+var Xm = 2097152, Zm = I({
+	version: R(1),
+	installationId: Cs(),
+	packagePath: N().max(512),
+	files: F(I({
+		path: N().min(1).max(512),
+		executable: Gs(),
+		sha256: N().regex(/^[a-f0-9]{64}$/)
+	})).min(1).max(Sp)
+});
+function Z() {
+	throw new wp("BUNDLE_SOURCE_UNAVAILABLE", "Installed executable-mode metadata is missing, unsafe, or changed. Restore the complete reviewed package before retrying.");
+}
+function Qm(e) {
+	(n(r(e)) !== "skills" || n(r(r(e))) !== ".agents") && Z();
+	let t = s(e, "../../.."), i = o(t, e).split(c).join("/"), l = d("sha256").update(i).digest("hex");
+	return {
+		project: t,
+		packagePath: i,
+		metadata: a(e, ".loom"),
+		registry: a(t, ".loom", "package-modes"),
+		key: `${l}.json`
+	};
+}
+function $m(e) {
+	return e instanceof Error && "code" in e && e.code === "ENOENT";
+}
+async function eh(e) {
+	try {
+		await h(e, { mode: 448 });
+	} catch (e) {
+		if (!(e instanceof Error && "code" in e && e.code === "EEXIST")) throw e;
+	}
+	let t = await m(e);
+	(!t.isDirectory() || t.isSymbolicLink() || await v(e) !== e) && Z();
+}
+async function th(t) {
+	let n;
+	try {
+		n = await m(t, { bigint: !0 });
+	} catch (e) {
+		if ($m(e)) return null;
+		throw e;
+	}
+	(!n.isFile() || n.isSymbolicLink() || n.nlink !== 1n || n.size > BigInt(Xm)) && Z();
+	let r = await g(t, e.O_RDONLY | e.O_NOFOLLOW | e.O_NONBLOCK);
+	try {
+		let e = await r.stat({ bigint: !0 });
+		e.dev === n.dev && e.ino === n.ino && e.isFile() && e.size === n.size || Z();
+		let i = Buffer.alloc(Number(e.size) + 1), a = 0;
+		for (; a < i.length;) {
+			let { bytesRead: e } = await r.read(i, a, i.length - a, a);
+			if (e === 0) break;
+			a += e;
+		}
+		let o = await r.stat({ bigint: !0 }), s = await m(t, { bigint: !0 });
+		(a !== Number(e.size) || o.size !== e.size || o.mtimeNs !== e.mtimeNs || o.ctimeNs !== e.ctimeNs || s.dev !== e.dev || s.ino !== e.ino || s.isSymbolicLink() || s.nlink !== 1n) && Z();
+		try {
+			return new TextDecoder("utf-8", { fatal: !0 }).decode(i.subarray(0, a));
+		} catch {
+			Z();
+		}
+	} finally {
+		await r.close();
+	}
+}
+async function nh(t, n) {
+	let i = a(r(t), `.modes-${f()}.tmp`), o = await g(i, e.O_WRONLY | e.O_CREAT | e.O_EXCL | e.O_NOFOLLOW, 384);
+	try {
+		try {
+			await o.writeFile(n, "utf8"), await o.sync();
+		} finally {
+			await o.close();
+		}
+		await p(i, t);
+	} finally {
+		await x(i);
+	}
+}
+async function rh(e, t) {
+	let n = Qm(e), r = Zm.parse({
+		version: 1,
+		installationId: f(),
+		packagePath: n.packagePath,
+		files: t.map((e) => ({
+			path: e.path,
+			executable: e.executable,
+			sha256: d("sha256").update(e.content).digest("hex")
+		})).sort((e, t) => e.path < t.path ? -1 : +(e.path > t.path))
+	});
+	for (let e of r.files) Ap(e.path);
+	new Set(r.files.map((e) => e.path.toLowerCase())).size !== t.length && Z();
+	let i = `${JSON.stringify(r)}\n`;
+	Buffer.byteLength(i) > Xm && Z(), await eh(a(n.project, ".loom")), await eh(n.registry), await eh(n.metadata);
+	let o = {
+		registryPath: a(n.registry, n.key),
+		content: i
+	};
+	await nh(o.registryPath, i);
+	try {
+		await nh(a(n.metadata, "installed-modes.json"), i), await Lp(n.registry), await Lp(n.metadata), await Lp(a(n.project, ".loom")), await Lp(e), await Lp(n.project);
+	} catch (e) {
+		throw await ih(o), e;
+	}
+	return o;
+}
+async function ih(e) {
+	let t = r(e.registryPath), n = await m(t);
+	(!n.isDirectory() || n.isSymbolicLink() || await v(t) !== t) && Z();
+	let i = await th(e.registryPath);
+	i !== null && (i !== e.content && Z(), await x(e.registryPath), await Lp(r(e.registryPath)));
+}
+async function ah(e) {
+	if (n(r(e)) !== "skills" || n(r(r(e))) !== ".agents") return null;
+	let t = Qm(e);
+	for (let e of [
+		a(t.project, ".loom"),
+		t.registry,
+		t.metadata
+	]) try {
+		let t = await m(e);
+		(!t.isDirectory() || t.isSymbolicLink() || await v(e) !== e) && Z();
+	} catch (e) {
+		if (!$m(e)) throw e;
+	}
+	let [i, o] = await Promise.all([th(a(t.metadata, "installed-modes.json")), th(a(t.registry, t.key))]);
+	if (i === null && o === null) {
+		try {
+			await m(t.metadata), Z();
+		} catch (e) {
+			if (!$m(e)) throw e;
+		}
+		if (process.platform === "win32") {
+			try {
+				await m(a(e, "SKILL.md"));
+			} catch (e) {
+				if ($m(e)) return null;
+				throw e;
+			}
+			Z();
+		}
+		return null;
+	}
+	(i === null || o === null || i !== o) && Z();
+	for await (let e of await _(t.metadata)) e.name !== "installed-modes.json" && Z();
+	let s;
+	try {
+		s = JSON.parse(i);
+	} catch {
+		Z();
+	}
+	let c = Zm.safeParse(s);
+	c.success && c.data.packagePath === t.packagePath || Z();
+	let l = /* @__PURE__ */ new Set();
+	for (let e of c.data.files) {
+		Ap(e.path);
+		let t = e.path.toLowerCase();
+		l.has(t) && Z(), l.add(t);
+	}
+	return c.data;
+}
+function oh(e, t, n) {
+	let r = e.files.find((e) => e.path === t);
+	return (r === void 0 || process.platform !== "win32" && r.executable !== n) && Z(), r.executable;
+}
 // src/portable/install-skill.ts
-async function Jm(t, n, i = { directoryMode: 448 }) {
-	if (!n.some((e) => e.path === "SKILL.md")) throw new Cp("BUNDLE_INVALID", "Each skill package must include SKILL.md.");
-	for (let e of n) kp(e.path);
+async function sh(t, n, i = { directoryMode: 448 }) {
+	if (!n.some((e) => e.path === "SKILL.md")) throw new wp("BUNDLE_INVALID", "Each skill package must include SKILL.md.");
+	for (let e of n) Ap(e.path);
 	async function s(e) {
 		let n = t;
 		for (let s of o(t, r(e)).split(c).filter(Boolean)) {
@@ -9385,33 +9567,42 @@ async function Jm(t, n, i = { directoryMode: 448 }) {
 				if (!(e instanceof Error && "code" in e && e.code === "EEXIST")) throw e;
 			}
 			let e = await m(n);
-			if (!e.isDirectory() || e.isSymbolicLink() || await v(n) !== n) throw new Cp("BUNDLE_SOURCE_UNAVAILABLE", "A skill package directory changed during installation.");
+			if (!e.isDirectory() || e.isSymbolicLink() || await v(n) !== n) throw new wp("BUNDLE_SOURCE_UNAVAILABLE", "A skill package directory changed during installation.");
 		}
 	}
 	async function l(t, n) {
 		let r = await g(t, e.O_WRONLY | e.O_CREAT | e.O_EXCL | e.O_NOFOLLOW, n.executable ? 493 : 420);
 		try {
-			await r.writeFile(Ap(n.content)), i.enforceFileMode && await r.chmod(n.executable ? 493 : 420), await r.sync();
+			await r.writeFile(jp(n.content)), i.enforceFileMode && await r.chmod(n.executable ? 493 : 420), await r.sync();
 		} finally {
 			await r.close();
 		}
 	}
-	let u = n.filter((e) => e.path.split("/").at(-1) === "SKILL.md");
-	for (let e of n) {
-		if (e.path.split("/").at(-1) === "SKILL.md") continue;
-		let n = a(t, ...e.path.split("/"));
-		await s(n), await l(n, e);
-	}
-	u.sort((e, t) => t.path.split("/").length - e.path.split("/").length);
-	for (let e of u) {
-		let n = a(t, ...e.path.split("/"));
-		await s(n), await Ym(r(n), Ap(e.content), e.executable ? 493 : 420, {
-			...i,
-			temporaryRoot: r(t)
-		});
+	let u = i.recordExecutableModes ? await rh(t, n.map((e) => ({
+		...e,
+		content: jp(e.content)
+	}))) : void 0;
+	try {
+		let e = n.filter((e) => e.path.split("/").at(-1) === "SKILL.md");
+		for (let e of n) {
+			if (e.path.split("/").at(-1) === "SKILL.md") continue;
+			let n = a(t, ...e.path.split("/"));
+			await s(n), await l(n, e);
+		}
+		e.sort((e, t) => t.path.split("/").length - e.path.split("/").length);
+		for (let n of e) {
+			let e = a(t, ...n.path.split("/"));
+			await s(e), await ch(r(e), jp(n.content), n.executable ? 493 : 420, {
+				...i,
+				temporaryRoot: r(t)
+			});
+		}
+		return u;
+	} catch (e) {
+		throw u !== void 0 && await ih(u), e;
 	}
 }
-async function Ym(t, n, i, o = {}) {
+async function ch(t, n, i, o = {}) {
 	let s = a(o.temporaryRoot ?? r(t), `.loom-skill-${f()}.tmp`), c = !1;
 	try {
 		let r = await g(s, e.O_WRONLY | e.O_CREAT | e.O_EXCL | e.O_NOFOLLOW, i);
@@ -9427,58 +9618,58 @@ async function Ym(t, n, i, o = {}) {
 	}
 }
 // src/portable/runtime.ts
-var Xm = 65536, Zm = 1048576, Qm = 1e3, $m = 67108864, eh = class extends Error {
+var lh = 65536, uh = 1048576, dh = 1e3, fh = 67108864, ph = class extends Error {
 	code;
 	constructor(e, t) {
 		super(t), this.code = e, this.name = "PortableRunError";
 	}
 };
 function Q(e, t) {
-	throw new eh(e, t);
+	throw new ph(e, t);
 }
 function $() {
 	return (/* @__PURE__ */ new Date()).toISOString();
 }
-function th(e) {
+function mh(e) {
 	return d("sha256").update(e).digest("hex");
 }
-function nh() {
+function hh() {
 	return d("sha256").update("skill-loom-installed-tree-v2\0");
 }
-function rh(e, t, n) {
+function gh(e, t, n) {
 	let r = Buffer.from(t, "utf8"), i = (e) => {
 		let t = Buffer.alloc(8);
 		return t.writeBigUInt64BE(BigInt(e)), t;
 	};
 	e.update(n === void 0 ? "d" : "f").update(i(r.length)).update(r), n !== void 0 && e.update(n.executable ? "" : "\0").update(i(n.content.byteLength)).update(n.content);
 }
-function ih(e) {
-	let t = nh(), r = /* @__PURE__ */ new Set(), i = new Map(e.map((e) => [e.path, e]));
+function _h(e) {
+	let t = hh(), r = /* @__PURE__ */ new Set(), i = new Map(e.map((e) => [e.path, e]));
 	for (let t of e) {
 		let e = t.path.split("/");
 		for (e.pop(); e.length > 0;) r.add(e.join("/")), e.pop();
 	}
 	function a(e) {
 		let o = /* @__PURE__ */ new Set();
-		for (let t of r) ah(t) === e && o.add(t);
-		for (let t of i.keys()) ah(t) === e && o.add(t);
-		for (let e of [...o].sort((e, t) => n(e).localeCompare(n(t)))) if (r.has(e)) rh(t, e), a(e);
+		for (let t of r) vh(t) === e && o.add(t);
+		for (let t of i.keys()) vh(t) === e && o.add(t);
+		for (let e of [...o].sort((e, t) => n(e).localeCompare(n(t)))) if (r.has(e)) gh(t, e), a(e);
 		else {
 			let n = i.get(e);
-			rh(t, e, {
+			gh(t, e, {
 				executable: n.executable,
-				content: Ap(n.content)
+				content: jp(n.content)
 			});
 		}
 	}
 	return a(""), t.digest("hex");
 }
-function ah(e) {
+function vh(e) {
 	let t = e.lastIndexOf("/");
 	return t < 0 ? "" : e.slice(0, t);
 }
-function oh(e, t) {
-	let n = am.safeParse(t ?? {});
+function yh(e, t) {
+	let n = sm.safeParse(t ?? {});
 	n.success || Q("INPUT_INVALID", "Input values must be named strings no longer than 16 KiB.");
 	let r = new Set(e.chain.inputs.map((e) => e.name));
 	Object.keys(n.data).some((e) => !r.has(e)) && Q("INPUT_INVALID", "An input value was supplied for an undeclared chain input.");
@@ -9490,7 +9681,7 @@ function oh(e, t) {
 	}
 	return i;
 }
-function sh(e, t, n) {
+function bh(e, t, n) {
 	let r = e.chain.steps[t];
 	r || Q("STEP_NOT_FOUND", "No active chain step exists.");
 	let i = r.instruction.replace(/\{\{([^{}]*)\}\}/g, (e, t) => {
@@ -9499,42 +9690,42 @@ function sh(e, t, n) {
 	});
 	return r.kind === "instruction" ? `Instruction:\n${i}` : `Skill: ${r.skillName}\n\nInstruction:\n${i}`;
 }
-async function ch(e) {
+async function xh(e) {
 	try {
 		await h(e, { mode: 448 });
 	} catch (e) {
-		if (!lh(e, "EEXIST")) throw e;
+		if (!Sh(e, "EEXIST")) throw e;
 	}
 	let t = await m(e);
 	(!t.isDirectory() || t.isSymbolicLink() || await v(e) !== e) && Q("PATH_UNSAFE", "A required directory is not a real directory.");
 }
-function lh(e, t) {
+function Sh(e, t) {
 	return e instanceof Error && "code" in e && e.code === t;
 }
-async function uh(e) {
+async function Ch(e) {
 	i(e) || Q("PROJECT_INVALID", "The project path must be absolute.");
 	let t = await v(e);
 	return (await b(t)).isDirectory() || Q("PROJECT_INVALID", "The project path is not a directory."), t;
 }
-async function dh(e) {
+async function wh(e) {
 	let t = a(e, ".agents"), n = a(t, "skills");
-	return await ch(t), await ch(n), n;
+	return await xh(t), await xh(n), n;
 }
-async function fh(t, n, r) {
+async function Th(t, n, r) {
 	let i = await m(t, { bigint: !0 });
 	(!i.isFile() || i.isSymbolicLink() || i.ino === 0n) && Q(n, "The file must be a regular file with a verifiable identity, not a symbolic link.");
 	let a;
 	try {
 		a = await g(t, e.O_RDONLY | e.O_NOFOLLOW | e.O_NONBLOCK);
 	} catch (e) {
-		throw lh(e, "ELOOP") && Q(n, "The file must not be a symbolic link."), e;
+		throw Sh(e, "ELOOP") && Q(n, "The file must not be a symbolic link."), e;
 	}
 	let o = (e) => e.dev === i.dev && e.ino === i.ino, s = async () => {
 		let e;
 		try {
 			e = await m(t, { bigint: !0 });
 		} catch (e) {
-			throw lh(e, "ENOENT") && Q(r, "The file changed while it was inspected. Review it again."), e;
+			throw Sh(e, "ENOENT") && Q(r, "The file changed while it was inspected. Review it again."), e;
 		}
 		e.isFile() && !e.isSymbolicLink() && o(e) || Q(r, "The file changed while it was inspected. Review it again.");
 	};
@@ -9548,8 +9739,8 @@ async function fh(t, n, r) {
 		throw await a.close(), e;
 	}
 }
-async function ph(e, t) {
-	let { handle: n, verifyPath: r } = await fh(e, "PACKAGE_UNSAFE", "PACKAGE_CHANGED");
+async function Eh(e, t) {
+	let { handle: n, verifyPath: r } = await Th(e, "PACKAGE_UNSAFE", "PACKAGE_CHANGED");
 	try {
 		let e = await n.stat();
 		(!e.isFile() || e.size > t) && Q("PACKAGE_TOO_LARGE", "An existing package file is unsafe or exceeds the portable review limit.");
@@ -9568,44 +9759,45 @@ async function ph(e, t) {
 		await n.close();
 	}
 }
-async function mh(e, t, n = {
-	files: xp,
-	bytes: bp
+async function Dh(e, t, n = {
+	files: Sp,
+	bytes: xp
 }) {
-	let r = nh(), i = 0, o = 0, s = 0, c = 0;
-	function l(e) {
-		t !== void 0 && (c += Buffer.byteLength(JSON.stringify(e), "utf8") + 1, c > (n.inventoryBytes ?? 2 ** 53 - 1) && Q("PACKAGE_TOO_LARGE", "The existing package inventory exceeds the portable review limit."), t.push(e));
+	let r = hh(), i = await ah(e), o = 0, s = 0, c = 0, l = 0;
+	function u(e) {
+		t !== void 0 && (l += Buffer.byteLength(JSON.stringify(e), "utf8") + 1, l > (n.inventoryBytes ?? 2 ** 53 - 1) && Q("PACKAGE_TOO_LARGE", "The existing package inventory exceeds the portable review limit."), t.push(e));
 	}
-	async function u(e, c, d) {
-		(d > 32 || await v(e) !== e) && Q("PACKAGE_UNSAFE", "An installed skill has unsafe directories or exceeds the depth limit.");
-		let f = [];
-		for await (let t of await _(e)) s += 1, s > (n.entries ?? 66e3) && Q("PACKAGE_TOO_LARGE", "The existing package exceeds the portable review entry limit."), f.push(t);
-		f.sort((e, t) => e.name.localeCompare(t.name));
-		for (let s of f) {
-			let f = a(e, s.name), p = c === "" ? s.name : `${c}/${s.name}`, h = await m(f);
-			if (h.isSymbolicLink() && Q("PACKAGE_UNSAFE", "An installed skill contains a symbolic link."), h.isDirectory()) rh(r, p), l({
-				path: p,
+	async function d(e, l, f) {
+		(f > 32 || await v(e) !== e) && Q("PACKAGE_UNSAFE", "An installed skill has unsafe directories or exceeds the depth limit.");
+		let p = [];
+		for await (let t of await _(e)) c += 1, c > (n.entries ?? 66e3) && Q("PACKAGE_TOO_LARGE", "The existing package exceeds the portable review entry limit."), p.push(t);
+		p.sort((e, t) => e.name.localeCompare(t.name));
+		for (let c of p) {
+			if (l === "" && c.name === ".loom" && i !== null) continue;
+			let p = a(e, c.name), h = l === "" ? c.name : `${l}/${c.name}`, g = await m(p);
+			if (g.isSymbolicLink() && Q("PACKAGE_UNSAFE", "An installed skill contains a symbolic link."), g.isDirectory()) gh(r, h), u({
+				path: h,
 				kind: "directory"
-			}), await u(f, p, d + 1);
-			else if (h.isFile()) {
-				o += 1, o > n.files && Q("PACKAGE_TOO_LARGE", "The existing package exceeds the portable review file limit.");
-				let e = await ph(f, n.bytes - i);
-				i += e.content.length, rh(r, p, e), t !== void 0 && l({
-					path: p,
+			}), await d(p, h, f + 1);
+			else if (g.isFile()) {
+				s += 1, s > n.files && Q("PACKAGE_TOO_LARGE", "The existing package exceeds the portable review file limit.");
+				let e = await Eh(p, n.bytes - o);
+				i !== null && (e.executable = oh(i, h, e.executable)), o += e.content.length, gh(r, h, e), t !== void 0 && u({
+					path: h,
 					kind: "file",
 					bytes: e.content.length,
 					executable: e.executable,
-					fingerprint: th(e.content)
+					fingerprint: mh(e.content)
 				});
 			} else Q("PACKAGE_UNSAFE", "An installed skill contains a special file.");
 		}
 	}
-	return await u(e, "", 0), r.digest("hex");
+	return await d(e, "", 0), i !== null && s !== i.files.length && Q("PACKAGE_CHANGED", "Installed files no longer match their executable-mode metadata. Restore the complete reviewed package."), r.digest("hex");
 }
-async function hh(e, t, n, r, i) {
-	let s = await dh(t), l = new Set(n);
+async function Oh(e, t, n, r, i) {
+	let s = await wh(t), l = new Set(n);
 	(l.size !== n.length || [...l].some((t) => !e.skills.some((e) => e.name === t))) && Q("REUSE_INVALID", "Reuse choices must name distinct skills included in the bundle.");
-	let u = [], d = [];
+	let u = [], d = [], f = [];
 	try {
 		for (let t of e.skills) {
 			let e = a(s, t.directory);
@@ -9614,44 +9806,52 @@ async function hh(e, t, n, r, i) {
 			try {
 				await m(e), n = !0;
 			} catch (e) {
-				if (!lh(e, "ENOENT")) throw e;
+				if (!Sh(e, "ENOENT")) throw e;
 			}
 			if (n) {
 				let n = await m(e);
 				n.isDirectory() && !n.isSymbolicLink() && l.has(t.name) || Q("PACKAGE_CONFLICT", `Skill "${t.name}" already exists. Review it and explicitly choose reuse or cancel.`);
 				let o = a(e, "SKILL.md"), s = await m(o);
-				(!s.isFile() || s.isSymbolicLink()) && Q("PACKAGE_CONFLICT", `Existing "${t.name}" is not a valid skill package.`), (Sf(xf((await ph(o, bp)).content.toString("utf8")).data, "name") ?? t.directory) !== t.name && Q("PACKAGE_CONFLICT", `Existing skill directory does not contain "${t.name}".`);
-				let c = await mh(e);
-				c !== i.get(t.name) && Q("REVIEW_STALE", `Existing "${t.name}" changed since inspection; inspect and review it again.`), c !== ih(t.files) && !r && Q("REUSE_CONTENT_CONFIRMATION_REQUIRED", `Existing "${t.name}" differs from the bundle; explicitly confirm reuse of its installed contents.`), u.push({
+				(!s.isFile() || s.isSymbolicLink()) && Q("PACKAGE_CONFLICT", `Existing "${t.name}" is not a valid skill package.`), (Cf(Sf((await Eh(o, xp)).content.toString("utf8")).data, "name") ?? t.directory) !== t.name && Q("PACKAGE_CONFLICT", `Existing skill directory does not contain "${t.name}".`);
+				let c = await Dh(e);
+				c !== i.get(t.name) && Q("REVIEW_STALE", `Existing "${t.name}" changed since inspection; inspect and review it again.`), c !== _h(t.files) && !r && Q("REUSE_CONTENT_CONFIRMATION_REQUIRED", `Existing "${t.name}" differs from the bundle; explicitly confirm reuse of its installed contents.`), u.push({
 					name: t.name,
 					directory: t.directory,
 					fingerprint: c,
 					reused: !0
 				});
-			} else i.get(t.name) !== null && Q("REVIEW_STALE", `Existing "${t.name}" changed since inspection; inspect and review it again.`), l.has(t.name) && Q("REUSE_MISSING", `Skill "${t.name}" selected for reuse is missing.`), await h(e, { mode: 493 }), d.push(e), await Jm(e, t.files, {
+				continue;
+			}
+			i.get(t.name) !== null && Q("REVIEW_STALE", `Existing "${t.name}" changed since inspection; inspect and review it again.`), l.has(t.name) && Q("REUSE_MISSING", `Skill "${t.name}" selected for reuse is missing.`), await h(e, { mode: 493 }), d.push(e);
+			let p = await sh(e, t.files, {
 				directoryMode: 448,
-				enforceFileMode: !0
-			}), u.push({
+				enforceFileMode: !0,
+				recordExecutableModes: process.platform === "win32"
+			});
+			p !== void 0 && f.push(p);
+			let g = await Dh(e);
+			g !== _h(t.files) && Q("PACKAGE_CHANGED", "The newly installed skill differs from the reviewed bundle."), u.push({
 				name: t.name,
 				directory: t.directory,
-				fingerprint: await mh(e),
+				fingerprint: g,
 				reused: !1
 			});
 		}
 		return {
 			installedSkills: u,
-			createdDirectories: d
+			createdDirectories: d,
+			createdModes: f
 		};
 	} catch (e) {
 		throw await Promise.all(d.map((e) => ee(e, {
 			recursive: !0,
 			force: !0
-		}))), e instanceof eh || e instanceof Cp ? e : new eh("INSTALL_FAILED", "Skill installation failed; newly created package directories were rolled back.");
+		}))), await Promise.all(f.map(ih)), e instanceof ph || e instanceof wp ? e : new ph("INSTALL_FAILED", "Skill installation failed; newly created package directories were rolled back.");
 	}
 }
-async function gh(t) {
+async function kh(t) {
 	let n = a(t, ".loom"), r = a(n, "portable-runs");
-	await ch(n), await ch(r);
+	await xh(n), await xh(r);
 	let i = a(n, ".gitignore");
 	try {
 		let t = await g(i, e.O_WRONLY | e.O_CREAT | e.O_EXCL | e.O_APPEND | e.O_NOFOLLOW, 384);
@@ -9661,26 +9861,26 @@ async function gh(t) {
 			await t.close();
 		}
 	} catch (t) {
-		if (!lh(t, "EEXIST")) throw t;
+		if (!Sh(t, "EEXIST")) throw t;
 		let n = await m(i, { bigint: !0 });
 		(!n.isFile() || n.isSymbolicLink() || n.ino === 0n) && Q("PATH_UNSAFE", "The Loom ignore file is not a regular file.");
 		let r = await g(i, e.O_RDWR | e.O_APPEND | e.O_NOFOLLOW);
 		try {
 			let e = await r.stat({ bigint: !0 });
-			(!e.isFile() || e.dev !== n.dev || e.ino !== n.ino || e.nlink !== 1n || e.size > BigInt(Zm)) && Q("PATH_UNSAFE", "The Loom ignore file is unsafe or too large.");
+			(!e.isFile() || e.dev !== n.dev || e.ino !== n.ino || e.nlink !== 1n || e.size > BigInt(uh)) && Q("PATH_UNSAFE", "The Loom ignore file is unsafe or too large.");
 			let t = Buffer.alloc(1048577), a = 0;
 			for (; a < t.length;) {
 				let e = await r.read(t, a, t.length - a, a);
 				if (e.bytesRead === 0) break;
 				a += e.bytesRead;
 			}
-			a > Zm && Q("PATH_UNSAFE", "The Loom ignore file is unsafe or too large.");
+			a > uh && Q("PATH_UNSAFE", "The Loom ignore file is unsafe or too large.");
 			let o = t.subarray(0, a).toString("utf8"), s = await m(i, { bigint: !0 });
 			(!s.isFile() || s.isSymbolicLink() || s.dev !== e.dev || s.ino !== e.ino) && Q("PATH_UNSAFE", "The Loom ignore file changed during inspection.");
 			let c = o.split(/\r?\n/).filter((e) => e !== "" && !e.startsWith("#")), l = c.at(-1) === "portable-runs/" && c.at(-2) === "runs/" ? [] : c.at(-1) === "runs/" ? ["portable-runs/"] : ["runs/", "portable-runs/"];
 			if (l.length > 0) {
 				let e = `${o.endsWith("\n") || o === "" ? "" : "\n"}${l.join("\n")}\n`;
-				(await r.stat({ bigint: !0 })).size + BigInt(Buffer.byteLength(e)) > BigInt(Zm) && Q("PATH_UNSAFE", "The Loom ignore file is unsafe or too large."), await r.writeFile(e, "utf8"), await r.sync();
+				(await r.stat({ bigint: !0 })).size + BigInt(Buffer.byteLength(e)) > BigInt(uh) && Q("PATH_UNSAFE", "The Loom ignore file is unsafe or too large."), await r.writeFile(e, "utf8"), await r.sync();
 			}
 		} finally {
 			await r.close();
@@ -9688,10 +9888,10 @@ async function gh(t) {
 	}
 	return r;
 }
-async function _h(e, t, n = !1) {
-	return vh(e, `${JSON.stringify(t, null, 2)}\n`, n);
+async function Ah(e, t, n = !1) {
+	return jh(e, `${JSON.stringify(t, null, 2)}\n`, n);
 }
-async function vh(t, n, i = !1) {
+async function jh(t, n, i = !1) {
 	let o = a(r(t), `.${f()}.tmp`);
 	try {
 		let a = await g(o, e.O_WRONLY | e.O_CREAT | e.O_EXCL | e.O_NOFOLLOW, 384);
@@ -9700,29 +9900,17 @@ async function vh(t, n, i = !1) {
 		} finally {
 			await a.close();
 		}
-		i ? (await p(o, t), await x(o)) : await y(o, t), await yh(r(t));
+		i ? (await p(o, t), await x(o)) : await y(o, t), await Lp(r(t));
 	} catch (e) {
 		throw await ee(o, { force: !0 }), e;
 	}
 }
-async function yh(t) {
-	let n = await g(t, e.O_RDONLY);
-	try {
-		try {
-			await n.sync();
-		} catch (e) {
-			if (!lh(e, "EINVAL") && !lh(e, "EISDIR") && !lh(e, "EPERM") && !lh(e, "ENOTSUP")) throw e;
-		}
-	} finally {
-		await n.close();
-	}
-}
-async function bh(t, n) {
+async function Mh(t, n) {
 	let r = a(t, ".lock"), i;
 	try {
 		i = await g(r, e.O_WRONLY | e.O_CREAT | e.O_EXCL | e.O_NOFOLLOW, 384);
 	} catch (e) {
-		throw lh(e, "EEXIST") && Q("RUN_LOCKED", "Another helper process is mutating portable run state; retry after it exits."), e;
+		throw Sh(e, "EEXIST") && Q("RUN_LOCKED", "Another helper process is mutating portable run state; retry after it exits."), e;
 	}
 	try {
 		return await i.writeFile(`${process.pid}\n`, "utf8"), await i.sync(), await n();
@@ -9730,12 +9918,12 @@ async function bh(t, n) {
 		await i.close(), await ee(r, { force: !0 });
 	}
 }
-async function xh(e, t, r = Sp) {
+async function Nh(e, t, r = Cp) {
 	let i;
 	try {
-		({content: i} = await ph(e, r));
+		({content: i} = await Eh(e, r));
 	} catch (e) {
-		if (!(e instanceof eh)) throw e;
+		if (!(e instanceof ph)) throw e;
 		e.code === "PACKAGE_TOO_LARGE" && r < 31457280 && Q("RUN_SCAN_TOO_LARGE", "Portable run records exceed the conflict scan budget; archive completed records before retrying."), Q("RUN_FILE_INVALID", "The portable run record is unsafe, changed during inspection, or exceeds its size limit.");
 	}
 	let a;
@@ -9745,48 +9933,48 @@ async function xh(e, t, r = Sp) {
 		if (!(e instanceof SyntaxError)) throw e;
 		Q("RUN_FILE_INVALID", "The portable run record is corrupt, unsupported, or belongs to another project.");
 	}
-	let o = n(e).slice(0, -5), s = cm(a, t, o);
+	let o = n(e).slice(0, -5), s = um(a, t, o);
 	return (s === null || n(e) !== `${s.id}.json`) && Q("RUN_FILE_INVALID", "The portable run record is corrupt, unsupported, or belongs to another project."), {
 		run: s,
 		bytes: i.length
 	};
 }
-async function Sh(e, t) {
-	return (await xh(e, t)).run;
+async function Ph(e, t) {
+	return (await Nh(e, t)).run;
 }
-async function Ch(e, t, n) {
+async function Fh(e, t, n) {
 	let r = 0, i = 0, a = await _(e);
 	for await (let o of a) {
 		if (!o.name.endsWith(".json")) continue;
 		let a = o.name.slice(0, -5);
-		if (im.test(a) || Q("RUN_FILE_INVALID", "The portable run directory contains an invalid run record name."), a === n) continue;
-		r += 1, r > Qm && Q("RUN_SCAN_TOO_LARGE", "Too many portable run records to check for conflicts; archive completed records before retrying.");
-		let s = await xh(Th(e, a), t, Math.min(Sp, $m - i));
+		if (om.test(a) || Q("RUN_FILE_INVALID", "The portable run directory contains an invalid run record name."), a === n) continue;
+		r += 1, r > dh && Q("RUN_SCAN_TOO_LARGE", "Too many portable run records to check for conflicts; archive completed records before retrying.");
+		let s = await Nh(Lh(e, a), t, Math.min(Cp, fh - i));
 		i += s.bytes;
 		let { run: c } = s, l = c.status === "completed" || c.status === "aborted" || c.status === "failed";
 		l && (c.resumeRequired || c.steps.some((e) => e.attempts.some((e) => e.status === "running"))) && Q("RUN_FILE_INVALID", "A finished portable run contains an unresolved attempt."), l || Q("RUN_ACTIVE_CONFLICT", "Another portable run is unfinished; finish or explicitly abort it before continuing.");
 	}
 }
-async function wh(e, t) {
+async function Ih(e, t) {
 	e.installedSkills.length > 0 && e.skillFingerprintVersion !== 2 && Q("PACKAGE_REVIEW_REQUIRED", "This run uses an older package fingerprint. Abort it and inspect and prepare a new run.");
 	for (let n of e.installedSkills) {
 		let e = a(t, ".agents", "skills", n.directory), r = await m(e);
-		(!r.isDirectory() || r.isSymbolicLink() || await mh(e) !== n.fingerprint) && Q("PACKAGE_CHANGED", `Installed skill "${n.name}" changed since this run was prepared; review it and prepare a new run.`);
+		(!r.isDirectory() || r.isSymbolicLink() || await Dh(e) !== n.fingerprint) && Q("PACKAGE_CHANGED", `Installed skill "${n.name}" changed since this run was prepared; review it and prepare a new run.`);
 	}
 }
-function Th(e, t) {
-	return im.test(t) || Q("RUN_ID_INVALID", "The run id is not safe."), a(e, `${t}.json`);
+function Lh(e, t) {
+	return om.test(t) || Q("RUN_ID_INVALID", "The run id is not safe."), a(e, `${t}.json`);
 }
-async function Eh(e) {
+async function Rh(e) {
 	return e === void 0 ? {} : ((typeof e != "object" || !e || Array.isArray(e)) && Q("REQUEST_INVALID", "The request must be a JSON object."), e);
 }
-async function Dh(e, t, n = !1) {
-	let r = sm.safeParse(t);
-	r.success || Q("RUN_STATE_INVALID", "The portable run transition would produce invalid state."), Buffer.byteLength(JSON.stringify(r.data), "utf8") > 31457280 && Q("RUN_TOO_LARGE", "The portable run record exceeds the 30 MiB safety limit."), await _h(Th(e, t.id), r.data, n);
+async function zh(e, t, n = !1) {
+	let r = lm.safeParse(t);
+	r.success || Q("RUN_STATE_INVALID", "The portable run transition would produce invalid state."), Buffer.byteLength(JSON.stringify(r.data), "utf8") > 31457280 && Q("RUN_TOO_LARGE", "The portable run record exceeds the 30 MiB safety limit."), await Ah(Lh(e, t.id), r.data, n);
 }
-async function Oh(e) {
+async function Bh(e) {
 	e && i(e) || Q("BUNDLE_PATH_INVALID", "Provide an absolute bundle file path.");
-	let { handle: t, verifyPath: n } = await fh(e, "BUNDLE_INVALID", "BUNDLE_INVALID");
+	let { handle: t, verifyPath: n } = await Th(e, "BUNDLE_INVALID", "BUNDLE_INVALID");
 	try {
 		let e = await t.stat();
 		(!e.isFile() || e.size > 31457280) && Q("BUNDLE_INVALID", "The bundle is not a regular file or exceeds the size limit.");
@@ -9798,13 +9986,13 @@ async function Oh(e) {
 		}
 		let a = await t.stat();
 		(i !== e.size || a.size !== e.size || a.mtimeMs !== e.mtimeMs) && Q("BUNDLE_INVALID", "The bundle changed while being read; inspect it again."), await n();
-		let o = Np(JSON.parse(r.subarray(0, i).toString("utf8")));
-		return o.chain.steps.length > 1e3 && Q("CHAIN_TOO_LARGE", `Portable chains are limited to ${String(rm)} steps.`), o;
+		let o = Pp(JSON.parse(r.subarray(0, i).toString("utf8")));
+		return o.chain.steps.length > 1e3 && Q("CHAIN_TOO_LARGE", `Portable chains are limited to ${String(am)} steps.`), o;
 	} finally {
 		await t.close();
 	}
 }
-async function kh(e, t) {
+async function Vh(e, t) {
 	let n = [];
 	for (let r of e.skills) {
 		let e = null;
@@ -9812,9 +10000,9 @@ async function kh(e, t) {
 			let n = a(t, ".agents", "skills", r.directory);
 			try {
 				let t = await m(n);
-				e = t.isDirectory() && !t.isSymbolicLink() && await v(n) === n ? await mh(n) : "unsafe";
+				e = t.isDirectory() && !t.isSymbolicLink() && await v(n) === n ? await Dh(n) : "unsafe";
 			} catch (e) {
-				if (!lh(e, "ENOENT")) throw e;
+				if (!Sh(e, "ENOENT")) throw e;
 			}
 		}
 		n.push({
@@ -9822,12 +10010,12 @@ async function kh(e, t) {
 			directory: r.directory,
 			files: r.files.map((e) => ({
 				path: e.path,
-				bytes: Ap(e.content).length,
+				bytes: jp(e.content).length,
 				executable: e.executable
 			})),
 			skillMarkdown: Buffer.from(r.files.find((e) => e.path === "SKILL.md").content, "base64").toString("utf8"),
 			existingFingerprint: e,
-			bundledFingerprint: ih(r.files)
+			bundledFingerprint: _h(r.files)
 		});
 	}
 	let r = e.version === 2 ? await Promise.all(e.agents.map(async (e) => {
@@ -9836,9 +10024,9 @@ async function kh(e, t) {
 			let r = e.harness === "opencode" ? ".opencode/agents" : ".github/agents", i = a(t, r, e.agentPath);
 			try {
 				let e = await m(i);
-				n = e.isFile() && !e.isSymbolicLink() && await v(i) === i ? th((await ph(i, bp)).content) : "unsafe";
+				n = e.isFile() && !e.isSymbolicLink() && await v(i) === i ? mh((await Eh(i, xp)).content) : "unsafe";
 			} catch (e) {
-				if (!lh(e, "ENOENT")) throw e;
+				if (!Sh(e, "ENOENT")) throw e;
 			}
 		}
 		return {
@@ -9846,13 +10034,13 @@ async function kh(e, t) {
 			harness: e.harness,
 			agentPath: e.agentPath,
 			fingerprint: e.fingerprint,
-			content: Ap(e.content).toString("utf8"),
+			content: jp(e.content).toString("utf8"),
 			existingFingerprint: n
 		};
-	})) : [], i = th(JSON.stringify(e)), o = null;
+	})) : [], i = mh(JSON.stringify(e)), o = null;
 	if (t !== null) {
 		let e = await b(t, { bigint: !0 });
-		e.isDirectory() && await v(t) === t || Q("PROJECT_INVALID", "The inspected project is no longer a canonical directory."), o = th(JSON.stringify({
+		e.isDirectory() && await v(t) === t || Q("PROJECT_INVALID", "The inspected project is no longer a canonical directory."), o = mh(JSON.stringify({
 			version: 1,
 			project: t,
 			projectDevice: String(e.dev),
@@ -9879,16 +10067,16 @@ async function kh(e, t) {
 		reviewDigest: o
 	};
 }
-async function Ah(e) {
-	if (e.command === "inspect") return kh(await Oh(e.bundlePath), e.projectPath ? await uh(e.projectPath) : null);
+async function Hh(e) {
+	if (e.command === "inspect") return Vh(await Bh(e.bundlePath), e.projectPath ? await Ch(e.projectPath) : null);
 	e.projectPath && i(e.projectPath) || Q("PROJECT_INVALID", "Provide an absolute project path.");
-	let t = await uh(e.projectPath), n = await Eh(e.input);
+	let t = await Ch(e.projectPath), n = await Rh(e.input);
 	if (e.command === "prepare") {
 		e.bundlePath && i(e.bundlePath) || Q("BUNDLE_PATH_INVALID", "Provide an absolute bundle file path."), n.installConfirmed !== !0 && Q("INSTALL_CONFIRMATION_REQUIRED", "Review and explicitly confirm package installation first."), typeof n.reviewDigest == "string" && /^[a-f0-9]{64}$/.test(n.reviewDigest) || Q("REVIEW_REQUIRED", "Inspect the bundle and project, then provide the review digest with installation approval.");
-		let r = await Oh(e.bundlePath), a = Mp(r);
+		let r = await Bh(e.bundlePath), a = Np(r);
 		a.agent !== void 0 && Q("NATIVE_AGENT_REQUIRES_LOOM", "This bundle selects a harness-native agent. The portable current-conversation runner cannot switch agents; import the bundle into Skill Loom to run it with the selected agent.");
-		let o = oh(r, n.inputs);
-		for (let e = 0; e < r.chain.steps.length; e += 1) Buffer.byteLength(sh(r, e, o), "utf8") > Xm && Q("INSTRUCTION_TOO_LARGE", "Resolved step instructions are limited to 64 KiB.");
+		let o = yh(r, n.inputs);
+		for (let e = 0; e < r.chain.steps.length; e += 1) Buffer.byteLength(bh(r, e, o), "utf8") > lh && Q("INSTRUCTION_TOO_LARGE", "Resolved step instructions are limited to 64 KiB.");
 		let s = n.progression === "agent" ? "agent" : n.progression === "supervised" ? "supervised" : null;
 		s === null && Q("PROGRESSION_INVALID", "Choose supervised or agent progression."), s === "agent" && n.progressionConfirmed !== !0 && Q("PROGRESSION_CONFIRMATION_REQUIRED", "Agent-driven progression needs explicit consent.");
 		let c = n.actualHost === "copilot" || n.actualHost === "opencode" || n.actualHost === "other" ? n.actualHost : null;
@@ -9897,21 +10085,21 @@ async function Ah(e) {
 		r.chain.harness !== c && !l && Q("HOST_SWITCH_CONFIRMATION_REQUIRED", "The current host differs from the bundle harness; explicitly confirm compatibility review.");
 		let u = n.sessionDecision;
 		(typeof u != "object" || !u || Array.isArray(u)) && Q("SESSION_DECISION_REQUIRED", "Describe the verified host session mechanism before preparation.");
-		let d = u, p = sm.shape.sessionDecision.safeParse(d);
+		let d = u, p = lm.shape.sessionDecision.safeParse(d);
 		p.success && p.data.requested === r.chain.sessionMode || Q("SESSION_DECISION_INVALID", "The session decision must match the bundle and name an actual host mechanism."), (r.chain.sessionMode === "fresh" && p.data.mechanism === "current-conversation" || r.chain.sessionMode === "fork" && p.data.mechanism === "handoff") && p.data.confirmed !== !0 && Q("SESSION_CONFIRMATION_REQUIRED", "A non-native session approximation requires explicit consent."), r.chain.sessionMode === "shared" && p.data.mechanism !== "current-conversation" && Q("SESSION_DECISION_INVALID", "A shared chain must use the current host conversation."), r.chain.sessionMode === "fresh" && !["isolated-worker", "current-conversation"].includes(p.data.mechanism) && Q("SESSION_DECISION_INVALID", "Fresh mode needs a verified isolated worker or an explicitly accepted shared approximation."), r.chain.sessionMode === "fork" && !["native-fork", "handoff"].includes(p.data.mechanism) && Q("SESSION_DECISION_INVALID", "Fork mode needs a verified native fork or an explicitly accepted handoff."), n.installConfirmed !== !0 && Q("INSTALL_CONFIRMATION_REQUIRED", "Review and explicitly confirm package installation first.");
 		let m = n.reuseSkills === void 0 ? [] : n.reuseSkills;
-		(!Array.isArray(m) || m.some((e) => typeof e != "string")) && Q("REUSE_INVALID", "Reuse choices must be a list of skill names."), (await kh(r, t)).reviewDigest !== n.reviewDigest && Q("REVIEW_STALE", "The bundle, project, or existing package state changed since inspection; review it again."), process.platform === "win32" && r.skills.some((e) => e.files.some((e) => e.executable)) && Q("EXECUTABLE_MODES_UNSUPPORTED", "Windows cannot yet preserve executable modes when installing or reusing bundle skills.");
-		let h = await gh(t), g = f();
-		return Km(t, "portable", g, () => bh(h, async () => {
-			await Ch(h, t);
-			let e = await kh(r, t);
+		(!Array.isArray(m) || m.some((e) => typeof e != "string")) && Q("REUSE_INVALID", "Reuse choices must be a list of skill names."), (await Vh(r, t)).reviewDigest !== n.reviewDigest && Q("REVIEW_STALE", "The bundle, project, or existing package state changed since inspection; review it again.");
+		let h = await kh(t), g = f();
+		return Jm(t, "portable", g, () => Mh(h, async () => {
+			await Fh(h, t);
+			let e = await Vh(r, t);
 			e.reviewDigest !== n.reviewDigest && Q("REVIEW_STALE", "The bundle, project, or existing package state changed since inspection; review it again.");
-			let { installedSkills: i, createdDirectories: u } = await hh(r, t, m, n.differingReuseConfirmed === !0, new Map(e.skills.map((e) => [e.name, e.existingFingerprint]))), d = $(), f = {
+			let { installedSkills: i, createdDirectories: u, createdModes: d } = await Oh(r, t, m, n.differingReuseConfirmed === !0, new Map(e.skills.map((e) => [e.name, e.existingFingerprint]))), f = $(), _ = {
 				version: 1,
 				id: g,
 				revision: 1,
 				projectPath: t,
-				bundleFingerprint: th(JSON.stringify(r)),
+				bundleFingerprint: mh(JSON.stringify(r)),
 				bundle: r,
 				actualHost: c,
 				hostSwitchConfirmed: l,
@@ -9929,29 +10117,29 @@ async function Ah(e) {
 					index: t,
 					attempts: []
 				})),
-				createdAt: d,
-				updatedAt: d
+				createdAt: f,
+				updatedAt: f
 			};
 			try {
-				await Dh(h, f, !0);
+				await zh(h, _, !0);
 			} catch (e) {
 				throw await Promise.all(u.map((e) => ee(e, {
 					recursive: !0,
 					force: !0
-				}))), e;
+				}))), await Promise.all(d.map(ih)), e;
 			}
 			return {
 				ok: !0,
 				runId: g,
-				revision: f.revision,
-				status: f.status,
+				revision: _.revision,
+				status: _.status,
 				installedSkills: i
 			};
 		}));
 	}
-	let r = await gh(t);
+	let r = await kh(t);
 	e.runId || Q("RUN_ID_INVALID", "Provide a run id.");
-	let o = Th(r, e.runId), s = await Sh(o, t);
+	let o = Lh(r, e.runId), s = await Ph(o, t);
 	if (e.command === "status") return {
 		ok: !0,
 		run: {
@@ -9972,12 +10160,12 @@ async function Ah(e) {
 			updatedAt: s.updatedAt
 		}
 	};
-	if (e.command === "step") return qm(t, {
+	if (e.command === "step") return Ym(t, {
 		kind: "portable",
 		runId: s.id
-	}, () => bh(r, async () => {
-		let e = await Sh(o, t);
-		n.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), (e.status !== "ready" || e.resumeRequired) && Q("RUN_NOT_READY", "The run is not ready to start another step."), await Ch(r, t, e.id), await wh(e, t), e.progression === "supervised" && n.confirmed !== !0 && Q("STEP_CONFIRMATION_REQUIRED", "Confirm this step before execution.");
+	}, () => Mh(r, async () => {
+		let e = await Ph(o, t);
+		n.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), (e.status !== "ready" || e.resumeRequired) && Q("RUN_NOT_READY", "The run is not ready to start another step."), await Fh(r, t, e.id), await Ih(e, t), e.progression === "supervised" && n.confirmed !== !0 && Q("STEP_CONFIRMATION_REQUIRED", "Confirm this step before execution.");
 		let i = e.bundle.chain.steps[e.currentStepIndex], s = e.steps[e.currentStepIndex];
 		i && s || Q("RUN_STATE_INVALID", "The current step is missing."), s.attempts.length >= 50 && Q("ATTEMPTS_EXHAUSTED", "A step can have at most 50 attempts."), s.attempts.at(-1)?.status === "running" && Q("STEP_ALREADY_RUNNING", "The current step already has an unresolved attempt.");
 		let c = {
@@ -9988,13 +10176,13 @@ async function Ah(e) {
 			summary: null,
 			reason: null
 		};
-		s.attempts.push(c), e.status = "running", e.revision += 1, e.updatedAt = $(), await Dh(r, e);
-		let l = sh(e.bundle, e.currentStepIndex, e.resolvedInputs), u = null;
+		s.attempts.push(c), e.status = "running", e.revision += 1, e.updatedAt = $(), await zh(r, e);
+		let l = bh(e.bundle, e.currentStepIndex, e.resolvedInputs), u = null;
 		if (e.bundle.chain.sessionMode === "fork" && e.sessionDecision.mechanism === "handoff" && e.currentStepIndex > 0) {
-			let t = e.bundle.chain.steps[e.currentStepIndex - 1], n = e.steps[e.currentStepIndex - 1]?.attempts.at(-1), r = sh(e.bundle, e.currentStepIndex - 1, e.resolvedInputs);
+			let t = e.bundle.chain.steps[e.currentStepIndex - 1], n = e.steps[e.currentStepIndex - 1]?.attempts.at(-1), r = bh(e.bundle, e.currentStepIndex - 1, e.resolvedInputs);
 			u = [
 				"Portable handoff (not a native session fork):",
-				`Previous step: ${String(e.currentStepIndex)} "${Tf(t)}"`,
+				`Previous step: ${String(e.currentStepIndex)} "${Ef(t)}"`,
 				`Previous instruction: ${r.slice(0, 2e3)}`,
 				`Recorded status: ${n?.status ?? "unknown"}`,
 				`Recorded summary: ${(n?.summary ?? "No summary recorded.").slice(0, 4e3)}`
@@ -10010,7 +10198,7 @@ async function Ah(e) {
 				index: e.currentStepIndex,
 				count: e.steps.length,
 				id: i.id,
-				label: Tf(i),
+				label: Ef(i),
 				kind: i.kind === "instruction" ? "instruction" : "skill",
 				skillName: "skillName" in i ? i.skillName : null,
 				skillPath: d ? a(t, ".agents", "skills", d.directory) : null,
@@ -10021,12 +10209,12 @@ async function Ah(e) {
 			sessionDecision: e.sessionDecision
 		};
 	}));
-	if (e.command === "record") return qm(t, {
+	if (e.command === "record") return Ym(t, {
 		kind: "portable",
 		runId: s.id
-	}, () => bh(r, async () => {
-		let e = await Sh(o, t);
-		if (n.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), n.action === "pause" || n.action === "abort") return e.status !== "ready" && e.status !== "paused" && Q("RUN_ACTION_INVALID", "Pause or abort is only available between steps."), e.status = n.action === "pause" ? "paused" : "aborted", e.revision += 1, e.updatedAt = $(), await Dh(r, e), {
+	}, () => Mh(r, async () => {
+		let e = await Ph(o, t);
+		if (n.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), n.action === "pause" || n.action === "abort") return e.status !== "ready" && e.status !== "paused" && Q("RUN_ACTION_INVALID", "Pause or abort is only available between steps."), e.status = n.action === "pause" ? "paused" : "aborted", e.revision += 1, e.updatedAt = $(), await zh(r, e), {
 			ok: !0,
 			runId: e.id,
 			revision: e.revision,
@@ -10034,7 +10222,7 @@ async function Ah(e) {
 		};
 		if (n.action === "retry") {
 			let t = e.steps[e.currentStepIndex]?.attempts.at(-1);
-			return (e.status !== "paused" || t?.status !== "failed") && Q("RETRY_NOT_AVAILABLE", "Retry is available only for the current failed step."), e.status = "ready", e.revision += 1, e.updatedAt = $(), await Dh(r, e), {
+			return (e.status !== "paused" || t?.status !== "failed") && Q("RETRY_NOT_AVAILABLE", "Retry is available only for the current failed step."), e.status = "ready", e.revision += 1, e.updatedAt = $(), await zh(r, e), {
 				ok: !0,
 				runId: e.id,
 				revision: e.revision,
@@ -10050,7 +10238,7 @@ async function Ah(e) {
 				finishedAt: $(),
 				summary: null,
 				reason: n.reason.slice(0, 2e3)
-			}), e.currentStepIndex += 1, e.status = e.currentStepIndex >= e.steps.length ? "completed" : "ready", e.revision += 1, e.updatedAt = $(), await Dh(r, e), {
+			}), e.currentStepIndex += 1, e.status = e.currentStepIndex >= e.steps.length ? "completed" : "ready", e.revision += 1, e.updatedAt = $(), await zh(r, e), {
 				ok: !0,
 				runId: e.id,
 				revision: e.revision,
@@ -10062,7 +10250,7 @@ async function Ah(e) {
 		let s = n.outcome;
 		s !== "done" && s !== "failed" && s !== "skipped" && Q("OUTCOME_INVALID", "Record done, failed, or skipped."), s === "skipped" && (typeof n.reason != "string" || n.reason.trim() === "") && Q("SKIP_REASON_REQUIRED", "Skipping a step requires a reason."), s === "done" && e.progression === "supervised" && n.confirmed !== !0 && Q("COMPLETION_CONFIRMATION_REQUIRED", "Confirm the step outcome before marking it done.");
 		let c = typeof n.summary == "string" ? n.summary : "";
-		return Buffer.byteLength(c, "utf8") > 8192 && Q("SUMMARY_TOO_LARGE", "Step summaries are limited to 8 KiB; do not store a transcript."), a.status = s, a.finishedAt = $(), a.summary = c || null, a.reason = s === "skipped" ? n.reason.slice(0, 2e3) : null, s === "failed" ? e.status = "paused" : (e.currentStepIndex += 1, e.status = e.currentStepIndex >= e.steps.length ? "completed" : "ready"), e.revision += 1, e.updatedAt = $(), await Dh(r, e), {
+		return Buffer.byteLength(c, "utf8") > 8192 && Q("SUMMARY_TOO_LARGE", "Step summaries are limited to 8 KiB; do not store a transcript."), a.status = s, a.finishedAt = $(), a.summary = c || null, a.reason = s === "skipped" ? n.reason.slice(0, 2e3) : null, s === "failed" ? e.status = "paused" : (e.currentStepIndex += 1, e.status = e.currentStepIndex >= e.steps.length ? "completed" : "ready"), e.revision += 1, e.updatedAt = $(), await zh(r, e), {
 			ok: !0,
 			runId: e.id,
 			revision: e.revision,
@@ -10070,12 +10258,12 @@ async function Ah(e) {
 			currentStepIndex: e.currentStepIndex
 		};
 	}));
-	if (e.command === "resume") return qm(t, {
+	if (e.command === "resume") return Ym(t, {
 		kind: "portable",
 		runId: s.id
-	}, () => bh(r, async () => {
-		let e = await Sh(o, t);
-		if (n.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), e.status === "paused" && !e.resumeRequired && n.decision === "continue") return e.status = "ready", e.revision += 1, e.updatedAt = $(), await Dh(r, e), {
+	}, () => Mh(r, async () => {
+		let e = await Ph(o, t);
+		if (n.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), e.status === "paused" && !e.resumeRequired && n.decision === "continue") return e.status = "ready", e.revision += 1, e.updatedAt = $(), await zh(r, e), {
 			ok: !0,
 			runId: e.id,
 			revision: e.revision,
@@ -10084,7 +10272,7 @@ async function Ah(e) {
 		if (e.status === "running") {
 			n.stoppedConfirmed !== !0 && Q("STOP_CONFIRMATION_REQUIRED", "Confirm that the earlier host work has stopped before marking this attempt interrupted.");
 			let t = e.steps[e.currentStepIndex]?.attempts.at(-1);
-			return t?.status !== "running" && Q("RUN_STATE_INVALID", "The active run has no in-flight attempt."), t.status = "interrupted", t.finishedAt = $(), e.status = "interrupted", e.resumeRequired = !0, e.revision += 1, e.updatedAt = $(), await Dh(r, e), {
+			return t?.status !== "running" && Q("RUN_STATE_INVALID", "The active run has no in-flight attempt."), t.status = "interrupted", t.finishedAt = $(), e.status = "interrupted", e.resumeRequired = !0, e.revision += 1, e.updatedAt = $(), await zh(r, e), {
 				ok: !0,
 				runId: e.id,
 				revision: e.revision,
@@ -10100,7 +10288,7 @@ async function Ah(e) {
 			let t = typeof n.summary == "string" ? n.summary : "";
 			Buffer.byteLength(t, "utf8") > 8192 && Q("SUMMARY_TOO_LARGE", "Step summaries are limited to 8 KiB."), a.status = "done", a.summary = t || null, e.currentStepIndex += 1;
 		} else i === "failed" ? a.status = "failed" : Q("RESUME_DECISION_REQUIRED", "Choose retry, done, or failed for the interrupted attempt.");
-		return e.resumeRequired = !1, e.status = i === "failed" ? "paused" : e.currentStepIndex >= e.steps.length ? "completed" : "ready", e.revision += 1, e.updatedAt = $(), await Dh(r, e), {
+		return e.resumeRequired = !1, e.status = i === "failed" ? "paused" : e.currentStepIndex >= e.steps.length ? "completed" : "ready", e.revision += 1, e.updatedAt = $(), await zh(r, e), {
 			ok: !0,
 			runId: e.id,
 			revision: e.revision,
@@ -10110,44 +10298,44 @@ async function Ah(e) {
 	Q("COMMAND_INVALID", "Unknown portable run command.");
 }
 // src/portable/cli.ts
-var jh = [
+var Uh = [
 	"inspect",
 	"prepare",
 	"status",
 	"step",
 	"record",
 	"resume"
-], Mh = new Set([...l().values()].map(([e]) => e));
-Mh.add("ERR_SQLITE_ERROR");
-function Nh(e) {
+], Wh = new Set([...l().values()].map(([e]) => e));
+Wh.add("ERR_SQLITE_ERROR");
+function Gh(e) {
 	let t = e[0];
-	if (!jh.includes(t)) throw new eh("USAGE", `Usage: loom-bundle <${jh.join("|")}> [--bundle PATH] [--project PATH] [--run-id ID]`);
+	if (!Uh.includes(t)) throw new ph("USAGE", `Usage: loom-bundle <${Uh.join("|")}> [--bundle PATH] [--project PATH] [--run-id ID]`);
 	let n = { command: t };
 	for (let t = 1; t < e.length; t += 1) {
 		let r = e[t];
-		if (r !== "--bundle" && r !== "--project" && r !== "--run-id") throw new eh("USAGE", `Unknown option "${r}".`);
+		if (r !== "--bundle" && r !== "--project" && r !== "--run-id") throw new ph("USAGE", `Unknown option "${r}".`);
 		let i = e[t + 1];
-		if (i === void 0 || i === "" || i.startsWith("--")) throw new eh("USAGE", `Option "${r}" needs a value.`);
+		if (i === void 0 || i === "" || i.startsWith("--")) throw new ph("USAGE", `Option "${r}" needs a value.`);
 		t += 1, r === "--bundle" && (n.bundlePath = i), r === "--project" && (n.projectPath = i), r === "--run-id" && (n.runId = i);
 	}
-	if (n.command !== "inspect" && n.projectPath === void 0) throw new eh("USAGE", "This command needs --project PATH.");
+	if (n.command !== "inspect" && n.projectPath === void 0) throw new ph("USAGE", "This command needs --project PATH.");
 	if ([
 		"status",
 		"step",
 		"record",
 		"resume"
-	].includes(n.command) && n.runId === void 0) throw new eh("USAGE", "This command needs --run-id ID.");
+	].includes(n.command) && n.runId === void 0) throw new ph("USAGE", "This command needs --run-id ID.");
 	return n;
 }
-async function Ph(e = process.argv.slice(2), t = {}) {
+async function Kh(e = process.argv.slice(2), t = {}) {
 	let n = t.stdout ?? process.stdout, r = t.stderr ?? process.stderr;
 	try {
-		let r = Nh(e), i = r.command === "inspect" ? "" : await Fh(t.stdin ?? process.stdin);
+		let r = Gh(e), i = r.command === "inspect" ? "" : await qh(t.stdin ?? process.stdin);
 		i.trim() !== "" && (r.input = JSON.parse(i));
-		let a = await Ah(r);
+		let a = await Hh(r);
 		return n.write(`${JSON.stringify(a)}\n`), 0;
 	} catch (e) {
-		let t = e instanceof eh || e instanceof Cp || e instanceof X || e instanceof Wm || e instanceof Bm, n = t ? e.code : e instanceof SyntaxError ? "JSON_INVALID" : "REQUEST_FAILED", i = t ? e.message : e instanceof SyntaxError ? "Structured helper input is not valid JSON." : "The portable helper could not complete the request. Check file permissions and retry.", a = e instanceof Error && "code" in e ? e.code : void 0, o = !t && typeof a == "string" && Mh.has(a) ? a : void 0;
+		let t = e instanceof ph || e instanceof wp || e instanceof Y || e instanceof Km || e instanceof Hm, n = t ? e.code : e instanceof SyntaxError ? "JSON_INVALID" : "REQUEST_FAILED", i = t ? e.message : e instanceof SyntaxError ? "Structured helper input is not valid JSON." : "The portable helper could not complete the request. Check file permissions and retry.", a = e instanceof Error && "code" in e ? e.code : void 0, o = !t && typeof a == "string" && Wh.has(a) ? a : void 0;
 		return r.write(`${JSON.stringify({
 			ok: !1,
 			error: {
@@ -10158,17 +10346,17 @@ async function Ph(e = process.argv.slice(2), t = {}) {
 		})}\n`), 1;
 	}
 }
-async function Fh(e) {
+async function qh(e) {
 	if (e === void 0 || "isTTY" in e && e.isTTY === !0) return "";
 	let t = [], n = 0;
 	for await (let r of e) {
 		let e = Buffer.isBuffer(r) ? r : Buffer.from(String(r));
-		if (n += e.length, n > 8388608) throw new eh("REQUEST_TOO_LARGE", "Structured helper input is limited to 8 MiB.");
+		if (n += e.length, n > 8388608) throw new ph("REQUEST_TOO_LARGE", "Structured helper input is limited to 8 MiB.");
 		t.push(e);
 	}
 	return Buffer.concat(t).toString("utf8");
 }
-function Ih() {
+function Jh() {
 	let e = process.argv[1];
 	if (e === void 0 || !["loom-bundle.mjs", "cli.js"].includes(n(e))) return !1;
 	try {
@@ -10177,7 +10365,7 @@ function Ih() {
 		return !1;
 	}
 }
-Ih() && Ph().then((e) => {
+Jh() && Kh().then((e) => {
 	e !== 0 && (process.exitCode = e);
 });
-export { Nh as parsePortableArgs, Ph as runPortableCli };
+export { Gh as parsePortableArgs, Kh as runPortableCli };

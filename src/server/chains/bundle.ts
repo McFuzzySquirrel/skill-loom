@@ -31,6 +31,8 @@ import {
   validatePackagePath,
 } from '../../portable/bundle.js';
 import { writeBundleSkillFiles } from '../../portable/install-skill.js';
+import { discardInstalledModeIndex, installedExecutableFlag, readInstalledModeIndex, type InstalledModeReceipt } from '../../portable/installed-modes.js';
+import { packageFingerprint, treeFingerprint } from '../../portable/runtime.js';
 export { BundleError, MAX_BUNDLE_BYTES, parseBundle } from '../../portable/bundle.js';
 
 export { MAX_BUNDLE_REQUEST_BYTES } from '../../portable/bundle.js';
@@ -129,6 +131,7 @@ export async function exportBundle(
     }
     const skill: BundleSkill = { name, directory, files: [] };
     const snapshotContent = selected[REMOTE_SNAPSHOT_CONTENT];
+    const installedModes = await readInstalledModeIndex(source);
     if (process.platform === 'win32' && selected.source === 'remote' && snapshotContent?.executablePaths === undefined) {
       throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', 'The remote package modes cannot be verified on Windows. Refresh the source and retry.');
     }
@@ -138,6 +141,7 @@ export async function exportBundle(
     async function collect(directory: string, prefix: string, depth: number): Promise<void> {
       if (depth > 32) invalid('The skill package exceeds the directory depth limit.');
       for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+        if (prefix === '' && entry.name === '.loom' && installedModes !== null) continue;
         const path = prefix + entry.name;
         validatePackagePath(path);
         const absolute = join(directory, entry.name);
@@ -164,7 +168,8 @@ export async function exportBundle(
             skill.files.push({
               path,
               content: content.subarray(0, bytesRead).toString('base64'),
-              executable: recordedExecutable ?? executable,
+              executable: installedModes === null ? recordedExecutable ?? executable :
+                installedExecutableFlag(installedModes, path, executable),
             });
           } finally {
             await handle.close();
@@ -179,7 +184,10 @@ export async function exportBundle(
         invalid('Export refuses symbolic links in skill package paths.');
       }
       await collect(source, '', 0);
-      if (process.platform === 'win32' && snapshotContent === undefined) {
+      if (installedModes !== null && installedModes.files.length !== skill.files.length) {
+        invalid('Installed files no longer match their executable-mode metadata. Restore the complete reviewed package.');
+      }
+      if (process.platform === 'win32' && snapshotContent === undefined && installedModes === null) {
         const executablePaths = await readGitExecutablePaths(source, skill.files.map((file) => file.path));
         for (const file of skill.files) file.executable = executablePaths.has(file.path);
       }
@@ -374,13 +382,7 @@ export async function importBundle(
   requireCompleteDiscovery = false,
   verifyReuse?: () => Promise<void>,
 ): Promise<Chain> {
-  const preview = await previewBundle(raw, projectPath, catalog, requireCompleteDiscovery);
-  if (process.platform === 'win32' && preview.bundle.skills.some((skill) => skill.files.some((file) => file.executable))) {
-    throw new BundleError(
-      'BUNDLE_SOURCE_UNAVAILABLE',
-      'Windows cannot yet preserve executable modes when installing or reusing bundle skills.',
-    );
-  }
+  const { preview, entries } = await inspectBundleDestination(raw, projectPath, catalog, requireCompleteDiscovery);
   const reuse = new Set(reuseSkills);
   if (reuse.size !== reuseSkills.length || [...reuse].some((name) =>
     !preview.skills.some((skill) => skill.name === name && skill.conflict))) {
@@ -390,8 +392,17 @@ export async function importBundle(
     if (!reuse.has(skill.name) && (skill.conflict || skill.directoryExists)) {
       throw new BundleError('BUNDLE_CONFLICT', `Skill "${skill.name}" already exists. Reuse the installed skill or cancel; import never overwrites packages.`);
     }
+    if (process.platform === 'win32' && reuse.has(skill.name)) {
+      const paths = new Set(entries.filter((entry) =>
+        entry.enabled && entry.source === 'project' && entry.name === skill.name).map((entry) => entry.packagePath));
+      const path = [...paths][0];
+      if (paths.size !== 1 || path === undefined || await readInstalledModeIndex(path) === null) {
+        throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', 'Windows package reuse requires intact installed-mode metadata. Install the reviewed bundle into a new package directory.');
+      }
+    }
   }
   const created: string[] = [];
+  const createdModes: InstalledModeReceipt[] = [];
   const createdAgents: Array<{ path: string; fingerprint: string }> = [];
   try {
     if (preview.bundle.skills.some((skill) => !reuse.has(skill.name))) {
@@ -406,7 +417,13 @@ export async function importBundle(
           throw error;
         }
         created.push(destination);
-        await writeBundleSkillFiles(destination, skill.files, { directoryMode: 0o755 });
+        const modes = await writeBundleSkillFiles(destination, skill.files, {
+          directoryMode: 0o755, recordExecutableModes: process.platform === 'win32',
+        });
+        if (modes !== undefined) createdModes.push(modes);
+        if (await treeFingerprint(destination) !== packageFingerprint(skill.files)) {
+          throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', 'The newly installed skill differs from the reviewed bundle.');
+        }
       }
     }
     if (preview.bundle.version === 2) {
@@ -429,6 +446,7 @@ export async function importBundle(
     return await chains.importChain(projectPath, bundleChain(preview.bundle));
   } catch (error) {
     await Promise.all(created.map((path) => rm(path, { recursive: true, force: true })));
+    await Promise.all(createdModes.map(discardInstalledModeIndex));
     await Promise.all(createdAgents.map(({ path, fingerprint }) =>
       removeNativeAgentIfUnchanged(path, fingerprint)));
     if (error instanceof NativeAgentCopyError) {

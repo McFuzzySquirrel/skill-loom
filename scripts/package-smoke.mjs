@@ -28,6 +28,7 @@ function assertPackageContents(files) {
     'package/dist/src/server/cli.js',
     'package/dist/src/server/index.js',
     'package/dist/src/server/chains/scenario-skills/THIRD_PARTY_NOTICES.md',
+    'package/dist/src/server/chains/scenario-skill-modes.json',
     'package/dist/src/server/chains/scenario-skills/minimax-xlsx/SKILL.md',
     'package/dist/src/server/chains/scenario-skills/minimax-xlsx/LICENSE',
     'package/dist/web/index.html',

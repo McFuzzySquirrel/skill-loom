@@ -15,3 +15,4 @@ if (sourceInfo.isSymbolicLink() || !sourceInfo.isDirectory()) {
 await rm(destination, { recursive: true, force: true });
 await mkdir(dirname(destination), { recursive: true });
 await cp(source, destination, { recursive: true, preserveTimestamps: true });
+await cp(join(dirname(source), 'scenario-skill-modes.json'), join(dirname(destination), 'scenario-skill-modes.json'));

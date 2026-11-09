@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import {
   chmod,
@@ -11,6 +12,13 @@ import {
 } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { publishSkillEntry } from '../../portable/install-skill.js';
+import {
+  discardInstalledModeIndex, installedExecutableFlag, readInstalledModeIndex, writeInstalledModeIndex,
+  type InstalledModeIndex, type InstalledModeReceipt,
+} from '../../portable/installed-modes.js';
+import { treeFingerprint, type PackageTreeEntry } from '../../portable/runtime.js';
+import { readGitExecutablePaths } from '../chains/git-file-modes.js';
+import { readBundledSkillModes } from './bundled-modes.js';
 import type { ScenarioSkillSource } from '../../shared/presets.js';
 import { SHARED_PROJECT_SKILLS_SEGMENTS, sharedProjectSkillRoot } from './project-paths.js';
 import { snapshotPackageFingerprint, snapshotReviewFingerprint } from './snapshot-fingerprint.js';
@@ -108,10 +116,10 @@ async function copySkillIntoProjectWithNotice(
     );
   }
   if (process.platform === 'win32' && entry.source === 'remote' &&
-      (remoteContent?.executablePaths === undefined || remoteContent.executablePaths.length > 0)) {
+      remoteContent?.executablePaths === undefined) {
     throw new CatalogCopyError(
       CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
-      'Windows cannot yet preserve the reviewed executable modes of this remote package during installation.',
+      'Windows requires verified executable-mode metadata for this remote package. Refresh the source and retry.',
       { skillId: entry.id },
     );
   }
@@ -180,9 +188,14 @@ async function copySkillIntoProjectWithNotice(
     allowNameSuffix,
   );
 
-  const budget: CopyBudget = { files: 0, bytes: 0, entries: 0, skillEntries: [] };
+  const budget: CopyBudget = { files: 0, bytes: 0, entries: 0, skillEntries: [], copiedFiles: [] };
+  let modeReceipt: InstalledModeReceipt | undefined;
   try {
-    await copyDirectory(sourceDirectory, destination, budget);
+    const sourceModes = await readInstalledModeIndex(sourceDirectory);
+    await copyDirectory(sourceDirectory, destination, budget, 0, '', sourceModes);
+    if (sourceModes !== null && sourceModes.files.length !== budget.copiedFiles.length) {
+      throw new CatalogCopyError(CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE, 'The source package no longer matches its installed-mode inventory.');
+    }
     if (!budget.skillEntries.some((item) => item.path === 'SKILL.md')) {
       throw new CatalogCopyError(
         CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
@@ -197,8 +210,35 @@ async function copySkillIntoProjectWithNotice(
         mode: 0o644,
       });
     }
+    let verifiedFiles: Array<{ path: string; content: Buffer; executable: boolean }> | undefined;
     if (entry.source === 'remote' && remoteContent !== undefined) {
-      await verifyRemoteCopy(destination, remoteContent, entry.id, budget.skillEntries);
+      verifiedFiles = await verifyRemoteCopy(destination, remoteContent, entry.id, budget.skillEntries);
+    } else if (process.platform === 'win32') {
+      if (sourceModes !== null) {
+        verifiedFiles = budget.copiedFiles;
+      } else if (entry.source === 'builtin') {
+        const recorded = await readBundledSkillModes(entry.name);
+        const seen = new Set<string>();
+        if (recorded.length !== budget.copiedFiles.length) {
+          throw new CatalogCopyError(CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE, 'The bundled package no longer matches its mode manifest.');
+        }
+        verifiedFiles = budget.copiedFiles.map((file) => {
+          const expected = recorded.find((item) => item.path === file.path);
+          if (seen.has(file.path) || expected === undefined ||
+              expected.sha256 !== createHash('sha256').update(file.content).digest('hex')) {
+            throw new CatalogCopyError(CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE, 'The bundled package no longer matches its mode manifest.');
+          }
+          seen.add(file.path);
+          return { ...file, executable: expected.executable };
+        });
+      } else {
+        const executable = await readGitExecutablePaths(sourceDirectory, budget.copiedFiles.map((file) => file.path));
+        verifiedFiles = budget.copiedFiles.map((file) => ({ ...file, executable: executable.has(file.path) }));
+      }
+      if (notice !== undefined) verifiedFiles.push({ path: 'SKILL-LOOM-SOURCE.md', content: Buffer.from(notice), executable: false });
+    }
+    if (process.platform === 'win32' && verifiedFiles !== undefined) {
+      modeReceipt = await writeInstalledModeIndex(destination, verifiedFiles);
     }
     budget.skillEntries.sort((left, right) => right.path.split('/').length - left.path.split('/').length);
     for (const skillEntry of budget.skillEntries) {
@@ -208,12 +248,31 @@ async function copySkillIntoProjectWithNotice(
         temporaryRoot: destinationRoot,
       });
     }
+    if (verifiedFiles !== undefined) {
+      const inventory: PackageTreeEntry[] = [];
+      await treeFingerprint(destination, inventory);
+      const installedFiles = inventory.filter((item) => item.kind === 'file');
+      const expected = new Map(verifiedFiles.map((file) => [file.path, file]));
+      if (installedFiles.length !== expected.size || installedFiles.some((file) => {
+        const original = expected.get(file.path);
+        return original === undefined || original.executable !== file.executable ||
+          original.content.length !== file.bytes ||
+          createHash('sha256').update(original.content).digest('hex') !== file.fingerprint;
+      })) {
+        throw new CatalogCopyError(
+          CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
+          'The installed package changed during publication. Refresh and review it again.',
+          { skillId: entry.id },
+        );
+      }
+    }
   } catch (error) {
     await removePartialCopy(
       destination,
       entry.id,
       'A partial skill package could not be removed after copy failed.',
       error,
+      modeReceipt,
     );
     if (error instanceof CatalogCopyError) {
       throw error;
@@ -231,7 +290,7 @@ async function copySkillIntoProjectWithNotice(
     snapshot: NonNullable<SkillEntry[typeof REMOTE_SNAPSHOT_CONTENT]>,
     skillId: string,
     skillEntries: Array<{ path: string; content: Buffer; mode: bigint }>,
-  ): Promise<void> {
+  ): Promise<Array<{ path: string; content: Buffer; executable: boolean }>> {
     const files: Array<{ path: string; content: Buffer; executable: boolean }> = [];
     const remainingExecutables = snapshot.executablePaths === undefined
       ? undefined : new Set(snapshot.executablePaths);
@@ -279,6 +338,7 @@ async function copySkillIntoProjectWithNotice(
         snapshotReviewFingerprint(files) !== snapshot.reviewFingerprint) {
       throw unsafe();
     }
+    return files;
   }
 
   return {
@@ -357,9 +417,11 @@ async function removePartialCopy(
   skillId: string,
   message: string,
   cause: unknown,
+  modeReceipt?: InstalledModeReceipt,
 ): Promise<void> {
   try {
     await rm(destination, { recursive: true, force: true });
+    if (modeReceipt !== undefined) await discardInstalledModeIndex(modeReceipt);
   } catch (error) {
     throw new CatalogCopyError(
       CATALOG_COPY_ERROR_CODES.COPY_FAILED,
@@ -468,6 +530,7 @@ interface CopyBudget {
   bytes: number;
   entries: number;
   skillEntries: Array<{ path: string; content: Buffer; mode: bigint }>;
+  copiedFiles: Array<{ path: string; content: Buffer; executable: boolean }>;
 }
 
 async function copyDirectory(
@@ -476,6 +539,7 @@ async function copyDirectory(
   budget: CopyBudget,
   depth = 0,
   prefix = '',
+  sourceModes: InstalledModeIndex | null = null,
 ): Promise<void> {
   const directory = await lstat(source);
   if (!directory.isDirectory() || directory.isSymbolicLink() || await realpath(source) !== source) {
@@ -496,6 +560,7 @@ async function copyDirectory(
     const sourcePath = join(source, entry.name);
     const destinationPath = join(destination, entry.name);
     const packagePath = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
+    if (prefix === '' && entry.name === '.loom' && sourceModes !== null) continue;
 
     if (entry.isSymbolicLink()) {
       throw new CatalogCopyError(
@@ -507,7 +572,7 @@ async function copyDirectory(
 
     if (entry.isDirectory()) {
       await mkdir(destinationPath, { mode: 0o755 });
-      await copyDirectory(sourcePath, destinationPath, budget, depth + 1, packagePath);
+      await copyDirectory(sourcePath, destinationPath, budget, depth + 1, packagePath, sourceModes);
       continue;
     }
 
@@ -548,6 +613,11 @@ async function copyDirectory(
         { path: sourcePath },
       );
     }
+    budget.copiedFiles.push({
+      path: packagePath, content: checked.content,
+      executable: sourceModes === null ? (checked.mode & 0o111n) !== 0n :
+        installedExecutableFlag(sourceModes, packagePath, (checked.mode & 0o111n) !== 0n),
+    });
     if (entry.name === 'SKILL.md') {
       budget.skillEntries.push({ path: packagePath, ...checked });
       continue;

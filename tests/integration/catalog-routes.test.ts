@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -66,6 +67,10 @@ beforeEach(async () => {
   const copilotPersonalDirectory = join(root, 'copilot', 'personal-skill');
   await writeSkill(copilotProjectDirectory, 'copilot-project', 'Copilot project skill');
   await writeSkill(copilotPersonalDirectory, 'copilot-personal', 'Copilot personal skill');
+  if (process.platform === 'win32') {
+    execFileSync('git', ['-C', root, 'init', '--quiet']);
+    execFileSync('git', ['-C', root, 'add', '--', 'home', 'copilot', 'extra-skills']);
+  }
 
   const copilotRunner: CopilotCommandRunner = async () => ({
     exitCode: 0,

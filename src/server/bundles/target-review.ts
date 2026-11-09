@@ -3,6 +3,7 @@ import { lstat, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { BundleError, MAX_BUNDLE_BYTES, MAX_BUNDLE_FILES } from '../../portable/bundle.js';
 import { packageFingerprint, PortableRunError, treeFingerprint } from '../../portable/runtime.js';
+import { readInstalledModeIndex } from '../../portable/installed-modes.js';
 import type { BundleReuseEvidence, ChainBundle, ReviewedBundlePreview } from '../../shared/bundles.js';
 import type { CatalogService } from '../catalog/merge.js';
 import type { SkillEntry } from '../catalog/types.js';
@@ -50,6 +51,9 @@ async function collectReuseEvidence(
       const info = await lstat(path);
       if (!info.isDirectory() || info.isSymbolicLink() || await realpath(path) !== path) {
         throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', `The installed package for "${name}" is not a safe directory.`);
+      }
+      if (process.platform === 'win32' && await readInstalledModeIndex(path) === null) {
+        throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', 'Windows package reuse requires intact installed-mode metadata. Reinstall the reviewed package into a new shared skill directory.');
       }
       fingerprint = await treeFingerprint(path, inventory, {
         files: MAX_BUNDLE_FILES - totalFiles, bytes: MAX_BUNDLE_BYTES - totalBytes,

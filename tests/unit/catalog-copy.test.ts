@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import {
   chmod,
   mkdir,
@@ -22,6 +23,7 @@ import {
 } from '../../src/server/catalog/copy.js';
 import { REMOTE_SNAPSHOT_CONTENT, type SkillEntry } from '../../src/server/catalog/types.js';
 import { snapshotPackageFingerprint, snapshotReviewFingerprint } from '../../src/server/catalog/snapshot-fingerprint.js';
+import { treeFingerprint } from '../../src/portable/runtime.js';
 import {
   scenarioCatalog,
   scenarioSkillPackagePath,
@@ -44,6 +46,10 @@ beforeEach(async () => {
   );
   await mkdir(join(sourcePath, 'templates'), { recursive: true });
   await writeFile(join(sourcePath, 'templates', 'note.md'), 'TEMPLATE\n', 'utf8');
+  if (process.platform === 'win32') {
+    execFileSync('git', ['-C', root, 'init', '--quiet']);
+    execFileSync('git', ['-C', root, 'add', '--', 'personal-skills']);
+  }
 });
 
 afterEach(async () => {
@@ -170,12 +176,10 @@ describe('copySkillIntoProject', () => {
       copySkillIntoProject({ projectPath, harness: 'opencode', entry: remote }),
       CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
     );
-    if (process.platform !== 'win32') {
-      expect(await readdir(projectSkillRootFor('opencode', projectPath))).toEqual([]);
-    }
+    expect(await readdir(projectSkillRootFor('opencode', projectPath))).toEqual([]);
   });
 
-  it.skipIf(process.platform === 'win32')('verifies remote executable bits against the snapshot', async () => {
+  it('preserves verified remote executable intent, including on Windows', async () => {
     const script = join(sourcePath, 'scripts', 'check.sh');
     await mkdir(join(sourcePath, 'scripts'));
     await writeFile(script, 'echo checked\n');
@@ -197,8 +201,15 @@ describe('copySkillIntoProject', () => {
       },
     });
     const copied = await copySkillIntoProject({ projectPath, harness: 'opencode', entry: remote });
-    expect((await stat(join(copied.destinationPath, 'scripts', 'check.sh'))).mode & 0o111).not.toBe(0);
-    await chmod(script, 0o644);
+    const inventory: Parameters<typeof treeFingerprint>[1] = [];
+    await treeFingerprint(copied.destinationPath, inventory);
+    expect(inventory.find((item) => item.path === 'scripts/check.sh')).toMatchObject({ executable: true });
+    if (process.platform !== 'win32') {
+      expect((await stat(join(copied.destinationPath, 'scripts', 'check.sh'))).mode & 0o111).not.toBe(0);
+      await chmod(script, 0o644);
+    } else {
+      await writeFile(script, 'changed\n');
+    }
     await expectCopyError(
       copySkillIntoProject({ projectPath, harness: 'opencode', entry: remote }),
       CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,

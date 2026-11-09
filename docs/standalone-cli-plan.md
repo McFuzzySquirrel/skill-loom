@@ -207,9 +207,10 @@ These are requirements to implement and verify, not current guarantees:
    handoff and bundle export; legacy snapshots gain an index only after refresh
    verifies their contents. Windows discovery, export and copy reject missing
    mode metadata rather than inferring it from filesystem modes; hosted
-   Linux, macOS and Windows checks passed (`42659438142`). Windows installation and reuse of executable bundle
-   packages and remote executable-package copy remain explicitly blocked until
-   reviewed mode metadata can also be preserved and validated after install.
+   Linux, macOS and Windows checks passed (`42659438142`). Executable bundle
+   installation and remote executable-package copy were initially blocked on
+   Windows; the installed-mode implementation below supersedes that gate only
+   for packages with complete, validated mode records.
    Windows export of other filesystem packages reads executable intent from
    stage-zero Git index entries, and refuses untracked or conflicted files
    instead of deriving modes from Windows filesystem stat results. The Git
@@ -224,15 +225,15 @@ These are requirements to implement and verify, not current guarantees:
    require inspection and cleanup. Actual process interruption before any link,
    after a nested link, and after the top-level link and the focused publication
    suites passed on hosted Linux, macOS and Windows (`42674918360`). This ordering is not proof of
-   power-loss durability, safe execution isolation, or Windows executable-mode
-   installation.
+   power-loss durability, safe execution isolation, or by itself Windows
+   executable-mode installation.
    Focused hosted Linux, macOS and Windows tests passed for migration,
    tamper rejection, handoff, bundle export and the standalone handoff builder;
    the Windows test also verified that executable installation is blocked.
    Remote copies are now checked against the discovered snapshot fingerprint,
    with partial copies removed on mismatch; hosted tests passed on Linux, macOS
    and Windows (`42654254374`). This is a point-in-time check, not a protected
-   execution view, and it does not lift the Windows executable-mode gate.
+   execution view, and it did not by itself lift the Windows executable-mode gate.
    The original snapshot fingerprint concatenates unframed file contents, so
    different package trees can produce the same digest input. New snapshots
    additionally store a length-framed digest built from the fetched Git files;
@@ -252,6 +253,31 @@ These are requirements to implement and verify, not current guarantees:
    The focused bundle suite passed on all three hosted platforms
    (`42659092629`). This detects observed replacements; it is not an immutable
    file lock.
+   Windows installation now reserves paired, version-1 installed-mode records
+   in the package's `.loom/installed-modes.json` and the project's
+   `.loom/package-modes/` registry. The records bind original file hashes and
+   executable intent to complete package-relative paths. New package content
+   is verified against the reviewed bundle or copy before success. Review,
+   differing reuse, portable steps, and re-export fingerprint current bytes
+   together with recorded intent; existing-path edits retain mode intent but
+   invalidate previous approvals. Missing or extra paths require a new reviewed
+   installation. Only validated metadata is excluded from content inventories.
+   Missing either record fails closed, and Windows shared packages without
+   either record are also rejected rather than silently treated as
+   non-executable. Legacy shared packages need restoration or a fresh reviewed
+   installation; this is intentionally not an automatic migration. Other
+   Windows filesystem copies require a complete stage-zero Git mode index.
+   Bundled packages ship a content-bound mode manifest; contributors regenerate
+   it with `npm run update:scenario-modes` after changing those packages.
+   Metadata publication never overwrites existing records; ordinary rollback
+   removes only that attempt's registry receipt, while crashes retain evidence
+   for explicit inspection and cleanup. Tests cover real installer termination,
+   simultaneous reservations, missing/corrupt metadata, content and path changes,
+   differing reuse, and executable round-trips. Local focused checks have passed;
+   native hosted verification of this implementation is pending. These records
+   are not authenticated or immutable and cannot replace protected execution,
+   private Windows IPC, or descendant containment. Power-loss durability is not
+   established on Windows filesystems without directory fsync.
    The hosted Linux runner's read-only probe found cgroup v2 but no write
    access to its root or current cgroup. `/dev/kvm` was not accessible to
    the runner user and QEMU was not installed. This does not rule out a

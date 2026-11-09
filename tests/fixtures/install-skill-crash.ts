@@ -13,6 +13,7 @@ const files = [
 
 await writeBundleSkillFiles(destination, files, {
   directoryMode: 0o700,
+  recordExecutableModes: process.argv[4] === 'record-modes',
   publish: async (source, target) => {
     if (phase !== 'before') await link(source, target);
     if (phase === 'before' || (phase === 'nested' && target !== join(destination, 'SKILL.md')) ||

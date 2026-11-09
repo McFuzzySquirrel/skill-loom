@@ -7,6 +7,7 @@ import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { executePortableRequest, openCheckedFile, packageFingerprint, treeFingerprint, type PackageTreeEntry } from '../../src/portable/runtime.js';
 import { RunSchema } from '../../src/portable/run-schema.js';
+import { writeInstalledModeIndex } from '../../src/portable/installed-modes.js';
 import { runPortableCli } from '../../src/portable/cli.js';
 import type { ChainBundle } from '../../src/shared/bundles.js';
 import { scanProjectRunRecords } from '../../src/shared/project-run-records.js';
@@ -138,14 +139,46 @@ describe('portable bundle execution', () => {
     expect(stderr).not.toContain('SECRET_VALUE');
   });
 
-  it.skipIf(process.platform !== 'win32')('refuses executable bundle installation before claiming or creating a run', async () => {
+  it('prepares executable bundle installation with reviewed executable intent', async () => {
     const executableBundle = structuredClone(bundle);
     executableBundle.skills[0]!.files[1]!.executable = true;
     await writeFile(bundlePath, JSON.stringify(executableBundle));
-    await expect(prepare()).rejects.toMatchObject({ code: 'EXECUTABLE_MODES_UNSUPPORTED' });
-    await expect(stat(join(project, '.agents'))).rejects.toMatchObject({ code: 'ENOENT' });
-    expect((await reviewProjectCoordination(project)).claim).toBeNull();
+    const prepared = await prepare();
+    const inventory: PackageTreeEntry[] = [];
+    const destination = join(project, '.agents', 'skills', 'review');
+    expect(await treeFingerprint(destination, inventory)).toBe(packageFingerprint(executableBundle.skills[0]!.files));
+    expect(inventory.find((entry) => entry.path === 'check.bin')).toMatchObject({ executable: true });
+    expect((await command('step', prepared.runId, prepared.revision, { confirmed: true }))).toMatchObject({ ok: true });
   });
+
+  it.runIf(process.platform === 'win32')('preserves executable intent through both standalone helper mirrors', async () => {
+    const executableBundle = structuredClone(bundle);
+    executableBundle.skills[0]!.files[1]!.executable = true;
+    await writeFile(bundlePath, JSON.stringify(executableBundle));
+    for (const [index, prefix] of ['.github/skills', 'skill'].entries()) {
+      const target = join(root, `helper-project-${index}`);
+      await mkdir(target);
+      const helper = join(process.cwd(), prefix, 'loom-run-bundle', 'scripts', 'loom-bundle.mjs');
+      const args = ['--disable-warning=ExperimentalWarning', helper];
+      const review = spawnSync(process.execPath, [...args, 'inspect', '--bundle', bundlePath, '--project', target], {
+        encoding: 'utf8', timeout: 30_000,
+      });
+      expect(review.status, review.stderr).toBe(0);
+      const { reviewDigest } = JSON.parse(review.stdout) as { reviewDigest: string };
+      const prepared = spawnSync(process.execPath, [...args, 'prepare', '--bundle', bundlePath, '--project', target], {
+        input: JSON.stringify({
+          installConfirmed: true, reviewDigest, actualHost: 'opencode', progression: 'supervised',
+          sessionDecision: { requested: 'shared', mechanism: 'current-conversation', description: 'Current conversation.', confirmed: true },
+          inputs: { task: 'the change' },
+        }),
+        encoding: 'utf8', timeout: 30_000,
+      });
+      expect(prepared.status, prepared.stderr).toBe(0);
+      const inventory: PackageTreeEntry[] = [];
+      await treeFingerprint(join(target, '.agents', 'skills', 'review'), inventory);
+      expect(inventory.find((entry) => entry.path === 'check.bin')).toMatchObject({ executable: true });
+    }
+  }, 120_000);
 
   it('retains a portable claim through mutations and terminal status until separately cleared', async () => {
     const initial = await reviewProjectCoordination(project);
@@ -171,6 +204,9 @@ describe('portable bundle execution', () => {
     const existing = join(project, '.agents', 'skills', 'review');
     await mkdir(existing, { recursive: true });
     await writeFile(join(existing, 'SKILL.md'), skillText);
+    if (process.platform === 'win32') {
+      await writeInstalledModeIndex(existing, [{ path: 'SKILL.md', executable: false, content: Buffer.from(skillText) }]);
+    }
     const initial = await reviewProjectCoordination(project);
     await enableReviewedProjectProtocol(project, initial.reviewDigest, true);
     await expect(prepare()).rejects.toMatchObject({ code: 'PACKAGE_CONFLICT' });
@@ -347,6 +383,12 @@ describe('portable bundle execution', () => {
     await mkdir(directory, { recursive: true });
     await writeFile(join(directory, 'SKILL.md'), skillText);
     await writeFile(join(directory, 'x'), Buffer.from('prefix\x00y\x00f\x000\x00suffix'));
+    if (process.platform === 'win32') {
+      await writeInstalledModeIndex(directory, [
+        { path: 'SKILL.md', executable: false, content: Buffer.from(skillText) },
+        { path: 'x', executable: false, content: Buffer.from('prefix\x00y\x00f\x000\x00suffix') },
+      ]);
+    }
     const inspected = await executePortableRequest({ command: 'inspect', projectPath: project, bundlePath }) as {
       reviewDigest: string;
     };
@@ -357,7 +399,7 @@ describe('portable bundle execution', () => {
     await writeFile(join(directory, 'y'), 'suffix');
     await expect(prepare({
       reviewDigest: inspected.reviewDigest, reuseSkills: ['review'], differingReuseConfirmed: true,
-    })).rejects.toMatchObject({ code: 'REVIEW_STALE' });
+    })).rejects.toMatchObject({ code: process.platform === 'win32' ? 'BUNDLE_SOURCE_UNAVAILABLE' : 'REVIEW_STALE' });
   });
 
   it('refuses a prepared step after a legacy-colliding installed package substitution', async () => {
@@ -365,6 +407,12 @@ describe('portable bundle execution', () => {
     await mkdir(directory, { recursive: true });
     await writeFile(join(directory, 'SKILL.md'), skillText);
     await writeFile(join(directory, 'x'), Buffer.from('prefix\x00y\x00f\x000\x00suffix'));
+    if (process.platform === 'win32') {
+      await writeInstalledModeIndex(directory, [
+        { path: 'SKILL.md', executable: false, content: Buffer.from(skillText) },
+        { path: 'x', executable: false, content: Buffer.from('prefix\x00y\x00f\x000\x00suffix') },
+      ]);
+    }
     const prepared = await prepare({ reuseSkills: ['review'], differingReuseConfirmed: true });
     await writeFile(join(directory, 'SKILL.md'), Buffer.concat([
       Buffer.from(skillText), Buffer.from('\x00x\x00f\x000\x00prefix'),
@@ -372,7 +420,7 @@ describe('portable bundle execution', () => {
     await rm(join(directory, 'x'));
     await writeFile(join(directory, 'y'), 'suffix');
     await expect(command('step', prepared.runId, prepared.revision, { confirmed: true }))
-      .rejects.toMatchObject({ code: 'PACKAGE_CHANGED' });
+      .rejects.toMatchObject({ code: process.platform === 'win32' ? 'BUNDLE_SOURCE_UNAVAILABLE' : 'PACKAGE_CHANGED' });
     await expect(command('status', prepared.runId, prepared.revision)).resolves.toMatchObject({
       run: { status: 'ready', revision: prepared.revision },
     });
@@ -472,6 +520,9 @@ describe('portable bundle execution', () => {
     const destination = join(project, '.agents', 'skills', 'review');
     await mkdir(destination, { recursive: true });
     await writeFile(join(destination, 'SKILL.md'), skillText);
+    if (process.platform === 'win32') {
+      await writeInstalledModeIndex(destination, [{ path: 'SKILL.md', executable: false, content: Buffer.from(skillText) }]);
+    }
     const inspected = await executePortableRequest({ command: 'inspect', bundlePath, projectPath: project }) as {
       reviewDigest: string;
     };
@@ -842,6 +893,9 @@ describe('portable bundle execution', () => {
     const destination = join(project, '.agents', 'skills', 'review');
     await mkdir(destination, { recursive: true });
     await writeFile(join(destination, 'SKILL.md'), skillText);
+    if (process.platform === 'win32') {
+      await writeInstalledModeIndex(destination, [{ path: 'SKILL.md', executable: false, content: Buffer.from(skillText) }]);
+    }
     await expect(prepare()).rejects.toMatchObject({ code: 'PACKAGE_CONFLICT' });
     await writeFile(join(destination, 'SKILL.md'), `${skillText}\nLocal edits\n`);
     await expect(prepare({ reuseSkills: ['review'] })).rejects.toMatchObject({
