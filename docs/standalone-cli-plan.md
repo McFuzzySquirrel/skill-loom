@@ -112,8 +112,10 @@ These are requirements to implement and verify, not current guarantees:
    `EPERM` when publishing an already-existing snapshot directory. Refresh now
    accepts a Windows `EPERM` collision only if the existing manifest matches
    the newly staged manifest and its packages, agents, and usable index verify;
-   mismatches fail without replacing the existing snapshot. Hosted Windows
-   verification of this change is pending. A hosted
+   mismatches fail without replacing the existing snapshot. A focused hosted
+   Windows test passed for repeat publication and tampered package, agent,
+   manifest and index rejection; executable-mode preservation remains separate
+   and unresolved. A hosted
    filesystem probe observed `0644` to `0755` on Linux and macOS, but `0666`
    before and after `chmod(0755)` on Windows. Git executable modes therefore
    need a verified representation carried through snapshot validation,
