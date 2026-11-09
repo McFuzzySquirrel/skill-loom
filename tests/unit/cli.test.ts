@@ -42,10 +42,10 @@ describe('CLI argument parsing', () => {
     expect(parseCliArgs(['--port', '7400']).port).toBe(7400);
     expect(parseCliArgs(['--port=7401']).port).toBe(7401);
     expect(parseCliArgs(['--config-dir', '.tmp/profile']).configDir).toBe(
-      `${process.cwd()}/.tmp/profile`,
+      join(process.cwd(), '.tmp', 'profile'),
     );
     expect(parseCliArgs(['--config-dir=.tmp/profile']).configDir).toBe(
-      `${process.cwd()}/.tmp/profile`,
+      join(process.cwd(), '.tmp', 'profile'),
     );
   });
 
@@ -288,7 +288,7 @@ describe('CLI output and environment', () => {
 
     expect(code).toBe(0);
     expect(env.LOOM_PORT).toBe('7411');
-    expect(env.LOOM_CONFIG_DIR).toContain('.tmp/loom-profile');
+    expect(env.LOOM_CONFIG_DIR).toBe(join(process.cwd(), '.tmp', 'loom-profile'));
     expect(stdout.read()).toContain('URL: http://127.0.0.1:7411');
     expect(openUrl).toBeNull();
   });

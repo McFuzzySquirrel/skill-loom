@@ -12,7 +12,7 @@ on:
         description: Test scope
         type: choice
         default: full
-        options: [full, claims, portable, catalog, catalog-collision, profile-alias, snapshot-modes, macos-baseline, preflight, filesystem, harness-exe, workspaces, library, package, mode-probe, containment-probe, terminal, terminal-macos-helper]
+        options: [full, claims, portable, catalog, catalog-collision, profile-alias, snapshot-modes, macos-baseline, preflight, filesystem, harness-exe, cli, workspaces, library, package, mode-probe, containment-probe, terminal, terminal-macos-helper]
 
 permissions:
   contents: read
@@ -59,6 +59,8 @@ jobs:
         run: npx vitest run tests/unit/projects-paths.test.ts tests/integration/fs-routes.test.ts tests/unit/catalog-opencode.test.ts
       - if: inputs.suite == 'harness-exe'
         run: npx vitest run tests/unit/harness-registry.test.ts -t "finds and launches a native Windows|bare override is missing|injected executable probe"
+      - if: inputs.suite == 'cli'
+        run: npx vitest run tests/unit/cli.test.ts
       - if: inputs.suite == 'workspaces'
         run: npx vitest run tests/unit/test-workspaces.test.ts tests/integration/test-workspace-routes.test.ts
       - if: inputs.suite == 'library'
