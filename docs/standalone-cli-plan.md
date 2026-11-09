@@ -156,10 +156,14 @@ These are requirements to implement and verify, not current guarantees:
    with `EPERM`; a later reproduction identified the atomic rename operation
    (`42669079266`). The JSON writer now retries Windows `EPERM` rename errors
    a bounded number of times before reporting failure, without replacing the
-   atomic rename with a copy. Persistent errors still pause the run. The fix
-   requires further Windows stress verification; a passing suite alone does not
-   establish that the intermittent failure is resolved. Diagnostics report
-   only recognized system codes and operations, not paths or content.
+   atomic rename with a copy. Persistent errors still pause the run. Two
+   twenty-iteration hosted Windows stress runs and a full Windows suite passed
+   after this change (`42669536036`, `42669541073`, `42669545978`). A separate
+   hosted Windows test held the target with an exclusive file-sharing lock,
+   verified that the first real rename failed, released the lock on retry,
+   and checked the atomically replaced contents (`42669749931`). These results
+   do not prove all `EPERM` failures are transient. Diagnostics report only
+   recognized system codes and operations, not paths or content.
    A later full baseline after the profile-alias fixes passed Linux but failed
    12 of 65 macOS files and 25 of 65 Windows files (three Windows files
    skipped). This baseline predates the subsequent snapshot-mode changes.
