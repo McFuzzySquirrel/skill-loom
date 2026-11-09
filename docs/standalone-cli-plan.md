@@ -114,6 +114,11 @@ These are requirements to implement and verify, not current guarantees:
    before and after `chmod(0755)` on Windows. Git executable modes therefore
    need a verified representation carried through snapshot validation,
    handoff, bundle export, and installation; do not bypass fingerprint checks.
+   The hosted Linux runner's read-only probe found cgroup v2 but no write
+   access to its root or current cgroup. `/dev/kvm` was not accessible to
+   the runner user and QEMU was not installed. This does not rule out a
+   separately provisioned delegated cgroup or VM, and does not establish
+   containment or safe privileged provisioning.
 
 ### Versioned CLI and process interface
 
