@@ -353,6 +353,10 @@ stopped; cross-mode protection is not complete for older clients or unrelated
 processes. An integration fixture verifies that a separate-process portable
 claim blocks a managed start, and that a managed claim blocks portable
 preparation; neither conflicting operation is allowed to dispatch work.
+Headless process errors after a successful spawn are now reported without
+treating them as an exit; cleanup still waits for an actual exit, escalates,
+and retains the process when termination cannot be confirmed. This protects
+direct-child lifecycle handling but does not establish descendant containment.
 Test and discovery workspace removal now rejects retained claims and unresolved
 records, commits a retirement marker under the project transaction, and moves
 the workspace out of its registered path before deletion. It persists verified

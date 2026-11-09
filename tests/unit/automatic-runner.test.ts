@@ -1,3 +1,4 @@
+import { ChildProcess } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import {
   CHAIN_VERSION,
@@ -26,6 +27,7 @@ import {
   type AutomaticTimers,
 } from '../../src/server/runs/automatic.js';
 import { createTerminalSession, type TerminalExit, type TerminalSession } from '../../src/server/terminal/pty.js';
+import { adaptChildProcess } from '../../src/server/runs/headless-process.js';
 
 const CREATED_AT = '2026-11-04T10:00:00.000Z';
 const PROJECT_PATH = '/tmp/loom-automatic-project';
@@ -782,6 +784,45 @@ describe('automatic Copilot process-exit advancement', () => {
   function copilotChain(overrides: Partial<Chain> = {}): Chain {
     return makeChain({ harness: 'copilot', automaticPermissionOptIn: true, ...overrides });
   }
+
+  it('retains a live child and refuses abort when signaling errors do not confirm exit', async () => {
+    const chain = copilotChain();
+    const child = new ChildProcess();
+    Object.defineProperty(child, 'pid', { value: 12345 });
+    const kill = vi.spyOn(child, 'kill').mockImplementation(() => {
+      child.emit('error', Object.assign(new Error('permission denied'), { code: 'EPERM' }));
+      return false;
+    });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const spawn = vi.fn(() => adaptChildProcess(child));
+    const runner = createAutomaticRunner({
+      run: makeRun(chain),
+      adapter: copilotAdapter(),
+      projectPath: PROJECT_PATH,
+      spawn,
+      timers: new FakeTimers(),
+    });
+    try {
+      await runner.start();
+      vi.useFakeTimers();
+      const abort = runner.abort();
+      const failure = expect(abort).rejects.toMatchObject({
+        code: 'AUTOMATIC_PROCESS_TERMINATION_FAILED',
+      });
+      await vi.advanceTimersByTimeAsync(2_500);
+      await failure;
+      expect(kill.mock.calls.map(([signal]) => signal)).toEqual(['SIGTERM', 'SIGKILL']);
+      expect(runner.getRun().status).not.toBe('aborted');
+      expect(runner.getRun().currentStepIndex).toBe(0);
+      expect(spawn).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+      child.emit('exit', 0, null);
+      await runner.shutdown();
+      log.mockRestore();
+      kill.mockRestore();
+    }
+  });
 
   it('runs one headless process per step with the opt-in flags and advances only on exit', async () => {
     const harness = makeHarness({

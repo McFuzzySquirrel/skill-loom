@@ -1,6 +1,4 @@
-import { spawn as spawnChild } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import type { ChildProcess } from 'node:child_process';
 import { realpath, stat } from 'node:fs/promises';
 import { withProjectClaimTransaction } from '../../shared/project-claim.js';
 import { beginCoordinatedProjectRun, withCoordinatedProjectRun } from '../../shared/project-coordination.js';
@@ -29,7 +27,6 @@ import {
   isFinalRunStatus,
   markRunInterrupted,
   toTimestamp,
-  trimTail,
   truncateReason,
   type Run,
   type RunMode,
@@ -57,7 +54,8 @@ import {
   type SupervisedPtyProcess,
   type SupervisedRunEvent,
 } from './supervised.js';
-import type { TerminalExit, TerminalManager, TerminalSession } from '../terminal/pty.js';
+import type { TerminalManager, TerminalSession } from '../terminal/pty.js';
+import { createChildProcessAdapter } from './headless-process.js';
 
 /**
  * Run orchestration.
@@ -381,7 +379,6 @@ export interface RunOrchestrator {
 }
 
 const DEFAULT_RECONNECT_BUFFER_SIZE = 256;
-const MAX_PROCESS_BUFFER_BYTES = 64 * 1024;
 
 interface Subscription {
   readonly listener: (message: RunStreamMessage) => void;
@@ -1707,110 +1704,6 @@ function createManagedAutomaticSpawner(
     }
 
     return createChildProcessAdapter(spec);
-  };
-}
-
-/**
- * Process-exit surface used by adapters whose declared advancement is a
- * headless process exit. The executable and argument array are passed to
- * `spawn` with `shell: false`; no user text is ever interpreted by a shell.
- */
-function createChildProcessAdapter(spec: AutomaticSpawnSpec): AutomaticProcess {
-  const dataListeners = new Set<(chunk: string) => void>();
-  const exitListeners = new Set<(event: TerminalExit) => void>();
-  let dataSubscribed = false;
-  let buffered = '';
-  let exitEvent: TerminalExit | null = null;
-
-  const child: ChildProcess = spawnChild(spec.executable, [...spec.args], {
-    cwd: spec.cwd,
-    env: process.env,
-    shell: false,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
-  });
-
-  const append = (chunk: string): void => {
-    if (chunk === '') {
-      return;
-    }
-    if (dataSubscribed) {
-      for (const listener of [...dataListeners]) {
-        listener(chunk);
-      }
-      return;
-    }
-    buffered += chunk;
-    if (Buffer.byteLength(buffered, 'utf8') > MAX_PROCESS_BUFFER_BYTES) {
-      buffered = trimTail(buffered);
-    }
-  };
-
-  child.stdout?.on('data', (chunk: Buffer | string) => {
-    append(chunk.toString());
-  });
-  child.stderr?.on('data', (chunk: Buffer | string) => {
-    append(chunk.toString());
-  });
-
-  const finish = (event: TerminalExit): void => {
-    if (exitEvent !== null) {
-      return;
-    }
-    exitEvent = event;
-    for (const listener of [...exitListeners]) {
-      listener(event);
-    }
-    exitListeners.clear();
-  };
-
-  child.once('error', () => {
-    finish({ exitCode: -1 });
-  });
-  child.once('exit', (code) => {
-    finish({ exitCode: code ?? -1 });
-  });
-
-  return {
-    pid: child.pid ?? -1,
-    onData(listener) {
-      dataListeners.add(listener);
-      if (!dataSubscribed) {
-        dataSubscribed = true;
-        const pending = buffered;
-        buffered = '';
-        if (pending !== '') {
-          listener(pending);
-        }
-      }
-      return () => {
-        dataListeners.delete(listener);
-      };
-    },
-    onExit(listener) {
-      if (exitEvent !== null) {
-        const event = exitEvent;
-        queueMicrotask(() => listener(event));
-        return () => undefined;
-      }
-      exitListeners.add(listener);
-      return () => {
-        exitListeners.delete(listener);
-      };
-    },
-    kill(signal) {
-      try {
-        child.kill(signal as NodeJS.Signals | undefined);
-      } catch {
-        // A process that exits between the check and the kill is already gone.
-      }
-    },
-    isRunning() {
-      return exitEvent === null;
-    },
-    getExit() {
-      return exitEvent;
-    },
   };
 }
 
