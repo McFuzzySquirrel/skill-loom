@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { access, lstat, mkdir, mkdtemp, readFile, readdir, rm, unlink, writeFile } from 'node:fs/promises';
+import { access, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -159,9 +159,11 @@ describe('large remote catalog', () => {
     const skill = '---\nname: demo\ndescription: Fixture.\n---\nReview.\n';
     const agent = '---\nmode: primary\ndescription: A reviewer fixture with extra content.\n---\nReview carefully.\n';
     const skillBlob = git(['hash-object', '-w', '--stdin'], skill);
+    const secondSkillBlob = git(['hash-object', '-w', '--stdin'], skill.replace('Fixture.', 'fixture.'));
     const agentBlob = git(['hash-object', '-w', '--stdin'], agent);
     const packageTree = git(['mktree'], `100644 blob ${skillBlob}\tSKILL.md\n`);
-    const skillsTree = git(['mktree'], `040000 tree ${packageTree}\tdemo\n040000 tree ${packageTree}\tsecond\n`);
+    const secondPackageTree = git(['mktree'], `100644 blob ${secondSkillBlob}\tSKILL.md\n`);
+    const skillsTree = git(['mktree'], `040000 tree ${packageTree}\tdemo\n040000 tree ${secondPackageTree}\tsecond\n`);
     const agentTree = git(['mktree'], `100644 blob ${agentBlob}\treviewer.md\n100644 blob ${agentBlob}\tsecond.md\n`);
     const openCodeTree = git(['mktree'], `040000 tree ${agentTree}\tagents\n`);
     const tree = git(['mktree'], `040000 tree ${openCodeTree}\t.opencode\n040000 tree ${skillsTree}\tskills\n`);
@@ -182,6 +184,41 @@ describe('large remote catalog', () => {
       const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
       await store.update({ remoteSkillSources: [{ id: 'budget', repository: remote }] });
       const original = await refreshRemoteSkillSource(store, 'budget', { temporaryDirectory: root });
+      expect(original.packages.map((item) => item.name)).toEqual(['demo', 'demo']);
+      expect(original.packages[0]!.fingerprint).not.toBe(original.packages[1]!.fingerprint);
+      const readPages = async () => {
+        const first = await listRemoteSnapshotPage(store.getConfigDir(), 'budget', commit, {
+          kind: 'skill', search: 'demo', offset: 0, limit: 1,
+        });
+        const second = await listRemoteSnapshotPage(store.getConfigDir(), 'budget', commit, {
+          kind: 'skill', search: 'demo', offset: 1, limit: 1,
+        });
+        expect([first.total, second.total, first.nextOffset, second.nextOffset]).toEqual([2, 2, 1, null]);
+        return [...first.items, ...second.items];
+      };
+      const indexed = await readPages();
+      expect(indexed.map((item) => item.repositoryPath)).toEqual(['skills/demo', 'skills/second']);
+      const indexPath = join(store.getConfigDir(), 'catalog-sources', 'budget', commit, 'snapshot-index.sqlite');
+      await rename(indexPath, `${indexPath}.held`);
+      try {
+        expect(await readPages()).toEqual(indexed);
+      } finally {
+        await rename(`${indexPath}.held`, indexPath);
+      }
+      const identities = original.packages.map((item) => ({
+        sourceId: 'budget', revision: commit, repositoryPath: item.repositoryPath, fingerprint: item.fingerprint,
+      }));
+      const handoff = await prepareDiscoveryHandoff(store, {
+        goal: 'Review same-name packages', harness: 'opencode', candidates: identities,
+      });
+      expect(handoff.candidates.map((item) => [item.repositoryPath, item.fingerprint]))
+        .toEqual(identities.map((item) => [item.repositoryPath, item.fingerprint]));
+      expect(handoff.candidates.map((item) => Buffer.from(item.files[0]!.content, 'base64').toString('utf8')))
+        .toEqual([skill, skill.replace('Fixture.', 'fixture.')]);
+      await expect(prepareDiscoveryHandoff(store, {
+        goal: 'Reject a mismatched identity', harness: 'opencode',
+        candidates: [{ ...identities[0]!, fingerprint: identities[1]!.fingerprint }],
+      })).rejects.toMatchObject({ code: 'DISCOVERY_CANDIDATE_UNAVAILABLE' });
       const skillBytes = Buffer.byteLength(skill);
       const agentBytes = Buffer.byteLength(agent);
       for (const [dimension, threshold] of [

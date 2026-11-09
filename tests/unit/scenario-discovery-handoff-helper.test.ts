@@ -142,4 +142,47 @@ describe('scenario-discovery standalone handoff helpers', () => {
     expect(read.stdout).toBe('');
     expect(read.stderr).toMatch(/unsafe|invalid|path/i);
   });
+
+  it('refuses same-name candidates together but builds the explicitly selected identity', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'loom-handoff-duplicates-'));
+    roots.push(root);
+    const { handoff, handoffPath, manifestPath } = await fixture(root);
+    const first = handoff.candidates[0]!;
+    const secondFiles = first.files.map((file) => file.path === 'SKILL.md'
+      ? { ...file, content: Buffer.from('---\nname: helper-skill\ndescription: Second fixture.\n---\nReview the second.\n').toString('base64') }
+      : file);
+    const hash = createHash('sha256');
+    for (const file of secondFiles) {
+      hash.update(file.path).update('\0').update(file.executable ? 'x' : '-')
+        .update('\0').update(Buffer.from(file.content, 'base64'));
+    }
+    const second = { ...first, repositoryPath: 'skills/second', fingerprint: hash.digest('hex'), files: secondFiles };
+    const { fingerprint: _fingerprint, ...body } = handoff;
+    const updated = { ...body, candidates: [first, second] };
+    await writeFile(handoffPath, JSON.stringify({
+      ...updated, fingerprint: createHash('sha256').update(JSON.stringify(updated)).digest('hex'),
+    }));
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
+      chain: unknown;
+      candidates: Array<{ sourceId: string; revision: string; repositoryPath: string; fingerprint: string }>;
+    };
+    const identity = {
+      sourceId: second.sourceId, revision: second.revision,
+      repositoryPath: second.repositoryPath, fingerprint: second.fingerprint,
+    };
+    const outputPath = join(root, 'approved.loom.json');
+    const build = () => spawnSync(process.execPath, [
+      join(scripts, 'build-from-handoff.mjs'), '--handoff', handoffPath,
+      '--manifest', manifestPath, '--out', outputPath,
+    ], { encoding: 'utf8' });
+    await writeFile(manifestPath, JSON.stringify({ ...manifest, candidates: [...manifest.candidates, identity] }));
+    const ambiguous = build();
+    expect(ambiguous.status).not.toBe(0);
+    expect(ambiguous.stderr).toContain('ambiguous same-name package');
+    await expect(readFile(outputPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    await writeFile(manifestPath, JSON.stringify({ ...manifest, candidates: [identity] }));
+    expect(build().status).toBe(0);
+    const bundle = parseBundle(JSON.parse(await readFile(outputPath, 'utf8')));
+    expect(bundle.skills[0]?.files.find((file) => file.path === 'SKILL.md')?.content).toBe(secondFiles[0]!.content);
+  });
 });
