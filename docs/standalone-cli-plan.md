@@ -92,7 +92,7 @@ These are requirements to implement and verify, not current guarantees:
    1.1.0's prebuilt `spawn-helper` mode `0644`. The package postinstall now
    grants owner execute permission to a private regular helper, and a clean
    macOS runner passed the focused terminal suite without a manual repair.
-   The full cross-platform suite remains failing.
+   The full Windows suite remains unverified after the latest fixes.
    A later full baseline after the profile-alias fixes passed Linux but failed
    12 of 65 macOS files and 25 of 65 Windows files (three Windows files
    skipped). This baseline predates the subsequent snapshot-mode changes.
@@ -100,8 +100,10 @@ These are requirements to implement and verify, not current guarantees:
    fixture paths; those fixtures now use canonical roots without weakening
    explicit alias tests. Removing a deleted extra-skill directory also now
    resolves aliases in its surviving ancestors. The focused hosted macOS suite
-   covering all 12 formerly failing files passed; a fresh full run is still
-   needed before claiming macOS suite coverage.
+   covering all 12 formerly failing files passed. A subsequent full hosted
+   macOS run (`42641736064`) also passed its typecheck, documentation check,
+   and complete Vitest suite. This is offline suite coverage, not live harness
+   or descendant-containment verification.
    Workspace storage, workspace inspection, global drafts and global templates
    now canonicalize config ancestors (including macOS `/var` aliases) while
    rejecting a symlink as the configured directory or storage child. Focused
