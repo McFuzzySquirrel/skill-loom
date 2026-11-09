@@ -79,7 +79,12 @@ project-claim race tests where both contenders reported busy. The Windows
 fixtures now create protected profiles; the subsequent full Windows suite
 passed (`42690884410`: 976 tests, before the final canonical-path guard).
 Focused macOS ownership, control and lifecycle tests passed (`42690892754`:
-25 tests). This is not a successful full macOS regression run.
+25 tests). The later full native matrix passed on all three platforms
+(`42695130412`: Linux 1,026 tests, macOS 1,015, Windows 982). Claim transaction
+startup now closes failed connections and retries transient exclusive-lock
+acquisition for at most 100 ms; callbacks are never replayed, and long-held
+locks still report busy. This resolves the macOS both-contenders-busy race
+without weakening exclusive transactions or durable ownership.
 
 The earlier native installed-package failures (`42690879884`, `42691546905`,
 `42692442530`) exposed retained input-pipe/conout-worker resources after the
@@ -91,7 +96,18 @@ dependency bytes or linked replacement targets. Native Windows package smoke
 now passes (`42693749252`), including actual installed service control,
 asset copying, clean service shutdown and natural PTY probe-process exit
 without a forced exit. Native terminal regressions also pass (`42693753747`:
-51 tests). This fixes the resource leak, not descendant escape; protected
+51 tests). A stronger three-session probe exposed a further forwarding-write
+race (`42694687367`, diagnosed without masking the original error in
+`42695385356`): disposing the worker after destroying its output socket can
+raise `EPIPE` in a later session. The compatibility fix now waits for worker
+termination before closing output, is idempotent, rejects stale-PID killing
+after native exit, and binds both agent and worker-lifecycle file hashes.
+The installed three-session probe passes (`42696176142`), checks final output
+draining and repeated post-exit kill calls, and requires natural probe-process
+exit. Native installer/lifecycle regressions pass (`42696180767`: 57 tests).
+Package smoke now removes its own npm-exec installation cache rather than
+leaving one persistent install for every temporary tarball path. These fixes
+address the observed PTY hangs/crashes, not descendant escape; protected
 execution and verified containment backends are still required.
 
 ## Existing implementation and important constraints

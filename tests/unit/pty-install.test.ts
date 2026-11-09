@@ -127,6 +127,25 @@ describe('Windows PTY installation', () => {
     expect(await readFile(path, 'utf8')).toContain('this._conoutSocketWorker._destroySocket().then');
   });
 
+  it('surfaces worker termination failure through the terminal error path', async () => {
+    const { path } = await windowsFixture();
+    await ensurePtyHelper({ platform: 'win32', arch: process.arch, packageDirectory: root });
+    const exported: { WindowsPtyAgent?: { prototype: { _cleanUpProcess: (this: unknown) => void } } } = {};
+    runInNewContext(await readFile(path, 'utf8'), {
+      exports: exported, require: () => ({}), setTimeout, clearTimeout, console,
+    });
+    const failure = new Error('injected worker termination failure');
+    let received: unknown;
+    exported.WindowsPtyAgent!.prototype._cleanUpProcess.call({
+      _useConptyDll: false,
+      _inSocket: { destroy() {} },
+      _outSocket: { destroy(error: unknown) { received = error; } },
+      _conoutSocketWorker: { _destroySocket: () => Promise.reject(failure) },
+    });
+    await Promise.resolve();
+    expect(received).toBe(failure);
+  });
+
   it('refuses unknown dependency bytes without overwriting them', async () => {
     const { path } = await windowsFixture();
     await writeFile(path, 'unexpected upstream release');

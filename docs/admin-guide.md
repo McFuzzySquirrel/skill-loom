@@ -490,10 +490,14 @@ down. Clean shutdown removes only that instance's metadata. Windows control
 does not lift the protected-content or descendant-containment execution gates.
 
 Windows installation applies a compatibility fix to the pinned `node-pty`
-1.1.0 JavaScript agent: natural exit drains terminal output, then destroys
-the input pipe and disposes the conout worker as well as closing the output
-pipe. The installer checks the complete upstream file hash and accepts only
-the exact original or already-fixed implementation; unknown versions, linked
+1.1.0 JavaScript agent: natural exit drains terminal output, destroys the input
+pipe, and waits for conout-worker termination before closing the output pipe.
+Closing output first can race a forwarding write and crash a later session.
+Cleanup is idempotent, and killing after native exit never enumerates or kills
+potentially recycled process IDs. Worker termination errors take the terminal
+error path rather than being ignored. The installer checks complete upstream
+agent and worker-lifecycle file hashes, upgrades the earlier cleanup fix, and
+accepts only known implementations; unknown versions, linked
 files and linked library directories fail explicitly. Re-run `npm install`
 after rebuilding or replacing the dependency; do not disable postinstall.
 Native installed-package verification now observes natural process exit
