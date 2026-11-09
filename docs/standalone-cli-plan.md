@@ -205,7 +205,11 @@ These are requirements to implement and verify, not current guarantees:
    Installed-package review fingerprints also use a framed representation;
    older portable runs with skills can be inspected and reconciled but cannot
    start another step without a new review and run. Older helpers reject new
-   run records. These checks likewise do not freeze packages for execution.
+   run records. The portable suite passed on Linux, macOS and Windows
+   (`42658656412`). These checks likewise do not freeze packages for execution.
+   Headless bundle import review also checks the opened bundle's file identity
+   and rechecks its path and timestamps after reading, including on Windows.
+   This detects observed replacements; it is not an immutable file lock.
    The hosted Linux runner's read-only probe found cgroup v2 but no write
    access to its root or current cgroup. `/dev/kvm` was not accessible to
    the runner user and QEMU was not installed. This does not rule out a

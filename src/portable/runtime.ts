@@ -202,7 +202,7 @@ async function ensureSkillRoot(project: string): Promise<string> {
   return skills;
 }
 
-async function openCheckedFile(
+export async function openCheckedFile(
   path: string,
   unsafeCode: string,
   changedCode: string,

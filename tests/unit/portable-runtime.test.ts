@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { executePortableRequest, packageFingerprint, treeFingerprint, type PackageTreeEntry } from '../../src/portable/runtime.js';
+import { executePortableRequest, openCheckedFile, packageFingerprint, treeFingerprint, type PackageTreeEntry } from '../../src/portable/runtime.js';
 import { RunSchema } from '../../src/portable/run-schema.js';
 import { runPortableCli } from '../../src/portable/cli.js';
 import type { ChainBundle } from '../../src/shared/bundles.js';
@@ -101,6 +101,17 @@ function command(
 }
 
 describe('portable bundle execution', () => {
+  it('detects a file replaced after opening even when the new path is a regular file', async () => {
+    const checked = await openCheckedFile(bundlePath, 'UNSAFE', 'CHANGED');
+    try {
+      await rename(bundlePath, join(root, 'original-bundle.json'));
+      await writeFile(bundlePath, '{}');
+      await expect(checked.verifyPath()).rejects.toMatchObject({ code: 'CHANGED' });
+    } finally {
+      await checked.handle.close();
+    }
+  });
+
   it.each([
     ['EACCES', 'EACCES'],
     ['SECRET_VALUE', undefined],

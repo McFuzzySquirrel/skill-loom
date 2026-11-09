@@ -314,6 +314,11 @@ describe('portable chain bundles', () => {
     expect(await readdir(target)).toEqual([]);
   });
 
+  it('rejects a directory supplied as a bundle before attempting to read it', async () => {
+    await expect(reviewBundleImport(app.loomServices, targetId, root))
+      .rejects.toMatchObject({ code: 'BUNDLE_INVALID' });
+  });
+
   it('round-trips the selected native agent in a version 2 bundle', async () => {
     const agentText = '---\nname: team/reviewer\ndescription: Review changes\n---\nReview the task.\n';
     const agentPath = 'team/reviewer.md';

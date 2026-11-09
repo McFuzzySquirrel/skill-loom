@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import { constants } from 'node:fs';
-import { open, realpath, stat } from 'node:fs/promises';
+import { realpath, stat } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
 import { decodeBundleFile } from '../../portable/bundle.js';
+import { openCheckedFile, PortableRunError } from '../../portable/runtime.js';
 import { BundleError, importBundle, MAX_BUNDLE_REQUEST_BYTES, parseBundle } from '../chains/bundle.js';
 import { approvedReuse, reviewBundleTarget, verifyReusedPackages } from './target-review.js';
 import { isProjectId } from '../projects/registry.js';
@@ -21,25 +21,32 @@ async function loadBundle(path: string) {
   if (canonical !== resolve(path)) {
     throw new BundleError('BUNDLE_INVALID', 'The bundle must be an existing canonical absolute file path.');
   }
-  let handle;
+  let checked;
   try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-  } catch {
+    checked = await openCheckedFile(path, 'BUNDLE_INVALID', 'BUNDLE_INVALID');
+  } catch (error) {
+    if (error instanceof PortableRunError) throw new BundleError('BUNDLE_INVALID', error.message);
     throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', 'The bundle file is unavailable or unreadable.');
   }
+  const { handle, verifyPath } = checked;
   try {
-    const info = await handle.stat();
-    if (!info.isFile() || info.size > MAX_BUNDLE_REQUEST_BYTES) {
+    const info = await handle.stat({ bigint: true });
+    if (!info.isFile() || info.size > BigInt(MAX_BUNDLE_REQUEST_BYTES)) {
       throw new BundleError('BUNDLE_TOO_LARGE', 'The bundle is not a regular file or exceeds its JSON size limit.');
     }
-    const bytes = Buffer.alloc(info.size + 1);
+    const bytes = Buffer.alloc(Number(info.size) + 1);
     let offset = 0;
     while (offset < bytes.length) {
       const read = await handle.read(bytes, offset, bytes.length - offset, offset);
       if (read.bytesRead === 0) break;
       offset += read.bytesRead;
     }
-    if (offset !== info.size) throw new BundleError('BUNDLE_INVALID', 'The bundle changed while it was read; review it again.');
+    const after = await handle.stat({ bigint: true });
+    if (offset !== Number(info.size) || after.size !== info.size || after.mtimeNs !== info.mtimeNs ||
+        after.ctimeNs !== info.ctimeNs) {
+      throw new BundleError('BUNDLE_INVALID', 'The bundle changed while it was read; review it again.');
+    }
+    await verifyPath();
     let raw: unknown;
     try {
       raw = JSON.parse(bytes.subarray(0, offset).toString('utf8')) as unknown;
@@ -49,6 +56,7 @@ async function loadBundle(path: string) {
     return parseBundle(raw);
   } catch (error) {
     if (error instanceof BundleError) throw error;
+    if (error instanceof PortableRunError) throw new BundleError('BUNDLE_INVALID', error.message);
     throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', 'The bundle file could not be read completely.');
   } finally {
     await handle.close();
