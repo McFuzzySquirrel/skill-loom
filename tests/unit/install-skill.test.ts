@@ -23,6 +23,32 @@ afterEach(async () => {
 });
 
 describe('bundle skill installation', () => {
+  it.each(['before', 'after'])('keeps publication safe after an interrupted process (%s link)', async (phase) => {
+    const { root, destination } = await setup();
+    const child = spawn(process.execPath, [
+      '--import', 'tsx', 'tests/fixtures/install-skill-crash.ts', destination, phase,
+    ], { cwd: process.cwd(), stdio: ['ignore', 'pipe', 'pipe'] });
+    const exited = once(child, 'exit');
+    try {
+      const [ready] = await once(child.stdout, 'data', { signal: AbortSignal.timeout(10_000) });
+      expect(String(ready)).toContain('READY');
+      child.kill('SIGKILL');
+      await exited;
+      expect(await readFile(join(destination, 'scripts', 'review.txt'), 'utf8')).toBe('review data');
+      if (phase === 'before') {
+        await expect(access(join(destination, 'SKILL.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+      } else {
+        expect(await readFile(join(destination, 'SKILL.md'), 'utf8')).toContain('name: example');
+      }
+      expect((await readdir(root)).filter((name) => name.startsWith('.loom-skill-'))).toHaveLength(1);
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill('SIGKILL');
+        await exited;
+      }
+    }
+  }, 20_000);
+
   it('publishes the entry only after other package files are complete', async () => {
     const { root, destination } = await setup();
     let publications = 0;
@@ -61,3 +87,5 @@ describe('bundle skill installation', () => {
     expect(await readdir(root)).toEqual(['example']);
   });
 });
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
