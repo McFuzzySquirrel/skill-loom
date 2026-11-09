@@ -82,6 +82,8 @@ public static class WindowsNativeScopeFixture {
     [DllImport("kernel32.dll", SetLastError = true)] static extern uint ResumeThread(IntPtr thread);
     [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
     [DllImport("kernel32.dll", SetLastError = true)] static extern uint GetProcessId(IntPtr process);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern bool QueryFullProcessImageNameW(IntPtr process, uint flags, StringBuilder path, ref uint size);
     [DllImport("advapi32.dll", SetLastError = true)] static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
     [DllImport("advapi32.dll", SetLastError = true)] static extern bool GetTokenInformation(IntPtr token, int type, IntPtr buffer, uint size, out uint returned);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool InitializeProcThreadAttributeList(IntPtr list, int count, uint flags, ref IntPtr size);
@@ -174,23 +176,39 @@ public static class WindowsNativeScopeFixture {
         Check(QueryInformationJobObject(job, 1, out value, (uint)Marshal.SizeOf(typeof(Accounting)), IntPtr.Zero), "query job");
         return value.ActiveProcesses;
     }
-    static string DescribeJob(IntPtr job) {
+    static List<uint> JobPids(IntPtr job) {
         int size = 8 + 32 * IntPtr.Size;
         IntPtr buffer = Marshal.AllocHGlobal(size);
         try {
             Check(QueryProcessList(job, 3, buffer, (uint)size, IntPtr.Zero), "query bounded job diagnostics");
             int count = Marshal.ReadInt32(buffer, 4);
             Require(count >= 0 && count <= 32, "Job diagnostics exceeded their bound.");
-            var details = new List<string>();
+            Require(Marshal.ReadInt32(buffer) == count, "Incomplete job process census.");
+            var pids = new List<uint>();
             for (int index = 0; index < count; index++) {
-                int pid = checked((int)Marshal.ReadIntPtr(buffer, 8 + index * IntPtr.Size).ToInt64());
-                string name;
-                try { using (Process process = Process.GetProcessById(pid)) name = process.ProcessName; }
-                catch (ArgumentException) { name = "already-exited"; }
-                details.Add(pid + ":" + name);
+                uint pid = checked((uint)Marshal.ReadIntPtr(buffer, 8 + index * IntPtr.Size).ToInt64());
+                Require(pid > 0 && !pids.Contains(pid), "Invalid job process census.");
+                pids.Add(pid);
             }
-            return string.Join(",", details.ToArray());
+            return pids;
         } finally { Marshal.FreeHGlobal(buffer); }
+    }
+    static void CaptureConsole(uint pid, IntPtr job) {
+        Require(CapturedPids.Add(pid), "Console host aliases an actor.");
+        IntPtr handle = OpenProcess(SynchronizeQuery, false, pid);
+        Check(handle != IntPtr.Zero, "retain original console host");
+        Handles.Add(handle);
+        Require(WaitForSingleObject(handle, 0) == Timeout, "Console host exited before capture.");
+        var image = new StringBuilder(32768);
+        uint size = (uint)image.Capacity;
+        Check(QueryFullProcessImageNameW(handle, 0, image, ref size), "identify console host");
+        Require(string.Equals(image.ToString(), Path.Combine(Environment.SystemDirectory, "conhost.exe"),
+            StringComparison.OrdinalIgnoreCase), "Unexpected extra Job member: " + image);
+        if (job != IntPtr.Zero) {
+            bool member;
+            Check(IsProcessInJob(handle, job, out member), "verify console host job membership");
+            Require(member, "Console host escaped its Job Object.");
+        }
     }
     static void VerifyToken(IntPtr process, SecurityIdentifier expected) {
         IntPtr token;
@@ -299,12 +317,24 @@ public static class WindowsNativeScopeFixture {
             var expected = new SecurityIdentifier(sid);
             IntPtr worker = Capture(workspace, "worker", expected, job);
             Require(GetProcessId(worker) == actor.ProcessId, "Worker is not the originally suspended process.");
-            Capture(workspace, "child", expected, job);
-            Capture(workspace, "grandchild", expected, job);
-            Require(Active(job) == 3, "Unexpected active job membership: " + Active(job) + " [" + DescribeJob(job) + "].");
+            IntPtr child = Capture(workspace, "child", expected, job);
+            IntPtr grandchild = Capture(workspace, "grandchild", expected, job);
+            List<uint> members = JobPids(job);
+            Require(members.Count == 4 && Active(job) == 4, "Expected three actors and one console host.");
+            uint consolePid = 0;
+            foreach (uint pid in members) {
+                if (!CapturedPids.Contains(pid)) {
+                    Require(consolePid == 0, "Unexpected additional Job member.");
+                    consolePid = pid;
+                }
+            }
+            Require(consolePid != 0, "Missing console host.");
+            CaptureConsole(consolePid, job);
+            Require(CapturedPids.SetEquals(JobPids(job)), "Job census changed during handle capture.");
             Require(File.ReadAllText(Path.Combine(workspace, "checks")) == "read;write-denied;dacl-denied;dup-denied;breakaway-denied",
                 "Missing protection evidence.");
             if (mode == "owner-death") {
+                File.WriteAllText(Path.Combine(root, "conhost.pid"), consolePid.ToString());
                 File.WriteAllText(Path.Combine(root, "broker-ready"), "verified");
                 Thread.Sleep(30000);
                 throw new InvalidOperationException("Broker death probe was not interrupted.");
@@ -314,7 +344,10 @@ public static class WindowsNativeScopeFixture {
                 Require(WaitForSingleObject(actor.Process, 5000) == 0, "Direct worker failed to finish.");
                 uint code;
                 Check(GetExitCodeProcess(actor.Process, out code), "query direct worker exit");
-                Require(code == 0 && Active(job) == 2, "Direct completion did not retain both detached descendants.");
+                Require(code == 0 && WaitForSingleObject(child, 0) == Timeout &&
+                    WaitForSingleObject(grandchild, 0) == Timeout,
+                    "Direct completion did not retain both detached descendants.");
+                foreach (uint pid in JobPids(job)) Require(CapturedPids.Contains(pid), "Untracked actor after direct completion.");
             } else {
                 Check(TerminateJobObject(job, 1), "abort job");
                 foreach (IntPtr handle in Handles) Require(WaitForSingleObject(handle, 5000) == 0, "Abort left an actor alive.");
@@ -342,6 +375,10 @@ public static class WindowsNativeScopeFixture {
                 Capture(workspace, "worker", sid, IntPtr.Zero);
                 Capture(workspace, "child", sid, IntPtr.Zero);
                 Capture(workspace, "grandchild", sid, IntPtr.Zero);
+                uint consolePid;
+                Require(uint.TryParse(File.ReadAllText(Path.Combine(root, "conhost.pid")), out consolePid),
+                    "Invalid console host identity.");
+                CaptureConsole(consolePid, IntPtr.Zero);
                 Check(TerminateProcess(broker.Handle, 1), "kill actual broker");
                 Require(broker.WaitForExit(5000), "Original broker survived termination.");
             }, delegate {
@@ -387,7 +424,7 @@ public static class WindowsNativeScopeFixture {
             RunScope(root, executable, profile, "abort");
             OwnerDeath(root, executable, profile, app);
             Require(File.ReadAllText(Path.Combine(root, "reviewed.txt")) == "reviewed fixture content", "Reviewed bytes changed.");
-            Console.WriteLine("{\"platform\":\"windows\",\"candidate\":\"appcontainer-job\",\"protectedWritesDenied\":true,\"breakawayDenied\":true,\"brokerHandleDuplicationDenied\":true,\"originalProcessesTerminated\":true,\"modes\":[\"finish\",\"abort\",\"broker-death\"]}");
+            Console.WriteLine("{\"platform\":\"windows\",\"candidate\":\"appcontainer-job\",\"protectedWritesDenied\":true,\"breakawayDenied\":true,\"brokerHandleDuplicationDenied\":true,\"originalProcessesTerminated\":true,\"originalConsoleHostsTerminated\":true,\"modes\":[\"finish\",\"abort\",\"broker-death\"]}");
         }, delegate {
             FreeSid(sid);
             Marshal.ThrowExceptionForHR(DeleteAppContainerProfile(profile));

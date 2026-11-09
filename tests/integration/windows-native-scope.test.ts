@@ -29,6 +29,7 @@ describe.skipIf(process.platform !== 'win32' || process.env.LOOM_TEST_PRIVILEGED
           platform: 'windows', candidate: 'appcontainer-job',
           protectedWritesDenied: true, breakawayDenied: true,
           brokerHandleDuplicationDenied: true, originalProcessesTerminated: true,
+          originalConsoleHostsTerminated: true,
           modes: ['finish', 'abort', 'broker-death'],
         });
         console.info(JSON.stringify(evidence));
