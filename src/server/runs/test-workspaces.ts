@@ -155,7 +155,7 @@ async function createWorkspace(
       name: chain.name,
       harness: chain.harness,
       sessionMode: chain.sessionMode,
-      steps: chain.steps,
+      steps: imported.steps,
       inputs: chain.inputs,
       automaticPermissionOptIn: chain.automaticPermissionOptIn,
     };

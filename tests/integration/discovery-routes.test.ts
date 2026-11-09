@@ -12,6 +12,7 @@ import {
   type RemoteSourceGitRunner,
   unregisterRemoteSkillSource,
 } from '../../src/server/catalog/remote.js';
+import { resolveSkillCatalogEntry } from '../../src/server/catalog/skill-resolution.js';
 import { createConfigStore, type ConfigStore } from '../../src/server/config/store.js';
 import { callControl, startControlServer } from '../../src/server/control.js';
 import { runCli } from '../../src/server/cli.js';
@@ -306,10 +307,17 @@ describe('discovery handoff route', () => {
         inputs: [{ name: 'scope', required: true }],
       }) as { chain: { id: string } };
       const createdWorkspace = await cli(['workspace', 'create'], { sourceDraftId: draft.chain.id }) as {
-        workspace: { id: string; path: string; projectId: string };
+        workspace: { id: string; path: string; projectId: string; chainId: string };
       };
       const testWorkspace = createdWorkspace.workspace;
       expect(await readFile(join(testWorkspace.path, '.agents', 'skills', 'handoff-skill', 'SKILL.md'), 'utf8')).toBe(skillContent);
+      const workspaceChain = await app.loomServices.chainService.get(testWorkspace.path, testWorkspace.chainId);
+      const workspaceStep = workspaceChain.steps[0]!;
+      expect(workspaceStep).not.toHaveProperty('skillBinding');
+      if (workspaceStep.kind === 'instruction') throw new Error('Expected the materialized skill step.');
+      const catalog = await app.loomServices.catalogService.getCatalog({ projectPath: testWorkspace.path, harness: 'opencode' });
+      expect(resolveSkillCatalogEntry(catalog.groups.flatMap((group) => group.entries), workspaceStep))
+        .toMatchObject({ status: 'resolved', entry: { source: 'project', name: 'handoff-skill' } });
       await expect(stat(join(projectPath, '.agents', 'skills', 'handoff-skill'))).rejects.toMatchObject({ code: 'ENOENT' });
       const testInspect = portable(['inspect', '--bundle', bundlePath, '--project', testWorkspace.path]);
       const testRun = portable(['prepare', '--bundle', bundlePath, '--project', testWorkspace.path], {

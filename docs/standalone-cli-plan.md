@@ -228,10 +228,12 @@ handoff and standalone discovery bundle builder through a disposable workspace
 test and artifact check before reviewed CLI import, UI chain inspection, and
 the standalone portable helper's supervised step and agent-reported completion.
 Remote exports use the safe skill name rather than the internal snapshot hash
-as the package directory, matching the discovery bundle for reuse. The fixture
-enables project coordination and separately reviews and clears the retained
-claim. It uses simulated approval and does not execute a real agent, package
-script, or live model.
+as the package directory, matching the discovery bundle for reuse. After
+materialization, workspace chain steps resolve the copied project packages
+rather than retaining remote snapshot bindings. The fixture enables project
+coordination and separately reviews and clears the retained claim. It uses
+simulated approval and does not execute a real agent, package script, or live
+model.
 After retrying an interrupted run, the UI now reconnects its run event stream
 and observes subsequent actions from other clients. One earlier Playwright run
 under concurrent test load showed a blank recovered terminal; isolated repeats
