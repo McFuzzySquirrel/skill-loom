@@ -9373,10 +9373,9 @@ async function qm(e, t, n) {
 }
 // src/portable/install-skill.ts
 async function Jm(t, n, i = { directoryMode: 448 }) {
-	let s = n.find((e) => e.path === "SKILL.md");
-	if (s === void 0) throw new Cp("BUNDLE_INVALID", "Each skill package must include SKILL.md.");
+	if (!n.some((e) => e.path === "SKILL.md")) throw new Cp("BUNDLE_INVALID", "Each skill package must include SKILL.md.");
 	for (let e of n) kp(e.path);
-	async function l(e) {
+	async function s(e) {
 		let n = t;
 		for (let s of o(t, r(e)).split(c).filter(Boolean)) {
 			n = a(n, s);
@@ -9389,7 +9388,7 @@ async function Jm(t, n, i = { directoryMode: 448 }) {
 			if (!e.isDirectory() || e.isSymbolicLink() || await v(n) !== n) throw new Cp("BUNDLE_SOURCE_UNAVAILABLE", "A skill package directory changed during installation.");
 		}
 	}
-	async function u(t, n) {
+	async function l(t, n) {
 		let r = await g(t, e.O_WRONLY | e.O_CREAT | e.O_EXCL | e.O_NOFOLLOW, n.executable ? 493 : 420);
 		try {
 			await r.writeFile(Ap(n.content)), i.enforceFileMode && await r.chmod(n.executable ? 493 : 420), await r.sync();
@@ -9397,15 +9396,23 @@ async function Jm(t, n, i = { directoryMode: 448 }) {
 			await r.close();
 		}
 	}
+	let u = n.filter((e) => e.path.split("/").at(-1) === "SKILL.md");
 	for (let e of n) {
-		if (e.path === "SKILL.md") continue;
+		if (e.path.split("/").at(-1) === "SKILL.md") continue;
 		let n = a(t, ...e.path.split("/"));
-		await l(n), await u(n, e);
+		await s(n), await l(n, e);
 	}
-	await Ym(t, Ap(s.content), s.executable ? 493 : 420, i);
+	u.sort((e, t) => t.path.split("/").length - e.path.split("/").length);
+	for (let e of u) {
+		let n = a(t, ...e.path.split("/"));
+		await s(n), await Ym(r(n), Ap(e.content), e.executable ? 493 : 420, {
+			...i,
+			temporaryRoot: r(t)
+		});
+	}
 }
 async function Ym(t, n, i, o = {}) {
-	let s = a(r(t), `.loom-skill-${f()}.tmp`), c = !1;
+	let s = a(o.temporaryRoot ?? r(t), `.loom-skill-${f()}.tmp`), c = !1;
 	try {
 		let r = await g(s, e.O_WRONLY | e.O_CREAT | e.O_EXCL | e.O_NOFOLLOW, i);
 		c = !0;

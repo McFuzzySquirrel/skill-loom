@@ -17,6 +17,7 @@ vi.mock('../../src/portable/install-skill.js', async (importOriginal) => {
 
 import { copyBundledScenarioSkill, copySkillIntoProject } from '../../src/server/catalog/copy.js';
 import { scenarioCatalog, scenarioSkillPackagePath } from '../../src/server/chains/presets.js';
+import { snapshotPackageFingerprint, snapshotReviewFingerprint } from '../../src/server/catalog/snapshot-fingerprint.js';
 import { REMOTE_SNAPSHOT_CONTENT, type SkillEntry } from '../../src/server/catalog/types.js';
 
 const roots: string[] = [];
@@ -62,4 +63,42 @@ it('does not publish a remote skill when snapshot verification fails', async () 
     .rejects.toMatchObject({ code: 'SKILL_SOURCE_UNSAFE' });
   expect(inspectPublication).not.toHaveBeenCalled();
   await expect(access(join(projectPath, '.agents', 'skills', 'example'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it('verifies and publishes nested remote skills after their supporting files', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-copy-publication-')));
+  roots.push(root);
+  const projectPath = join(root, 'project');
+  const packagePath = join(root, 'package');
+  await mkdir(projectPath);
+  await mkdir(join(packagePath, 'nested'), { recursive: true });
+  const files = [
+    { path: 'SKILL.md', content: Buffer.from('---\nname: example\n---\nbody\n'), executable: false },
+    { path: 'nested/SKILL.md', content: Buffer.from('---\nname: nested\n---\nbody\n'), executable: false },
+    { path: 'nested/reference.txt', content: Buffer.from('reference'), executable: false },
+  ];
+  for (const file of files) await writeFile(join(packagePath, ...file.path.split('/')), file.content);
+  const entry: SkillEntry = {
+    id: 'remote', harness: 'opencode', source: 'remote', name: 'example',
+    description: '', path: join(packagePath, 'SKILL.md'), packagePath, enabled: true,
+    [REMOTE_SNAPSHOT_CONTENT]: {
+      fingerprint: snapshotPackageFingerprint(files),
+      reviewFingerprint: snapshotReviewFingerprint(files),
+      executablePaths: [],
+    },
+  };
+  const destinations: string[] = [];
+  inspectPublication.mockImplementation(async (destination) => {
+    destinations.push(destination);
+    const packageRoot = join(projectPath, '.agents', 'skills', 'example');
+    expect(await readFile(join(packageRoot, 'nested', 'reference.txt'), 'utf8')).toBe('reference');
+    await expect(access(join(packageRoot, 'SKILL.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+    if (destination === packageRoot) {
+      expect(await readFile(join(packageRoot, 'nested', 'SKILL.md'), 'utf8')).toContain('name: nested');
+    } else {
+      await expect(access(join(packageRoot, 'nested', 'SKILL.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+    }
+  });
+  const result = await copySkillIntoProject({ projectPath, harness: 'opencode', entry });
+  expect(destinations).toEqual([join(result.destinationPath, 'nested'), result.destinationPath]);
 });

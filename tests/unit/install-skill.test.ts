@@ -23,7 +23,7 @@ afterEach(async () => {
 });
 
 describe('bundle skill installation', () => {
-  it.each(['before', 'after'])('keeps publication safe after an interrupted process (%s link)', async (phase) => {
+  it.each(['before', 'nested', 'after'])('keeps publication safe after an interrupted process (%s link)', async (phase) => {
     const { root, destination } = await setup();
     const child = spawn(process.execPath, [
       '--import', 'tsx', 'tests/fixtures/install-skill-crash.ts', destination, phase,
@@ -35,10 +35,16 @@ describe('bundle skill installation', () => {
       child.kill('SIGKILL');
       await exited;
       expect(await readFile(join(destination, 'scripts', 'review.txt'), 'utf8')).toBe('review data');
-      if (phase === 'before') {
+      expect(await readFile(join(destination, 'nested', 'reference.txt'), 'utf8')).toBe('nested data');
+      if (phase !== 'after') {
         await expect(access(join(destination, 'SKILL.md'))).rejects.toMatchObject({ code: 'ENOENT' });
       } else {
         expect(await readFile(join(destination, 'SKILL.md'), 'utf8')).toContain('name: example');
+      }
+      if (phase === 'before') {
+        await expect(access(join(destination, 'nested', 'SKILL.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+      } else {
+        expect(await readFile(join(destination, 'nested', 'SKILL.md'), 'utf8')).toContain('name: nested');
       }
       expect((await readdir(root)).filter((name) => name.startsWith('.loom-skill-'))).toHaveLength(1);
     } finally {
@@ -67,21 +73,42 @@ describe('bundle skill installation', () => {
     expect(await readdir(root)).toEqual(['example']);
   });
 
-  it('does not hide nested skill entries before top-level publication', async () => {
+  it('publishes nested entries only after their supporting files and before the top-level entry', async () => {
     const { destination } = await setup();
     const nested = {
       path: 'nested/SKILL.md',
       content: Buffer.from('---\nname: nested\n---\nNested instructions.\n').toString('base64'),
       executable: false,
     };
-    await writeBundleSkillFiles(destination, [...files, nested], {
+    const deeper = {
+      path: 'nested/deeper/SKILL.md',
+      content: Buffer.from('---\nname: deeper\n---\nInstructions.\n').toString('base64'),
+      executable: false,
+    };
+    const support = { path: 'nested/reference.txt', content: Buffer.from('nested data').toString('base64'), executable: false };
+    const targets: string[] = [];
+    await writeBundleSkillFiles(destination, [...files, nested, deeper, support], {
       directoryMode: 0o700,
       publish: async (source, target) => {
-        expect(await readFile(join(destination, 'nested', 'SKILL.md'), 'utf8')).toContain('name: nested');
+        targets.push(String(target));
+        expect(await readFile(join(destination, 'nested', 'reference.txt'), 'utf8')).toBe('nested data');
         await expect(access(join(destination, 'SKILL.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+        if (String(target) === join(destination, 'SKILL.md')) {
+          expect(await readFile(join(destination, 'nested', 'SKILL.md'), 'utf8')).toContain('name: nested');
+        } else if (String(target) === join(destination, 'nested', 'SKILL.md')) {
+          expect(await readFile(join(destination, 'nested', 'deeper', 'SKILL.md'), 'utf8')).toContain('name: deeper');
+          await expect(access(join(destination, 'nested', 'SKILL.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+        } else {
+          await expect(access(join(destination, 'nested', 'deeper', 'SKILL.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+        }
         await link(source, target);
       },
     });
+    expect(targets).toEqual([
+      join(destination, 'nested', 'deeper', 'SKILL.md'),
+      join(destination, 'nested', 'SKILL.md'),
+      join(destination, 'SKILL.md'),
+    ]);
   });
 
   it('leaves no discoverable entry or temporary file when publication fails', async () => {

@@ -6,16 +6,17 @@ import type { BundleSkill } from '../shared/bundles.js';
 import { BundleError, decodeBundleFile, validatePackagePath } from './bundle.js';
 
 /**
- * Publish the top-level skill entry only after the other package files.
- * Nested skill entries may still be discovered before this publication.
+ * Publish nested skill entries from deepest to shallowest after all other files,
+ * with the top-level entry last.
  */
 export async function writeBundleSkillFiles(
   destination: string,
   files: BundleSkill['files'],
   options: { directoryMode: number; enforceFileMode?: boolean; publish?: typeof link } = { directoryMode: 0o700 },
 ): Promise<void> {
-  const entry = files.find((file) => file.path === 'SKILL.md');
-  if (entry === undefined) throw new BundleError('BUNDLE_INVALID', 'Each skill package must include SKILL.md.');
+  if (!files.some((file) => file.path === 'SKILL.md')) {
+    throw new BundleError('BUNDLE_INVALID', 'Each skill package must include SKILL.md.');
+  }
   for (const file of files) validatePackagePath(file.path);
 
   async function ensureParent(target: string): Promise<void> {
@@ -46,23 +47,32 @@ export async function writeBundleSkillFiles(
     }
   }
 
+  const entries = files.filter((file) => file.path.split('/').at(-1) === 'SKILL.md');
   for (const file of files) {
-    if (file.path === 'SKILL.md') continue;
+    if (file.path.split('/').at(-1) === 'SKILL.md') continue;
     const target = join(destination, ...file.path.split('/'));
     await ensureParent(target);
     await writeFile(target, file);
   }
 
-  await publishSkillEntry(destination, decodeBundleFile(entry.content), entry.executable ? 0o755 : 0o644, options);
+  entries.sort((left, right) => right.path.split('/').length - left.path.split('/').length);
+  for (const entry of entries) {
+    const target = join(destination, ...entry.path.split('/'));
+    await ensureParent(target);
+    await publishSkillEntry(dirname(target), decodeBundleFile(entry.content), entry.executable ? 0o755 : 0o644, {
+      ...options,
+      temporaryRoot: dirname(destination),
+    });
+  }
 }
 
 export async function publishSkillEntry(
   destination: string,
   content: Uint8Array,
   mode: number,
-  options: { enforceFileMode?: boolean; publish?: typeof link } = {},
+  options: { enforceFileMode?: boolean; publish?: typeof link; temporaryRoot?: string } = {},
 ): Promise<void> {
-  const temporary = join(dirname(destination), `.loom-skill-${randomUUID()}.tmp`);
+  const temporary = join(options.temporaryRoot ?? dirname(destination), `.loom-skill-${randomUUID()}.tmp`);
   let created = false;
   try {
     const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, mode);

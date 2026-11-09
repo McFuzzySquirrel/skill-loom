@@ -9,7 +9,7 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { publishSkillEntry } from '../../portable/install-skill.js';
 import type { ScenarioSkillSource } from '../../shared/presets.js';
 import { SHARED_PROJECT_SKILLS_SEGMENTS, sharedProjectSkillRoot } from './project-paths.js';
@@ -180,10 +180,10 @@ async function copySkillIntoProjectWithNotice(
     allowNameSuffix,
   );
 
-  const budget: CopyBudget = { files: 0, bytes: 0, entries: 0 };
+  const budget: CopyBudget = { files: 0, bytes: 0, entries: 0, skillEntries: [] };
   try {
     await copyDirectory(sourceDirectory, destination, budget);
-    if (budget.entry === undefined) {
+    if (!budget.skillEntries.some((item) => item.path === 'SKILL.md')) {
       throw new CatalogCopyError(
         CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
         'The skill package no longer contains its SKILL.md entry.',
@@ -198,11 +198,16 @@ async function copySkillIntoProjectWithNotice(
       });
     }
     if (entry.source === 'remote' && remoteContent !== undefined) {
-      await verifyRemoteCopy(destination, remoteContent, entry.id, budget.entry);
+      await verifyRemoteCopy(destination, remoteContent, entry.id, budget.skillEntries);
     }
-    await publishSkillEntry(destination, budget.entry.content, Number(budget.entry.mode & 0o777n), {
-      enforceFileMode: true,
-    });
+    budget.skillEntries.sort((left, right) => right.path.split('/').length - left.path.split('/').length);
+    for (const skillEntry of budget.skillEntries) {
+      const target = join(destination, ...skillEntry.path.split('/'));
+      await publishSkillEntry(dirname(target), skillEntry.content, Number(skillEntry.mode & 0o777n), {
+        enforceFileMode: true,
+        temporaryRoot: destinationRoot,
+      });
+    }
   } catch (error) {
     await removePartialCopy(
       destination,
@@ -225,13 +230,13 @@ async function copySkillIntoProjectWithNotice(
     root: string,
     snapshot: NonNullable<SkillEntry[typeof REMOTE_SNAPSHOT_CONTENT]>,
     skillId: string,
-    entry: { content: Buffer; mode: bigint },
+    skillEntries: Array<{ path: string; content: Buffer; mode: bigint }>,
   ): Promise<void> {
     const files: Array<{ path: string; content: Buffer; executable: boolean }> = [];
     const remainingExecutables = snapshot.executablePaths === undefined
       ? undefined : new Set(snapshot.executablePaths);
-    let bytes = entry.content.length;
-    let entries = 1;
+    let bytes = skillEntries.reduce((total, item) => total + item.content.length, 0);
+    let entries = skillEntries.length;
     const unsafe = () => new CatalogCopyError(
       CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
       'The copied remote package differs from the verified snapshot. Refresh and review it again.',
@@ -261,11 +266,13 @@ async function copySkillIntoProjectWithNotice(
         files.push({ path: relativePath, content, executable: recordedExecutable ?? executable });
       }
     }
-    const recordedExecutable = remainingExecutables?.delete('SKILL.md');
-    const executable = (entry.mode & 0o111n) !== 0n;
-    if (recordedExecutable !== undefined && process.platform !== 'win32' &&
-        executable !== recordedExecutable) throw unsafe();
-    files.push({ path: 'SKILL.md', content: entry.content, executable: recordedExecutable ?? executable });
+    for (const entry of skillEntries) {
+      const recordedExecutable = remainingExecutables?.delete(entry.path);
+      const executable = (entry.mode & 0o111n) !== 0n;
+      if (recordedExecutable !== undefined && process.platform !== 'win32' &&
+          executable !== recordedExecutable) throw unsafe();
+      files.push({ path: entry.path, content: entry.content, executable: recordedExecutable ?? executable });
+    }
     await visit(root, '', 0);
     if ((remainingExecutables?.size ?? 0) !== 0 ||
         snapshotPackageFingerprint(files) !== snapshot.fingerprint ||
@@ -460,7 +467,7 @@ interface CopyBudget {
   files: number;
   bytes: number;
   entries: number;
-  entry?: { content: Buffer; mode: bigint };
+  skillEntries: Array<{ path: string; content: Buffer; mode: bigint }>;
 }
 
 async function copyDirectory(
@@ -468,6 +475,7 @@ async function copyDirectory(
   destination: string,
   budget: CopyBudget,
   depth = 0,
+  prefix = '',
 ): Promise<void> {
   const directory = await lstat(source);
   if (!directory.isDirectory() || directory.isSymbolicLink() || await realpath(source) !== source) {
@@ -487,6 +495,7 @@ async function copyDirectory(
     }
     const sourcePath = join(source, entry.name);
     const destinationPath = join(destination, entry.name);
+    const packagePath = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
 
     if (entry.isSymbolicLink()) {
       throw new CatalogCopyError(
@@ -498,7 +507,7 @@ async function copyDirectory(
 
     if (entry.isDirectory()) {
       await mkdir(destinationPath, { mode: 0o755 });
-      await copyDirectory(sourcePath, destinationPath, budget, depth + 1);
+      await copyDirectory(sourcePath, destinationPath, budget, depth + 1, packagePath);
       continue;
     }
 
@@ -539,8 +548,8 @@ async function copyDirectory(
         { path: sourcePath },
       );
     }
-    if (depth === 0 && entry.name === 'SKILL.md') {
-      budget.entry = checked;
+    if (entry.name === 'SKILL.md') {
+      budget.skillEntries.push({ path: packagePath, ...checked });
       continue;
     }
     await writeFile(destinationPath, checked.content, {
