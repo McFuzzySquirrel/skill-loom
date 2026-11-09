@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { lstat, mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -8,6 +8,38 @@ import { listRemoteSkillSnapshots, listRemoteSnapshotPage, refreshRemoteSkillSou
 import { prepareDiscoveryHandoff } from '../../src/server/catalog/discovery-handoff.js';
 
 const roots: string[] = [];
+
+async function descendantRss(pid: number): Promise<number> {
+  let threads: string[];
+  try {
+    threads = await readdir(`/proc/${pid}/task`);
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return 0;
+    throw error;
+  }
+  const children = new Set<string>();
+  for (const thread of threads) {
+    try {
+      const list = await readFile(`/proc/${pid}/task/${thread}/children`, 'utf8');
+      for (const child of list.trim().split(/\s+/).filter(Boolean)) children.add(child);
+    } catch (error) {
+      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+    }
+  }
+  let bytes = 0;
+  for (const child of children) {
+    const childPid = Number(child);
+    try {
+      const status = await readFile(`/proc/${child}/status`, 'utf8');
+      const rss = /^VmRSS:\s+(\d+)\s+kB$/m.exec(status);
+      if (rss !== null) bytes += Number(rss[1]) * 1024;
+      bytes += await descendantRss(childPid);
+    } catch (error) {
+      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+    }
+  }
+  return bytes;
+}
 
 async function stagingSize(root: string): Promise<{ bytes: number; entries: number }> {
   const pending = [root];
@@ -95,12 +127,19 @@ describe('large remote catalog', () => {
       const stagingRoot = join(root, 'staging');
       await mkdir(stagingRoot);
       let peakRss = process.memoryUsage.rss();
+      let peakDescendantRss = 0;
+      let peakTreeRss = peakRss;
       let peakStagingBytes = 0;
       let peakStagingEntries = 0;
       let monitoring = true;
       const monitor = (async () => {
         while (monitoring) {
           peakRss = Math.max(peakRss, process.memoryUsage.rss(), process.resourceUsage().maxRSS * 1024);
+          if (process.platform === 'linux') {
+            const descendants = await descendantRss(process.pid);
+            peakDescendantRss = Math.max(peakDescendantRss, descendants);
+            peakTreeRss = Math.max(peakTreeRss, process.memoryUsage.rss() + descendants);
+          }
           const staging = await stagingSize(stagingRoot);
           peakStagingBytes = Math.max(peakStagingBytes, staging.bytes);
           peakStagingEntries = Math.max(peakStagingEntries, staging.entries);
@@ -114,13 +153,19 @@ describe('large remote catalog', () => {
         monitoring = false;
         await monitor;
       }
-      peakRss = Math.max(peakRss, process.memoryUsage.rss());
+      peakRss = Math.max(peakRss, process.memoryUsage.rss(), process.resourceUsage().maxRSS * 1024);
       expect(peakRss).toBeLessThan(768 * 1024 * 1024);
+      if (process.platform === 'linux') {
+        expect(peakDescendantRss).toBeGreaterThan(0);
+        expect(peakTreeRss).toBeLessThan(768 * 1024 * 1024);
+      }
       expect(peakStagingBytes).toBeGreaterThan(0);
       expect(peakStagingBytes).toBeLessThanOrEqual(128 * 1024 * 1024);
       expect(peakStagingEntries).toBeGreaterThan(0);
       expect(peakStagingEntries).toBeLessThanOrEqual(30_001);
-      console.info('Large catalog sampled resources:', { peakRss, peakStagingBytes, peakStagingEntries });
+      console.info('Large catalog sampled resources:', {
+        peakRss, peakDescendantRss, peakTreeRss, peakStagingBytes, peakStagingEntries,
+      });
       expect(snapshot.revision).toBe(commit);
       expect(snapshot.packages).toHaveLength(1_000);
       expect(snapshot.packages.reduce((sum, entry) => sum + entry.files, 0)).toBe(20_000);
