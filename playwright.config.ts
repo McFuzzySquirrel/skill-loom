@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
@@ -7,7 +7,7 @@ import { delimiter, join } from 'node:path';
  * Browser tests must never read or write the developer's real Skill Loom state.
  * Every run gets its own throwaway config directory and home directory.
  */
-const isolatedRoot = join(tmpdir(), `loom-playwright-${process.pid}`);
+const isolatedRoot = mkdtempSync(join(tmpdir(), 'loom-playwright-'));
 const configDir = join(isolatedRoot, 'config');
 const homeDir = join(isolatedRoot, 'home');
 const fakeBinDir = join(isolatedRoot, 'bin');
@@ -17,6 +17,18 @@ const baseURL = `http://127.0.0.1:${port}`;
 mkdirSync(configDir, { recursive: true });
 mkdirSync(homeDir, { recursive: true });
 mkdirSync(fakeBinDir, { recursive: true });
+const unavailableHarness = `#!${process.execPath}\nprocess.stderr.write('No fake harness is configured for this test.\\n');\nprocess.exitCode = 1;\n`;
+for (const name of ['opencode', 'copilot']) {
+  writeFileSync(join(fakeBinDir, name), unavailableHarness, { mode: 0o755 });
+}
+process.once('exit', () => {
+  try {
+    rmSync(isolatedRoot, { recursive: true, force: true });
+  } catch (error) {
+    console.error(`Could not remove the isolated Playwright root: ${isolatedRoot}`, error);
+    process.exitCode = 1;
+  }
+});
 
 export default defineConfig({
   testDir: './tests/e2e',

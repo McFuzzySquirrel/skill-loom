@@ -15,6 +15,7 @@ const runSuffix = `${String(process.pid)}-${String(Date.now())}`;
 
 let fixtureRoot: string;
 let openCodePath: string;
+let originalOpenCode: Buffer | undefined;
 let configPath: string;
 let originalConfigText: string | null = null;
 
@@ -81,6 +82,7 @@ test.beforeAll(async ({ request }) => {
       ? { version: 1 }
       : (JSON.parse(originalConfigText) as Record<string, unknown>);
   await mkdir(dirname(openCodePath), { recursive: true });
+  originalOpenCode = await readFile(openCodePath);
   await writeExecutable(
     openCodePath,
     `#!/usr/bin/env node
@@ -116,8 +118,8 @@ setInterval(() => {
 });
 
 test.afterAll(async () => {
-  if (openCodePath !== undefined) {
-    await rm(openCodePath, { force: true });
+  if (openCodePath !== undefined && originalOpenCode !== undefined) {
+    await writeFile(openCodePath, originalOpenCode, { mode: 0o755 });
   }
   if (configPath !== undefined) {
     if (originalConfigText === null) {

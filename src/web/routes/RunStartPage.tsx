@@ -253,18 +253,24 @@ export function RunStartPage({
     setPermissionBusy(true);
     setPermissionError(null);
     try {
-      const updated = await api.updateChain(projectId, chainId, {
-        id: chain.id,
-        version: chain.version,
-        createdAt: chain.createdAt,
-        updatedAt: chain.updatedAt,
-        name: chain.name,
-        harness: chain.harness,
-        sessionMode: chain.sessionMode,
-        steps: chain.steps,
-        inputs: chain.inputs,
-        automaticPermissionOptIn: true,
-      });
+      const updated = await api.updateChain(
+        projectId,
+        chainId,
+        {
+          id: chain.id,
+          version: chain.version,
+          createdAt: chain.createdAt,
+          updatedAt: chain.updatedAt,
+          name: chain.name,
+          harness: chain.harness,
+          sessionMode: chain.sessionMode,
+          steps: chain.steps,
+          inputs: chain.inputs,
+          automaticPermissionOptIn: true,
+          ...(chain.agent === undefined ? {} : { agent: chain.agent }),
+        },
+        { ...(chain.revision === undefined ? {} : { expectedRevision: chain.revision }) },
+      );
       setChainState({ status: 'ready', chain: updated, error: null });
       setPendingOptIn(false);
       const flags = preflight.report?.permissions?.flags ?? [];

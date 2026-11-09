@@ -19,6 +19,8 @@ const runSuffix = `${String(process.pid)}-${String(Date.now())}`;
 let fixtureRoot: string;
 let fakeOpenCodePath: string;
 let fakeCopilotPath: string;
+let originalOpenCode: Buffer | undefined;
+let originalCopilot: Buffer | undefined;
 let configDirectory: string;
 let configPath: string;
 let originalConfigText: string | null = null;
@@ -144,6 +146,8 @@ test.beforeAll(async ({ request }) => {
   await mkdir(fakeBinDirectory, { recursive: true });
   fakeOpenCodePath = join(fakeBinDirectory, 'opencode');
   fakeCopilotPath = join(fakeBinDirectory, 'copilot');
+  originalOpenCode = await readFile(fakeOpenCodePath);
+  originalCopilot = await readFile(fakeCopilotPath);
   await writeExecutable(fakeOpenCodePath, openCodeScript());
   await writeExecutable(fakeCopilotPath, copilotScript());
 
@@ -176,11 +180,11 @@ test.beforeAll(async ({ request }) => {
 });
 
 test.afterAll(async () => {
-  if (fakeOpenCodePath !== undefined) {
-    await rm(fakeOpenCodePath, { force: true });
+  if (fakeOpenCodePath !== undefined && originalOpenCode !== undefined) {
+    await writeFile(fakeOpenCodePath, originalOpenCode, { mode: 0o755 });
   }
-  if (fakeCopilotPath !== undefined) {
-    await rm(fakeCopilotPath, { force: true });
+  if (fakeCopilotPath !== undefined && originalCopilot !== undefined) {
+    await writeFile(fakeCopilotPath, originalCopilot, { mode: 0o755 });
   }
   if (configPath !== undefined) {
     if (originalConfigText === null) {

@@ -251,6 +251,12 @@ subsequent isolated runs passed, but neither failure's cause has been
 established. The reconnect test now attaches redacted WebSocket frame metadata
 on a terminal-output assertion failure to help distinguish transport from
 rendering failures without recording terminal contents.
+The disk filled during a concurrent browser and unit-test stress run, which also
+produced a blank terminal; this does not establish the earlier failures' cause.
+Playwright now uses per-process owned temporary roots, fail-closed placeholder
+harnesses, and restores placeholders between harness specs. Normal process exit
+removes those roots, but forced termination can still leave them behind. Full
+disk and combined-suite acceptance remain open until sufficient space is available.
 Repeated terminal attachment rejections now consume the retry budget until the
 server actually accepts a subscriber; an exhausted retry is visibly reported
 and announced. This fixes an independently reproduced unbounded retry loop,

@@ -21,6 +21,8 @@ const runSuffix = `${String(process.pid)}-${String(Date.now())}`;
 let fixtureRoot: string;
 let fakeOpenCodePath: string;
 let fakeCopilotPath: string;
+let originalOpenCode: Buffer | undefined;
+let originalCopilot: Buffer | undefined;
 let configDirectory: string;
 let configPath: string;
 let isolatedHome: string;
@@ -38,6 +40,15 @@ interface StoredChain {
   harness: 'opencode' | 'copilot';
   sessionMode: 'shared' | 'fresh' | 'fork';
   automaticPermissionOptIn: boolean;
+  agent?: {
+    harness: 'opencode' | 'copilot';
+    name: string;
+    sourceId: string;
+    revision: string;
+    repositoryPath: string;
+    agentPath: string;
+    fingerprint: string;
+  };
   steps: Array<{ id: string; skillName: string; instruction: string; label?: string }>;
   inputs: Array<{ name: string; label?: string; required: boolean; defaultValue?: string }>;
 }
@@ -48,6 +59,7 @@ interface ChainSeed {
   sessionMode: 'shared' | 'fresh' | 'fork';
   steps: StoredChain['steps'];
   inputs?: StoredChain['inputs'];
+  agent?: StoredChain['agent'];
 }
 
 async function writeSkill(
@@ -130,6 +142,8 @@ test.beforeAll(async ({ request }) => {
   await mkdir(fakeBinDirectory, { recursive: true });
   fakeOpenCodePath = join(fakeBinDirectory, 'opencode');
   fakeCopilotPath = join(fakeBinDirectory, 'copilot');
+  originalOpenCode = await readFile(fakeOpenCodePath);
+  originalCopilot = await readFile(fakeCopilotPath);
   await writeExecutable(fakeOpenCodePath, openCodeScript());
   await writeExecutable(fakeCopilotPath, copilotScript());
 
@@ -187,11 +201,11 @@ test.beforeAll(async ({ request }) => {
 });
 
 test.afterAll(async () => {
-  if (fakeOpenCodePath !== undefined) {
-    await rm(fakeOpenCodePath, { force: true });
+  if (fakeOpenCodePath !== undefined && originalOpenCode !== undefined) {
+    await writeFile(fakeOpenCodePath, originalOpenCode, { mode: 0o755 });
   }
-  if (fakeCopilotPath !== undefined) {
-    await rm(fakeCopilotPath, { force: true });
+  if (fakeCopilotPath !== undefined && originalCopilot !== undefined) {
+    await writeFile(fakeCopilotPath, originalCopilot, { mode: 0o755 });
   }
   if (configPath !== undefined) {
     if (originalConfigText === null) {
@@ -242,6 +256,7 @@ async function createChain(
       sessionMode: seed.sessionMode,
       steps: seed.steps,
       inputs: seed.inputs ?? [],
+      ...(seed.agent === undefined ? {} : { agent: seed.agent }),
     },
   });
   expect(response.status()).toBe(201);
@@ -485,6 +500,46 @@ test.describe('Run start and preflight', () => {
     expect(consoleErrors).toEqual([]);
   });
 
+  test('preserves the selected agent when saving the automatic-permission opt-in', async ({
+    page,
+    request,
+  }) => {
+    const projectPath = join(fixtureRoot, `opt-in-agent-project-${runSuffix}`);
+    await mkdir(projectPath, { recursive: true });
+    const project = await openFixtureProject(request, projectPath);
+    const agent: NonNullable<StoredChain['agent']> = {
+      harness: 'copilot',
+      name: 'review-agent',
+      sourceId: 'fixture',
+      revision: 'a'.repeat(40),
+      repositoryPath: 'agents',
+      agentPath: 'review-agent.md',
+      fingerprint: 'b'.repeat(64),
+    };
+    const chain = await createChain(request, project.id, {
+      name: `Opt-in agent ${runSuffix}`,
+      harness: 'copilot',
+      sessionMode: 'fork',
+      agent,
+      steps: [{ id: 'step-copilot', skillName: 'deploy-helper', instruction: 'Deploy.' }],
+    });
+
+    await gotoRunStart(page, project.id, chain.id, chain.name);
+    await page.getByTestId('run-mode-automatic').check();
+    await page.getByTestId('preflight-run').click();
+    await page.getByTestId('permission-opt-in').click();
+    const savedOptIn = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PUT' &&
+        new URL(response.url()).pathname === `/api/projects/${project.id}/chains/${chain.id}`,
+    );
+    await page.getByTestId('permission-opt-in-confirm').click();
+    expect((await savedOptIn).status()).toBe(200);
+    const saved = await getChain(request, project.id, chain.id);
+    expect(saved.automaticPermissionOptIn).toBe(true);
+    expect(saved.agent).toEqual(agent);
+  });
+
   test('starts trust, verifies it, and persists the exact automatic-permission opt-in', async ({
     page,
     request,
@@ -558,7 +613,14 @@ test.describe('Run start and preflight', () => {
     const beforeOptIn = await getChain(request, project.id, chain.id);
     expect(beforeOptIn.automaticPermissionOptIn).toBe(false);
 
+    const savedOptIn = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PUT' &&
+        new URL(response.url()).pathname === `/api/projects/${project.id}/chains/${chain.id}`,
+    );
     await page.getByTestId('permission-opt-in-confirm').click();
+    expect((await savedOptIn).status()).toBe(200);
+    await expect(optInConfirm).toBeHidden();
     await expect(optIn).toBeChecked();
     await expect(optIn).toBeDisabled();
     const afterOptIn = await getChain(request, project.id, chain.id);
