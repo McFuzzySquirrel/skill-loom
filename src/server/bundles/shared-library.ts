@@ -299,7 +299,12 @@ function assertBundleId(value: string): void {
 async function syncDirectory(directory: string): Promise<void> {
   const handle = await open(directory, constants.O_RDONLY);
   try {
-    await handle.sync();
+    try {
+      await handle.sync();
+    } catch (error) {
+      // Windows does not support fsync on this directory handle.
+      if (process.platform !== 'win32' || !isErrno(error, 'EPERM')) throw error;
+    }
   } finally {
     await handle.close();
   }
