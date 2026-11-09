@@ -286,6 +286,7 @@ async function main() {
   await mkdir(tarDirectory, { recursive: true });
 
   let child = null;
+  let operationError;
 
   try {
     const packed = await execFileAsync(
@@ -354,7 +355,7 @@ async function main() {
           await new Promise((resolve, reject) => {
             const session = createTerminalSession({
               executable: process.execPath,
-              args: ['-e', "process.stdin.setRawMode(true);process.stdin.on('data',()=>{process.stdout.write('PACKAGED_PTY_DRAINED\\\\r\\\\n');process.exit(0)});process.stdout.write('PACKAGED_PTY_OK\\\\r\\\\n');"],
+              args: ['-e', "process.stdin.setRawMode(true);process.stdin.once('data',()=>{process.stdin.pause();process.stdout.write('PACKAGED_PTY_DRAINED\\\\r\\\\n',()=>{process.exitCode=0})});process.stdout.write('PACKAGED_PTY_OK\\\\r\\\\n');"],
             });
             let acknowledged = false;
             const acknowledge = () => {
@@ -496,12 +497,24 @@ async function main() {
     console.log(
       `Package smoke passed: ${packageName}@${packageVersion}, ${String(files.length)} files, ${String(files.filter((path) => path.startsWith('package/dist/')).length)} dist files.`,
     );
+  } catch (error) {
+    operationError = error;
+    throw error;
   } finally {
+    const cleanupErrors = [];
     if (child !== null) {
-      await stopProcess(child);
+      try { await stopProcess(child); } catch (error) { cleanupErrors.push(error); }
     }
-    if (profileParent !== temporaryRoot) await rm(profileParent, { recursive: true, force: true });
-    await rm(temporaryRoot, { recursive: true, force: true });
+    if (profileParent !== temporaryRoot) {
+      try { await rm(profileParent, { recursive: true, force: true }); } catch (error) { cleanupErrors.push(error); }
+    }
+    try { await rm(temporaryRoot, { recursive: true, force: true }); } catch (error) { cleanupErrors.push(error); }
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError(
+        operationError === undefined ? cleanupErrors : [operationError, ...cleanupErrors],
+        'Package smoke operation or cleanup failed.',
+      );
+    }
   }
 }
 
