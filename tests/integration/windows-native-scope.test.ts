@@ -32,8 +32,8 @@ describe.skipIf(process.platform !== 'win32' || process.env.LOOM_TEST_PRIVILEGED
           originalConsoleHostsTerminated: true,
           conptyInputOutputResizeVerified: true, conptyBrokerDeathVerified: true,
           conptyInheritedStdioVerified: true,
-          ownerLeaseLossVerified: true,
-          modes: ['finish', 'abort', 'broker-death', 'owner-lease-loss'],
+          actualOwnerDeathVerified: true,
+          modes: ['finish', 'abort', 'broker-death', 'owner-death'],
         });
         console.info(JSON.stringify(evidence));
       } finally {
