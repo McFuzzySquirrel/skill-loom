@@ -208,7 +208,8 @@ These are requirements to implement and verify, not current guarantees:
    older portable runs with skills can be inspected and reconciled but cannot
    start another step without a new review and run. Older helpers reject new
    run records. The portable suite passed on Linux, macOS and Windows
-   (`42658656412`). These checks likewise do not freeze packages for execution.
+   (`42658656412` and `42659722826`, including replacement detection and
+   collision tests). These checks likewise do not freeze packages for execution.
    Headless bundle import review also checks the opened bundle's file identity
    and rechecks its path and timestamps after reading, including on Windows.
    The focused bundle suite passed on all three hosted platforms
