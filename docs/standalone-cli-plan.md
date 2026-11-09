@@ -92,9 +92,11 @@ These are requirements to implement and verify, not current guarantees:
    Normal installs have not been fixed, and the full suite remains failing.
    Workspace storage currently rejects a config path whose real path differs
    from its configured spelling, including paths under macOS `/var` aliases;
-   canonicalizing test fixtures does not resolve that user-facing limitation.
-   Focused Windows terminal tests also fail on process startup, resize, exit
-   status, and timeouts, so ConPTY behavior is not yet verified.
+   canonicalizing test fixtures allowed the focused macOS workspace suite to
+   pass but does not resolve that user-facing limitation. Focused Windows
+   terminal tests also fail on resize, exit status, locked test directories,
+   missing-executable expectations, and timeouts, so ConPTY behavior is not
+   yet verified.
 
 ### Versioned CLI and process interface
 
