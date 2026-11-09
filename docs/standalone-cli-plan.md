@@ -26,11 +26,38 @@ Deliver both managed harness execution and execution in the calling agent's sess
 | Requirement | Status |
 | --- | --- |
 | Windows executable-mode installation | Implemented for reviewed new installations, copies, reuse, nested skills, and re-export. Legacy shared packages require restoration or fresh installation; missing records never silently become non-executable. |
-| Windows private IPC and ownership | Open: explicit current-user ACLs, peer identity, exclusive ownership, and stale-owner recovery still need implementation and native verification. |
+| Windows private IPC and ownership | In progress: protected profile ACL validation and mutually authenticated, certificate-pinned loopback TLS implemented; native Windows verification remains required before enabling control for the UI launcher by default. |
 | Protected managed skill execution | Blocked: a verified protected content view and harness-resolution boundary are still required. |
 | Descendant containment | Open: verified native containment or an explicitly approved VM backend is required; direct-child exit and terminal status are insufficient. |
 
 Installed-mode preservation does not complete the other three requirements or lift their execution and recovery gates.
+
+The Windows control candidate uses the OS-provided Windows PowerShell/.NET
+helper shipped with Loom, not default named-pipe permissions. New profiles are
+created with a protected, inheritable current-user-only DACL. Existing unsafe
+profiles, reparse-point ancestors, broadly accessible metadata/lock files, and
+ancestors permitting untrusted deletion or ACL takeover are rejected without
+changing ACLs. System, administrators, and TrustedInstaller are privileged
+principals, not isolation targets. Profiles must be on a local drive.
+
+The candidate binds an exclusive loopback TCP port, requires TLS 1.3 and the
+`loom-control-v1` ALPN protocol, and authenticates both peers with fresh,
+independently generated self-signed certificates. The private profile's
+`control.json` contains the server certificate, client certificate and client
+PKCS#12 key, plus the existing per-instance bearer capability. The server key
+is never written to that file. Keep this temporary file out of backups and
+version control. Certificates expire after one year; restart the service to
+rotate them. Protocol/application version checks and existing bounded request,
+event, terminal and backpressure handling remain shared with Unix.
+
+Native tests cover unsafe ACLs, linked paths, unauthenticated/incorrect
+certificates, endpoint impersonation, live-owner exclusion, process-crash
+recovery and event/terminal parity. The `windows-control` workflow suite also
+explicitly enables a disposable second-local-user test on the hosted Windows
+runner; it verifies a public fixture is readable while the private metadata,
+profile writes and authenticated IPC are denied, and removes that account.
+No native result is recorded yet. Protected execution and containment remain
+separate, unresolved requirements.
 
 ## Existing implementation and important constraints
 

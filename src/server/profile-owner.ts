@@ -1,5 +1,6 @@
 import { lstat, mkdir, realpath, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { verifyWindowsProfile } from './windows-control.js';
 
 export class ProfileOwnerError extends Error {
   constructor(
@@ -24,7 +25,11 @@ export interface ProfileOwner {
  */
 export async function acquireProfileOwner(configDirectory: string): Promise<ProfileOwner> {
   const requestedRoot = resolve(configDirectory);
-  await mkdir(requestedRoot, { recursive: true, mode: 0o700 });
+  if (process.platform === 'win32') {
+    await verifyWindowsProfile(requestedRoot, 'prepare');
+  } else {
+    await mkdir(requestedRoot, { recursive: true, mode: 0o700 });
+  }
   const root = await realpath(requestedRoot);
   const lockPath = join(root, 'profile-owner.sqlite');
   try {
@@ -34,9 +39,10 @@ export async function acquireProfileOwner(configDirectory: string): Promise<Prof
       if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error;
     }
     const info = await lstat(lockPath);
-    if (!info.isFile() || info.isSymbolicLink()) {
+    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1) {
       throw new ProfileOwnerError('PROFILE_LOCK_UNSAFE', 'The profile ownership file is unsafe.');
     }
+    if (process.platform === 'win32') await verifyWindowsProfile(root, 'lock');
   } catch (error) {
     if (error instanceof ProfileOwnerError) throw error;
     throw new ProfileOwnerError('PROFILE_LOCK_FAILED', 'The profile ownership file could not be opened.', { cause: error });

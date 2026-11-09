@@ -5,12 +5,18 @@ import { join } from 'node:path';
 import { once } from 'node:events';
 import { afterEach, describe, expect, it } from 'vitest';
 import { acquireProfileOwner } from '../../src/server/profile-owner.js';
+import { verifyWindowsProfile } from '../../src/server/windows-control.js';
 
 const roots: string[] = [];
 
 async function root(): Promise<string> {
   const path = await mkdtemp(join(tmpdir(), 'loom-owner-'));
   roots.push(path);
+  if (process.platform === 'win32') {
+    const profile = join(path, 'profile');
+    await verifyWindowsProfile(profile, 'prepare');
+    return profile;
+  }
   return path;
 }
 

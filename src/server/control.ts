@@ -1,10 +1,11 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual, X509Certificate } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, mkdtemp, open, realpath, rmdir, stat, unlink } from 'node:fs/promises';
 import { createConnection, createServer, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
+import { connect as connectTls, createServer as createTlsServer, type TLSSocket } from 'node:tls';
 import type { Readable } from 'node:stream';
 import { z } from 'zod';
 import packageManifest from '../../package.json' with { type: 'json' };
@@ -52,6 +53,7 @@ import { ProjectClaimError } from '../shared/project-claim.js';
 import { ProjectCoordinationError, reviewProjectCoordination } from '../shared/project-coordination.js';
 import { coordinationActionSchema, executeCoordinationAction, ProjectCoordinationActionError } from './projects/coordination.js';
 import { ProjectRunRecordsError, scanProjectRunRecords } from '../shared/project-run-records.js';
+import { createWindowsControlCertificates, readWindowsControlMetadata, verifyWindowsProfile } from './windows-control.js';
 import {
   TerminalTransportError,
   type TerminalAttachment,
@@ -68,6 +70,11 @@ const metadataSchema = z.strictObject({
   applicationVersion: z.string().min(1).max(64),
   token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
   socket: z.string().max(512),
+  tls: z.strictObject({
+    serverCertificate: z.string().regex(/^[A-Za-z0-9+/]+={0,2}$/).max(8192),
+    clientCertificate: z.string().regex(/^[A-Za-z0-9+/]+={0,2}$/).max(8192),
+    clientPfx: z.string().regex(/^[A-Za-z0-9+/]+={0,2}$/).max(16384),
+  }).optional(),
 });
 const requestSchema = z.strictObject({
   version: z.number().int(),
@@ -123,13 +130,17 @@ function failure(error: unknown): ControlResponse {
   } };
 }
 
-function requireUnix(): void {
-  if (process.platform === 'win32' || process.getuid === undefined) {
+function requireControlPlatform(): void {
+  if (process.platform !== 'win32' && process.getuid === undefined) {
     throw new ControlError('CONTROL_UNSUPPORTED', 'The local control service is not yet supported on this platform.');
   }
 }
 
 async function assertPrivateDirectory(directory: string, allowReadable: boolean): Promise<void> {
+  if (process.platform === 'win32') {
+    await verifyWindowsProfile(directory);
+    return;
+  }
   const info = await lstat(directory);
   if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.() ||
       (info.mode & (allowReadable ? 0o022 : 0o077)) !== 0 || await realpath(directory) !== directory) {
@@ -138,6 +149,35 @@ async function assertPrivateDirectory(directory: string, allowReadable: boolean)
 }
 
 async function readMetadata(root: string): Promise<Metadata | null> {
+  if (process.platform === 'win32') {
+    try {
+      const info = await lstat(join(root, 'control.json'));
+      if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1) {
+        throw new ControlError('CONTROL_UNSAFE', 'The local control metadata is not safely protected.');
+      }
+    } catch (error) {
+      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+    }
+    const text = await readWindowsControlMetadata(root);
+    if (text === null) return null;
+    let raw: unknown;
+    try { raw = JSON.parse(text) as unknown; } catch {
+      throw new ControlError('CONTROL_UNSAFE', 'The local control metadata is invalid.');
+    }
+    const parsed = metadataSchema.safeParse(raw);
+    if (!parsed.success) throw new ControlError('CONTROL_VERSION_UNSUPPORTED', 'The local control metadata is invalid or uses an unsupported protocol.');
+    if (parsed.data.tls === undefined || !/^tls:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}$/.test(parsed.data.socket) ||
+        Number(parsed.data.socket.split(':').at(-1)) > 65535) {
+      throw new ControlError('CONTROL_UNSAFE', 'The local control endpoint is unsafe.');
+    }
+    try {
+      new X509Certificate(Buffer.from(parsed.data.tls.serverCertificate, 'base64'));
+      new X509Certificate(Buffer.from(parsed.data.tls.clientCertificate, 'base64'));
+    } catch {
+      throw new ControlError('CONTROL_UNSAFE', 'The local control credentials are invalid.');
+    }
+    return parsed.data;
+  }
   let handle;
   try {
     handle = await open(join(root, 'control.json'), constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -167,7 +207,7 @@ async function readMetadata(root: string): Promise<Metadata | null> {
     const parsed = metadataSchema.safeParse(raw);
     if (!parsed.success) throw new ControlError('CONTROL_VERSION_UNSUPPORTED', 'The local control metadata is invalid or uses an unsupported protocol.');
     const socketDirectory = dirname(parsed.data.socket);
-    if (!basename(socketDirectory).startsWith('loom-control-') || basename(parsed.data.socket) !== 'control.sock' ||
+    if (parsed.data.tls !== undefined || !basename(socketDirectory).startsWith('loom-control-') || basename(parsed.data.socket) !== 'control.sock' ||
         !parsed.data.socket.startsWith('/')) {
       throw new ControlError('CONTROL_UNSAFE', 'The local control endpoint is unsafe.');
     }
@@ -177,7 +217,60 @@ async function readMetadata(root: string): Promise<Metadata | null> {
   }
 }
 
+function connectControl(metadata: Metadata): Socket {
+  if (metadata.tls === undefined) return createConnection(metadata.socket);
+  const credentials = metadata.tls;
+  const serverCertificate = new X509Certificate(Buffer.from(credentials.serverCertificate, 'base64'));
+  const socket = connectTls({
+    host: '127.0.0.1',
+    port: Number(metadata.socket.split(':').at(-1)),
+    servername: 'localhost',
+    ca: serverCertificate.toString(),
+    pfx: Buffer.from(credentials.clientPfx, 'base64'),
+    passphrase: '',
+    rejectUnauthorized: true,
+    minVersion: 'TLSv1.3',
+    ALPNProtocols: ['loom-control-v1'],
+    checkServerIdentity: (_hostname, peer) => {
+      if (!peer.raw.equals(serverCertificate.raw)) {
+        return new ControlError('CONTROL_AUTH_FAILED', 'Local control server authentication failed.');
+      }
+      return undefined;
+    },
+  });
+  socket.once('secureConnect', () => {
+    if (socket.alpnProtocol !== 'loom-control-v1') {
+      socket.destroy(new ControlError('CONTROL_VERSION_UNSUPPORTED', 'The local control TLS protocol is unsupported.'));
+    }
+  });
+  return socket;
+}
+
+function connected(metadata: Metadata): 'connect' | 'secureConnect' {
+  return metadata.tls === undefined ? 'connect' : 'secureConnect';
+}
+
 async function removeStaleEndpoint(metadata: Metadata): Promise<void> {
+  if (metadata.tls !== undefined) {
+    await new Promise<void>((done, reject) => {
+      const socket = connectControl(metadata);
+      socket.setTimeout(5_000, () => {
+        socket.destroy();
+        reject(new ControlError('CONTROL_ENDPOINT_IN_USE', 'The previous control endpoint did not respond.'));
+      });
+      socket.once('secureConnect', () => {
+        socket.destroy();
+        reject(new ControlError('CONTROL_ENDPOINT_IN_USE', 'Another process still owns the previous control endpoint.'));
+      });
+      socket.once('error', (error: NodeJS.ErrnoException) => {
+        if (error.code === 'ECONNREFUSED') done();
+        else reject(new ControlError('CONTROL_UNSAFE', 'The previous control endpoint could not be authenticated safely.'));
+      });
+    });
+    // A TCP port is not a filesystem artifact. Never delete or shut down an
+    // unknown listener. Production startup also holds exclusive profile ownership.
+    return;
+  }
   try {
     await assertPrivateDirectory(dirname(metadata.socket), false);
   } catch (error) {
@@ -655,39 +748,45 @@ export async function startControlServer(
     terminalManager?: TerminalManager;
   } = {},
 ): Promise<{ close(): Promise<void> }> {
-  requireUnix();
+  requireControlPlatform();
   const root = await realpath(configStore.getConfigDir());
   const services = options.services ?? createLoomServices({ configStore });
   const catalogPages = new ProjectCatalogPages(services.catalogService);
   await assertPrivateDirectory(root, true);
   const previous = await readMetadata(root);
   if (previous !== null) await removeStaleEndpoint(previous);
-  let runtime = await mkdtemp(join(await realpath(tmpdir()), 'loom-control-'));
-  if (Buffer.byteLength(join(runtime, 'control.sock')) > 100) {
+  let runtime = process.platform === 'win32' ? undefined : await mkdtemp(join(await realpath(tmpdir()), 'loom-control-'));
+  if (runtime !== undefined && Buffer.byteLength(join(runtime, 'control.sock')) > 100) {
     await rmdir(runtime);
     runtime = await mkdtemp(join(await realpath('/tmp'), 'loom-control-'));
   }
   try {
-    await assertPrivateDirectory(runtime, false);
+    if (runtime !== undefined) await assertPrivateDirectory(runtime, false);
   } catch (error) {
     try {
-      await rmdir(runtime);
+      if (runtime !== undefined) await rmdir(runtime);
     } catch (cleanupError) {
       throw new ControlStartupCleanupError([error, cleanupError], 'Control endpoint setup failed and its runtime directory could not be removed.');
     }
     throw error;
   }
+  const certificates = process.platform === 'win32' ? await createWindowsControlCertificates() : undefined;
   const metadata: Metadata = {
     version: VERSION,
     applicationVersion: packageManifest.version,
     token: randomBytes(32).toString('base64url'),
-    socket: join(runtime, 'control.sock'),
+    socket: runtime === undefined ? '' : join(runtime, 'control.sock'),
+    ...(certificates === undefined ? {} : { tls: {
+      serverCertificate: certificates.server.certificate,
+      clientCertificate: certificates.client.certificate,
+      clientPfx: certificates.client.pfx,
+    } }),
   };
   const clients = new Set<Socket>();
   const eventStreams = new Set<Socket>();
   const active = new Set<Promise<void>>();
   let closing = false;
-  const server = createServer((socket) => {
+  const accept = (socket: Socket): void => {
     if (closing || clients.size >= 32) { socket.destroy(); return; }
     clients.add(socket);
     socket.once('close', () => clients.delete(socket));
@@ -790,22 +889,55 @@ export async function startControlServer(
         },
       );
     });
+  };
+  const server = certificates === undefined ? createServer(accept) : createTlsServer({
+    pfx: Buffer.from(certificates.server.pfx, 'base64'),
+    passphrase: '',
+    ca: new X509Certificate(Buffer.from(certificates.client.certificate, 'base64')).toString(),
+    requestCert: true,
+    rejectUnauthorized: true,
+    minVersion: 'TLSv1.3',
+    handshakeTimeout: 5_000,
+    ALPNProtocols: ['loom-control-v1'],
+  }, (socket: TLSSocket) => {
+    if (!socket.authorized || socket.alpnProtocol !== 'loom-control-v1' ||
+        !socket.getPeerCertificate().raw?.equals(Buffer.from(certificates.client.certificate, 'base64'))) {
+      socket.destroy();
+      return;
+    }
+    accept(socket);
+  });
+  // Bound unauthenticated TLS handshakes as well as accepted application clients.
+  server.maxConnections = 32;
+  const connections = new Set<Socket>();
+  server.on('connection', (socket) => {
+    connections.add(socket);
+    socket.once('close', () => connections.delete(socket));
   });
   try {
     await new Promise<void>((resolveListen, reject) => {
       server.once('error', reject);
-      server.listen(metadata.socket, () => { server.removeListener('error', reject); resolveListen(); });
+      const listening = (): void => {
+        server.removeListener('error', reject);
+        const address = server.address();
+        if (certificates !== undefined && address !== null && typeof address !== 'string') {
+          metadata.socket = `tls://127.0.0.1:${address.port}`;
+        }
+        resolveListen();
+      };
+      if (certificates === undefined) server.listen(metadata.socket, listening);
+      else server.listen({ host: '127.0.0.1', port: 0, exclusive: true }, listening);
     });
     await atomicWriteJson(join(root, 'control.json'), metadata);
   } catch (error) {
     try {
       if (server.listening) {
         const stopped = new Promise<void>((done, reject) => server.close((closeError) => closeError ? reject(closeError) : done()));
-        for (const socket of clients) socket.destroy();
+        for (const socket of connections) socket.destroy();
         await Promise.all(active);
         await stopped;
       }
-      await rmdir(runtime);
+      if (runtime !== undefined) await rmdir(runtime);
     } catch (cleanupError) {
       throw new ControlStartupCleanupError([error, cleanupError], 'Control endpoint startup failed and cleanup did not complete.');
     }
@@ -821,11 +953,11 @@ export async function startControlServer(
         for (const socket of eventStreams) socket.destroy();
         for (const socket of clients) if (socket.timeout !== 0) socket.destroy();
         await Promise.all(active);
-        for (const socket of clients) socket.destroy();
+        for (const socket of connections) socket.destroy();
         await stopped;
         const current = await readMetadata(root);
         if (current?.token === metadata.token) await unlink(join(root, 'control.json'));
-        await rmdir(runtime);
+        if (runtime !== undefined) await rmdir(runtime);
       })();
       return closePromise;
     },
@@ -1004,7 +1136,7 @@ async function streamRunTerminal(
 }
 
 async function controlMetadata(configDirectory: string): Promise<Metadata> {
-  requireUnix();
+  requireControlPlatform();
   let root: string;
   try {
     root = await realpath(resolve(configDirectory));
@@ -1020,6 +1152,7 @@ async function controlMetadata(configDirectory: string): Promise<Metadata> {
   if (metadata.applicationVersion !== packageManifest.version) {
     throw new ControlError('CONTROL_VERSION_UNSUPPORTED', 'The running Skill Loom service has a different application version.');
   }
+  if (metadata.tls !== undefined) return metadata;
   try {
     await assertPrivateDirectory(dirname(metadata.socket), false);
   } catch (error) {
@@ -1036,7 +1169,7 @@ export async function callControl(configDirectory: string, operation: string, in
   const request = `${JSON.stringify({ version: VERSION, token: metadata.token, operation, input })}\n`;
   if (Buffer.byteLength(request) > MAX_REQUEST_BYTES) throw new ControlError('CONTROL_REQUEST_TOO_LARGE', 'The local control request exceeds its size limit.');
   return new Promise<ControlResponse>((resolveResponse, reject) => {
-    const socket = createConnection(metadata.socket);
+    const socket = connectControl(metadata);
     const chunks: Buffer[] = [];
     let size = 0;
     let completed = false;
@@ -1044,7 +1177,7 @@ export async function callControl(configDirectory: string, operation: string, in
       socket.destroy();
       reject(new ControlError('CONTROL_UNAVAILABLE', 'The Skill Loom service did not accept the connection.'));
     });
-    socket.once('connect', () => {
+    socket.once(connected(metadata), () => {
       socket.setTimeout(0);
       socket.write(request);
     });
@@ -1125,7 +1258,7 @@ export async function attachControlTerminal(
     }),
   });
   return new Promise<void>((resolveTerminal, reject) => {
-    const socket = createConnection(metadata.socket);
+    const socket = connectControl(metadata);
     const decoder = new StringDecoder('utf8');
     let buffer = Buffer.alloc(0);
     let finished = false;
@@ -1188,7 +1321,7 @@ export async function attachControlTerminal(
       }
     };
     socket.setTimeout(5_000, () => finish(new ControlError('CONTROL_UNAVAILABLE', 'The Skill Loom service did not accept the connection.')));
-    socket.once('connect', () => {
+    socket.once(connected(metadata), () => {
       socket.setTimeout(0);
       socket.write(request);
     });
@@ -1291,7 +1424,7 @@ async function receiveControlEvents(
     }),
   });
   return new Promise<void>((resolveStream, reject) => {
-    const socket = createConnection(metadata.socket);
+    const socket = connectControl(metadata);
     let buffer = Buffer.alloc(0);
     let finished = false;
     let gotSnapshot = false;
@@ -1311,7 +1444,7 @@ async function receiveControlEvents(
     }
     signal?.addEventListener('abort', abort, { once: true });
     socket.setTimeout(5_000, () => finish(new ControlError('CONTROL_UNAVAILABLE', 'The Skill Loom service did not accept the connection.')));
-    socket.once('connect', () => {
+    socket.once(connected(metadata), () => {
       socket.setTimeout(0);
       socket.write(request);
     });
