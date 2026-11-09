@@ -230,6 +230,7 @@ describe('project claim transaction', () => {
         await acquireProjectRunClaim(process.argv[1], 'managed', process.argv[2]);
         process.stdout.write('acquired');
       } catch (error) {
+        console.error(error);
         process.stdout.write(error.code || 'unexpected');
       }
     `;
@@ -239,8 +240,9 @@ describe('project claim transaction', () => {
     ], { cwd: process.cwd() });
     const results = await Promise.all([run('process-one'), run('process-two')]);
     const outcomes = results.map((result) => result.stdout);
-    expect(outcomes.filter((result) => result === 'acquired')).toHaveLength(1);
-    expect(outcomes.filter((result) => ['PROJECT_CLAIM_CONFLICT', 'PROJECT_CLAIM_BUSY'].includes(result))).toHaveLength(1);
+    expect(outcomes.filter((result) => result === 'acquired'), JSON.stringify(results)).toHaveLength(1);
+    expect(outcomes.filter((result) => ['PROJECT_CLAIM_CONFLICT', 'PROJECT_CLAIM_BUSY'].includes(result)),
+      JSON.stringify(results)).toHaveLength(1);
     await withProjectClaimTransaction(root, async (tx) => {
       expect(['process-one', 'process-two']).toContain(tx.read()?.runId);
     });
