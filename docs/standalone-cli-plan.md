@@ -220,6 +220,10 @@ Git output. Both streams and the batched reader have boundary coverage.
 Refresh rejects non-UTF-8 Git tree paths rather than changing their identities;
 a real Git fixture confirms that valid replacement characters remain supported
 and that rejection preserves the preceding snapshot.
+A real Git fixture also checks that refresh and handoff preserve adversarial
+instructions, an executable script, and a package postinstall declaration as
+data without running the script. This does not establish how an agent will
+interpret untrusted instructions after receiving them.
 The 1,000-package/20,000-file local Git fixture measures the test process's RSS
 high-water mark and samples the temporary clone staging tree every 100 ms.
 On Linux it also samples RSS for Git and other descendants. One isolated run
