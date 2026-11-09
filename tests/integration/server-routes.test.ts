@@ -8,13 +8,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import { startServer } from '../../src/server/index.js';
 import { isApiErrorEnvelope } from '../../src/shared/api.js';
+import { verifyWindowsProfile } from '../../src/server/windows-control.js';
 
 let root: string;
+let temporaryRoot: string;
 let app: FastifyInstance;
 const stopHandler = vi.fn(async () => undefined);
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'loom-server-routes-'));
+  temporaryRoot = await mkdtemp(join(tmpdir(), 'loom-server-routes-'));
+  root = process.platform === 'win32' ? join(temporaryRoot, 'profile') : temporaryRoot;
+  if (process.platform === 'win32') await verifyWindowsProfile(root, 'prepare');
   app = await buildApp({
     serveStatic: false,
     env: { ...process.env, LOOM_CONFIG_DIR: root },
@@ -25,7 +29,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await app.close();
-  await rm(root, { recursive: true, force: true });
+  await rm(temporaryRoot, { recursive: true, force: true });
   stopHandler.mockClear();
 });
 
@@ -184,7 +188,7 @@ describe('server lifecycle routes', () => {
     } finally {
       await started.stop();
     }
-  });
+  }, process.platform === 'win32' ? 60_000 : 15_000);
 
   it('rejects a second server for the same profile without disturbing the owner', async () => {
     const reservation = createServer();
@@ -216,5 +220,5 @@ describe('server lifecycle routes', () => {
     }
     const restarted = await startServer(options);
     await restarted.stop();
-  });
+  }, process.platform === 'win32' ? 60_000 : 15_000);
 });

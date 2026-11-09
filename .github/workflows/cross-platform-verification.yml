@@ -54,7 +54,7 @@ jobs:
       - if: inputs.suite == 'windows-control'
         env:
           LOOM_TEST_WINDOWS_CROSS_USER: '1'
-        run: npx vitest run tests/unit/profile-owner.test.ts tests/integration/windows-control.test.ts tests/integration/control.test.ts
+        run: npx vitest run tests/unit/profile-owner.test.ts tests/integration/windows-control.test.ts tests/integration/control.test.ts tests/integration/server-routes.test.ts
       - if: inputs.suite == 'remote-copy'
         run: npx vitest run tests/unit/catalog-copy.test.ts tests/unit/catalog-remote.test.ts tests/integration/catalog-routes.test.ts tests/integration/discovery-routes.test.ts tests/integration/chain-bundles.test.ts
       - if: inputs.suite == 'catalog'

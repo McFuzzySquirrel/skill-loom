@@ -3,6 +3,7 @@ import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -10,8 +11,10 @@ import { unzipSync } from 'fflate';
 
 const execFileAsync = promisify(execFile);
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const npxCommand = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+const npmCommand = process.platform === 'win32' ? process.execPath : 'npm';
+const npmArguments = process.platform === 'win32'
+  ? [process.env.npm_execpath ?? join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js')]
+  : [];
 const packageName = JSON.parse(
   await readFile(join(repoRoot, 'package.json'), 'utf8'),
 ).name;
@@ -277,16 +280,17 @@ async function main() {
   await mkdir(join(repoRoot, '.tmp'), { recursive: true });
   const temporaryRoot = await mkdtemp(join(repoRoot, '.tmp', 'package-smoke-'));
   const tarDirectory = join(temporaryRoot, 'tarball');
-  const configDirectory = join(temporaryRoot, 'config');
+  const profileParent = process.platform === 'win32'
+    ? await mkdtemp(join(tmpdir(), 'loom-package-profile-')) : temporaryRoot;
+  const configDirectory = join(profileParent, 'config');
   await mkdir(tarDirectory, { recursive: true });
-  await mkdir(configDirectory, { recursive: true });
 
   let child = null;
 
   try {
     const packed = await execFileAsync(
       npmCommand,
-      ['pack', '--json', '--pack-destination', tarDirectory],
+      [...npmArguments, 'pack', '--json', '--pack-destination', tarDirectory],
       { cwd: repoRoot, maxBuffer: 20 * 1024 * 1024 },
     );
     // `prepack` runs the build, whose output shares stdout with npm's JSON
@@ -318,8 +322,8 @@ async function main() {
     await smokeChainWorkflowSkill();
 
     const version = await execFileAsync(
-      npxCommand,
-      ['--yes', `--package=${tarball}`, 'skill-loom', '--version'],
+      npmCommand,
+      [...npmArguments, 'exec', '--yes', `--package=${tarball}`, '--', 'skill-loom', '--version'],
       { cwd: repoRoot, maxBuffer: 20 * 1024 * 1024, env: { ...process.env, CI: '1' } },
     );
     if (!version.stdout.includes(`Skill Loom ${packageVersion}`)) {
@@ -331,7 +335,7 @@ async function main() {
     await writeFile(join(installedRoot, 'package.json'), '{"private":true}\n');
     await execFileAsync(
       npmCommand,
-      ['install', '--no-audit', '--no-fund', '--no-package-lock', '--no-save', tarball],
+      [...npmArguments, 'install', '--no-audit', '--no-fund', '--no-package-lock', '--no-save', tarball],
       { cwd: installedRoot, maxBuffer: 20 * 1024 * 1024, env: { ...process.env, CI: '1' } },
     );
     const terminalProbe = `
@@ -360,16 +364,17 @@ async function main() {
     });
 
     const port = await findFreePort();
+    const installedCli = join(installedRoot, 'node_modules', packageName, 'dist/src/server/cli.js');
     child = spawn(
       process.execPath,
       [
-        join(repoRoot, 'dist', 'src', 'server', 'cli.js'),
+        installedCli,
         '--no-open',
         '--port',
         String(port),
       ],
       {
-        cwd: repoRoot,
+        cwd: installedRoot,
         env: {
           ...process.env,
           CI: '1',
@@ -380,9 +385,15 @@ async function main() {
       },
     );
 
-    const health = await waitForHealth(port);
+    const health = await waitForHealth(port, process.platform === 'win32' ? 60_000 : 15_000);
     if (health.status !== 'ok') {
       throw new Error('Packaged server health response is not ok.');
+    }
+    const control = await execFileAsync(process.execPath, [
+      installedCli, 'service', 'status', '--config-dir', configDirectory,
+    ], { cwd: installedRoot, timeout: 30_000 });
+    if (JSON.parse(control.stdout).result?.state !== 'running') {
+      throw new Error('The installed CLI could not authenticate to the packaged server.');
     }
     const workflowResponse = await fetch(
       `http://127.0.0.1:${String(port)}/api/portable-skill/loom-chain-workflow`,
@@ -435,6 +446,24 @@ async function main() {
     ) {
       throw new Error('Packaged scenario copy is missing its source attribution.');
     }
+    const stopped = await execFileAsync(process.execPath, [
+      installedCli, 'service', 'stop', '--config-dir', configDirectory,
+    ], { cwd: installedRoot, timeout: 30_000 });
+    if (JSON.parse(stopped.stdout).ok !== true) {
+      throw new Error('The installed CLI could not stop the packaged server.');
+    }
+    if (child.exitCode === null && child.signalCode === null) {
+      let timeout;
+      try {
+        await Promise.race([
+          once(child, 'exit'),
+          new Promise((_, reject) => {
+            timeout = setTimeout(() => reject(new Error('Packaged server did not stop.')), 15_000);
+          }),
+        ]);
+      } finally { clearTimeout(timeout); }
+    }
+    if (child.exitCode !== 0) throw new Error('The packaged server did not stop cleanly.');
 
     console.log(
       `Package smoke passed: ${packageName}@${packageVersion}, ${String(files.length)} files, ${String(files.filter((path) => path.startsWith('package/dist/')).length)} dist files.`,
@@ -443,6 +472,7 @@ async function main() {
     if (child !== null) {
       await stopProcess(child);
     }
+    if (profileParent !== temporaryRoot) await rm(profileParent, { recursive: true, force: true });
     await rm(temporaryRoot, { recursive: true, force: true });
   }
 }
