@@ -15,10 +15,12 @@ Deliver both managed harness execution and execution in the calling agent's sess
 - Preserve existing bundle v1/v2 readers and their independent, smaller size caps unless a specific compatibility review justifies a format change. A large catalog does not mean a large bundle.
 - Preserve one active managed run per config profile, exact source pinning, explicit recovery, non-overwriting imports, and documented harness capability restrictions. No telemetry or hosted backend.
 - Linux, macOS, and Windows are required targets for the standalone managed
-  workflow. Prefer native harness execution when it can meet the reviewed
-  content and descendant-cleanup guarantees; a Linux VM fallback is acceptable
-  when native execution cannot. Disclose the backend and its prerequisites and
-  obtain any additional approvals before provisioning or execution.
+  workflow. Native host execution is required; the user subsequently declined
+  the proposed isolated Linux guest with separate authentication and copied
+  workspace. Do not silently substitute a VM, container guest, separate harness
+  identity, or workspace import/export for native execution. Disclose native
+  prerequisites and obtain additional approvals before privileged provisioning
+  or live execution.
 - This document tracks the approved scope, milestone status, and acceptance gates. Update it alongside implementation.
 
 ## Current cross-platform completion status
@@ -28,7 +30,7 @@ Deliver both managed harness execution and execution in the calling agent's sess
 | Windows executable-mode installation | Implemented for reviewed new installations, copies, reuse, nested skills, and re-export. Legacy shared packages require restoration or fresh installation; missing records never silently become non-executable. |
 | Windows private IPC and ownership | Implemented and natively verified: protected requested/canonical profile ACLs, mutually authenticated pinned loopback TLS, exclusive profile ownership, crash recovery, and UI/CLI sharing. Installed-package control and natural PTY exit now pass. |
 | Protected managed skill execution | Blocked: a verified protected content view and harness-resolution boundary are still required. |
-| Descendant containment | Open: verified native containment or an explicitly approved VM backend is required; direct-child exit and terminal status are insufficient. Windows natural-exit PTY resource cleanup is fixed separately, not proof of containment. |
+| Descendant containment | Open: verified native containment is required on all three platforms; VM fallback was declined. Direct-child exit and terminal status are insufficient. Windows natural-exit PTY resource cleanup is fixed separately, not proof of containment. |
 
 Installed-mode preservation does not complete the other three requirements or lift their execution and recovery gates.
 
@@ -154,19 +156,19 @@ These are requirements to implement and verify, not current guarantees:
    containment mechanism that demonstrably prevents descendant escape. Do not
    treat process groups, a direct child's exit, or a proposed API as evidence
    of containment. An unavailable or unverified backend must fail closed.
-3. If native guarantees cannot be met, offer an explicitly approved Linux VM
-   backend on macOS and Windows. Specify installation, guest provisioning,
-   harness and authentication setup, project synchronization, terminal
-   transport, protected package staging, network access, permissions, and
-   cleanup before implementation. VM execution must not silently replace the
-   user's host harness or change their project and trust semantics. It is not
-   a promise of isolation from an administrator or unrelated host writers.
+3. Native host execution is required. The previously considered Linux VM
+   fallback is not approved. Investigate OS-enforced content and descendant
+   boundaries without changing host harness credentials or direct project
+   semantics. If a target requires a privileged broker, signed entitlement,
+   or system extension, specify that prerequisite and obtain approval before
+   provisioning it. An unavailable native boundary must remain blocked rather
+   than falling back to process enumeration, a VM, or a terminal-exit assertion.
 4. Implement Windows user-private control transport and ownership before
    claiming Windows CLI parity. Keep existing execution blocks and retained
    project claims until the selected backend proves cleanup, including after
    failure, service crash, restart, and explicit reconciliation. Neither a
    terminal status nor operator confirmation alone proves descendants exited.
-5. Test actual Linux, macOS, and Windows hosts, including supported native and VM
+5. Test actual Linux, macOS, and Windows hosts, including supported native
    paths, with adversarial package replacement, alternate skill locations,
    detached descendants, failed termination, crashes, cancellation, terminal
    reattachment, and independently reviewed retries. Live harness tests require
