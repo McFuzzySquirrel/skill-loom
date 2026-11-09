@@ -382,9 +382,14 @@ public static class WindowsNativeScopeFixture {
             bool writeDenied = false, aclDenied = false;
             try { File.WriteAllText(reviewed, "changed"); }
             catch (UnauthorizedAccessException) { writeDenied = true; }
-            try { File.SetAccessControl(reviewed, File.GetAccessControl(reviewed)); }
+            try {
+                var changedAcl = File.GetAccessControl(reviewed);
+                changedAcl.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User,
+                    FileSystemRights.FullControl, AccessControlType.Allow));
+                File.SetAccessControl(reviewed, changedAcl);
+            }
             catch (UnauthorizedAccessException) { aclDenied = true; }
-            Require(writeDenied && aclDenied, "Protected write or ACL update was permitted.");
+            Require(writeDenied && aclDenied, "Protected write denied: " + writeDenied + "; actual ACL update denied: " + aclDenied + ".");
             IntPtr broker = OpenProcess(0x40, false, uint.Parse(args[3]));
             if (broker != IntPtr.Zero) { Close(broker); throw new InvalidOperationException("Broker handle duplication was permitted."); }
             Require(Marshal.GetLastWin32Error() == 5, "Unexpected broker access error.");
