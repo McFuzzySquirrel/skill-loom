@@ -37,7 +37,7 @@ npx --yes --package=./skill-loom-cli-0.1.0.tgz skill-loom
 
 The CLI supports `--help`, `--version`, `--no-open`, `--port <number>`, and `--config-dir <path>`. It starts the same loopback-only production server as `npm start`, prints the resolved config directory and URL, and opens the default browser only when stdout is a TTY and `CI` is unset. `--no-open` disables that behavior entirely.
 
-`--port` sets `LOOM_PORT`; `--config-dir` sets `LOOM_CONFIG_DIR`. Environment variables remain authoritative when a flag is omitted. The package contains only the compiled server, built web UI, compiled package metadata, `docs/OPERATIONS.md`, and the manifest; source, tests, build scripts, and the other documentation files are excluded. Installing the package still builds the native `node-pty` module, so the Python/make/C++ toolchain is required.
+`--port` sets `LOOM_PORT`; `--config-dir` sets `LOOM_CONFIG_DIR`. Environment variables remain authoritative when a flag is omitted. The package contains the compiled server, built web UI, compiled package metadata, the macOS PTY installation helper, `docs/OPERATIONS.md`, and the manifest; source, tests, build scripts, and the other documentation files are excluded. Installing the package may build the native `node-pty` module, so the Python/make/C++ toolchain is required.
 
 Before publishing, flip `"private"` to `false`, add repository metadata, verify the package name is still available, run `npm run test:package`, and publish with `npm publish`. Once published, the invocation is `npx skill-loom-cli`.
 
@@ -278,18 +278,20 @@ A `node-pty` install failure usually means the native toolchain is missing. Inst
 
 On a hosted macOS ARM64 runner, a clean install of `node-pty` 1.1.0 produced
 `posix_spawnp failed` because its prebuilt `spawn-helper` had mode `0644`.
-For an installation you own, inspect the helper path and permissions from the
-directory where Skill Loom resolves `node-pty`:
+Skill Loom's postinstall grants the owner execute permission to regular,
+privately linked installed helpers without changing their contents. An install
+with lifecycle scripts disabled does not perform that repair. If a terminal
+still fails, inspect the helper path and permissions from the directory where
+Skill Loom resolves `node-pty`:
 
 ```bash
 node -p "require('path').join(require('path').dirname(require.resolve('node-pty/package.json')), 'prebuilds', 'darwin-' + process.arch, 'spawn-helper')"
 ```
 
 Verify that the printed path is the expected regular file in your installation,
-not a symlink, before granting its owner execute permission with `chmod u+x` on
-that exact path. Restart Skill Loom and retry the terminal. A hosted probe with
-that permission change passed the focused terminal tests; it does not verify
-managed descendant cleanup. A reinstall may restore the original permissions.
+not a symlink or hard link, before granting its owner execute permission with
+`chmod u+x` on that exact path. Restart Skill Loom and retry the terminal. This
+permission repair does not verify managed descendant cleanup.
 
 ### Dirty git tree
 

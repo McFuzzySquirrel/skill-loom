@@ -16,9 +16,11 @@
     "dist/web",
     "dist/skills",
     "dist/package.json",
+    "install/ensure-pty-helper.mjs",
     "docs/OPERATIONS.md"
   ],
   "scripts": {
+    "postinstall": "node install/ensure-pty-helper.mjs",
     "predev": "npm run build:portable-skill",
     "dev": "node scripts/dev-supervisor.mjs",
     "dev:server": "tsx watch src/server/index.ts",

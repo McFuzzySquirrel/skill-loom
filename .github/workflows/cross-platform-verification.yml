@@ -52,4 +52,4 @@ jobs:
         run: |
           node -e "if (process.platform !== 'darwin') throw Error('This probe requires macOS'); const fs = require('node:fs'); const p = 'node_modules/node-pty/prebuilds/darwin-' + process.arch + '/spawn-helper'; const s = fs.lstatSync(p); if (!s.isFile() || s.isSymbolicLink()) throw Error('Unsafe helper'); fs.chmodSync(p, s.mode | 0o100);"
       - if: inputs.suite == 'terminal' || inputs.suite == 'terminal-macos-helper'
-        run: npx vitest run tests/unit/pty.test.ts tests/unit/pty-platform.test.ts tests/unit/supervised-runner.test.ts tests/integration/terminal-ws.test.ts
+        run: npx vitest run tests/unit/pty.test.ts tests/unit/pty-install.test.ts tests/unit/pty-platform.test.ts tests/unit/supervised-runner.test.ts tests/integration/terminal-ws.test.ts

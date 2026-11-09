@@ -23,6 +23,7 @@ const packageVersion = JSON.parse(
 function assertPackageContents(files) {
   const required = [
     'package/package.json',
+    'package/install/ensure-pty-helper.mjs',
     'package/dist/package.json',
     'package/dist/src/server/cli.js',
     'package/dist/src/server/index.js',
