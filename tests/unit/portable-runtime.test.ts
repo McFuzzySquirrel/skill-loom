@@ -226,7 +226,7 @@ describe('portable bundle execution', () => {
     const fingerprint = await treeFingerprint(directory, inventory);
     expect(fingerprint).toBe(packageFingerprint([
       { path: 'SKILL.md', content: Buffer.from('abc').toString('base64'), executable: false },
-      { path: 'scripts/check.sh', content: Buffer.from('defg').toString('base64'), executable: true },
+      { path: 'scripts/check.sh', content: Buffer.from('defg').toString('base64'), executable: process.platform !== 'win32' },
     ]));
     const inventoryBytes = inventory.reduce((sum, item) => sum + Buffer.byteLength(JSON.stringify(item), 'utf8') + 1, 0);
     const exact = { files: 2, bytes: 7, entries: 3, inventoryBytes };

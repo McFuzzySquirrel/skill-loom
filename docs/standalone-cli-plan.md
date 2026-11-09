@@ -124,6 +124,9 @@ These are requirements to implement and verify, not current guarantees:
    where `O_NOFOLLOW` is insufficient; hosted Linux, macOS and Windows
    (`42647120313`) passed the focused tests, including both standalone helper
    mirrors. These checks do not lock files against concurrent writers.
+   The focused Git blob-reader suite also passed on all three hosted platforms
+   (`42647505376`), including timeout and direct-child reaping; this does not
+   verify descendant containment.
    A later full baseline after the profile-alias fixes passed Linux but failed
    12 of 65 macOS files and 25 of 65 Windows files (three Windows files
    skipped). This baseline predates the subsequent snapshot-mode changes.
