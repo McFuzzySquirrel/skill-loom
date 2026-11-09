@@ -198,7 +198,8 @@ These are requirements to implement and verify, not current guarantees:
    different package trees can produce the same digest input. New snapshots
    additionally store a length-framed digest built from the fetched Git files;
    discovery, copy, export and handoff verify it. Legacy snapshots without that
-   index must be refreshed at the same revision before use. The digest and its
+   index must be refreshed at the same revision before use. The focused snapshot
+   and copy suites passed on Linux, macOS and Windows (`42657583229`). The digest and its
    writable index are not an isolation boundary against an actor who can replace
    both, and must not be used to lift managed-execution safeguards.
    The hosted Linux runner's read-only probe found cgroup v2 but no write
