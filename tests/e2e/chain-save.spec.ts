@@ -538,6 +538,7 @@ test.describe('Chain inputs and save', () => {
     await expect(page).toHaveURL(
       new RegExp(`/projects/${escapeRegExp(project.id)}/chains/[^/]+$`),
     );
+    await expect.poll(() => chainIdFromUrl(page.url())).not.toBe(original.id);
     await expect(page.getByTestId('builder-chain-name')).toHaveText(`${name} copy`);
     const copyId = chainIdFromUrl(page.url());
     expect(copyId).not.toBe(original.id);

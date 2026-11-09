@@ -16,6 +16,9 @@ import { createConfigStore, type ConfigStore } from '../../src/server/config/sto
 import { callControl, startControlServer } from '../../src/server/control.js';
 import { runCli } from '../../src/server/cli.js';
 import { DiscoveryHandoffSchema, MAX_HANDOFF_BYTES, MAX_HANDOFF_FILES } from '../../src/shared/discovery-handoff.js';
+import {
+  acquireProjectRunClaim, clearReviewedProjectClaim, enableReviewedProjectProtocol, reviewProjectCoordination,
+} from '../../src/shared/project-coordination.js';
 
 const revision = 'a'.repeat(40);
 const skillBlob = 'b'.repeat(40);
@@ -589,5 +592,14 @@ describe('discovery handoff route', () => {
       url: `/api/discovery/workspaces/${workspace.id}/import`,
       payload: {},
     })).resolves.toMatchObject({ statusCode: 409 });
+    const coordination = await reviewProjectCoordination(workspace.path);
+    await enableReviewedProjectProtocol(workspace.path, coordination.reviewDigest, true);
+    await acquireProjectRunClaim(workspace.path, 'managed', 'run-discovery-test');
+    const denied = await app.inject({ method: 'DELETE', url: `/api/discovery/workspaces/${workspace.id}` });
+    expect(denied.statusCode).toBe(409);
+    expect(denied.json()).toMatchObject({ error: { code: 'DISCOVERY_WORKSPACE_ACTIVE' } });
+    const claimReview = await reviewProjectCoordination(workspace.path);
+    await clearReviewedProjectClaim(workspace.path, claimReview.reviewDigest, true, true);
+    expect((await app.inject({ method: 'DELETE', url: `/api/discovery/workspaces/${workspace.id}` })).statusCode).toBe(200);
   });
 });

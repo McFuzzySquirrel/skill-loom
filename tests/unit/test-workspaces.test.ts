@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -17,6 +17,9 @@ import {
   TEST_WORKSPACE_ERROR_CODES,
 } from '../../src/server/runs/test-workspaces.js';
 import { withWorkspaceLifecycleLock } from '../../src/server/runs/workspace-lock.js';
+import { executePortableRequest } from '../../src/portable/runtime.js';
+import { withProjectClaimTransaction, withProjectRetirementTransaction } from '../../src/shared/project-claim.js';
+import { clearReviewedProjectClaim, enableReviewedProjectProtocol, reviewProjectCoordination } from '../../src/shared/project-coordination.js';
 
 let root: string;
 
@@ -84,6 +87,93 @@ async function setup() {
 }
 
 describe('managed test workspaces', () => {
+  it.each(['legacy', 'enabled'] as const)('refuses removal of portable work and retained claims in %s mode', async (mode) => {
+    const { source, chain, service } = await setup();
+    const workspace = await service.create({ sourceProjectId: source.id, sourceChainId: chain.id });
+    if (mode === 'enabled') {
+      const review = await reviewProjectCoordination(workspace.path);
+      await enableReviewedProjectProtocol(workspace.path, review.reviewDigest, true);
+    }
+    const bundlePath = join(root, 'portable.loom.json');
+    await writeFile(bundlePath, JSON.stringify({
+      format: 'skill-loom-chain', version: 1,
+      chain: {
+        name: 'Portable test', harness: 'opencode', sessionMode: 'shared',
+        steps: [{ id: 'one', kind: 'instruction', instruction: 'Review.' }], inputs: [],
+      },
+      skills: [],
+    }));
+    const inspect = await executePortableRequest({ command: 'inspect', projectPath: workspace.path, bundlePath }) as { reviewDigest: string };
+    const prepared = await executePortableRequest({
+      command: 'prepare', projectPath: workspace.path, bundlePath,
+      input: {
+        reviewDigest: inspect.reviewDigest, installConfirmed: true, actualHost: 'opencode',
+        progression: 'supervised', inputs: {},
+        sessionDecision: {
+          requested: 'shared', mechanism: 'current-conversation', description: 'Current conversation.', confirmed: true,
+        },
+      },
+    }) as { runId: string; revision: number };
+    await expect(service.remove(workspace.id)).rejects.toMatchObject({ code: TEST_WORKSPACE_ERROR_CODES.ACTIVE });
+    await executePortableRequest({
+      command: 'record', projectPath: workspace.path, runId: prepared.runId,
+      input: { revision: prepared.revision, action: 'abort' },
+    });
+    if (mode === 'enabled') {
+      await expect(service.remove(workspace.id)).rejects.toMatchObject({ code: TEST_WORKSPACE_ERROR_CODES.ACTIVE });
+      const review = await reviewProjectCoordination(workspace.path);
+      await clearReviewedProjectClaim(workspace.path, review.reviewDigest, true, true);
+    }
+    await expect(service.remove(workspace.id)).resolves.toEqual({ id: workspace.id, removed: true });
+  });
+
+  it('resumes removal after retirement or an interrupted rename', async () => {
+    const { source, chain, service } = await setup();
+    for (const move of [false, true]) {
+      const workspace = await service.create({ sourceProjectId: source.id, sourceChainId: chain.id });
+      await withProjectRetirementTransaction(workspace.path, async (tx) => tx.retire('2026-01-02T00:00:00.000Z'));
+      await expect(reviewProjectCoordination(workspace.path)).rejects.toMatchObject({ code: 'PROJECT_CLAIM_RETIRED' });
+      if (move) await rename(workspace.path, join(workspace.path, '..', `.retired-${workspace.id}`));
+      await expect(service.remove(workspace.id)).resolves.toEqual({ id: workspace.id, removed: true });
+    }
+  });
+
+  it('does not remove an unverified directory occupying a retired workspace path', async () => {
+    const { source, chain, service } = await setup();
+    const workspace = await service.create({ sourceProjectId: source.id, sourceChainId: chain.id });
+    const retiredPath = join(workspace.path, '..', `.retired-${workspace.id}`);
+    await mkdir(retiredPath);
+    await writeFile(join(retiredPath, 'keep.txt'), 'Unrelated data.');
+    await expect(service.remove(workspace.id)).rejects.toMatchObject({ code: TEST_WORKSPACE_ERROR_CODES.CLEANUP_FAILED });
+    expect(await readFile(join(retiredPath, 'keep.txt'), 'utf8')).toBe('Unrelated data.');
+    expect((await service.list())).toContainEqual(workspace);
+  });
+
+  it('serializes retirement behind an in-flight project claim', async () => {
+    const { source, chain, service } = await setup();
+    const workspace = await service.create({ sourceProjectId: source.id, sourceChainId: chain.id });
+    const review = await reviewProjectCoordination(workspace.path);
+    await enableReviewedProjectProtocol(workspace.path, review.reviewDigest, true);
+    let entered!: () => void;
+    let release!: () => void;
+    const locked = new Promise<void>((resolve) => { entered = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const operation = withProjectClaimTransaction(workspace.path, async (tx) => {
+      entered();
+      await gate;
+      tx.acquire({
+        version: 1, ...tx.identity, kind: 'managed', runId: 'run-competing',
+        createdAt: '2026-01-02T00:00:00.000Z',
+      });
+    });
+    await locked;
+    const removal = service.remove(workspace.id);
+    release();
+    await operation;
+    await expect(removal).rejects.toMatchObject({ code: TEST_WORKSPACE_ERROR_CODES.ACTIVE });
+    expect((await reviewProjectCoordination(workspace.path)).claim).toMatchObject({ runId: 'run-competing' });
+  });
+
   it('creates a hidden, self-contained project copy and removes only that workspace', async () => {
     const { configStore, projectRegistry, source, chain, chainService, service } = await setup();
 

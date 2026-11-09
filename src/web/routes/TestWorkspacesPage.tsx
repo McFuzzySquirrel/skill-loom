@@ -134,7 +134,8 @@ export function TestWorkspacesPage({
                   <div className="confirm-panel" role="group" aria-label="Confirm workspace removal">
                     <p>
                       Remove this test project and its run history? The original project and
-                      reusable chain are not affected.
+                      reusable chain are not affected. First stop all work, descendants, and
+                      older Skill Loom services and helpers using this workspace.
                     </p>
                     <button
                       type="button"

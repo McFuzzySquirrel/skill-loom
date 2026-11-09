@@ -321,7 +321,12 @@ accepts either `{"sourceDraftId":"..."}` or
 `{"sourceProjectId":"...","sourceChainId":"..."}` on stdin and materializes
 an isolated working directory without running a harness. `workspace remove`
 requires `{"workspaceId":"...","confirmed":true}` on stdin and refuses to
-remove a workspace with an active run. These directories are not OS sandboxes.
+remove a workspace with an active run, unresolved run record, or retained
+project claim. Before confirming removal, stop all work and descendants as well
+as older Skill Loom services and helpers using the workspace; nonparticipating
+clients are not protected by coordination. Workspace retirement blocks new
+participating run operations before the directory is moved and removed.
+These directories are not OS sandboxes.
 `workspace inspect` accepts `{"workspaceId":"...","path":"relative/path"}`
 on stdin, pages directory entries, and returns regular files up to 1 MiB as
 base64. It refuses symbolic links and special files; output is untrusted data.
@@ -357,7 +362,9 @@ Arrange exclusive project use manually from
 before installation or execution until completion or explicit abort; status
 checks do not lock the project. If exclusive use cannot be established, stop.
 Portable mutations now initialize a project-local SQLite coordination database
-and its ignore rule. If the protocol is enabled, portable preparation
+and its ignore rule. Current clients migrate version 1 databases to version 2;
+earlier participating clients reject version 2, so stop and update them before
+using the same project. If the protocol is enabled, portable preparation
 claims the project before installation and later mutations require that claim;
 the claim persists after failures, completion, and abort. Managed starts also
 claim before run creation, and managed actions and automatic transitions check

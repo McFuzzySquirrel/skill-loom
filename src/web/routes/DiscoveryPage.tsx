@@ -652,7 +652,7 @@ export function DiscoveryPage() {
                 type="button"
                 className="button button--danger"
                 onClick={() => {
-                  if (window.confirm('Remove this discovery workspace, handoff, result, and run history? Imported Chain drafts and pinned source snapshots will remain.')) {
+                  if (window.confirm('Remove this discovery workspace, handoff, result, and run history? First stop all work, descendants, and older Skill Loom services and helpers using it. Imported Chain drafts and pinned source snapshots will remain.')) {
                     void removeDiscoveryWorkspace(workspace);
                   }
                 }}

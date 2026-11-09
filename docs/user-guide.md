@@ -121,7 +121,7 @@ Instruction steps run through the chain's selected harness in the same order and
 
 ### Test in a disposable project
 
-In the workflow designer, choose **Test in disposable workspace** to save the current chain and create a fresh managed test project containing its chain and selected packages. The run uses Skill Loom's regular preflight, trust, permissions, and run controls. It does not modify the source project's files. The test project and run records are retained for inspection until you remove them from **Test workspaces** in the navigation. Cleanup is blocked while a workspace owns the active run.
+In the workflow designer, choose **Test in disposable workspace** to save the current chain and create a fresh managed test project containing its chain and selected packages. The run uses Skill Loom's regular preflight, trust, permissions, and run controls. It does not modify the source project's files. The test project and run records are retained for inspection until you remove them from **Test workspaces** in the navigation. Cleanup is blocked by active or unresolved runs and retained project claims. Before removal, stop all work and descendants, and older Skill Loom services and helpers using the workspace.
 
 A separate working directory is not a security sandbox: the selected harness can still access files, network resources, and credentials allowed by its normal permissions. A new test workspace is not shown in the ordinary recent-project list, but remains registered for run recovery. Do not treat successful execution as proof that the chain or its outputs are correct.
 

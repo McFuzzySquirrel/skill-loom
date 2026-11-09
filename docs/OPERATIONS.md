@@ -87,6 +87,10 @@ replace it while a service is running. If a claim exists or project coordination
 is enabled, recovery retains the record and pointer and logs `RUN_RECOVERY_CLAIMED`.
 Use project coordination review and separately confirmed actions to reconcile it.
 Invalid coordination data blocks recovery.
+Current participating clients migrate version 1 coordination databases to
+version 2; older participating clients reject the new version. Stop and update
+them before accessing the same project. Retired workspaces reject new run
+mutations, and incomplete removal may be retried through the owning service.
 Managed starts, actions, automatic transitions, and shutdown participate in the
 protocol when enabled, and retain claims until separately reviewed. Process-tree
 cleanup remains unverified; confirmations that descendants have stopped are

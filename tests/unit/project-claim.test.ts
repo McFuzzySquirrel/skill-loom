@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
-import { withProjectClaimTransaction, type ProjectClaim } from '../../src/shared/project-claim.js';
+import { withProjectClaimTransaction, withProjectRetirementTransaction, type ProjectClaim } from '../../src/shared/project-claim.js';
 
 const roots: string[] = [];
 const execFileAsync = promisify(execFile);
@@ -32,6 +32,32 @@ afterEach(async () => {
 });
 
 describe('project claim transaction', () => {
+  it('migrates version-one claims and fails closed after retirement', async () => {
+    const root = await project();
+    await mkdir(join(root, '.loom'));
+    const path = join(root, '.loom', 'project-claim.sqlite');
+    const database = new DatabaseSync(path);
+    database.exec(`
+      CREATE TABLE claim (id INTEGER PRIMARY KEY CHECK (id = 1), document TEXT NOT NULL);
+      CREATE TABLE protocol (id INTEGER PRIMARY KEY CHECK (id = 1), document TEXT NOT NULL);
+      PRAGMA user_version = 1;
+      PRAGMA application_id = 1280266061;
+    `);
+    database.prepare('INSERT INTO claim (id, document) VALUES (1, ?)').run(JSON.stringify(claim(root)));
+    database.close();
+    await withProjectClaimTransaction(root, async (tx) => expect(tx.read()).toEqual(claim(root)));
+    const migrated = new DatabaseSync(path);
+    expect(migrated.prepare('PRAGMA user_version').get()?.user_version).toBe(2);
+    migrated.close();
+    await withProjectRetirementTransaction(root, async (tx) => {
+      tx.release(claim(root));
+      tx.retire('2026-01-02T00:00:00.000Z');
+    });
+    await expect(withProjectClaimTransaction(root, async () => undefined))
+      .rejects.toMatchObject({ code: 'PROJECT_CLAIM_RETIRED' });
+    await withProjectRetirementTransaction(root, async (tx) => expect(tx.retired()).toBe(true));
+  });
+
   it('persists a claim and releases only the matching run', async () => {
     const root = await project();
     const first = claim(root);
@@ -194,7 +220,7 @@ describe('project claim transaction', () => {
     await withProjectClaimTransaction(unknown, async () => undefined);
     const path = join(unknown, '.loom', 'project-claim.sqlite');
     const db = new DatabaseSync(path);
-    db.exec('PRAGMA user_version = 2');
+    db.exec('PRAGMA user_version = 99');
     db.close();
     await expect(withProjectClaimTransaction(unknown, async () => undefined))
       .rejects.toMatchObject({ code: 'PROJECT_CLAIM_UNSAFE' });

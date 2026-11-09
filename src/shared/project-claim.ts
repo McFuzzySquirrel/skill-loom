@@ -6,12 +6,15 @@ import { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 
 const DATABASE_NAME = 'project-claim.sqlite';
-const DATABASE_VERSION = 1;
-const APPLICATION_ID = 0x4c4f4f4d;
+export const PROJECT_CLAIM_DATABASE_VERSION = 2;
+export const PROJECT_CLAIM_APPLICATION_ID = 0x4c4f4f4d;
+const DATABASE_VERSION = PROJECT_CLAIM_DATABASE_VERSION;
+const APPLICATION_ID = PROJECT_CLAIM_APPLICATION_ID;
 const MAX_DATABASE_BYTES = 8 * 1024 * 1024;
 const MAX_IGNORE_BYTES = 1024 * 1024;
 const CREATE_TABLE = 'CREATE TABLE claim (id INTEGER PRIMARY KEY CHECK (id = 1), document TEXT NOT NULL)';
 const CREATE_PROTOCOL = 'CREATE TABLE protocol (id INTEGER PRIMARY KEY CHECK (id = 1), document TEXT NOT NULL)';
+const CREATE_LIFECYCLE = 'CREATE TABLE lifecycle (id INTEGER PRIMARY KEY CHECK (id = 1), document TEXT NOT NULL)';
 
 const ProtocolSchema = z.strictObject({
   version: z.literal(1),
@@ -19,6 +22,14 @@ const ProtocolSchema = z.strictObject({
   projectDevice: z.string().regex(/^[0-9]+$/),
   projectInode: z.string().regex(/^[0-9]+$/),
   enabledAt: z.iso.datetime({ offset: true }),
+});
+
+export const ProjectRetirementSchema = z.strictObject({
+  version: z.literal(1),
+  projectPath: z.string(),
+  projectDevice: z.string().regex(/^[0-9]+$/),
+  projectInode: z.string().regex(/^[0-9]+$/),
+  retiredAt: z.iso.datetime({ offset: true }),
 });
 
 export const ProjectClaimSchema = z.strictObject({
@@ -34,7 +45,7 @@ export type ProjectClaim = z.infer<typeof ProjectClaimSchema>;
 
 export class ProjectClaimError extends Error {
   constructor(
-    readonly code: 'PROJECT_CLAIM_UNSAFE' | 'PROJECT_CLAIM_BUSY' | 'PROJECT_CLAIM_CONFLICT' | 'PROJECT_CLAIM_MISMATCH',
+    readonly code: 'PROJECT_CLAIM_UNSAFE' | 'PROJECT_CLAIM_BUSY' | 'PROJECT_CLAIM_CONFLICT' | 'PROJECT_CLAIM_MISMATCH' | 'PROJECT_CLAIM_RETIRED',
     message: string,
     options?: { cause?: unknown },
   ) {
@@ -50,6 +61,8 @@ export interface ProjectClaimTransaction {
   read(): ProjectClaim | null;
   acquire(claim: ProjectClaim): void;
   release(expected: Pick<ProjectClaim, 'kind' | 'runId'>): void;
+  retired(): boolean;
+  retire(now: string): void;
 }
 
 const queues = new Map<string, Promise<void>>();
@@ -93,7 +106,7 @@ async function ensureDatabase(projectPath: string): Promise<{
     try {
       const database = new DatabaseSync(temporary);
       try {
-        database.exec(`PRAGMA synchronous = FULL; BEGIN EXCLUSIVE; ${CREATE_TABLE}; ${CREATE_PROTOCOL}; PRAGMA user_version = ${DATABASE_VERSION}; PRAGMA application_id = ${APPLICATION_ID}; COMMIT`);
+        database.exec(`PRAGMA synchronous = FULL; BEGIN EXCLUSIVE; ${CREATE_TABLE}; ${CREATE_PROTOCOL}; ${CREATE_LIFECYCLE}; PRAGMA user_version = ${DATABASE_VERSION}; PRAGMA application_id = ${APPLICATION_ID}; COMMIT`);
       } finally {
         database.close();
       }
@@ -201,6 +214,22 @@ export async function withProjectClaimTransaction<T>(
   projectPath: string,
   task: (transaction: ProjectClaimTransaction) => Promise<T>,
 ): Promise<T> {
+  return runProjectClaimTransaction(projectPath, task, false);
+}
+
+/** Permit a removal retry to inspect an already retired workspace. */
+export async function withProjectRetirementTransaction<T>(
+  projectPath: string,
+  task: (transaction: ProjectClaimTransaction) => Promise<T>,
+): Promise<T> {
+  return runProjectClaimTransaction(projectPath, task, true);
+}
+
+async function runProjectClaimTransaction<T>(
+  projectPath: string,
+  task: (transaction: ProjectClaimTransaction) => Promise<T>,
+  allowRetired: boolean,
+): Promise<T> {
   if (!isAbsolute(projectPath) || projectPath.includes('\0')) {
     throw unsafe('The project path must be absolute.');
   }
@@ -230,7 +259,7 @@ export async function withProjectClaimTransaction<T>(
       begun = true;
       const versionRow = database.prepare('PRAGMA user_version').get();
       const version = versionRow?.user_version;
-      if (version !== DATABASE_VERSION) {
+      if (version !== 1 && version !== DATABASE_VERSION) {
         throw unsafe('The project claim database has an unsupported or incomplete version.');
       }
       const application = database.prepare('PRAGMA application_id').get();
@@ -238,13 +267,19 @@ export async function withProjectClaimTransaction<T>(
       const journal = database.prepare('PRAGMA journal_mode').get();
       if (journal?.journal_mode !== 'delete') throw unsafe('The project claim database journal mode is unsupported.');
       const metadata = database.prepare("SELECT type, name, sql FROM sqlite_master").all();
-      if (metadata.length !== 2 ||
+      if (metadata.length !== (version === 1 ? 2 : 3) ||
           !metadata.some((entry) => entry.type === 'table' && entry.name === 'claim' && entry.sql === CREATE_TABLE) ||
-          !metadata.some((entry) => entry.type === 'table' && entry.name === 'protocol' && entry.sql === CREATE_PROTOCOL)) {
+          !metadata.some((entry) => entry.type === 'table' && entry.name === 'protocol' && entry.sql === CREATE_PROTOCOL) ||
+          (version === DATABASE_VERSION && !metadata.some(
+            (entry) => entry.type === 'table' && entry.name === 'lifecycle' && entry.sql === CREATE_LIFECYCLE,
+          ))) {
         throw unsafe('The project claim database schema is invalid.');
       }
       const check = database.prepare('PRAGMA quick_check').get();
       if (check?.quick_check !== 'ok') throw unsafe('The project claim database is corrupt.');
+      if (version === 1) {
+        database.exec(`${CREATE_LIFECYCLE}; PRAGMA user_version = ${DATABASE_VERSION}`);
+      }
       const db = database;
       const read = (): ProjectClaim | null => {
         if (!active) throw unsafe('The project claim transaction is no longer active.');
@@ -274,10 +309,37 @@ export async function withProjectClaimTransaction<T>(
         }
         return result.data;
       };
+      const retired = (): boolean => {
+        if (!active) throw unsafe('The project claim transaction is no longer active.');
+        const rows = db.prepare('SELECT id, document FROM lifecycle').all();
+        if (rows.length === 0) return false;
+        if (rows.length !== 1 || rows[0]?.id !== 1 || typeof rows[0].document !== 'string' ||
+            Buffer.byteLength(rows[0].document, 'utf8') > 4096) {
+          throw unsafe('The project retirement record is invalid.');
+        }
+        let value: unknown;
+        try {
+          value = JSON.parse(rows[0].document) as unknown;
+        } catch (error) {
+          throw unsafe('The project retirement record is invalid.', error);
+        }
+        const result = ProjectRetirementSchema.safeParse(value);
+        if (!result.success || result.data.projectPath !== identity.projectPath ||
+            result.data.projectDevice !== identity.projectDevice || result.data.projectInode !== identity.projectInode) {
+          throw unsafe('The project retirement record is invalid or belongs to another project.');
+        }
+        return true;
+      };
+      const assertNotRetired = (): void => {
+        if (retired()) {
+          throw new ProjectClaimError('PROJECT_CLAIM_RETIRED', 'This workspace is being removed and cannot start or change runs.');
+        }
+      };
       const transaction: ProjectClaimTransaction = {
         identity,
         protocol,
         enableProtocol(now) {
+          assertNotRetired();
           if (protocol() !== null) return;
           const value = ProtocolSchema.safeParse({ version: 1, ...identity, enabledAt: now });
           if (!value.success) throw unsafe('The project protocol record is invalid.');
@@ -285,6 +347,7 @@ export async function withProjectClaimTransaction<T>(
         },
         read,
         acquire(value) {
+          assertNotRetired();
           const claim = ProjectClaimSchema.safeParse(value);
           if (!claim.success || claim.data.projectPath !== identity.projectPath ||
               claim.data.projectDevice !== identity.projectDevice || claim.data.projectInode !== identity.projectInode) {
@@ -296,15 +359,27 @@ export async function withProjectClaimTransaction<T>(
           db.prepare('INSERT INTO claim (id, document) VALUES (1, ?)').run(JSON.stringify(claim.data));
         },
         release(expected) {
+          assertNotRetired();
           const claim = read();
           if (claim === null || claim.kind !== expected.kind || claim.runId !== expected.runId) {
             throw new ProjectClaimError('PROJECT_CLAIM_MISMATCH', 'The project claim does not match this run.');
           }
           db.prepare('DELETE FROM claim WHERE id = 1').run();
         },
+        retired,
+        retire(now) {
+          if (retired()) return;
+          if (read() !== null) {
+            throw new ProjectClaimError('PROJECT_CLAIM_CONFLICT', 'A claimed project cannot be retired.');
+          }
+          const value = ProjectRetirementSchema.safeParse({ version: 1, ...identity, retiredAt: now });
+          if (!value.success) throw unsafe('The project retirement record is invalid.');
+          db.prepare('INSERT INTO lifecycle (id, document) VALUES (1, ?)').run(JSON.stringify(value.data));
+        },
       };
       read();
       protocol();
+      if (!allowRetired) assertNotRetired();
       let result: T;
       try {
         result = await task(transaction);

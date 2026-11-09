@@ -2,6 +2,9 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import {
+  acquireProjectRunClaim, clearReviewedProjectClaim, enableReviewedProjectProtocol, reviewProjectCoordination,
+} from '../../src/shared/project-coordination';
 
 /**
  * Browser coverage for CHAIN-05 (chain step editor and reordering).
@@ -229,10 +232,25 @@ test.describe('Chain builder', () => {
     const response = await request.get('/api/test-workspaces');
     expect(response.ok()).toBe(true);
     const body = await response.json() as {
-      workspaces: Array<{ sourceDraftId?: string }>;
+      workspaces: Array<{ sourceDraftId?: string; path: string }>;
     };
-    expect(body.workspaces.some((workspace) => workspace.sourceDraftId === draftId)).toBe(true);
+    const workspace = body.workspaces.find((item) => item.sourceDraftId === draftId);
+    expect(workspace).toBeDefined();
+    if (workspace === undefined) throw new Error('The test workspace was not registered.');
     expect(errors).toEqual([]);
+    const coordination = await reviewProjectCoordination(workspace.path);
+    await enableReviewedProjectProtocol(workspace.path, coordination.reviewDigest, true);
+    await acquireProjectRunClaim(workspace.path, 'managed', 'run-browser-test');
+    await page.goto('/test-workspaces');
+    const card = page.locator('.project-list__item').filter({ hasText: workspace.path });
+    await card.getByRole('button', { name: 'Remove test workspace' }).click();
+    await expect(card.getByText(/First stop all work, descendants/)).toBeVisible();
+    await card.getByRole('button', { name: 'Remove workspace', exact: true }).click();
+    await expect(page.getByTestId('test-workspaces-page').getByText('The workspace has a retained claim or unresolved run. Reconcile it before removal.', { exact: true })).toBeVisible();
+    const claimed = await reviewProjectCoordination(workspace.path);
+    await clearReviewedProjectClaim(workspace.path, claimed.reviewDigest, true, true);
+    await card.getByRole('button', { name: 'Remove workspace', exact: true }).click();
+    await expect(card).toHaveCount(0);
   });
 
   test('starts a project-independent scenario draft from a goal', async ({ page }) => {

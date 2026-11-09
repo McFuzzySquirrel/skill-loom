@@ -312,6 +312,14 @@ stopped; cross-mode protection is not complete for older clients or unrelated
 processes. An integration fixture verifies that a separate-process portable
 claim blocks a managed start, and that a managed claim blocks portable
 preparation; neither conflicting operation is allowed to dispatch work.
+Test and discovery workspace removal now rejects retained claims and unresolved
+records, commits a retirement marker under the project transaction, and moves
+the workspace out of its registered path before deletion. A retry handles a
+completed retirement or rename; partial deletion that destroys the retirement
+evidence fails closed and needs operator investigation. Database version 1 is
+migrated under the transaction to version 2; older participating clients reject
+the newer schema and must be stopped and updated. Nonparticipating clients and
+descendants still require the operator's explicit attention.
 Startup recovery now holds the project transaction when handling its matching
 profile pointer and leaves that pointer and run unchanged when a claim exists or
 the protocol is enabled; it reports `RUN_RECOVERY_CLAIMED`. It creates the

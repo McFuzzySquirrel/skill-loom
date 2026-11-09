@@ -113,6 +113,7 @@ export function createDiscoveryWorkspaceService(
 const importQueues = new Map<string, Promise<{ draftId: string; imported: true }>>();
 export { withWorkspaceLifecycleLock as withDiscoveryWorkspaceLock } from './workspace-lock.js';
 import { withWorkspaceLifecycleLock as withDiscoveryWorkspaceLock } from './workspace-lock.js';
+import { removeRetiredWorkspace, WorkspaceRemovalError } from './workspace-removal.js';
 
 async function createWorkspace(
   input: Parameters<DiscoveryWorkspaceService['create']>[0],
@@ -716,8 +717,10 @@ async function removeWorkspaceLocked(
       if (!info.isDirectory() || info.isSymbolicLink() || await realpath(expectedPath) !== expectedPath) {
         throw new Error('unsafe workspace');
       }
-      await rm(expectedPath, { recursive: true });
+      await removeRetiredWorkspace(workspaceRoot, id);
       workspaceExists = false;
+    } else {
+      await removeRetiredWorkspace(workspaceRoot, id);
     }
     await options.configStore.update((current) => ({
       discoveryWorkspaces: current.discoveryWorkspaces.filter((candidate) => candidate.id !== id),
@@ -726,6 +729,9 @@ async function removeWorkspaceLocked(
     return { id, removed: true };
   } catch (error) {
     if (error instanceof DiscoveryWorkspaceError) throw error;
+    if (error instanceof WorkspaceRemovalError && error.code === 'ACTIVE') {
+      throw new DiscoveryWorkspaceError(DISCOVERY_WORKSPACE_ERROR_CODES.ACTIVE, error.message, { id }, { cause: error });
+    }
     throw new DiscoveryWorkspaceError(
       DISCOVERY_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
       workspaceExists

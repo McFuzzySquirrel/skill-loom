@@ -16,6 +16,7 @@ import type { ProjectRegistry } from '../projects/registry.js';
 import { readActiveRunPointerFile } from './store.js';
 import { exportBundle, importBundle } from '../chains/bundle.js';
 import { withWorkspaceLifecycleLock } from './workspace-lock.js';
+import { removeRetiredWorkspace, WorkspaceRemovalError } from './workspace-removal.js';
 
 const WORKSPACE_DIRECTORY = 'test-workspaces';
 
@@ -332,11 +333,7 @@ async function removeWorkspaceLocked(
   }
 
   try {
-    const info = await lstat(expectedPath);
-    if (!info.isDirectory() || info.isSymbolicLink() || await realpath(expectedPath) !== expectedPath) {
-      throw new Error('unsafe workspace');
-    }
-    await rm(expectedPath, { recursive: true });
+    await removeRetiredWorkspace(workspaceRoot, id);
     await options.configStore.update((current) => ({
       testWorkspaces: current.testWorkspaces.filter((candidate) => candidate.id !== id),
       recentProjects: current.recentProjects.filter((candidate) => candidate.id !== record.projectId),
@@ -344,6 +341,9 @@ async function removeWorkspaceLocked(
     return { id, removed: true };
   } catch (error) {
     if (error instanceof TestWorkspaceError) throw error;
+    if (error instanceof WorkspaceRemovalError && error.code === 'ACTIVE') {
+      throw new TestWorkspaceError(TEST_WORKSPACE_ERROR_CODES.ACTIVE, error.message, { id }, { cause: error });
+    }
     throw new TestWorkspaceError(
       TEST_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
       'The managed test workspace could not be safely removed.',
