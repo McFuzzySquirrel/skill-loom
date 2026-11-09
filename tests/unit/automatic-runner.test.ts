@@ -530,6 +530,39 @@ describe('automatic OpenCode advancement', () => {
     }
   });
 
+  it.each([false, true])('does not expose completion before its persistence settles (failure: %s)', async (fail) => {
+    let release: () => void = () => undefined;
+    let entered: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const reached = new Promise<void>((resolve) => { entered = resolve; });
+    const harness = makeHarness({
+      persist: async (run) => {
+        if (run.status === 'completed') {
+          entered();
+          await gate;
+          if (fail) throw new Error('injected final write failure');
+        }
+      },
+    });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await harness.runner.start();
+      await advanceOscStep(harness, harness.spawner.lastProcess);
+      harness.spawner.lastProcess.emitData(OSC_WORKING + OSC_IDLE);
+      await reached;
+      expect(harness.runner.getRun().status).toBe('running');
+      expect(harness.events.some((event) => event.type === 'run-completed')).toBe(false);
+      release();
+      await harness.runner.whenSettled();
+      expect(harness.runner.getRun().status).toBe(fail ? 'paused' : 'completed');
+      expect(harness.events.some((event) => event.type === 'run-completed')).toBe(!fail);
+    } finally {
+      release();
+      log.mockRestore();
+      await harness.runner.shutdown();
+    }
+  });
+
   it('does not spawn another automatic step while a completion is being shut down', async () => {
     let release: () => void = () => undefined;
     let entered: () => void = () => undefined;

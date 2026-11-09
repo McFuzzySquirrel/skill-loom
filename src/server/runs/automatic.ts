@@ -1347,11 +1347,19 @@ export class AutomaticRunner {
     if (nextIndex >= this.runValue.steps.length) {
       // Completion is the end of the chain, not a further advancement; a
       // pause requested during the final step still records a completed run.
-      this.runValue.status = 'completed';
-      this.runValue.finishedAt = timestamp;
-      this.runValue.reason = null;
-      this.runValue.updatedAt = timestamp;
-      await this.emitAndPersist('run-completed', step);
+      const completed: Run = {
+        ...this.getRun(),
+        status: 'completed',
+        finishedAt: timestamp,
+        reason: null,
+        updatedAt: timestamp,
+      };
+      await this.persistSnapshot(completed, step);
+      this.runValue.status = completed.status;
+      this.runValue.finishedAt = completed.finishedAt;
+      this.runValue.reason = completed.reason;
+      this.runValue.updatedAt = completed.updatedAt;
+      this.emit('run-completed', step);
       return;
     }
 
@@ -1525,9 +1533,14 @@ export class AutomaticRunner {
       readonly reason?: string | null;
     } = {},
   ): Promise<void> {
+    await this.persistSnapshot(this.getRun(), step);
+    this.emit(type, step, extras);
+  }
+
+  private async persistSnapshot(run: Run, step: RunStepRecord | null): Promise<void> {
     if (this.persistHook !== undefined) {
       try {
-        await this.persistHook(this.getRun());
+        await this.persistHook(run);
       } catch (error) {
         throw toRunnerError(
           AUTOMATIC_RUNNER_ERROR_CODES.PERSIST_FAILED,
@@ -1540,7 +1553,6 @@ export class AutomaticRunner {
         );
       }
     }
-    this.emit(type, step, extras);
   }
 
   private emit(
