@@ -1,4 +1,4 @@
-import { ChildProcess } from 'node:child_process';
+import { ChildProcess, spawn } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { adaptChildProcess, createChildProcessAdapter } from '../../src/server/runs/headless-process.js';
 import { disposeAndWait } from '../../src/server/runs/process-cleanup.js';
@@ -70,5 +70,59 @@ describe('headless process adapter', () => {
     expect(result.exitCode).toBe(0);
     expect(output.join('')).toBe('fixture');
     expect(process.isRunning()).toBe(false);
+  });
+
+  it('does not treat direct-child exit as proof that a detached descendant stopped', async () => {
+    const script = `
+      const { spawn } = require('node:child_process');
+      const child = spawn(process.execPath, ['-e',
+        'process.stdout.write("ready"); setTimeout(() => process.exit(0), 15000)'],
+        { detached: true, stdio: ['ignore', 'pipe', 'ignore'] });
+      child.stdout.once('data', () => {
+        process.stdout.write(String(child.pid) + '\\n');
+        child.stdout.destroy();
+        child.unref();
+      });
+      setInterval(() => {}, 1000);
+    `;
+    const child = spawn(process.execPath, ['-e', script], {
+      stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
+    });
+    const adapted = adaptChildProcess(child);
+    let descendant: number | undefined;
+    try {
+      descendant = await new Promise<number>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Detached fixture did not start.')), 5000);
+        let output = '';
+        let unsubscribe = () => {};
+        unsubscribe = adapted.onData((data) => {
+          output += data;
+          if (!output.includes('\n')) return;
+          const pid = Number(output.trim());
+          if (!Number.isSafeInteger(pid) || pid <= 0) return;
+          clearTimeout(timer);
+          unsubscribe();
+          resolve(pid);
+        });
+        child.once('error', (error) => { clearTimeout(timer); reject(error); });
+      });
+      await disposeAndWait(adapted, () => adapted.kill('SIGTERM'));
+      expect(adapted.isRunning()).toBe(false);
+      expect(() => process.kill(descendant!, 0)).not.toThrow();
+    } finally {
+      try {
+        if (adapted.isRunning()) {
+          await disposeAndWait(adapted, () => adapted.kill('SIGTERM'));
+        }
+      } finally {
+        if (descendant !== undefined) {
+          try {
+            process.kill(descendant, 'SIGKILL');
+          } catch (error) {
+            if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH')) throw error;
+          }
+        }
+      }
+    }
   });
 });
