@@ -11,6 +11,7 @@ import type { CatalogService } from '../catalog/merge.js';
 import type { Chain } from '../chains/model.js';
 import type { ChainService } from '../chains/service.js';
 import type { ConfigStore } from '../config/store.js';
+import { canonicalConfigRoot } from '../config/canonical-root.js';
 import type { TestWorkspaceRecord } from '../config/schema.js';
 import type { ProjectRegistry } from '../projects/registry.js';
 import { readActiveRunPointerFile } from './store.js';
@@ -268,8 +269,18 @@ async function resolveAgentPath(
 
 async function listWorkspaces(options: TestWorkspaceServiceOptions): Promise<TestWorkspace[]> {
   const configDirectory = resolve(options.configStore.getConfigDir());
-  const root = join(configDirectory, WORKSPACE_DIRECTORY);
   const config = await options.configStore.get();
+  let root: string;
+  try {
+    root = join(await canonicalConfigRoot(configDirectory), WORKSPACE_DIRECTORY);
+  } catch (error) {
+    throw new TestWorkspaceError(
+      TEST_WORKSPACE_ERROR_CODES.PATH_INVALID,
+      'The managed test-workspace storage directory is unavailable or unsafe.',
+      {},
+      { cause: error },
+    );
+  }
   return config.testWorkspaces.map((record) => ({
     ...record,
     path: join(root, record.id),
@@ -361,15 +372,7 @@ async function removeWorkspaceLocked(
 async function ensureWorkspaceRoot(configDirectory: string): Promise<string> {
   try {
     await mkdir(configDirectory, { recursive: true, mode: 0o700 });
-    const configInfo = await lstat(configDirectory);
-    if (
-      !configInfo.isDirectory() ||
-      configInfo.isSymbolicLink() ||
-      await realpath(configDirectory) !== configDirectory
-    ) {
-      throw new Error('unsafe config directory');
-    }
-    const root = join(configDirectory, WORKSPACE_DIRECTORY);
+    const root = join(await canonicalConfigRoot(configDirectory), WORKSPACE_DIRECTORY);
     await mkdir(root, { recursive: true, mode: 0o700 });
     const info = await lstat(root);
     if (!info.isDirectory() || info.isSymbolicLink() || await realpath(root) !== root) {

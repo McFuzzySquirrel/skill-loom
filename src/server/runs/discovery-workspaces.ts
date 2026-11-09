@@ -14,6 +14,7 @@ import { parseBundle, MAX_BUNDLE_REQUEST_BYTES } from '../chains/bundle.js';
 import { createGlobalDraftService } from '../chains/drafts.js';
 import type { DiscoveryWorkspaceRecord } from '../config/schema.js';
 import type { ConfigStore } from '../config/store.js';
+import { canonicalConfigRoot } from '../config/canonical-root.js';
 import type { ChainService } from '../chains/service.js';
 import { prepareDiscoveryHandoff } from '../catalog/discovery-handoff.js';
 import { projectSkillRootFor } from '../catalog/copy.js';
@@ -641,8 +642,18 @@ async function listWorkspaces(
   options: DiscoveryWorkspaceServiceOptions,
 ): Promise<DiscoveryWorkspace[]> {
   const configDirectory = resolve(options.configStore.getConfigDir());
-  const root = join(configDirectory, WORKSPACE_DIRECTORY);
   const config = await options.configStore.get();
+  let root: string;
+  try {
+    root = join(await canonicalConfigRoot(configDirectory), WORKSPACE_DIRECTORY);
+  } catch (error) {
+    throw new DiscoveryWorkspaceError(
+      DISCOVERY_WORKSPACE_ERROR_CODES.INVALID,
+      'The managed discovery storage directory is unavailable or unsafe.',
+      {},
+      { cause: error },
+    );
+  }
   return config.discoveryWorkspaces.map((record) => ({
     ...record,
     path: join(root, record.id),
@@ -837,14 +848,17 @@ async function copySkill(source: string, projectPath: string, harness: 'opencode
 
 async function ensureWorkspaceRoot(configDirectory: string): Promise<string> {
   await mkdir(configDirectory, { recursive: true, mode: 0o700 });
-  const configInfo = await lstat(configDirectory);
-  if (!configInfo.isDirectory() || configInfo.isSymbolicLink() || await realpath(configDirectory) !== configDirectory) {
+  let root: string;
+  try {
+    root = join(await canonicalConfigRoot(configDirectory), WORKSPACE_DIRECTORY);
+  } catch (error) {
     throw new DiscoveryWorkspaceError(
       DISCOVERY_WORKSPACE_ERROR_CODES.INVALID,
       'The managed discovery storage directory is unavailable or unsafe.',
+      {},
+      { cause: error },
     );
   }
-  const root = join(configDirectory, WORKSPACE_DIRECTORY);
   await mkdir(root, { recursive: true, mode: 0o700 });
   const rootInfo = await lstat(root);
   if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink() || await realpath(root) !== root) {

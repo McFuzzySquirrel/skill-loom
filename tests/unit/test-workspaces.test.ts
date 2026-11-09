@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -89,6 +89,32 @@ async function setup(atomicWrite?: ConfigStoreOptions['atomicWrite']) {
 }
 
 describe('managed test workspaces', () => {
+  it('rejects a symbolic link as the configured workspace directory', async () => {
+    const { configDirectory, source, chain, chainService, catalogService } = await setup();
+    const alias = join(root, 'config-link');
+    await symlink(configDirectory, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    const configStore = createConfigStore({ env: { LOOM_CONFIG_DIR: alias } });
+    const service = createTestWorkspaceService({
+      configStore,
+      projectRegistry: createProjectRegistry({ configStore }),
+      chainService,
+      catalogService,
+    });
+    await expect(service.create({ sourceProjectId: source.id, sourceChainId: chain.id }))
+      .rejects.toMatchObject({ code: TEST_WORKSPACE_ERROR_CODES.PATH_INVALID });
+    await expect(readdir(join(configDirectory, 'test-workspaces'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('rejects a symbolic link as the workspace root without writing to its target', async () => {
+    const { configDirectory, source, chain, service } = await setup();
+    const target = join(root, 'outside');
+    await mkdir(target);
+    await symlink(target, join(configDirectory, 'test-workspaces'), process.platform === 'win32' ? 'junction' : 'dir');
+    await expect(service.create({ sourceProjectId: source.id, sourceChainId: chain.id }))
+      .rejects.toMatchObject({ code: TEST_WORKSPACE_ERROR_CODES.PATH_INVALID });
+    expect(await readdir(target)).toEqual([]);
+  });
+
   it.each(['legacy', 'enabled'] as const)('refuses removal of portable work and retained claims in %s mode', async (mode) => {
     const { source, chain, service } = await setup();
     const workspace = await service.create({ sourceProjectId: source.id, sourceChainId: chain.id });

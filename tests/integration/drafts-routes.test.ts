@@ -1,10 +1,10 @@
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
-import { globalDraftsDirectoryFor } from '../../src/server/chains/drafts.js';
+import { createGlobalDraftService, globalDraftsDirectoryFor } from '../../src/server/chains/drafts.js';
 import { globalChainsDirectoryFor } from '../../src/server/chains/store.js';
 import { createConfigStore } from '../../src/server/config/store.js';
 import type { Chain } from '../../src/server/chains/model.js';
@@ -46,6 +46,19 @@ const draftPayload = {
 };
 
 describe('project-independent chain drafts', () => {
+  it.each(['config', 'drafts'] as const)('rejects a symbolic link at the %s storage boundary', async (boundary) => {
+    const target = join(root, 'outside');
+    await mkdir(target);
+    if (boundary === 'drafts') await mkdir(configDirectory);
+    const link = boundary === 'config' ? configDirectory : join(configDirectory, 'drafts');
+    await symlink(target, link, process.platform === 'win32' ? 'junction' : 'dir');
+    const service = createGlobalDraftService(configDirectory);
+    await expect(service.create(configDirectory, draftPayload)).rejects.toMatchObject({
+      code: 'CHAIN_PATH_ESCAPED',
+    });
+    expect(await readdir(target)).toEqual([]);
+  });
+
   it('requires a current revision for HTTP update and deletion', async () => {
     const created = await app.inject({ method: 'POST', url: '/api/drafts', payload: draftPayload });
     const { chain, revision } = created.json<{ chain: Chain; revision: string }>();

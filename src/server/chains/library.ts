@@ -119,6 +119,7 @@ class FileGlobalChainService implements GlobalChainService {
       this.options.createStore?.(directory) ??
       createChainStore({
         chainsDirectory: directory,
+        configDirectory: this.options.configDirectory,
         ...(this.options.atomicWrite === undefined
           ? {}
           : { atomicWrite: this.options.atomicWrite }),

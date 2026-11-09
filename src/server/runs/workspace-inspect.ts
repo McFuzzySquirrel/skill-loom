@@ -2,6 +2,7 @@ import { constants } from 'node:fs';
 import { lstat, open, readdir, realpath } from 'node:fs/promises';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import type { ConfigStore } from '../config/store.js';
+import { canonicalConfigRoot } from '../config/canonical-root.js';
 import type { ProjectRegistry } from '../projects/registry.js';
 import { TestWorkspaceError, TEST_WORKSPACE_ERROR_CODES } from './test-workspaces.js';
 import { withWorkspaceLifecycleLock } from './workspace-lock.js';
@@ -20,7 +21,17 @@ export async function inspectTestWorkspace(
   return withWorkspaceLifecycleLock(record.projectId, async () => {
     const current = (await options.configStore.get()).testWorkspaces.find((item) => item.id === input.workspaceId);
     const project = current === undefined ? undefined : await options.projectRegistry.findRecentProject(current.projectId);
-    const root = join(options.configStore.getConfigDir(), 'test-workspaces', input.workspaceId);
+    let root: string;
+    try {
+      root = join(await canonicalConfigRoot(options.configStore.getConfigDir()), 'test-workspaces', input.workspaceId);
+    } catch (error) {
+      throw new TestWorkspaceError(
+        TEST_WORKSPACE_ERROR_CODES.PATH_INVALID,
+        'The managed workspace storage directory is unavailable or unsafe.',
+        {},
+        { cause: error },
+      );
+    }
     if (project?.managedWorkspace !== true || project.canonicalPath !== root) {
       throw new TestWorkspaceError(TEST_WORKSPACE_ERROR_CODES.PATH_INVALID, 'The managed workspace ownership record is invalid.');
     }

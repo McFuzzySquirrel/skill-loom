@@ -26,6 +26,6 @@ export function globalDraftsDirectoryFor(configDirectory: string): string {
 export function createGlobalDraftService(configDirectory: string): ChainService {
   const chainsDirectory = globalDraftsDirectoryFor(configDirectory);
   return createChainService({
-    createStore: () => createChainStore({ chainsDirectory }),
+    createStore: () => createChainStore({ chainsDirectory, configDirectory }),
   });
 }

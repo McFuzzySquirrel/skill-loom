@@ -10,7 +10,7 @@ import {
   unlink,
 } from 'node:fs/promises';
 import type { Stats } from 'node:fs';
-import { dirname, isAbsolute, join } from 'node:path';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 import {
   atomicWriteJson as writeJsonAtomically,
   type AtomicWriteDependencies,
@@ -162,6 +162,8 @@ export interface ChainStoreOptions {
    * as the global template library under the Skill Loom config directory.
    */
   chainsDirectory?: string;
+  /** Config root for a direct child store; ancestor aliases are canonicalized. */
+  configDirectory?: string;
   /** Canonicalization seam for deterministic traversal tests. */
   realpathPath?: RealpathPath;
   /** Write seam for failure simulation. */
@@ -475,6 +477,9 @@ class FileChainStore implements ChainStore {
 
   private async resolveRoot(create: boolean): Promise<ResolvedChainsRoot> {
     if (this.options.chainsDirectory !== undefined) {
+      if (this.options.configDirectory !== undefined) {
+        return this.resolveConfigDirectoryRoot(this.options.configDirectory, this.options.chainsDirectory, create);
+      }
       return this.resolveDirectoryRoot(this.options.chainsDirectory, create);
     }
 
@@ -526,6 +531,43 @@ class FileChainStore implements ChainStore {
     }
 
     return { projectPath: canonicalProject, chainsDirectory, exists };
+  }
+
+  private async resolveConfigDirectoryRoot(
+    configDirectory: string,
+    chainsDirectory: string,
+    create: boolean,
+  ): Promise<ResolvedChainsRoot> {
+    if (!isAbsolute(configDirectory) || dirname(chainsDirectory) !== configDirectory ||
+        configDirectory.includes('\0')) {
+      throw new ChainStoreError(
+        CHAIN_STORE_ERROR_CODES.PROJECT_INVALID,
+        'An absolute config directory and direct child chain directory are required.',
+        { path: configDirectory },
+      );
+    }
+    let state = await this.inspectEntry(configDirectory);
+    assertNotSymlinkOrFile(state, configDirectory, 'config');
+    if (state === 'missing') {
+      if (!create) return { projectPath: chainsDirectory, chainsDirectory, exists: false };
+      try {
+        await mkdir(configDirectory, { recursive: true, mode: 0o700 });
+      } catch (error) {
+        throw new ChainStoreError(
+          CHAIN_STORE_ERROR_CODES.STORE_SETUP_FAILED,
+          'The config directory could not be created.',
+          { path: configDirectory, reason: errnoCode(error) },
+          { cause: error },
+        );
+      }
+      state = await this.inspectEntry(configDirectory);
+      assertNotSymlinkOrFile(state, configDirectory, 'config');
+      if (state !== 'directory') {
+        throw new ChainStoreError(CHAIN_STORE_ERROR_CODES.STORE_SETUP_FAILED, 'The config directory is unavailable.');
+      }
+    }
+    const root = await this.canonicalizeChainsDirectory(configDirectory);
+    return this.resolveDirectoryRoot(join(root, basename(chainsDirectory)), create);
   }
 
   /**

@@ -93,10 +93,11 @@ These are requirements to implement and verify, not current guarantees:
    grants owner execute permission to a private regular helper, and a clean
    macOS runner passed the focused terminal suite without a manual repair.
    The full cross-platform suite remains failing.
-   Workspace storage currently rejects a config path whose real path differs
-   from its configured spelling, including paths under macOS `/var` aliases;
-   canonicalizing test fixtures allowed the focused macOS workspace suite to
-   pass but does not resolve that user-facing limitation. Focused Windows
+   Workspace storage, workspace inspection, global drafts and global templates
+   now canonicalize config ancestors (including macOS `/var` aliases) while
+   rejecting a symlink as the configured directory or storage child. Local
+   lifecycle and symlink-rejection tests pass; hosted verification is pending.
+   This does not establish that every profile surface supports aliases. Focused Windows
    terminal suite initially failed on resize, exit status, locked test
    directories, missing-executable expectations, and timeouts. Passing
    POSIX signals to `node-pty` on Windows caused deferred asynchronous errors;
