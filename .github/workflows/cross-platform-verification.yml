@@ -12,7 +12,7 @@ on:
         description: Test scope
         type: choice
         default: full
-        options: [full, claims, portable, catalog, catalog-collision, profile-alias, snapshot-modes, macos-baseline, preflight, workspaces, library, package, mode-probe, containment-probe, terminal, terminal-macos-helper]
+        options: [full, claims, portable, catalog, catalog-collision, profile-alias, snapshot-modes, macos-baseline, preflight, filesystem, workspaces, library, package, mode-probe, containment-probe, terminal, terminal-macos-helper]
 
 permissions:
   contents: read
@@ -55,6 +55,8 @@ jobs:
         run: npx vitest run tests/integration/catalog-routes.test.ts tests/integration/chain-bundles.test.ts tests/integration/control.test.ts tests/integration/presets-routes.test.ts tests/unit/agent-copy.test.ts tests/unit/catalog-opencode.test.ts tests/unit/catalog-merge.test.ts tests/unit/chain-store.test.ts tests/unit/cli.test.ts tests/unit/portable-runtime.test.ts tests/unit/project-registry.test.ts tests/unit/run-store.test.ts
       - if: inputs.suite == 'preflight'
         run: npx vitest run tests/unit/preflight-engine.test.ts
+      - if: inputs.suite == 'filesystem'
+        run: npx vitest run tests/unit/projects-paths.test.ts tests/integration/fs-routes.test.ts tests/unit/catalog-opencode.test.ts
       - if: inputs.suite == 'workspaces'
         run: npx vitest run tests/unit/test-workspaces.test.ts tests/integration/test-workspace-routes.test.ts
       - if: inputs.suite == 'library'

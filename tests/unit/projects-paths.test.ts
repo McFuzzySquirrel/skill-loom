@@ -52,7 +52,7 @@ async function expectFolderError(
   return error;
 }
 
-const unprivilegedIt = process.getuid?.() === 0 ? it.skip : it;
+const unprivilegedIt = process.platform === 'win32' || process.getuid?.() === 0 ? it.skip : it;
 
 describe('canonical directory resolution', () => {
   it('returns the realpath and its canonical parent', async () => {
@@ -115,7 +115,7 @@ describe('canonical directory resolution', () => {
 
     await expectFolderError(
       resolveCanonicalDirectory(join(file, 'child')),
-      'PATH_NOT_DIRECTORY',
+      process.platform === 'win32' ? 'PATH_NOT_FOUND' : 'PATH_NOT_DIRECTORY',
     );
   });
 
@@ -288,7 +288,7 @@ describe('directory listing', () => {
       realpathPath: async () => '/virtual',
       statPath: async () => ({ isDirectory: () => true }),
       accessPath: async (path) => {
-        if (path === '/virtual/locked') {
+        if (path === join('/virtual', 'locked')) {
           throw permissionError();
         }
       },

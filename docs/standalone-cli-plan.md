@@ -97,6 +97,11 @@ These are requirements to implement and verify, not current guarantees:
    Remaining failures include platform-specific fixtures and executable mode
    handling, and still need diagnosis before Windows suite coverage can be
    claimed.
+   The preflight unit suite subsequently passed on hosted Windows after its
+   synthetic paths were made platform-absolute (`42642647286`). POSIX
+   `chmod(000)` permission tests do not test Windows ACLs and are skipped there;
+   simulated browser permission failures remain covered, but real Windows ACL
+   denial and catalog permission-warning behavior still need verification.
    A later full baseline after the profile-alias fixes passed Linux but failed
    12 of 65 macOS files and 25 of 65 Windows files (three Windows files
    skipped). This baseline predates the subsequent snapshot-mode changes.
