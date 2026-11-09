@@ -221,31 +221,32 @@ describe('project claim transaction', () => {
     expect(calls).toBe(1);
   });
 
-  it.skipIf(process.platform === 'win32')('admits only one of two separate processes racing to claim a project', async () => {
-    const root = await project();
-    await withProjectClaimTransaction(root, async (tx) => tx.enableProtocol('2026-01-01T00:00:00.000Z'));
-    const script = `
-      import { acquireProjectRunClaim } from './src/shared/project-coordination.ts';
-      try {
-        await acquireProjectRunClaim(process.argv[1], 'managed', process.argv[2]);
-        process.stdout.write('acquired');
-      } catch (error) {
-        console.error(error);
-        process.stdout.write(error.code || 'unexpected');
-      }
-    `;
-    const run = (id: string) => execFileAsync(process.execPath, [
-      '--disable-warning=ExperimentalWarning', '--import', 'tsx', '--input-type=module',
-      '-e', script, root, id,
-    ], { cwd: process.cwd() });
-    const results = await Promise.all([run('process-one'), run('process-two')]);
-    const outcomes = results.map((result) => result.stdout);
-    expect(outcomes.filter((result) => result === 'acquired'), JSON.stringify(results)).toHaveLength(1);
-    expect(outcomes.filter((result) => ['PROJECT_CLAIM_CONFLICT', 'PROJECT_CLAIM_BUSY'].includes(result)),
-      JSON.stringify(results)).toHaveLength(1);
-    await withProjectClaimTransaction(root, async (tx) => {
-      expect(['process-one', 'process-two']).toContain(tx.read()?.runId);
-    });
+  it.skipIf(process.platform === 'win32').each(Array.from({ length: 10 }, (_, index) => index + 1))(
+    'admits only one of two separate processes racing to claim a project (attempt %i)', async () => {
+        const root = await project();
+        await withProjectClaimTransaction(root, async (tx) => tx.enableProtocol('2026-01-01T00:00:00.000Z'));
+        const script = `
+          import { acquireProjectRunClaim } from './src/shared/project-coordination.ts';
+          try {
+            await acquireProjectRunClaim(process.argv[1], 'managed', process.argv[2]);
+            process.stdout.write('acquired');
+          } catch (error) {
+            console.error(error);
+            process.stdout.write(error.code || 'unexpected');
+          }
+        `;
+        const run = (id: string) => execFileAsync(process.execPath, [
+          '--disable-warning=ExperimentalWarning', '--import', 'tsx', '--input-type=module',
+          '-e', script, root, id,
+        ], { cwd: process.cwd() });
+        const results = await Promise.all([run('process-one'), run('process-two')]);
+        const outcomes = results.map((result) => result.stdout);
+        expect(outcomes.filter((result) => result === 'acquired'), JSON.stringify(results)).toHaveLength(1);
+        expect(outcomes.filter((result) => ['PROJECT_CLAIM_CONFLICT', 'PROJECT_CLAIM_BUSY'].includes(result)),
+          JSON.stringify(results)).toHaveLength(1);
+        await withProjectClaimTransaction(root, async (tx) => {
+          expect(['process-one', 'process-two']).toContain(tx.read()?.runId);
+        });
   });
 
   it('publishes a fully initialized database to concurrent first-time processes', async () => {
