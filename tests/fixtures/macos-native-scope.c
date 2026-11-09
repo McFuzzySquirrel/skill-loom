@@ -88,6 +88,56 @@ static int clean_scope(uid_t uid) {
   }
 }
 
+static int crash_recovery_probe(uid_t uid, char **argv) {
+  int lease[2];
+  if (pipe(lease) != 0) return 1;
+  const pid_t broker = fork();
+  if (broker < 0) {
+    close(lease[0]);
+    close(lease[1]);
+    return 1;
+  }
+  if (broker == 0) {
+    close(lease[1]);
+    if (dup2(lease[0], STDIN_FILENO) < 0) _exit(1);
+    close(lease[0]);
+    execl(argv[0], argv[0], argv[1], argv[3], argv[4], (char *)NULL);
+    _exit(1);
+  }
+  close(lease[0]);
+  // Keep the lease open through SIGKILL so owner EOF cannot perform cleanup.
+  char command;
+  const int requested = read(STDIN_FILENO, &command, 1) == 1 && command == 'K';
+  int failed = !requested;
+  if (kill(broker, SIGKILL) != 0) failed = 1;
+  int status;
+  if (waitpid(broker, &status, 0) != broker || !WIFSIGNALED(status) ||
+      WTERMSIG(status) != SIGKILL) failed = 1;
+  close(lease[1]);
+  if (requested) {
+    const int remaining = inspect_scope(uid, 0);
+    // The direct worker may exit on its broker-owned input pipe's EOF; both
+    // detached generations remain independent and require recovery.
+    if (remaining < 2 || remaining > 3) failed = 1;
+    else {
+      puts("BROKER_DEAD_SCOPE_REQUIRES_RECOVERY");
+      fflush(stdout);
+    }
+  }
+  const pid_t recovery = fork();
+  if (recovery < 0) {
+    fputs("Could not start independent fixture recovery.\n", stderr);
+    return 1;
+  }
+  if (recovery == 0) {
+    execl(argv[0], argv[0], argv[1], "--recover-scope", (char *)NULL);
+    _exit(1);
+  }
+  if (waitpid(recovery, &status, 0) != recovery || !WIFEXITED(status) ||
+      WEXITSTATUS(status) != 0) return 1;
+  return failed;
+}
+
 int main(int argc, char **argv) {
   if (argc < 3 || getuid() != 0 || geteuid() != 0) return 1;
   char *end = NULL;
@@ -97,6 +147,14 @@ int main(int argc, char **argv) {
   const uid_t uid = (uid_t)target;
   if (argc == 3 && strcmp(argv[2], "--verify-empty") == 0) {
     return inspect_scope(uid, 0) == 0 ? 0 : 1;
+  }
+  if (argc == 3 && strcmp(argv[2], "--recover-scope") == 0) {
+    if (clean_scope(uid) != 0) return 1;
+    puts("SCOPE_RECOVERED_EMPTY");
+    return fflush(stdout) == 0 ? 0 : 1;
+  }
+  if (argc == 5 && strcmp(argv[2], "--crash-recover") == 0) {
+    return crash_recovery_probe(uid, argv);
   }
   if (argc != 4) return 1;
   signal(SIGPIPE, SIG_IGN);

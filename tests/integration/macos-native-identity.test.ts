@@ -13,14 +13,15 @@ const identitySchema = z.strictObject({
 });
 
 async function exerciseScope(
-  mode: 'finish' | 'abort' | 'owner-death',
+  mode: 'finish' | 'abort' | 'owner-death' | 'broker-death-recovery',
   uid: number,
   binary: string,
   profile: string,
   descendants: string,
 ): Promise<void> {
   const owner = spawn(process.execPath, [
-    resolve('tests/fixtures/native-fixture-owner.cjs'), binary, String(uid), profile, descendants,
+    resolve('tests/fixtures/native-fixture-owner.cjs'), binary, String(uid),
+    ...(mode === 'broker-death-recovery' ? ['--crash-recover'] : []), profile, descendants,
   ], { stdio: ['pipe', 'pipe', 'pipe'], env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin' } });
   let output = '';
   let errors = '';
@@ -59,11 +60,16 @@ async function exerciseScope(
     expect(processes).toHaveLength(3);
     expect(processes.every((entry) => Number(entry[1]) === uid && !entry[2]?.startsWith('Z'))).toBe(true);
     if (mode === 'owner-death') owner.kill('SIGKILL');
-    else owner.stdin.write(mode === 'finish' ? 'F' : 'A');
+    else owner.stdin.write(mode === 'broker-death-recovery' ? 'K' : mode === 'finish' ? 'F' : 'A');
     const exit = await Promise.race([ended, deadline]);
     if (mode === 'owner-death') expect(exit.signal).toBe('SIGKILL');
     else expect(exit).toEqual({ code: 0, signal: null });
-    expect(output).toContain('SCOPE_EMPTY');
+    if (mode === 'broker-death-recovery') {
+      expect(output).toContain('BROKER_DEAD_SCOPE_REQUIRES_RECOVERY');
+      expect(output).toContain('SCOPE_RECOVERED_EMPTY');
+    } else {
+      expect(output).toContain('SCOPE_EMPTY');
+    }
     expect(errors).toBe('');
     await execute('/usr/bin/sudo', ['-n', binary, String(uid), '--verify-empty'], {
       timeout: 10_000, env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
@@ -181,7 +187,7 @@ describe.skipIf(process.platform !== 'darwin' || process.env.LOOM_TEST_PRIVILEGE
           forkAndSetsidAllowed: true,
           directInheritedAndHardlinkedSetuidExecDenied: true,
         }));
-        for (const mode of ['finish', 'abort', 'owner-death'] as const) {
+        for (const mode of ['finish', 'abort', 'owner-death', 'broker-death-recovery'] as const) {
           await exerciseScope(mode, uid, scopeBinary, files[3]!, descendants);
           console.info(JSON.stringify({ platform: 'darwin', candidate: 'distinct-uid-scope', mode, verifiedEmpty: true }));
         }
