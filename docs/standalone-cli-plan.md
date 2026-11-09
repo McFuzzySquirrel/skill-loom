@@ -21,6 +21,17 @@ Deliver both managed harness execution and execution in the calling agent's sess
   obtain any additional approvals before provisioning or execution.
 - This document tracks the approved scope, milestone status, and acceptance gates. Update it alongside implementation.
 
+## Current cross-platform completion status
+
+| Requirement | Status |
+| --- | --- |
+| Windows executable-mode installation | Implemented for reviewed new installations, copies, reuse, nested skills, and re-export. Legacy shared packages require restoration or fresh installation; missing records never silently become non-executable. |
+| Windows private IPC and ownership | Open: explicit current-user ACLs, peer identity, exclusive ownership, and stale-owner recovery still need implementation and native verification. |
+| Protected managed skill execution | Blocked: a verified protected content view and harness-resolution boundary are still required. |
+| Descendant containment | Open: verified native containment or an explicitly approved VM backend is required; direct-child exit and terminal status are insufficient. |
+
+Installed-mode preservation does not complete the other three requirements or lift their execution and recovery gates.
+
 ## Existing implementation and important constraints
 
 - `src/server/cli.ts` is currently a server/browser launcher; `src/server/app.ts` and `src/server/routes/` compose services through Fastify. `src/server/runs/orchestrator.ts` owns managed execution, PTYs, preflight, frozen snapshots and run actions.
@@ -283,9 +294,18 @@ These are requirements to implement and verify, not current guarantees:
    earlier run exposed noncanonical fixture paths, checkout line-ending
    conversion, and an intentionally retained registry entry in a removal fixture.
    Those issues were corrected without weakening record validation or
-   no-overwrite publication. The local full suite passed (71 files, 1,011 tests;
+   no-overwrite publication. The local full suite passed (71 files, 1,014 tests;
    15 platform-specific skips) and the package smoke check passed with the shipped
-   bundled manifest. Full hosted suites are pending. These records
+   bundled manifest. Full hosted Linux and macOS jobs passed (`42685103900`).
+   That overall run still failed on Windows because the existing real
+   PowerShell sharing-lock fixture exceeded its 10-second startup deadline.
+   The fixture now permits 30 seconds to acquire the actual lock and 45 seconds
+   overall, without changing production retry limits or lock assertions; the
+   subsequent full Windows suite passed (`42686048753`). Superseded Windows gate
+   expectations were updated, and Linux Git cleanup fixtures now wait for
+   observable kernel termination within a bounded interval rather than asserting
+   an instantaneous process state after signalling. None of this proves escaped
+   descendant containment. These records
    are not authenticated or immutable and cannot replace protected execution,
    private Windows IPC, or descendant containment. Power-loss durability is not
    established on Windows filesystems without directory fsync.
