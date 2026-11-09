@@ -102,6 +102,8 @@ These are requirements to implement and verify, not current guarantees:
    `chmod(000)` permission tests do not test Windows ACLs and are skipped there;
    simulated browser permission failures remain covered, but real Windows ACL
    denial and catalog permission-warning behavior still need verification.
+   The remaining focused filesystem suite passed on hosted Windows
+   (`42643035508`) with those POSIX permission tests skipped.
    A later full baseline after the profile-alias fixes passed Linux but failed
    12 of 65 macOS files and 25 of 65 Windows files (three Windows files
    skipped). This baseline predates the subsequent snapshot-mode changes.
