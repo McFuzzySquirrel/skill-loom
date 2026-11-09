@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -8,6 +8,36 @@ import { listRemoteSkillSnapshots, listRemoteSnapshotPage, refreshRemoteSkillSou
 import { prepareDiscoveryHandoff } from '../../src/server/catalog/discovery-handoff.js';
 
 const roots: string[] = [];
+
+async function stagingSize(root: string): Promise<{ bytes: number; entries: number }> {
+  const pending = [root];
+  let bytes = 0;
+  let entries = 0;
+  while (pending.length > 0) {
+    const directory = pending.pop()!;
+    let children;
+    try {
+      children = await readdir(directory, { withFileTypes: true });
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') continue;
+      throw error;
+    }
+    for (const child of children) {
+      const path = join(directory, child.name);
+      entries += 1;
+      if (child.isDirectory()) {
+        pending.push(path);
+      } else if (child.isFile()) {
+        try {
+          bytes += (await lstat(path)).size;
+        } catch (error) {
+          if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+        }
+      }
+    }
+  }
+  return { bytes, entries };
+}
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -58,10 +88,39 @@ describe('large remote catalog', () => {
           maxFiles: 20_000,
           maxCommandOutputBytes: 8 * 1024 * 1024,
           maxStagingEntries: 30_000,
+          maxStagingBytes: 128 * 1024 * 1024,
           maxSnapshotBytes: 128 * 1024 * 1024,
         },
       });
-      const snapshot = await refreshRemoteSkillSource(store, 'large');
+      const stagingRoot = join(root, 'staging');
+      await mkdir(stagingRoot);
+      let peakRss = process.memoryUsage.rss();
+      let peakStagingBytes = 0;
+      let peakStagingEntries = 0;
+      let monitoring = true;
+      const monitor = (async () => {
+        while (monitoring) {
+          peakRss = Math.max(peakRss, process.memoryUsage.rss(), process.resourceUsage().maxRSS * 1024);
+          const staging = await stagingSize(stagingRoot);
+          peakStagingBytes = Math.max(peakStagingBytes, staging.bytes);
+          peakStagingEntries = Math.max(peakStagingEntries, staging.entries);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      })();
+      let snapshot;
+      try {
+        snapshot = await refreshRemoteSkillSource(store, 'large', { temporaryDirectory: stagingRoot });
+      } finally {
+        monitoring = false;
+        await monitor;
+      }
+      peakRss = Math.max(peakRss, process.memoryUsage.rss());
+      expect(peakRss).toBeLessThan(768 * 1024 * 1024);
+      expect(peakStagingBytes).toBeGreaterThan(0);
+      expect(peakStagingBytes).toBeLessThanOrEqual(128 * 1024 * 1024);
+      expect(peakStagingEntries).toBeGreaterThan(0);
+      expect(peakStagingEntries).toBeLessThanOrEqual(30_001);
+      console.info('Large catalog sampled resources:', { peakRss, peakStagingBytes, peakStagingEntries });
       expect(snapshot.revision).toBe(commit);
       expect(snapshot.packages).toHaveLength(1_000);
       expect(snapshot.packages.reduce((sum, entry) => sum + entry.files, 0)).toBe(20_000);
