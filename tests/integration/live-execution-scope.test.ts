@@ -82,14 +82,20 @@ case "$1" in
 esac
 /bin/sleep 0.1
 if [ "$FAKE_EARLY_TOKEN" = 1 ]; then printf 'PINEAPPLE\\r\\n'; fi
-printf '\\033]7501;state=working\\007'
+printf '\\033]7501;state=working'
+if [ "$FAKE_C1" = 1 ]; then printf '\\302\\234'; else printf '\\007'; fi
 if [ "$FAKE_CLEAR" = 1 ]; then printf '\\033]7501;state=clear\\007'; fi
-if [ "$FAKE_EARLY_TOKEN" != 1 ]; then printf 'PINEAPPLE\\r\\n'; fi
-printf '\\033]7501;state=idle\\007'
+if [ "$FAKE_POST_CLEAR" = 1 ]; then
+  printf 'PINEAPPLE\\r\\n\\033]7501;state=idle\\007\\033]7501;state=clear\\007'
+else
+  if [ "$FAKE_EARLY_TOKEN" != 1 ]; then printf 'PINEAPPLE\\r\\n'; fi
+  printf '\\033]7501;state=idle'
+  if [ "$FAKE_C1" = 1 ]; then printf '\\302\\234'; else printf '\\007'; fi
+fi
 /bin/sleep 1
 `);
       await chmod(opencode, 0o755);
-      for (const scenario of ['working-idle', 'clear', 'early-token', 'unverified-cleanup'] as const) {
+      for (const scenario of ['working-idle', 'c1-terminator', 'clear', 'post-clear', 'early-token', 'unverified-cleanup'] as const) {
         const evidencePath = join(root, `${scenario}.json`);
         const result = spawnSync(process.execPath, [
           '--import', 'tsx', resolve('scripts/live-execution.ts'),
@@ -102,23 +108,26 @@ printf '\\033]7501;state=idle\\007'
             OPENAI_API_KEY: 'fixture-only',
             LOOM_LIVE_OPENCODE_MODEL: 'fixture/model',
             FAKE_CLEAR: scenario === 'clear' ? '1' : '0',
+            FAKE_C1: scenario === 'c1-terminator' ? '1' : '0',
+            FAKE_POST_CLEAR: scenario === 'post-clear' ? '1' : '0',
             FAKE_EARLY_TOKEN: scenario === 'early-token' ? '1' : '0',
             FAKE_LIST_FAIL: scenario === 'unverified-cleanup' ? '1' : '0',
           },
           encoding: 'utf8',
           timeout: 30_000,
         });
-        expect(result.status, result.stderr).toBe(scenario === 'working-idle' ? 0 : 1);
+        const passed = scenario === 'working-idle' || scenario === 'c1-terminator' || scenario === 'post-clear';
+        expect(result.status, result.stderr).toBe(passed ? 0 : 1);
         const evidence = JSON.parse(await readFile(evidencePath, 'utf8')) as {
           scope: string;
           result: string;
           checks: Array<{ id: string; status: string }>;
-          harnesses: { opencode: { signal: { productStateMachine: { completed: boolean } } } };
+          harnesses: { opencode: { signal: { productStateMachine: { advanced: boolean } } } };
           cleanup: { opencodeSessionCleanupPassed: boolean; opencodeSessions: Array<{ deleted: boolean; verifiedAbsent: boolean }> };
         };
         expect(evidence.scope).toBe('opencode');
-        expect(evidence.result).toBe(scenario === 'working-idle' ? 'passed' : 'failed');
-        expect(evidence.harnesses.opencode.signal.productStateMachine.completed).toBe(scenario !== 'clear');
+        expect(evidence.result).toBe(passed ? 'passed' : 'failed');
+        expect(evidence.harnesses.opencode.signal.productStateMachine.advanced).toBe(scenario !== 'clear');
         expect(evidence.checks).toContainEqual(expect.objectContaining({
           id: 'opencode.product-advancement',
           status: scenario === 'clear' ? 'failed' : 'passed',

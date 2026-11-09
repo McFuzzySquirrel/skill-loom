@@ -162,9 +162,10 @@ does not establish that the current advancement state machine can advance.
 An OpenCode-only execution probe now writes separately scoped evidence, without
 invoking Copilot, and fails if the captured signal does not advance the product
 state machine. Its operator procedure is in `docs/OPERATIONS.md`. Fake PTY
-coverage verifies both qualifying and clear-before-idle signals; no new live
-verification is implied. Session cleanup fails if a successful delete cannot be
-followed by a list that verifies the session is absent.
+coverage includes alternate terminators, clear-before-idle, clear after a
+qualifying transition, and token text before the working signal; no new live
+verification is implied. Session cleanup fails if a successful delete cannot
+be followed by a list that verifies the session is absent.
 Live supervised instruction-only runs also support reviewed next and retry
 actions, with distinct execution, replay (for retry), and live-test approvals.
 Interrupted instruction-only runs support reviewed retry, continue, and restart;

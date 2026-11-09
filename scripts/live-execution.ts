@@ -178,6 +178,7 @@ interface SignalEvidence {
   productStateMachine: {
     sawWorking: boolean;
     completed: boolean;
+    advanced: boolean;
     state: string;
   };
 }
@@ -841,7 +842,7 @@ function emptySignalEvidence(): SignalEvidence {
     firstIdleAfterWorkingAtMs: null,
     paramFormat: 'unknown',
     productParser: { eventCount: 0, recognized: false },
-    productStateMachine: { sawWorking: false, completed: false, state: 'unknown' },
+    productStateMachine: { sawWorking: false, completed: false, advanced: false, state: 'unknown' },
   };
 }
 
@@ -1250,10 +1251,11 @@ function updateSignalEvidence(
 
   signal.productParser.eventCount += productParser.push(chunk).length;
   signal.productParser.recognized = signal.productParser.eventCount > 0;
-  productState.push(chunk);
+  const changes = productState.push(chunk);
   signal.productStateMachine = {
     sawWorking: productState.sawWorking,
     completed: productState.completed,
+    advanced: signal.productStateMachine.advanced || changes.some((change) => change.advanced),
     state: productState.state,
   };
 }
@@ -1384,7 +1386,9 @@ async function runOpenCodeInteractive(input: {
         while (index < chunk.length && !signal.working) {
           const bell = chunk.indexOf('\x07', index);
           const backslash = chunk.indexOf('\\', index);
-          const terminator = bell < 0 ? backslash : backslash < 0 ? bell : Math.min(bell, backslash);
+          const c1 = chunk.indexOf('\u009c', index);
+          const candidates = [bell, backslash, c1].filter((value) => value >= 0);
+          const terminator = candidates.length === 0 ? -1 : Math.min(...candidates);
           const end = terminator < 0 ? chunk.length : terminator + 1;
           updateSignalEvidence(signal, probeParser, productParser, productState, chunk.slice(index, end), startedAt);
           index = end;
@@ -2657,7 +2661,7 @@ async function runOpenCodeProbe(input: {
   );
 
   input.report.checks.push(
-    seed.signal.productStateMachine.completed
+    seed.signal.productStateMachine.advanced
       ? checkPassed({
           id: 'opencode.product-advancement',
           harness: 'opencode',
@@ -2684,7 +2688,7 @@ async function runOpenCodeProbe(input: {
       )} event(s), while the probe's equivalent buffered parser recognized the signal. Report this contract mismatch to the backend engineer.`,
     });
   }
-  if (seed.signal.clearEventCount > 0 && !seed.signal.productStateMachine.completed) {
+  if (seed.signal.clearEventCount > 0 && !seed.signal.productStateMachine.advanced) {
     input.report.warnings.push({
       code: 'OSC7501_CLEAR_BEFORE_IDLE',
       harness: 'opencode',
