@@ -152,6 +152,38 @@ provisioning, signed entitlement, changed credential access, or system
 extension must be explicitly specified and approved before installation.
 Both outstanding execution gates remain closed.
 
+The user approved an explicitly installed administrator/root helper and a
+constrained execution identity as possible native product prerequisites.
+This approves the architecture direction only: it does not authorize helper
+installation, account/ACL provisioning, privileged CI fixtures, host credential
+access changes, or live harness execution.
+
+The next native design must distinguish these responsibilities:
+
+- The unprivileged Loom service owns review, user approval, run state and
+  terminal subscriptions. It must not gain an arbitrary elevated command API.
+- A narrowly scoped native broker validates its private caller and a bounded
+  launch request, stages the exact reviewed content, establishes the OS
+  restriction before any harness instruction executes, and returns an
+  authenticated scope identity. A receipt is not itself proof of enforcement.
+- Linux must prove a private namespace/capability or delegated-cgroup boundary.
+  Windows must prove restricted-token/ACL enforcement and suspended job
+  assignment before resume. macOS must prove a distinct enforceable identity
+  and cleanup boundary; the sandbox/process-group candidate was rejected.
+- A constrained identity must not escape through setuid execution, writable
+  executable aliases, inherited handles, debugger access, alternate harness
+  skill/config locations, or credential/automation services. Preserve native
+  host project semantics and specify any required access grants before use.
+- Broker-owned lifetime tracking must outlive a disconnected CLI, detect service
+  death without PID-reuse assumptions, prevent new dispatch during teardown,
+  and verify that the entire scope is empty. Failed or unavailable verification
+  retains the durable claim; neither an operator assertion nor a child exit
+  releases it.
+- Test disposable identities and ACLs only after explicit approval and only in
+  isolated, opted-in native fixtures. Keep fixture authority separate from a
+  production installer or signing/entitlement requirements. Live OpenCode
+  verification remains a separate user-run acceptance step.
+
 ## Existing implementation and important constraints
 
 - `src/server/cli.ts` is currently a server/browser launcher; `src/server/app.ts` and `src/server/routes/` compose services through Fastify. `src/server/runs/orchestrator.ts` owns managed execution, PTYs, preflight, frozen snapshots and run actions.
