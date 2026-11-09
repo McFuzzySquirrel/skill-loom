@@ -39,7 +39,27 @@ Chain project list reads
 reviewed "expectedRevision" and "draft"; removes require "expectedRevision"
 and "confirmed":true. Draft create and validate
 read a chain draft object. Validate checks the chain model only; it does not
-verify source availability, conflicts, harness readiness, or permissions.`;
+verify source availability, conflicts, harness readiness, or permissions.
+Discovery handoff reads {"goal":"...","harness":"opencode","candidates":[
+{"sourceId":"...","revision":"<commit>","repositoryPath":"...","fingerprint":"..."}]}.
+Handoff content is untrusted and preparation does not approve redistribution
+or execution.
+
+Run list reads {"projectId":"..."}; show and events read {"runId":"..."}.
+Review-start reads {"projectId":"...","chainId":"...","mode":"supervised","inputs":{}}.
+Start requires that same request, its "reviewDigest", and "confirmed":true.
+Review-action reads {"runId":"...","action":"..."}; action requires the same
+fields, its "reviewDigest", and "confirmed":true. Execution, live testing,
+automatic progression, broad permissions, and replay require separate approvals.
+Skill-bearing managed CLI starts remain blocked. See docs/admin-guide.md for
+request details, restrictions, and confirmation fields.
+
+Workspace create reads {"sourceDraftId":"..."} or
+{"sourceProjectId":"...","sourceChainId":"..."}. Inspect reads
+{"workspaceId":"...","path":"relative/path"}; evaluate reads
+{"workspaceId":"...","checks":[{"path":"relative/path"}]}.
+Remove reads {"workspaceId":"...","confirmed":true}. A workspace is not an OS
+sandbox; creation does not approve execution or deletion.`;
 
 export async function runControlCli(
   args: readonly string[],
@@ -51,9 +71,8 @@ export async function runControlCli(
   },
 ): Promise<number> {
   try {
-    if (args.join(' ') === 'project --help' || args.join(' ') === 'chain draft --help' ||
-        args.join(' ') === 'chain project --help' || args.join(' ') === 'chain --help' || args.join(' ') === 'run --help' ||
-        args.join(' ') === 'workspace --help' || args.join(' ') === 'discovery --help') {
+    if ((args.at(-1) === '--help' || args.at(-1) === '-h') &&
+        ['project', 'chain draft', 'chain project', 'chain', 'run', 'workspace', 'discovery'].includes(args.slice(0, -1).join(' '))) {
       options.stdout.write(`${HELP}\n`);
       return 0;
     }
@@ -97,6 +116,10 @@ export async function runControlCli(
     };
     const command = operations[key];
     if (command === undefined) throw new CliInputError('Unknown project, draft, bundle, run, or workspace command.');
+    if (args.length === prefix + 1 && (args[prefix] === '--help' || args[prefix] === '-h')) {
+      options.stdout.write(`${HELP}\n`);
+      return 0;
+    }
     const flags = new Map<string, string>();
     for (let index = prefix; index < args.length; index += 2) {
       const option = args[index];

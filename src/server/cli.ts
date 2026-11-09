@@ -39,6 +39,27 @@ export class CliUsageError extends Error {
 
 const DEFAULT_PORT = 7373;
 
+const SERVICE_HELP = `Usage:
+  skill-loom service start [--config-dir <path>] [--port <number>]
+  skill-loom service status [--config-dir <path>]
+  skill-loom service stop [--config-dir <path>]
+
+Start explicitly owns the profile and does not open a browser. Status and stop
+contact the existing owner; normal stop refuses an active or changing run.`;
+
+const BUNDLE_HELP = `Usage:
+  skill-loom bundle inspect --bundle <absolute-path> [--project <absolute-path>]
+  skill-loom bundle create (--draft <id> | --project <id> --chain <id>) --output <absolute-path> [--config-dir <path>]
+  skill-loom bundle review|import [--config-dir <path>]  # JSON on stdin
+  skill-loom bundle --help
+
+Inspect is read-only and does not require the service. Create uses the service
+and never overwrites an output file. Review reads {"projectId":"...","bundlePath":"/absolute/file"}.
+Import reads the same fields plus "reviewDigest" and "confirmed":true; reuse of
+existing skills requires "reuseSkills", and differing reuse requires separate
+"differingReuseConfirmed":true. Review, installation and execution are separate
+decisions; a digest does not prove a human reviewed the contents.`;
+
 export function cliUsage(): string {
   return `Skill Loom ${packageManifest.version}
 
@@ -52,6 +73,7 @@ Usage:
   skill-loom service start [--config-dir <path>] [--port <number>]
   skill-loom service status [--config-dir <path>]
   skill-loom service stop [--config-dir <path>]
+  skill-loom service --help
   skill-loom project --help
   skill-loom chain --help
   skill-loom run --help
@@ -161,6 +183,13 @@ export async function runCli(
   const stderr = dependencies.stderr ?? process.stderr;
   const env = dependencies.env ?? process.env;
 
+  if ((argv[0] === 'service' || argv[0] === 'bundle') &&
+      ((argv.length === 2 && (argv[1] === '--help' || argv[1] === '-h')) ||
+       (argv.length === 3 && (argv[2] === '--help' || argv[2] === '-h') &&
+        (argv[0] === 'service' ? ['start', 'status', 'stop'] : ['inspect', 'create', 'review', 'import']).includes(argv[1] ?? '')))) {
+    stdout.write(`${argv[0] === 'service' ? SERVICE_HELP : BUNDLE_HELP}\n`);
+    return 0;
+  }
   if (argv[0] === 'bundle' && argv[1] === 'inspect') {
     return runPortableCli(['inspect', ...argv.slice(2)], { stdout, stderr });
   }

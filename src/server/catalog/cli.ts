@@ -53,6 +53,11 @@ export async function runCatalogCli(
       options.stdout.write(`${USAGE}\n`);
       return 0;
     }
+    if (argv.length === 2 && (argv[1] === '--help' || argv[1] === '-h') &&
+        ['source', 'limits', 'snapshot', 'project'].includes(argv[0] ?? '')) {
+      options.stdout.write(`${USAGE}\n`);
+      return 0;
+    }
     const operation = `${argv[0] ?? ''} ${argv[1] ?? ''}`;
     const allowed = operation === 'source list'
       ? ['config-dir']
@@ -72,6 +77,10 @@ export async function runCatalogCli(
             ? ['config-dir', 'source', 'revision', 'kind', 'path']
             : null;
     if (allowed === null) throw new CatalogCliUsageError('Unknown catalog command.');
+    if (argv.length === 3 && (argv[2] === '--help' || argv[2] === '-h')) {
+      options.stdout.write(`${USAGE}\n`);
+      return 0;
+    }
     const flags = new Map<string, string>();
     for (let index = 2; index < argv.length; index += 2) {
       const key = argv[index];

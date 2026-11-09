@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
 import packageManifest from '../../package.json' with { type: 'json' };
 import {
   CliUsageError,
@@ -221,6 +222,36 @@ describe('CLI output and environment', () => {
     expect(cliUsage()).toContain('skill-loom');
     expect(cliUsage()).toContain('LOOM_CONFIG_DIR');
     expect(cliUsage()).toContain('Catalog mutations and project catalog paging require a running service.');
+  });
+
+  it('shows group and command help without reading stdin or starting the service', async () => {
+    for (const [args, expected] of [
+      [['service', '--help'], 'normal stop refuses'],
+      [['service', 'start', '--help'], 'explicitly owns the profile'],
+      [['bundle', '--help'], 'differingReuseConfirmed'],
+      [['bundle', 'inspect', '--help'], 'Inspect is read-only'],
+      [['bundle', 'review', '--help'], 'reviewDigest'],
+      [['run', 'start', '--help'], 'Skill-bearing managed CLI starts remain blocked'],
+      [['workspace', 'evaluate', '-h'], 'not an OS'],
+      [['chain', 'draft', 'create', '--help'], 'Validate checks the chain model only'],
+      [['catalog', 'snapshot', 'page', '--help'], 'Project catalog discovery'],
+      [['catalog', 'snapshot', '-h'], 'snapshot page'],
+      [['project', '-h'], 'Coordination review'],
+    ] as const) {
+      const stdout = captureOutput();
+      const stderr = captureOutput();
+      let starts = 0;
+      const stdin = new Readable({
+        read() { throw new Error('Help must not read stdin.'); },
+      });
+      expect(await runCli(args, {
+        env: {}, stdin, stdout: stdout.stream, stderr: stderr.stream,
+        start: async () => { starts += 1; throw new Error('Help must not start a service.'); },
+      })).toBe(0);
+      expect(stdout.read()).toContain(expected);
+      expect(stderr.read()).toBe('');
+      expect(starts).toBe(0);
+    }
   });
 
   it('prints help and version without starting the server', async () => {

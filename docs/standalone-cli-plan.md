@@ -403,6 +403,9 @@ The CLI can also list bounded managed and portable run-record summaries for a
 registered project without initializing coordination or recovery. It fails on
 unsafe or corrupt records rather than silently omitting them. The scan is not
 an atomic snapshot and does not report retained claims or prove process exit.
+CLI group and command help now exposes the principal structured request shapes
+and approval boundaries without reading stdin or starting a service; the
+administrator guide remains the complete contract for conditional approvals.
 Test and discovery workspace removal now rejects retained claims and unresolved
 records, commits a retirement marker under the project transaction, and moves
 the workspace out of its registered path before deletion. It persists verified
