@@ -12,7 +12,7 @@ on:
         description: Test scope
         type: choice
         default: full
-        options: [full, claims, portable, portable-no-follow, portable-claim-race, chain-bundles, skill-install, windows-control, windows-baseline, remote-copy, catalog, catalog-collision, git-batch, profile-alias, snapshot-modes, macos-baseline, macos-native-boundary, preflight, filesystem, harness-exe, cli, automatic, run-routes, run-routes-stress, workspaces, library, package, mode-probe, containment-probe, descendant-cleanup, terminal, terminal-macos-helper]
+        options: [full, claims, portable, portable-no-follow, portable-claim-race, chain-bundles, skill-install, windows-control, windows-baseline, remote-copy, catalog, catalog-collision, git-batch, profile-alias, snapshot-modes, macos-baseline, macos-native-boundary, macos-native-identity, preflight, filesystem, harness-exe, cli, automatic, run-routes, run-routes-stress, workspaces, library, package, mode-probe, containment-probe, descendant-cleanup, terminal, terminal-macos-helper]
 
 permissions:
   contents: read
@@ -100,6 +100,13 @@ jobs:
         run: |
           node -e "if (process.platform !== 'darwin') throw Error('This probe requires macOS');"
           npx vitest run tests/integration/macos-native-boundary.test.ts
+      - if: inputs.suite == 'macos-native-identity'
+        shell: bash
+        env:
+          LOOM_TEST_PRIVILEGED_NATIVE: '1'
+        run: |
+          node -e "if (process.platform !== 'darwin') throw Error('This probe requires macOS');"
+          npx vitest run tests/integration/macos-native-identity.test.ts
       - if: inputs.suite == 'workspaces'
         run: npx vitest run tests/unit/test-workspaces.test.ts tests/integration/test-workspace-routes.test.ts
       - if: inputs.suite == 'library'

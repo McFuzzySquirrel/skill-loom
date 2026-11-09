@@ -155,8 +155,10 @@ Both outstanding execution gates remain closed.
 The user approved an explicitly installed administrator/root helper and a
 constrained execution identity as possible native product prerequisites.
 This approves the architecture direction only: it does not authorize helper
-installation, account/ACL provisioning, privileged CI fixtures, host credential
-access changes, or live harness execution.
+installation, host account/ACL provisioning, host credential access changes,
+or live harness execution. The user separately approved disposable privileged
+offline CI fixtures, including temporary identities and test-only ACLs, with
+no changes to the user's machine and no production helper installation.
 
 The next native design must distinguish these responsibilities:
 
@@ -183,6 +185,18 @@ The next native design must distinguish these responsibilities:
   isolated, opted-in native fixtures. Keep fixture authority separate from a
   production installer or signing/entitlement requirements. Live OpenCode
   verification remains a separate user-run acceptance step.
+
+The approved `macos-native-identity` fixture is restricted to opted-in hosted
+macOS runners. It creates a disabled, marker-bound temporary account, checks
+that a dropped identity can read but cannot overwrite root-owned reviewed
+content, and measures setuid execution with an inherited sandbox. Its setuid
+reporter only prints its real/effective UID and exits; it cannot execute
+commands or write privileged files. The distinct, non-setuid launcher requires
+root, clears supplementary groups, drops to an explicit unprivileged UID and
+only then executes the fixture. The test removes its own marked account and
+restores ownership of explicitly named files before deleting its temporary
+directory. A measurement is not proof of containment, privileged-exec denial,
+live authentication, or safe production broker installation.
 
 ## Existing implementation and important constraints
 
