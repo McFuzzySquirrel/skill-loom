@@ -97,9 +97,11 @@ These are requirements to implement and verify, not current guarantees:
    (`42649899302`) failed 2 tests. A repeated cross-process test identified an
    `EPERM` replacing `.loom/.gitignore` during concurrent portable setup; the
    fix appends ignore rules instead and a focused race passed on Linux, macOS,
-   and Windows (`42651272147`). A managed-claim test
-   also observed the completed in-memory state before its record was persisted;
-   the test now waits for the durable record without clearing the claim. Neither
+   and Windows (`42651272147`). The full portable-runtime suite also passed on
+   all three platforms after bounded ignore-file reads (`42652135643`). A
+   managed-claim test also observed the completed in-memory state before its
+   record was persisted; the test now waits for the durable record without
+   clearing the claim. Neither
    result is evidence of safe descendant cleanup.
    The preflight unit suite subsequently passed on hosted Windows after its
    synthetic paths were made platform-absolute (`42642647286`). POSIX
