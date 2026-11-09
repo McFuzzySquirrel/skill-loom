@@ -89,7 +89,11 @@ export function createGitBlobReader(options: {
   child.stderr.on('data', (chunk: Buffer) => {
     stderrBytes += chunk.length;
     if (stderrBytes > options.maxStderrBytes) {
-      failure ??= new GitBatchError('TOO_LARGE', 'The Git blob reader exceeded its diagnostic output limit.');
+      failure ??= new GitBatchError(
+        'TOO_LARGE',
+        `The Git blob reader exceeded the maxCommandOutputBytes limit (${String(options.maxStderrBytes)}). Adjust the catalog limits or narrow the source.`,
+        { dimension: 'maxCommandOutputBytes', limit: options.maxStderrBytes },
+      );
       stopChild();
     }
   });

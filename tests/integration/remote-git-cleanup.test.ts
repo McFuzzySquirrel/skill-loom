@@ -281,7 +281,9 @@ if (args[0] === 'clone') {
             await expect(refresh).resolves.toMatchObject({ revision: 'a'.repeat(40), packages: [] });
           } else {
             await expect(refresh).rejects.toMatchObject({
-              code: 'REMOTE_SOURCE_TOO_LARGE', details: { limit: 64 },
+              code: 'REMOTE_SOURCE_TOO_LARGE',
+              message: expect.stringContaining('Adjust the catalog limits or narrow the source'),
+              details: { sourceId: 'output-test', dimension: 'maxCommandOutputBytes', limit: 64 },
             });
           }
           expect((await readdir(root)).filter((name) => name.startsWith('skill-loom-source-'))).toEqual([]);
@@ -294,6 +296,63 @@ if (args[0] === 'clone') {
       else process.env.LOOM_TEST_OUTPUT_BYTES = oldBytes;
       if (oldStream === undefined) delete process.env.LOOM_TEST_OUTPUT_STREAM;
       else process.env.LOOM_TEST_OUTPUT_STREAM = oldStream;
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it.skipIf(process.platform !== 'linux')('reports the configured limit for batched Git diagnostic output', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'loom-git-batch-output-'));
+    const executable = join(root, 'git');
+    const oldPath = process.env.PATH;
+    const oldBytes = process.env.LOOM_TEST_OUTPUT_BYTES;
+    try {
+      await writeFile(executable, `#!${process.execPath}
+const args = process.argv.slice(2);
+const configured = process.env.LOOM_TEST_OUTPUT_BYTES;
+if (args.includes('rev-parse')) {
+  process.stdout.write((configured === undefined ? '${'a'.repeat(40)}' : '${'b'.repeat(40)}') + '\\n');
+} else if (args.includes('ls-tree') && configured !== undefined) {
+  process.stdout.write('100644 blob ${'c'.repeat(40)}\\tskill/SKILL.md\\0');
+} else if (args.includes('cat-file')) {
+  process.stderr.write('x'.repeat(Number(configured)));
+  process.stdin.on('data', () => {
+    const content = '---\\nname: skill\\n---\\n';
+    process.stdout.write('${'c'.repeat(40)} blob ' + Buffer.byteLength(content) + '\\n' + content + '\\n');
+  });
+  process.stdin.resume();
+}
+`);
+      await chmod(executable, 0o700);
+      process.env.PATH = root;
+      delete process.env.LOOM_TEST_OUTPUT_BYTES;
+      const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
+      await store.update({
+        remoteSkillSources: [{ id: 'batch-output', repository: 'https://example.invalid/skills.git' }],
+        remoteCatalogLimits: { maxCommandOutputBytes: 128 },
+      });
+      const initial = await refreshRemoteSkillSource(store, 'batch-output', { temporaryDirectory: root });
+      let published = [initial];
+      for (const bytes of [127, 128, 129]) {
+        process.env.LOOM_TEST_OUTPUT_BYTES = String(bytes);
+        const refresh = refreshRemoteSkillSource(store, 'batch-output', { temporaryDirectory: root });
+        if (bytes <= 128) {
+          await expect(refresh).resolves.toMatchObject({ revision: 'b'.repeat(40), packages: [{ name: 'skill' }] });
+          published = await listRemoteSkillSnapshots(store.getConfigDir(), 'batch-output');
+        } else {
+          await expect(refresh).rejects.toMatchObject({
+            code: 'REMOTE_SOURCE_TOO_LARGE',
+            message: expect.stringContaining('Adjust the catalog limits or narrow the source'),
+            details: { sourceId: 'batch-output', dimension: 'maxCommandOutputBytes', limit: 128 },
+          });
+          expect(await listRemoteSkillSnapshots(store.getConfigDir(), 'batch-output')).toEqual(published);
+        }
+        expect((await readdir(root)).filter((name) => name.startsWith('skill-loom-source-'))).toEqual([]);
+      }
+    } finally {
+      if (oldPath === undefined) delete process.env.PATH;
+      else process.env.PATH = oldPath;
+      if (oldBytes === undefined) delete process.env.LOOM_TEST_OUTPUT_BYTES;
+      else process.env.LOOM_TEST_OUTPUT_BYTES = oldBytes;
       await rm(root, { recursive: true, force: true });
     }
   }, 30_000);

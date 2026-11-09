@@ -1164,9 +1164,9 @@ async function runGit(
             throw new RemoteSourceError(
               outputExceeded ? REMOTE_SOURCE_ERROR_CODES.TOO_LARGE : REMOTE_SOURCE_ERROR_CODES.TIMEOUT,
               outputExceeded
-                ? 'The Git operation exceeded its output limit.'
+                ? `The Git operation exceeded the maxCommandOutputBytes limit (${String(maxOutputBytes)}). Adjust the catalog limits or narrow the source.`
                 : 'The Git operation timed out; check repository access and retry.',
-              outputExceeded ? { limit: maxOutputBytes } : {},
+              outputExceeded ? { dimension: 'maxCommandOutputBytes', limit: maxOutputBytes } : {},
             );
           }
           if (processError !== undefined || code !== 0 || signal !== null) {

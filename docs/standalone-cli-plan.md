@@ -203,6 +203,9 @@ rename already in progress may still complete; Windows process-tree cleanup
 remains unverified.
 Real Git-command fixtures exercise staging entry and byte limits immediately
 below, at, and above their thresholds while preserving the previous snapshot.
+Git command-output and batched blob diagnostic limits also report the exact
+`maxCommandOutputBytes` dimension, threshold, and source without disclosing
+Git output. Both streams and the batched reader have boundary coverage.
 The 1,000-package/20,000-file local Git fixture measures the test process's RSS
 high-water mark and samples the temporary clone staging tree every 100 ms.
 On Linux it also samples RSS for Git and other descendants. One isolated run
