@@ -97,6 +97,7 @@ The config document is versioned and strict:
 ```
 
 - `harnessCommands` optionally overrides the executable name or absolute path. A missing entry resolves from `PATH`. A broken override is a block; Skill Loom does not silently fall back to the default name.
+- On Windows, PATH lookup for an extensionless name also checks for a native `.exe` in each directory. It does not search for `.cmd` or `.bat` wrappers or invoke them through a shell; configure an appropriate native executable instead. This does not imply Windows managed-run support.
 - `extraSkillDirectories` is the global extra-skill search list managed from the catalog settings dialog.
 - `remoteSkillSources` stores validated HTTPS/SSH Git URLs and optional refs for skill packages and supported native agents. Pinned snapshots live under `<LOOM_CONFIG_DIR>/catalog-sources/`; credentials are never stored.
 - `remoteCatalogLimits` controls finite Git staging, output, timeout, snapshot,

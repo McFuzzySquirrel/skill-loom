@@ -107,7 +107,8 @@ These are requirements to implement and verify, not current guarantees:
    Shell-free harness PATH lookup also tries an `.exe` suffix on Windows for
    extensionless command names; it does not resolve `.cmd` or `.bat` wrappers
    through a shell. This lookup alone does not establish Windows harness or
-   managed-run support.
+   managed-run support. A focused hosted Windows test (`42643548246`) found
+   and launched a native executable from a path containing spaces.
    A later full baseline after the profile-alias fixes passed Linux but failed
    12 of 65 macOS files and 25 of 65 Windows files (three Windows files
    skipped). This baseline predates the subsequent snapshot-mode changes.
