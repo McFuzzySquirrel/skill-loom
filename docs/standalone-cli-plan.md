@@ -158,6 +158,11 @@ PATH. The probe removed its temporary root and processes; the current evidence
 records these failures, not a harness pass. The earlier probe is retained in
 `docs/evidence/live-execution-2026-11-04.json`; its OpenCode signal observation
 does not establish that the current advancement state machine can advance.
+An OpenCode-only execution probe now writes separately scoped evidence, without
+invoking Copilot, and fails if the captured signal does not advance the product
+state machine. Its operator procedure is in `docs/OPERATIONS.md`. Fake PTY
+coverage verifies both qualifying and clear-before-idle signals; no new live
+verification is implied.
 Live supervised instruction-only runs also support reviewed next and retry
 actions, with distinct execution, replay (for retry), and live-test approvals.
 Interrupted instruction-only runs support reviewed retry, continue, and restart;

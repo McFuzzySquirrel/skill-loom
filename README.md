@@ -264,7 +264,7 @@ The packed package contains only `dist/src`, `dist/web`, the compiled package me
 
 Playwright never reads or writes your real Skill Loom or harness state. `npm run test:e2e` builds the app, starts it with a temporary `LOOM_CONFIG_DIR`, a temporary `HOME`, a temporary project area, and an isolated harness `PATH`; it never attaches to an already-running developer instance.
 
-The live probes exercise real OpenCode and Copilot CLIs. They fail with a clear diagnostic when a required CLI is absent; they do not silently skip. Run them only when you intend to use the installed harnesses and credentials.
+The default live probes exercise real OpenCode and Copilot CLIs. They fail with a clear diagnostic when a required CLI is absent; they do not silently skip. Run them only when you intend to use the installed harnesses and credentials. For an OpenCode-only execution probe, see the [verification guide](docs/OPERATIONS.md#opencode-only-live-verification); it does not invoke Copilot and writes separate evidence.
 
 ## First run
 

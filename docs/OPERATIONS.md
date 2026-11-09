@@ -206,6 +206,58 @@ These are current gaps between the intended contract and what was observed with 
 - **Platform coverage:** the recorded live probes ran on Linux ARM64 with OpenCode 2.2.5 and Copilot CLI 1.0.105. Other platforms and CLI versions are unverified.
 - **Package release:** version `0.1.0` is declared in `package.json`, but the package is private and has no Git release tag or npm publication.
 
+## OpenCode-only live verification
+
+Run this from the `feature/standalone-cli-agent-workflow` checkout on a machine
+with Node 24+, dependencies installed, OpenCode 2.2.5 on `PATH`, and an
+authenticated, available model provider. This makes real network/model calls
+and may incur charges. It creates a disposable project in the user cache and
+an OpenCode session in the normal OpenCode session store; it attempts to delete
+and verify removal of that session and the disposable project afterward. It is
+not a sandbox. Review the final cleanup status, especially after interruption.
+
+```bash
+git switch feature/standalone-cli-agent-workflow
+git pull --ff-only
+node --version
+opencode --version
+```
+
+Install dependencies with `npm install` if needed. Authenticate with
+`opencode auth login` if necessary. To select a specific already-authenticated
+model, optionally set `LOOM_LIVE_OPENCODE_MODEL` to its provider/model ID.
+Clear inherited Loom and Copilot profile overrides for this probe, then run:
+
+```bash
+env -u LOOM_CONFIG_DIR -u COPILOT_HOME npm run test:live:execution -- --harness opencode
+```
+
+This mode does **not** invoke Copilot or use its broad permission flags. It
+replaces `docs/evidence/live-execution-opencode.json` on each run; use
+`--evidence /absolute/path/to/output.json` to select another output file.
+The default command **without** `--harness opencode` runs both harnesses,
+including Copilot headless with `--allow-all-paths --allow-all-tools`, and
+replaces the combined `docs/evidence/live-execution.json`.
+
+The probe checks a seeded interactive prompt, an observed OSC sequence, recall
+in a second process using the same session, and the product's actual OSC state
+machine. It removes the temporary skills before recall. Inspect the console and
+the evidence file: `scope` must be `opencode`, `result` must be `passed`,
+`opencode.product-advancement` must pass, the expected version must match, and
+cleanup must report the temporary root removed, no tracked processes or PTYs
+remaining, and the probe session deleted. A `clear` between `working` and
+`idle` can make the product check fail even when the looser signal observation
+passes. Inspect `harnesses.opencode.signal`, checks, and warnings; do not treat
+that mismatch, a version warning, a failed cleanup, or a failed/blocked check
+as a pass.
+
+This verifies the captured interactive signal and session recall, **not** an
+end-to-end automatic chain or actual skill invocation. A passing result alone
+does not enable the blocked CLI automatic path. Share only the reviewed evidence
+JSON and failure codes; inspect it for sensitive information first, and never
+share credentials or full terminal transcripts. If cleanup reports failure,
+follow its remediation for the specific recorded session or temporary path.
+
 ## Troubleshooting
 
 ### Missing harness CLI

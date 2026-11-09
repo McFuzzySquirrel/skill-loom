@@ -11,6 +11,10 @@
  *   the documented broad flags, return the probe token, and recall the token in
  *   a second process using the same UUID session id.
  *
+ * `--harness opencode` runs only the OpenCode portion and writes separate
+ * evidence. `--evidence <path>` explicitly overrides the output location.
+ * The default remains the combined probe and includes Copilot's broad flags.
+ *
  * Every failure is explicit: a missing CLI, an unauthenticated harness, an
  * unresolved trust gate, a missing token, a missing signal, a failed recall, or
  * a failed cleanup exits non-zero with an actionable message.
@@ -310,8 +314,9 @@ interface ExecutionEvidence {
   loomVersion: string | null;
   durationMs: number;
   result: 'passed' | 'failed' | 'interrupted';
+  scope: 'both' | 'opencode';
   isolation: IsolationEvidence;
-  prerequisites: { opencode: VersionProbe; copilot: VersionProbe } | null;
+  prerequisites: Partial<Record<HarnessName, VersionProbe>> | null;
   auth: { opencode: AuthSummary | null; copilot: AuthSummary | null };
   harnesses: { opencode?: OpenCodeEvidence; copilot?: CopilotEvidence };
   checks: CheckRecord[];
@@ -1277,6 +1282,7 @@ async function runOpenCodeInteractive(input: {
   const productState = new Osc7501StateMachine();
 
   let accumulated = '';
+  let tokenEligibleOutput = '';
   let tokenObserved = false;
   let timedOut = false;
   let forcedKill = false;
@@ -1372,11 +1378,25 @@ async function runOpenCodeInteractive(input: {
       if (accumulated.length > MAX_CAPTURE_BYTES * 2) {
         accumulated = accumulated.slice(-MAX_CAPTURE_BYTES);
       }
-      updateSignalEvidence(signal, probeParser, productParser, productState, chunk, startedAt);
-      // A seed run must see the token after the harness has entered its working
-      // state. This prevents the probe skill's own text from being mistaken for
-      // model output if a future TUI renders the skill body.
-      if (accumulated.includes(PROBE_TOKEN) && (!input.requireSignal || signal.working)) {
+      let eligible = chunk;
+      if (input.requireSignal && !signal.working) {
+        let index = 0;
+        while (index < chunk.length && !signal.working) {
+          const bell = chunk.indexOf('\x07', index);
+          const backslash = chunk.indexOf('\\', index);
+          const terminator = bell < 0 ? backslash : backslash < 0 ? bell : Math.min(bell, backslash);
+          const end = terminator < 0 ? chunk.length : terminator + 1;
+          updateSignalEvidence(signal, probeParser, productParser, productState, chunk.slice(index, end), startedAt);
+          index = end;
+        }
+        eligible = chunk.slice(index);
+      }
+      updateSignalEvidence(signal, probeParser, productParser, productState, eligible, startedAt);
+      tokenEligibleOutput += eligible;
+      if (tokenEligibleOutput.length > MAX_CAPTURE_BYTES * 2) {
+        tokenEligibleOutput = tokenEligibleOutput.slice(-MAX_CAPTURE_BYTES);
+      }
+      if (tokenEligibleOutput.includes(PROBE_TOKEN)) {
         tokenObserved = true;
       }
       if (completed() && !timedOut && !forcedKill) {
@@ -1973,8 +1993,9 @@ async function writeEvidenceFile(filePath: string, evidence: ExecutionEvidence):
 async function buildEvidence(input: {
   report: MutableReport;
   result: 'passed' | 'failed' | 'interrupted';
+  scope: 'both' | 'opencode';
   cleanup: CleanupRecord;
-  prerequisites: { opencode: VersionProbe; copilot: VersionProbe } | null;
+  prerequisites: Partial<Record<HarnessName, VersionProbe>> | null;
 }): Promise<ExecutionEvidence> {
   return {
     version: 1,
@@ -1985,6 +2006,7 @@ async function buildEvidence(input: {
     loomVersion: await readLoomVersion(),
     durationMs: Date.now() - input.report.startedAt,
     result: input.result,
+    scope: input.scope,
     isolation: input.report.isolation,
     prerequisites: input.prerequisites,
     auth: input.report.auth,
@@ -2012,7 +2034,34 @@ function reportResult(report: MutableReport, cleanup: CleanupRecord): 'passed' |
 /* Main                                                                      */
 /* ------------------------------------------------------------------------- */
 
+function parseOptions(args: string[]): { scope: 'both' | 'opencode'; evidencePath: string } {
+  let scope: 'both' | 'opencode' = 'both';
+  let evidencePath: string | undefined;
+  let harnessSpecified = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--harness' && !harnessSpecified && args[index + 1] === 'opencode') {
+      scope = 'opencode';
+      harnessSpecified = true;
+      index += 1;
+    } else if (arg === '--evidence' && evidencePath === undefined &&
+      args[index + 1] !== undefined && args[index + 1] !== '' && !args[index + 1]?.startsWith('--')) {
+      evidencePath = resolve(args[index + 1]!);
+      index += 1;
+    } else {
+      throw new Error('Usage: npm run test:live:execution -- [--harness opencode] [--evidence <path>]');
+    }
+  }
+  return {
+    scope,
+    evidencePath: evidencePath ?? (scope === 'opencode'
+      ? join(PROJECT_ROOT, 'docs', 'evidence', 'live-execution-opencode.json')
+      : EVIDENCE_PATH),
+  };
+}
+
 async function main(): Promise<number> {
+  const { scope, evidencePath } = parseOptions(process.argv.slice(2));
   installProcessHandlers();
 
   const startedAt = Date.now();
@@ -2072,7 +2121,7 @@ async function main(): Promise<number> {
   const openCodeAdapter = registry.get('opencode');
   const copilotAdapter = registry.get('copilot');
 
-  let prerequisites: { opencode: VersionProbe; copilot: VersionProbe } | null = null;
+  let prerequisites: Partial<Record<HarnessName, VersionProbe>> | null = null;
   let fatal: unknown;
 
   try {
@@ -2086,17 +2135,17 @@ async function main(): Promise<number> {
       env: isolation.childEnv,
       cwd: canonicalProject,
     });
-    const copilotVersion = await probeVersion({
+    const copilotVersion = scope === 'both' ? await probeVersion({
       harness: 'copilot',
       adapter: copilotAdapter,
       expectedVersion: EXPECTED_COPILOT_VERSION,
       env: isolation.childEnv,
       cwd: canonicalProject,
-    });
-    prerequisites = { opencode: openCodeVersion, copilot: copilotVersion };
+    }) : undefined;
+    prerequisites = { opencode: openCodeVersion, ...(copilotVersion === undefined ? {} : { copilot: copilotVersion }) };
 
     addPrerequisiteCheck(report, openCodeVersion, 'opencode', openCodeAdapter.installHint);
-    addPrerequisiteCheck(report, copilotVersion, 'copilot', copilotAdapter.installHint);
+    if (copilotVersion !== undefined) addPrerequisiteCheck(report, copilotVersion, 'copilot', copilotAdapter.installHint);
 
     if (openCodeVersion.available && !openCodeVersion.versionMatches) {
       report.warnings.push({
@@ -2107,7 +2156,7 @@ async function main(): Promise<number> {
         }. The probe continued against the installed version.`,
       });
     }
-    if (copilotVersion.available && !copilotVersion.versionMatches) {
+    if (copilotVersion !== undefined && copilotVersion.available && !copilotVersion.versionMatches) {
       report.warnings.push({
         code: 'CLI_VERSION_MISMATCH',
         harness: 'copilot',
@@ -2127,26 +2176,23 @@ async function main(): Promise<number> {
       env: isolation.childEnv,
       runner: localRunner,
     });
-    const copilotAuth = await collectAuth({
+    const copilotAuth = scope === 'both' ? await collectAuth({
       harness: 'copilot',
       adapter: copilotAdapter,
       projectPath: canonicalProject,
       env: isolation.childEnv,
       runner: localRunner,
-    });
+    }) : undefined;
     report.auth = {
       opencode: openCodeAuth.summary,
-      copilot: copilotAuth.summary,
+      copilot: copilotAuth?.summary ?? null,
     };
     addAuthCheck(report, openCodeAuth.summary);
-    addAuthCheck(report, copilotAuth.summary);
+    if (copilotAuth !== undefined) addAuthCheck(report, copilotAuth.summary);
     throwIfInterrupted();
 
     const openCodeBlocked =
       !openCodeVersion.available || openCodeAuth.summary.state === 'unauthenticated';
-    const copilotBlocked =
-      !copilotVersion.available || copilotAuth.summary.state === 'unauthenticated';
-
     if (openCodeBlocked) {
       report.harnesses.opencode = blockedOpenCodeEvidence(openCodeVersion);
       addBlockedChecks(report, 'opencode', openCodeVersion, openCodeAuth.summary);
@@ -2162,28 +2208,28 @@ async function main(): Promise<number> {
 
     throwIfInterrupted();
 
-    // The OpenCode recall phase removes both probe skill locations so a recall
-    // cannot re-read the token. Re-create the Copilot probe before its seed.
-    await writeProbeSkill(canonicalProject, 'copilot');
-
-    if (copilotBlocked) {
-      report.harnesses.copilot = blockedCopilotEvidence(copilotVersion);
-      addBlockedChecks(report, 'copilot', copilotVersion, copilotAuth.summary);
-    } else {
-      report.harnesses.copilot = await runCopilotProbe({
-        report,
-        adapter: copilotAdapter,
-        projectPath: canonicalProject,
-        env: isolation.childEnv,
-        replacements: replacementsValue,
-      });
+    if (copilotVersion !== undefined && copilotAuth !== undefined) {
+      // Recall removes both skill locations, so recreate this one for Copilot.
+      await writeProbeSkill(canonicalProject, 'copilot');
+      if (!copilotVersion.available || copilotAuth.summary.state === 'unauthenticated') {
+        report.harnesses.copilot = blockedCopilotEvidence(copilotVersion);
+        addBlockedChecks(report, 'copilot', copilotVersion, copilotAuth.summary);
+      } else {
+        report.harnesses.copilot = await runCopilotProbe({
+          report,
+          adapter: copilotAdapter,
+          projectPath: canonicalProject,
+          env: isolation.childEnv,
+          replacements: replacementsValue,
+        });
+      }
     }
 
     if (report.harnesses.opencode !== undefined) {
       report.harnesses.opencode.version = openCodeVersion.version;
       report.harnesses.opencode.versionMatches = openCodeVersion.versionMatches;
     }
-    if (report.harnesses.copilot !== undefined) {
+    if (report.harnesses.copilot !== undefined && copilotVersion !== undefined) {
       report.harnesses.copilot.version = copilotVersion.version;
       report.harnesses.copilot.versionMatches = copilotVersion.versionMatches;
       report.harnesses.copilot.copilotHomeMode = report.isolation.copilotHomeMode;
@@ -2240,13 +2286,13 @@ async function main(): Promise<number> {
   }
 
   const result = interruptedBy !== undefined ? 'interrupted' : reportResult(report, cleanup);
-  const evidence = await buildEvidence({ report, result, cleanup, prerequisites });
+  const evidence = await buildEvidence({ report, result, scope, cleanup, prerequisites });
 
   try {
-    await writeEvidenceFile(EVIDENCE_PATH, evidence);
+    await writeEvidenceFile(evidencePath, evidence);
   } catch (error) {
     console.error(
-      `Live execution: evidence could not be written to ${EVIDENCE_PATH}: ${sanitizeError(
+      `Live execution: evidence could not be written to ${evidencePath}: ${sanitizeError(
         error,
         replacementsValue,
       )}`,
@@ -2254,7 +2300,7 @@ async function main(): Promise<number> {
     return 1;
   }
 
-  printSummary(evidence, fatal !== undefined);
+  printSummary(evidence, fatal !== undefined, evidencePath);
   if (interruptedBy !== undefined) {
     return interruptedBy === 'SIGINT' ? 130 : 143;
   }
@@ -2481,7 +2527,7 @@ function addBlockedChecks(
   const prefix = harness === 'opencode' ? 'opencode' : 'copilot';
   const checks =
     harness === 'opencode'
-      ? ['seed', 'signal', 'recall']
+      ? ['seed', 'signal', 'product-advancement', 'recall']
       : ['trust', 'seed', 'recall'];
   for (const check of checks) {
     report.checks.push(
@@ -2609,6 +2655,25 @@ async function runOpenCodeProbe(input: {
             'A live OpenCode run that does not emit working then idle must not be treated as complete. Inspect the OpenCode version and terminal state signal, then rerun npm run test:live:execution.',
           durationMs: seed.durationMs,
           ...(seed.failureExcerpt === undefined ? {} : { excerpt: seed.failureExcerpt }),
+        }),
+  );
+
+  input.report.checks.push(
+    seed.signal.productStateMachine.completed
+      ? checkPassed({
+          id: 'opencode.product-advancement',
+          harness: 'opencode',
+          description: 'Check the observed signal with the product advancement state machine.',
+          expected: 'The product state machine observes a qualifying working-to-idle transition.',
+          observed: 'The product state machine completed on the captured signal.',
+        })
+      : checkFailed({
+          id: 'opencode.product-advancement',
+          harness: 'opencode',
+          description: 'Check the observed signal with the product advancement state machine.',
+          expected: 'The product state machine observes a qualifying working-to-idle transition.',
+          observed: `The product state machine did not complete on the captured signal (state=${seed.signal.productStateMachine.state}).`,
+          remediation: 'Keep automatic OpenCode advancement unverified and investigate the captured signal sequence and product parser.',
         }),
   );
 
@@ -2994,13 +3059,13 @@ function copilotRemediation(
   }
 }
 
-function printSummary(evidence: ExecutionEvidence, fatal: boolean): void {
+function printSummary(evidence: ExecutionEvidence, fatal: boolean, evidencePath: string): void {
   const lines: string[] = [];
   lines.push('Skill Loom live execution (RUN-FR-13)');
   lines.push(
-    `  node ${evidence.node} | opencode ${
-      evidence.prerequisites?.opencode.version ?? 'unavailable'
-    } | copilot ${evidence.prerequisites?.copilot.version ?? 'unavailable'}`,
+    `  scope: ${evidence.scope} | node ${evidence.node} | opencode ${
+      evidence.prerequisites?.opencode?.version ?? 'unavailable'
+    }${evidence.scope === 'both' ? ` | copilot ${evidence.prerequisites?.copilot?.version ?? 'unavailable'}` : ''}`,
   );
 
   for (const check of evidence.checks) {
@@ -3021,7 +3086,7 @@ function printSummary(evidence: ExecutionEvidence, fatal: boolean): void {
   }
 
   lines.push(`  result: ${evidence.result}`);
-  lines.push(`  evidence: ${EVIDENCE_PATH}`);
+  lines.push(`  evidence: ${evidencePath}`);
 
   if (fatal) {
     lines.push('  A fatal error occurred; see the script.fatal check above.');
