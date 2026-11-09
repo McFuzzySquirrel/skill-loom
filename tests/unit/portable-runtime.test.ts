@@ -3,8 +3,10 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { access, chmod, mkdtemp, mkdir, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { executePortableRequest, packageFingerprint, treeFingerprint, type PackageTreeEntry } from '../../src/portable/runtime.js';
+import { runPortableCli } from '../../src/portable/cli.js';
 import type { ChainBundle } from '../../src/shared/bundles.js';
 import { scanProjectRunRecords } from '../../src/shared/project-run-records.js';
 import {
@@ -98,6 +100,28 @@ function command(
 }
 
 describe('portable bundle execution', () => {
+  it('reports safe system error codes without exposing underlying messages', async () => {
+    async function* failedInput() {
+      throw Object.assign(new Error('sensitive input and path'), { code: 'EACCES' });
+      yield '';
+    }
+    let stderr = '';
+    const code = await runPortableCli(['prepare', '--project', project, '--bundle', bundlePath], {
+      stdin: Readable.from(failedInput()),
+      stderr: { write: (chunk) => { stderr += String(chunk); return true; } },
+    });
+    expect(code).toBe(1);
+    expect(JSON.parse(stderr)).toEqual({
+      ok: false,
+      error: {
+        code: 'REQUEST_FAILED',
+        message: 'The portable helper could not complete the request. Check file permissions and retry.',
+        systemCode: 'EACCES',
+      },
+    });
+    expect(stderr).not.toContain('sensitive input and path');
+  });
+
   it.skipIf(process.platform !== 'win32')('refuses executable bundle installation before claiming or creating a run', async () => {
     const executableBundle = structuredClone(bundle);
     executableBundle.skills[0]!.files[1]!.executable = true;
@@ -549,7 +573,7 @@ describe('portable bundle execution', () => {
     expect([
       'RUN_LOCKED', 'RUN_ACTIVE_CONFLICT', 'REVIEW_STALE', 'PROJECT_CLAIM_BUSY',
       ...(mode === 'enabled' ? ['PROJECT_CLAIM_CONFLICT'] : []),
-    ])
+    ], JSON.stringify(rejected))
       .toContain((JSON.parse(rejected.stderr) as { error: { code: string } }).error.code);
     const review = await reviewProjectCoordination(project);
     expect(review.records).toEqual([expect.objectContaining({ kind: 'portable', runId: success.runId, unresolved: true })]);

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { realpathSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
+import { getSystemErrorMap } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { BundleError } from './bundle.js';
 import { executePortableRequest, PortableRunError, type PortableRequest } from './runtime.js';
@@ -9,6 +10,8 @@ import { ProjectCoordinationError } from '../shared/project-coordination.js';
 import { ProjectRunRecordsError } from '../shared/project-run-records.js';
 
 const COMMANDS = ['inspect', 'prepare', 'status', 'step', 'record', 'resume'] as const;
+const SYSTEM_ERROR_CODES = new Set([...getSystemErrorMap().values()].map(([code]) => code));
+SYSTEM_ERROR_CODES.add('ERR_SQLITE_ERROR');
 type Command = (typeof COMMANDS)[number];
 
 export function parsePortableArgs(argv: readonly string[]): PortableRequest {
@@ -71,7 +74,13 @@ export async function runPortableCli(
       : error instanceof SyntaxError
         ? 'Structured helper input is not valid JSON.'
         : 'The portable helper could not complete the request. Check file permissions and retry.';
-    stderr.write(`${JSON.stringify({ ok: false, error: { code, message } })}\n`);
+    const rawCode = error instanceof Error && 'code' in error ? error.code : undefined;
+    const systemCode = !known && typeof rawCode === 'string' && SYSTEM_ERROR_CODES.has(rawCode)
+      ? rawCode
+      : undefined;
+    stderr.write(`${JSON.stringify({
+      ok: false, error: { code, message, ...(systemCode === undefined ? {} : { systemCode }) },
+    })}\n`);
     return 1;
   }
 }

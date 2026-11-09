@@ -92,13 +92,14 @@ These are requirements to implement and verify, not current guarantees:
    1.1.0's prebuilt `spawn-helper` mode `0644`. The package postinstall now
    grants owner execute permission to a private regular helper, and a clean
    macOS runner passed the focused terminal suite without a manual repair.
-   The latest full hosted Windows run (`42647682895`) failed 9 of 66 test
-   files (12 tests failed, 873 passed, 58 skipped); three files were skipped.
+   The latest full hosted Windows run (`42649010391`) failed 1 of 66 test
+   files (1 test failed, 882 passed, 62 skipped); three files were skipped.
    Remaining failures include platform-specific fixtures and executable mode
    handling, and still need diagnosis before Windows suite coverage can be
-   claimed. That run also exposed intermittent managed-claim timing and a
-   concurrent portable request returning a generic error; these remain under
-   investigation and are not evidence of safe descendant cleanup.
+   claimed. A concurrent portable request returned a generic error in both
+   that run and the preceding full run; its cause remains under investigation.
+   An earlier run also exposed intermittent managed-claim timing. Neither
+   result is evidence of safe descendant cleanup.
    The preflight unit suite subsequently passed on hosted Windows after its
    synthetic paths were made platform-absolute (`42642647286`). POSIX
    `chmod(000)` permission tests do not test Windows ACLs and are skipped there;
@@ -133,6 +134,8 @@ These are requirements to implement and verify, not current guarantees:
    written. POSIX file-mode and graceful signal tests do not establish Windows
    ACL privacy or graceful Windows process shutdown. A focused Windows baseline
    passed (`42648789532`), with those platform-specific checks skipped.
+   A separate twelve-iteration cross-process portable claim race passed on
+   Windows (`42649239259`), but did not reproduce the full-suite failure.
    The focused Git blob-reader suite also passed on all three hosted platforms
    (`42647505376`), including timeout and direct-child reaping; this does not
    verify descendant containment.
