@@ -34,13 +34,27 @@ static void hold(void) {
   for (;;) pause();
 }
 
+static void require_readonly(const char *path) {
+  const int readable = open(path, O_RDONLY);
+  if (readable < 0) fail("read reviewed content");
+  char byte;
+  if (read(readable, &byte, 1) != 1) fail("read reviewed byte");
+  if (close(readable) != 0) fail("close reviewed read");
+  errno = 0;
+  const int writable = open(path, O_WRONLY | O_TRUNC);
+  if (writable >= 0) {
+    close(writable);
+    fputs("Reviewed content was unexpectedly writable.\n", stderr);
+    exit(1);
+  }
+  if (errno != EROFS) fail("reviewed write was not blocked by a read-only mount");
+}
+
 static void worker(const char *path) {
   const int limit = getdtablesize();
   for (int fd = 3; fd < limit; fd++) close(fd);
   drop_capabilities();
-  errno = 0;
-  const int file = open(path, O_WRONLY | O_TRUNC);
-  if (file >= 0 || errno != EROFS) fail("reviewed write was not blocked by a read-only mount");
+  require_readonly(path);
   errno = 0;
   if (mount(NULL, path, NULL, MS_BIND | MS_REMOUNT, NULL) == 0 || errno != EPERM) {
     fail("read-only remount was not protected");
@@ -53,12 +67,14 @@ static void worker(const char *path) {
       fprintf(stderr, "Nested namespace creation failed with errno %d.\n", errno);
       _exit(1);
     }
+    require_readonly(path);
     errno = 0;
     const int changed = mount(NULL, path, NULL, MS_BIND | MS_REMOUNT, NULL);
-    if (changed == 0 || errno != EPERM) {
+    if (changed == 0 || (errno != EPERM && errno != EACCES)) {
       fprintf(stderr, "Nested read-only remount returned %d with errno %d.\n", changed, errno);
       _exit(1);
     }
+    require_readonly(path);
     _exit(0);
   }
   int status;
