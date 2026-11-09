@@ -21,6 +21,7 @@
  */
 
 import { isAbsolute } from 'node:path';
+import { getSystemErrorMap } from 'node:util';
 import type {
   HarnessAdapter,
   HarnessAdvancementSignal,
@@ -1612,7 +1613,11 @@ export class AutomaticRunner {
       this.runValue.reason = reason;
       this.runValue.updatedAt = failedAt;
       if (!alreadyReported) this.emit('run-paused', step, { reason });
-      console.error(`Skill Loom paused automatic run ${this.runValue.id}: ${reason}.`);
+      const systemCode = persistenceSystemCode(error);
+      console.error(
+        `Skill Loom paused automatic run ${this.runValue.id}: ${reason}` +
+        `${systemCode === undefined ? '' : ` (system code: ${systemCode})`}.`,
+      );
     });
   }
 
@@ -1829,4 +1834,21 @@ function toRunnerError(
     return cause;
   }
   return new AutomaticRunnerError(code, message, details, { cause });
+}
+
+const SYSTEM_ERROR_CODES = new Set([...getSystemErrorMap().values()].map(([code]) => code));
+SYSTEM_ERROR_CODES.add('ERR_SQLITE_ERROR');
+
+function persistenceSystemCode(error: unknown): string | undefined {
+  if (!(error instanceof AutomaticRunnerError) || error.code !== AUTOMATIC_RUNNER_ERROR_CODES.PERSIST_FAILED) {
+    return undefined;
+  }
+  let cause: unknown = error.cause;
+  for (let depth = 0; depth < 8 && cause instanceof Error; depth += 1) {
+    if ('code' in cause && typeof cause.code === 'string' && SYSTEM_ERROR_CODES.has(cause.code)) {
+      return cause.code;
+    }
+    cause = cause.cause;
+  }
+  return undefined;
 }

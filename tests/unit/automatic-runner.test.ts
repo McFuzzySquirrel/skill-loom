@@ -485,6 +485,7 @@ describe('automatic OpenCode advancement', () => {
         if (fail && run.steps[0]?.status === 'done') throw new Error('simulated persistence failure');
       },
     });
+
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     try {
       await harness.runner.start();
@@ -500,6 +501,29 @@ describe('automatic OpenCode advancement', () => {
       await harness.runner.runNext();
       expect(harness.spawner.spawns).toHaveLength(2);
       await harness.runner.abort();
+    } finally {
+      log.mockRestore();
+      await harness.runner.shutdown();
+    }
+  });
+
+  it('logs only a recognized system code from a nested persistence failure', async () => {
+    const secret = 'private-persistence-details';
+    const systemError = Object.assign(new Error(secret), { code: 'EPERM' });
+    const harness = makeHarness({
+      persist: (run) => {
+        if (run.steps[0]?.status === 'done') {
+          throw new Error(secret, { cause: systemError });
+        }
+      },
+    });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await harness.runner.start();
+      await advanceOscStep(harness, harness.spawner.lastProcess);
+      expect(harness.runner.getRun()).toMatchObject({ status: 'paused', reason: 'PERSIST_FAILED' });
+      expect(log).toHaveBeenCalledWith(expect.stringContaining('(system code: EPERM)'));
+      expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
     } finally {
       log.mockRestore();
       await harness.runner.shutdown();
