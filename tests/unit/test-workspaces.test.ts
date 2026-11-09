@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -29,7 +29,7 @@ afterEach(async () => {
 });
 
 async function setup(atomicWrite?: ConfigStoreOptions['atomicWrite']) {
-  root = await mkdtemp(join(tmpdir(), 'loom-test-workspace-'));
+  root = await realpath(await mkdtemp(join(tmpdir(), 'loom-test-workspace-')));
   const configDirectory = join(root, 'config');
   const projectPath = join(root, 'source-project');
   await mkdir(projectPath);

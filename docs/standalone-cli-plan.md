@@ -84,6 +84,17 @@ These are requirements to implement and verify, not current guarantees:
    noncanonical temporary paths, PTY startup, and Windows-specific filesystem
    behavior; these are not yet all diagnosed. The workflow retains the full
    suite and permits explicit focused runs while the failures are resolved.
+   The focused claim suite has passed on all three platforms (four existing
+   Windows cases skipped), but an earlier macOS race failed once and remains
+   under investigation. A clean hosted macOS ARM64 install gave `node-pty`
+   1.1.0's prebuilt `spawn-helper` mode `0644`; the focused terminal suite
+   passed after granting owner execute permission in an isolated probe.
+   Normal installs have not been fixed, and the full suite remains failing.
+   Workspace storage currently rejects a config path whose real path differs
+   from its configured spelling, including paths under macOS `/var` aliases;
+   canonicalizing test fixtures does not resolve that user-facing limitation.
+   Focused Windows terminal tests also fail on process startup, resize, exit
+   status, and timeouts, so ConPTY behavior is not yet verified.
 
 ### Versioned CLI and process interface
 

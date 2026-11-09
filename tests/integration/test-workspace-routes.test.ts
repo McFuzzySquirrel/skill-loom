@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -18,7 +18,7 @@ afterEach(async () => {
 
 describe('test-workspace routes', () => {
   it('creates a disposable workspace directly from a project-independent draft', async () => {
-    root = await mkdtemp(join(tmpdir(), 'loom-draft-workspace-'));
+    root = await realpath(await mkdtemp(join(tmpdir(), 'loom-draft-workspace-')));
     const configStore = createConfigStore({
       env: { LOOM_CONFIG_DIR: join(root, 'config') },
       homeDirectory: () => join(root, 'home'),
@@ -69,7 +69,7 @@ describe('test-workspace routes', () => {
   });
 
   it('creates, lists, and removes a disposable chain project', async () => {
-    root = await mkdtemp(join(tmpdir(), 'loom-workspace-routes-'));
+    root = await realpath(await mkdtemp(join(tmpdir(), 'loom-workspace-routes-')));
     const configStore = createConfigStore({
       env: { LOOM_CONFIG_DIR: join(root, 'config') },
       homeDirectory: () => join(root, 'home'),
@@ -141,7 +141,7 @@ describe('test-workspace routes', () => {
   });
 
   it('rejects malformed create payloads before creating a workspace', async () => {
-    root = await mkdtemp(join(tmpdir(), 'loom-workspace-routes-invalid-'));
+    root = await realpath(await mkdtemp(join(tmpdir(), 'loom-workspace-routes-invalid-')));
     const configStore = createConfigStore({
       env: { LOOM_CONFIG_DIR: join(root, 'config') },
       homeDirectory: () => join(root, 'home'),

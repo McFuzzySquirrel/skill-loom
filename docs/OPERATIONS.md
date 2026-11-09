@@ -276,6 +276,21 @@ If preflight says the folder is untrusted, use the trust panel to start the inte
 
 A `node-pty` install failure usually means the native toolchain is missing. Install Python 3, `make`, and a C++ compiler (Debian/Ubuntu: `build-essential python3`; macOS: Xcode Command Line Tools), then run `npm install` again or `npm rebuild node-pty`. Read the actual compiler error; Skill Loom and npm do not convert a native build failure into a successful install message. Confirm with `npm run test:unit` or by starting the server and opening a run terminal.
 
+On a hosted macOS ARM64 runner, a clean install of `node-pty` 1.1.0 produced
+`posix_spawnp failed` because its prebuilt `spawn-helper` had mode `0644`.
+For an installation you own, inspect the helper path and permissions from the
+directory where Skill Loom resolves `node-pty`:
+
+```bash
+node -p "require('path').join(require('path').dirname(require.resolve('node-pty/package.json')), 'prebuilds', 'darwin-' + process.arch, 'spawn-helper')"
+```
+
+Verify that the printed path is the expected regular file in your installation,
+not a symlink, before granting its owner execute permission with `chmod u+x` on
+that exact path. Restart Skill Loom and retry the terminal. A hosted probe with
+that permission change passed the focused terminal tests; it does not verify
+managed descendant cleanup. A reinstall may restore the original permissions.
+
 ### Dirty git tree
 
 A dirty working tree is a preflight **warning**, not a block. Commit, stash, or discard the changes you do not want the harness to see, then rerun preflight; or acknowledge the warning if the state is intentional. A project that is not a git repository skips this check. Skill Loom never runs destructive git commands for you.
