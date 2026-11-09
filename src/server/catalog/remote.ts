@@ -480,6 +480,9 @@ async function refreshRemoteSkillSourceUnlocked(
         checkCancelled();
         if (file.mode !== '100644') throw invalidPackage(sourceId, file.repositoryPath);
         const content = await readBlob(file.object, 0, totalBytes);
+        if (content.byteLength > limits.maxPackageBytes) {
+          throw tooLarge(sourceId, 'maxPackageBytes', limits.maxPackageBytes);
+        }
         totalBytes += content.byteLength;
         if (totalBytes > limits.maxSnapshotBytes) throw tooLarge(sourceId, 'maxSnapshotBytes', limits.maxSnapshotBytes);
         validateRelativePackagePath(file.agentPath, sourceId, file.repositoryPath);

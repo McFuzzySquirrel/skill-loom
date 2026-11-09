@@ -258,6 +258,52 @@ describe('remote skill source snapshots', () => {
     }
   });
 
+  it('counts native-agent files and bytes at their exact boundaries', async () => {
+    const root = await makeRoot();
+    const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
+    await store.update({
+      remoteSkillSources: [{ id: 'demo-source', repository: 'https://example.com/acme/skills.git' }],
+    });
+    const tree = [
+      `100644 blob ${skillBlob}\tcollection/demo/SKILL.md\0`,
+      `100644 blob ${openCodeAgentBlob}\t.opencode/agents/reviewer.md\0`,
+    ].join('');
+    const skillBytes = Buffer.byteLength('---\nname: demo-skill\ndescription: A remote demo.\n---\nInstructions.\n');
+    const agentBytes = Buffer.byteLength('---\nmode: primary\ndescription: Reviews changes.\n---\nReview carefully.\n');
+    const manifest = join(store.getConfigDir(), 'catalog-sources', 'demo-source', revision, 'snapshot.json');
+    await refreshRemoteSkillSource(store, 'demo-source', { gitRunner: fakeGit(tree).run });
+    const original = await readFile(manifest);
+
+    for (const [dimension, threshold] of [
+      ['maxFiles', 2],
+      ['maxPackageBytes', agentBytes],
+      ['maxSnapshotBytes', skillBytes + agentBytes],
+    ] as const) {
+      for (const delta of [-1, 0, 1]) {
+        const limit = threshold + delta;
+        await store.update({
+          remoteCatalogLimits: {
+            maxFiles: dimension === 'maxFiles' ? limit : 100,
+            maxPackageBytes: dimension === 'maxPackageBytes' ? limit : 1_000,
+            maxSnapshotBytes: dimension === 'maxSnapshotBytes' ? limit : 2_000,
+          },
+        });
+        const refresh = refreshRemoteSkillSource(store, 'demo-source', { gitRunner: fakeGit(tree).run });
+        if (delta < 0) {
+          await expect(refresh).rejects.toMatchObject({
+            code: REMOTE_SOURCE_ERROR_CODES.TOO_LARGE, details: { dimension, limit },
+          });
+          expect(await readFile(manifest)).toEqual(original);
+        } else {
+          await expect(refresh).resolves.toMatchObject({
+            packages: [{ bytes: skillBytes }],
+            agents: [{ bytes: agentBytes }],
+          });
+        }
+      }
+    }
+  });
+
   it('counts shared nested-package files for each containing package', async () => {
     const root = await makeRoot();
     const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });

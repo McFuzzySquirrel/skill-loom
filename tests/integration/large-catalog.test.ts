@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -76,6 +76,72 @@ afterEach(async () => {
 });
 
 describe('large remote catalog', () => {
+  it('enforces mixed skill and native-agent budgets with the real Git blob reader', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'loom-git-agent-budget-'));
+    roots.push(root);
+    const repository = join(root, 'repository');
+    await mkdir(join(repository, 'skills', 'demo'), { recursive: true });
+    await mkdir(join(repository, '.opencode', 'agents'), { recursive: true });
+    const skill = '---\nname: demo\ndescription: Fixture.\n---\nReview.\n';
+    const agent = '---\nmode: primary\ndescription: A reviewer fixture with extra content.\n---\nReview carefully.\n';
+    await writeFile(join(repository, 'skills', 'demo', 'SKILL.md'), skill);
+    await writeFile(join(repository, '.opencode', 'agents', 'reviewer.md'), agent);
+    execFileSync('git', ['init', '--quiet', repository]);
+    execFileSync('git', ['-C', repository, 'add', '.']);
+    execFileSync('git', [
+      '-C', repository, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+      'commit', '--quiet', '-m', 'Fixture',
+    ]);
+    const config = join(root, 'gitconfig');
+    const remote = 'https://example.invalid/agent-budget.git';
+    execFileSync('git', ['config', '--file', config, `url.file://${repository}.insteadOf`, remote]);
+    const previousGlobal = process.env.GIT_CONFIG_GLOBAL;
+    const previousSystem = process.env.GIT_CONFIG_NOSYSTEM;
+    process.env.GIT_CONFIG_GLOBAL = config;
+    process.env.GIT_CONFIG_NOSYSTEM = '1';
+    try {
+      const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
+      await store.update({ remoteSkillSources: [{ id: 'budget', repository: remote }] });
+      const original = await refreshRemoteSkillSource(store, 'budget', { temporaryDirectory: root });
+      const skillBytes = Buffer.byteLength(skill);
+      const agentBytes = Buffer.byteLength(agent);
+      for (const [dimension, threshold] of [
+        ['maxFiles', 2],
+        ['maxPackageBytes', agentBytes],
+        ['maxSnapshotBytes', skillBytes + agentBytes],
+      ] as const) {
+        for (const delta of [-1, 0, 1]) {
+          const limit = threshold + delta;
+          await store.update({
+            remoteCatalogLimits: {
+              maxFiles: dimension === 'maxFiles' ? limit : 100,
+              maxPackageBytes: dimension === 'maxPackageBytes' ? limit : 1_000,
+              maxSnapshotBytes: dimension === 'maxSnapshotBytes' ? limit : 2_000,
+            },
+          });
+          const refresh = refreshRemoteSkillSource(store, 'budget', { temporaryDirectory: root });
+          if (delta < 0) {
+            await expect(refresh).rejects.toMatchObject({
+              code: 'REMOTE_SOURCE_TOO_LARGE', details: { sourceId: 'budget', dimension, limit },
+            });
+            expect(await listRemoteSkillSnapshots(store.getConfigDir(), 'budget')).toEqual([original]);
+          } else {
+            await expect(refresh).resolves.toMatchObject({
+              packages: [{ bytes: skillBytes }],
+              agents: [{ bytes: agentBytes }],
+            });
+          }
+          expect((await readdir(root)).filter((name) => name.startsWith('skill-loom-source-'))).toEqual([]);
+        }
+      }
+    } finally {
+      if (previousGlobal === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+      else process.env.GIT_CONFIG_GLOBAL = previousGlobal;
+      if (previousSystem === undefined) delete process.env.GIT_CONFIG_NOSYSTEM;
+      else process.env.GIT_CONFIG_NOSYSTEM = previousSystem;
+    }
+  });
+
   it('rejects invalid UTF-8 Git paths without publishing a changed snapshot', async () => {
     const root = await mkdtemp(join(tmpdir(), 'loom-git-paths-'));
     roots.push(root);

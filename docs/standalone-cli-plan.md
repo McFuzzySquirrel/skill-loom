@@ -108,7 +108,10 @@ subdirectories disappearing during a scan while surfacing other I/O failures;
 it remains a polling guard, not a filesystem quota. Snapshot integrity checks
 bound file reads by the recorded package size and reject unexpected files or
 changed content. Real child-process tests exercise stdout and stderr output
-limits below, at, and above the threshold and verify staging cleanup. Read-only CLI
+limits below, at, and above the threshold and verify staging cleanup. A real Git
+fixture also checks mixed skill and native-agent file counts, per-item bytes,
+and aggregate snapshot bytes below, at, and above their limits, preserving the
+previous snapshot after rejection. Read-only CLI
 source and snapshot listing, verified candidate paths for content review, deterministic
 snapshot and project-catalog search pages, a shared lazy run owner, and authenticated Unix local
 control for source and limit mutations are available. Project registration,
