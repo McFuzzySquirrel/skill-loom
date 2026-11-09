@@ -34,7 +34,7 @@ let catalogService: ReturnType<typeof createCatalogService>;
 let apps: FastifyInstance[];
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'loom-catalog-routes-'));
+  root = await realpath(await mkdtemp(join(tmpdir(), 'loom-catalog-routes-')));
   project = join(root, 'workspace', 'demo-project');
   configDirectory = join(root, 'config');
   home = join(root, 'home');

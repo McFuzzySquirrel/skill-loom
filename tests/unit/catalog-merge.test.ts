@@ -411,4 +411,17 @@ describe('extra skill directory settings', () => {
     expect(removed.extraSkillDirectories).toEqual([]);
     expect(await listExtraSkillDirectories(store)).toEqual([]);
   });
+
+  it('removes a deleted directory through an alias to an existing ancestor', async () => {
+    const alias = join(root, 'alias-root');
+    await symlink(root, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    const directory = join(alias, 'nested', 'removable-skills');
+    await mkdir(directory, { recursive: true });
+    const store = createStore();
+    await addExtraSkillDirectory(store, directory);
+    await rm(join(root, 'nested'), { recursive: true });
+    const removed = await removeExtraSkillDirectory(store, directory);
+    expect(removed.directory).toBe(join(await realpath(root), 'nested', 'removable-skills'));
+    expect(removed.extraSkillDirectories).toEqual([]);
+  });
 });

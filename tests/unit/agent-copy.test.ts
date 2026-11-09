@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -16,7 +16,7 @@ let sourcePath: string;
 let sourceContent: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'loom-agent-copy-'));
+  root = await realpath(await mkdtemp(join(tmpdir(), 'loom-agent-copy-')));
   projectPath = join(root, 'project');
   sourcePath = join(root, 'snapshot', 'reviewer.agent.md');
   sourceContent = '---\nname: reviewer\n---\nReview carefully.\n';

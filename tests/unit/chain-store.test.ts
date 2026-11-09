@@ -32,7 +32,7 @@ let root: string;
 let projectPath: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'loom-chain-store-'));
+  root = await realpath(await mkdtemp(join(tmpdir(), 'loom-chain-store-')));
   projectPath = join(root, 'project');
   await mkdir(projectPath);
 });

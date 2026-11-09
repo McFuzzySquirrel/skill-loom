@@ -1,7 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import type { Dirent } from 'node:fs';
-import { access, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { createConnection, createServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -530,7 +530,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
   }, 20_000);
 
   it('shares profile updates between the CLI and the running UI owner', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'loom-control-app-'));
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-control-app-')));
     const configStore = createConfigStore({ env: { LOOM_CONFIG_DIR: root }, homeDirectory: () => join(root, 'home') });
     const copilotRunner = vi.fn(async ({ cwd }: { cwd: string }) => {
       const skillsRoot = join(cwd, '.agents', 'skills');

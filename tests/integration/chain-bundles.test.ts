@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -30,7 +30,7 @@ const skillText = '---\nname: review\ndescription: Review changes\n---\nInspect 
 const binary = Buffer.from([0, 1, 128, 255]);
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'loom-bundles-'));
+  root = await realpath(await mkdtemp(join(tmpdir(), 'loom-bundles-')));
   source = join(root, 'source');
   target = join(root, 'target');
   const packagePath = join(source, '.opencode', 'skills', 'review');

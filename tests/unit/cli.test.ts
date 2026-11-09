@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -125,7 +125,7 @@ describe('CLI output and environment', () => {
   });
 
   it('locates an exact pinned candidate only after verifying its content', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'loom-cli-catalog-inspect-'));
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-cli-catalog-inspect-')));
     try {
       const revision = 'a'.repeat(40);
       const directory = 'b'.repeat(64);

@@ -20,7 +20,7 @@ let root: string;
 let configDirectory: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'loom-project-registry-'));
+  root = await realpath(await mkdtemp(join(tmpdir(), 'loom-project-registry-')));
   configDirectory = join(root, 'config');
 });
 

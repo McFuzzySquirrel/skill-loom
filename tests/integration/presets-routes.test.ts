@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -13,7 +13,7 @@ let configDirectory: string;
 let apps: FastifyInstance[];
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'loom-scenario-presets-'));
+  root = await realpath(await mkdtemp(join(tmpdir(), 'loom-scenario-presets-')));
   configDirectory = join(root, 'config');
   apps = [];
 });

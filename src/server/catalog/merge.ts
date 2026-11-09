@@ -1,5 +1,5 @@
 import { readFile, realpath } from 'node:fs/promises';
-import { isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import type { RemoteSkillSource } from '../config/schema.js';
 import type { ConfigStore } from '../config/store.js';
 import {
@@ -563,10 +563,19 @@ function validateRemovalPath(input: unknown): string {
 }
 
 async function canonicalizeIfPossible(input: string): Promise<string> {
-  try {
-    return await realpath(input);
-  } catch {
-    return resolve(input);
+  let candidate = resolve(input);
+  const missing: string[] = [];
+  for (;;) {
+    try {
+      return join(await realpath(candidate), ...missing);
+    } catch (error) {
+      if (!(error instanceof Error && 'code' in error &&
+          (error.code === 'ENOENT' || error.code === 'ENOTDIR'))) throw error;
+      const parent = dirname(candidate);
+      if (parent === candidate) throw error;
+      missing.unshift(basename(candidate));
+      candidate = parent;
+    }
   }
 }
 

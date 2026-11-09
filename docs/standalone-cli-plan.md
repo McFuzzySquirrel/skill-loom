@@ -96,6 +96,10 @@ These are requirements to implement and verify, not current guarantees:
    A later full baseline after the profile-alias fixes passed Linux but failed
    12 of 65 macOS files and 25 of 65 Windows files (three Windows files
    skipped). This baseline predates the subsequent snapshot-mode changes.
+   Several macOS failures compared canonical results to noncanonical temporary
+   fixture paths; those fixtures now use canonical roots without weakening
+   explicit alias tests. Removing a deleted extra-skill directory also now
+   resolves aliases in its surviving ancestors. Hosted verification is pending.
    Workspace storage, workspace inspection, global drafts and global templates
    now canonicalize config ancestors (including macOS `/var` aliases) while
    rejecting a symlink as the configured directory or storage child. Focused

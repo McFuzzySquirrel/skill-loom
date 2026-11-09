@@ -27,7 +27,7 @@ let extra: string;
 let restoreModePaths: string[];
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'loom-catalog-opencode-'));
+  root = await realpath(await mkdtemp(join(tmpdir(), 'loom-catalog-opencode-')));
   project = join(root, 'project');
   home = join(root, 'home');
   extra = join(root, 'extra');

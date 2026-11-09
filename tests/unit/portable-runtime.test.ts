@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
-import { access, chmod, mkdtemp, mkdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdtemp, mkdir, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -46,7 +46,7 @@ const bundle: ChainBundle = {
 };
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'loom-portable-'));
+  root = await realpath(await mkdtemp(join(tmpdir(), 'loom-portable-')));
   project = join(root, 'project');
   bundlePath = join(root, 'review.loom.json');
   await mkdir(project);

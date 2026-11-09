@@ -51,7 +51,7 @@ let projectPath: string;
 let configDirectory: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'loom-run-store-'));
+  root = await realpath(await mkdtemp(join(tmpdir(), 'loom-run-store-')));
   projectPath = join(root, 'project');
   configDirectory = join(root, 'config');
   await mkdir(projectPath);
