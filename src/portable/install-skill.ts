@@ -6,8 +6,8 @@ import type { BundleSkill } from '../shared/bundles.js';
 import { BundleError, decodeBundleFile, validatePackagePath } from './bundle.js';
 
 /**
- * Write a reserved package directory without making it discoverable as a skill
- * until all of its other files have been written.
+ * Publish the top-level skill entry only after the other package files.
+ * Nested skill entries may still be discovered before this publication.
  */
 export async function writeBundleSkillFiles(
   destination: string,

@@ -218,8 +218,10 @@ These are requirements to implement and verify, not current guarantees:
    package files before publishing `SKILL.md` via an exclusive hard link.
    Remote copies are fingerprint-verified and bundled-skill attribution is
    written before publication. This prevents an ordinary interrupted process
-   from exposing a partial package as a discoverable skill; abandoned incomplete
-   directories and temporary files require inspection and cleanup. Actual
+   from exposing the top-level entry early, but does not hide nested `SKILL.md`
+   files from recursive discovery. An interrupted package may therefore expose
+   nested skills; abandoned incomplete directories and temporary files require
+   inspection and cleanup. Actual
    process interruption immediately before and after the link and the focused
    publication suites passed on hosted Linux and Windows (jobs in
    `42673113745`) and macOS (`42673286458`). This ordering is not proof of

@@ -67,6 +67,23 @@ describe('bundle skill installation', () => {
     expect(await readdir(root)).toEqual(['example']);
   });
 
+  it('does not hide nested skill entries before top-level publication', async () => {
+    const { destination } = await setup();
+    const nested = {
+      path: 'nested/SKILL.md',
+      content: Buffer.from('---\nname: nested\n---\nNested instructions.\n').toString('base64'),
+      executable: false,
+    };
+    await writeBundleSkillFiles(destination, [...files, nested], {
+      directoryMode: 0o700,
+      publish: async (source, target) => {
+        expect(await readFile(join(destination, 'nested', 'SKILL.md'), 'utf8')).toContain('name: nested');
+        await expect(access(join(destination, 'SKILL.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+        await link(source, target);
+      },
+    });
+  });
+
   it('leaves no discoverable entry or temporary file when publication fails', async () => {
     const { root, destination } = await setup();
     const failure = new Error('injected publication failure');
