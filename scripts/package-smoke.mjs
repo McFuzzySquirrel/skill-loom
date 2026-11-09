@@ -345,8 +345,17 @@ async function main() {
         const { createTerminalSession } = await import(pathToFileURL(path).href);
         const session = createTerminalSession({
           executable: process.execPath,
-          args: ['-e', "process.stdout.write('PACKAGED_PTY_OK\\\\n')"],
+          args: ['-e', "process.stdin.setRawMode(true);process.stdin.on('data',()=>process.exit(0));process.stdout.write('PACKAGED_PTY_OK\\\\r\\\\n');"],
         });
+        let acknowledged = false;
+        const acknowledge = () => {
+          if (!acknowledged && session.getBufferedOutput().includes('PACKAGED_PTY_OK')) {
+            acknowledged = true;
+            session.write('\\r');
+          }
+        };
+        session.onData(acknowledge);
+        acknowledge();
         const timeout = setTimeout(() => {
           session.kill();
           throw new Error('Packaged PTY timed out.');
