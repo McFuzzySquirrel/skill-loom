@@ -40,6 +40,8 @@ export interface UseRunStreamResult {
   view: RunView | null;
   error: ApiClientErrorType | null;
   connection: RunConnectionState;
+  terminalGeneration: number;
+  terminalRecoveryGeneration: number;
   busyAction: RunActionName | null;
   actionError: ApiClientErrorType | null;
   reload: () => void;
@@ -171,6 +173,8 @@ export function useRunStream({
   const [view, setView] = useState<RunView | null>(null);
   const [error, setError] = useState<ApiClientErrorType | null>(null);
   const [connection, setConnection] = useState<RunConnectionState>('connecting');
+  const [terminalGeneration, setTerminalGeneration] = useState(0);
+  const [terminalRecoveryGeneration, setTerminalRecoveryGeneration] = useState(0);
   const [busyAction, setBusyAction] = useState<RunActionName | null>(null);
   const [actionError, setActionError] = useState<ApiClientErrorType | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -298,6 +302,7 @@ export function useRunStream({
         }
 
         if (message.type === 'snapshot') {
+          setTerminalRecoveryGeneration((current) => current + 1);
           commitView({
             run: message.run,
             projectPath: previous.projectPath,
@@ -308,6 +313,9 @@ export function useRunStream({
           return;
         }
 
+        if (message.type === 'process-started') {
+          setTerminalGeneration((current) => current + 1);
+        }
         commitView({
           run: message.run,
           projectPath: previous.projectPath,
@@ -420,6 +428,8 @@ export function useRunStream({
     view,
     error,
     connection,
+    terminalGeneration,
+    terminalRecoveryGeneration,
     busyAction,
     actionError,
     reload,

@@ -193,6 +193,7 @@ export interface RunStreamSnapshot {
 export const RUN_STREAM_DELTA_TYPES = [
   'started',
   'step-started',
+  'process-started',
   'output',
   'process-exit',
   'signal',

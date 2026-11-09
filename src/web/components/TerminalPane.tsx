@@ -37,6 +37,10 @@ export interface TerminalPaneProps {
   className?: string;
   /** Reattach after a dropped socket (run terminals survive a reload). */
   reconnectOnClose?: boolean;
+  /** Changes after a new process is attached to the same terminal id. */
+  attachmentGeneration?: number;
+  /** Changes when a run-stream snapshot might have missed a process. */
+  recoveryGeneration?: number;
   /** Hide the long helper paragraphs on the dedicated terminal page. */
   dense?: boolean;
 }
@@ -100,6 +104,8 @@ export function TerminalPane({
   exitHint = 'Screen-reader mode is on. Press Escape to leave the terminal and return to Verify trust. Output is rendered by xterm.js only and is never inserted as HTML.',
   className,
   reconnectOnClose = false,
+  attachmentGeneration = 0,
+  recoveryGeneration = 0,
   dense = false,
 }: TerminalPaneProps) {
   const { resolved } = useAppearance();
@@ -107,6 +113,10 @@ export function TerminalPane({
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
+  const reconnectRef = useRef<(() => void) | null>(null);
+  const recoverRef = useRef<(() => void) | null>(null);
+  const generationRef = useRef(attachmentGeneration);
+  const recoveryGenerationRef = useRef(recoveryGeneration);
   const onExitFocusRef = useRef(onExitFocus);
   onExitFocusRef.current = onExitFocus;
 
@@ -149,6 +159,7 @@ export function TerminalPane({
     let reconnectTimer: number | null = null;
     let reconnectAttempts = 0;
     let sessionEnded = false;
+    let recoverWhenEnded = false;
 
     const send = (message: unknown): void => {
       if (socket !== null && socket.readyState === WS_OPEN) {
@@ -167,7 +178,7 @@ export function TerminalPane({
       socket = nextSocket;
 
       nextSocket.addEventListener('open', () => {
-        if (disposed) {
+        if (disposed || nextSocket !== socket) {
           return;
         }
         fit();
@@ -175,7 +186,7 @@ export function TerminalPane({
       });
 
       nextSocket.addEventListener('message', (event) => {
-        if (disposed || typeof event.data !== 'string') {
+        if (disposed || nextSocket !== socket || typeof event.data !== 'string') {
           return;
         }
         let message: TerminalServerMessage;
@@ -207,7 +218,12 @@ export function TerminalPane({
       });
 
       nextSocket.addEventListener('close', () => {
-        if (disposed) {
+        if (disposed || nextSocket !== socket) {
+          return;
+        }
+        socket = null;
+        if (sessionEnded && recoverWhenEnded) {
+          reconnectRef.current?.();
           return;
         }
         if (reconnectOnClose && !sessionEnded && reconnectAttempts < 8) {
@@ -225,6 +241,31 @@ export function TerminalPane({
         }
         terminal.write('\r\n[terminal disconnected]\r\n');
       });
+    };
+
+    reconnectRef.current = () => {
+      if (disposed) return;
+      window.clearTimeout(connectTimer);
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      sessionEnded = false;
+      recoverWhenEnded = false;
+      reconnectAttempts = 0;
+      setConnectionError(null);
+      const previous = socket;
+      socket = null;
+      previous?.close();
+      openSocket();
+    };
+    recoverRef.current = () => {
+      if (sessionEnded || (socket === null && reconnectTimer === null)) {
+        reconnectRef.current?.();
+      } else if (socket !== null) {
+        // The old terminal's exit can arrive after the run-stream snapshot.
+        recoverWhenEnded = true;
+      }
     };
 
     // Deferring the connection by one task prevents React StrictMode's
@@ -281,10 +322,24 @@ export function TerminalPane({
       resizeDisposable.dispose();
       socket?.close();
       socket = null;
+      reconnectRef.current = null;
+      recoverRef.current = null;
       terminalRef.current = null;
       terminal.dispose();
     };
   }, [sessionId, terminalPath, reconnectOnClose, announce]);
+
+  useEffect(() => {
+    if (generationRef.current === attachmentGeneration) return;
+    generationRef.current = attachmentGeneration;
+    reconnectRef.current?.();
+  }, [attachmentGeneration]);
+
+  useEffect(() => {
+    if (recoveryGenerationRef.current === recoveryGeneration) return;
+    recoveryGenerationRef.current = recoveryGeneration;
+    recoverRef.current?.();
+  }, [recoveryGeneration]);
 
   useEffect(() => {
     const terminal = terminalRef.current;

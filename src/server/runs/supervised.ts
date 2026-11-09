@@ -163,6 +163,7 @@ export interface SupervisedActionRequest {
 export const SUPERVISED_EVENT_TYPES = [
   'started',
   'step-started',
+  'process-started',
   'output',
   'process-exit',
   'awaiting-user',
@@ -888,6 +889,7 @@ export class SupervisedRunner {
     }
 
     this.attachProcess(process, index);
+    this.emit('process-started', step);
 
     const exit = process.getExit();
     if (exit !== null) {

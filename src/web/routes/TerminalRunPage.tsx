@@ -217,6 +217,8 @@ export function TerminalRunPage({ runId }: TerminalRunPageProps) {
       <div className="run-terminal-page__surface">
         {terminalId !== null ? (
           <TerminalPane
+            attachmentGeneration={stream.terminalGeneration}
+            recoveryGeneration={stream.terminalRecoveryGeneration}
             sessionId={terminalId}
             terminalPath={runTerminalPath(terminalId)}
             label={`Harness terminal for ${run.chainSnapshot.name}`}

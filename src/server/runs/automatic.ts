@@ -179,6 +179,7 @@ export interface AutomaticActionRequest {
 export const AUTOMATIC_EVENT_TYPES = [
   'started',
   'step-started',
+  'process-started',
   'output',
   'process-exit',
   'signal',
@@ -1012,6 +1013,7 @@ export class AutomaticRunner {
     }
 
     this.attachProcess(process, index);
+    this.emit('process-started', step);
     this.startStepTimeout(index);
 
     const exit = process.getExit();

@@ -279,6 +279,18 @@ Repeated terminal attachment rejections now consume the retry budget until the
 server actually accepts a subscriber; an exhausted retry is visibly reported
 and announced. This fixes an independently reproduced unbounded retry loop,
 but does not establish the cause of the earlier blank-terminal failures.
+Separately, a reproducible stale attachment after a supervised Next is fixed:
+the runners publish a process-started event only after the new process is
+attached, and both run views reattach the existing xterm without clearing its
+scrollback. Initial and recovered event-stream snapshots also prompt terminal
+recovery when an exit was missed, without reconnecting an otherwise healthy
+terminal.
+Browser fixtures cover Next, Retry, automatic advancement, and a missed start
+during disconnection or before the initial snapshot. In the disconnection test
+xterm deferred its DOM rendering while
+off-screen; the assertion brings the terminal into view before checking output.
+This does not explain the earlier intermittent blank-terminal failures or
+establish live harness behavior.
 
 ### Remaining project coordination design
 

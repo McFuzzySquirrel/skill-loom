@@ -1713,6 +1713,8 @@ describe('GET /api/runs and POST /api/runs/:runId/actions', () => {
       expect(afterNext.type).toBe('step-advanced');
       const stepStarted = await socket.next();
       expect(stepStarted.type).toBe('step-started');
+      const processStarted = await socket.next();
+      expect(processStarted.type).toBe('process-started');
       const awaiting = await socket.next();
       expect(awaiting.type).toBe('awaiting-user');
     } finally {
