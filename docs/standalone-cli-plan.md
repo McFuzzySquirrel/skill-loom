@@ -110,6 +110,13 @@ leaving one persistent install for every temporary tarball path. These fixes
 address the observed PTY hangs/crashes, not descendant escape; protected
 execution and verified containment backends are still required.
 
+Final offline acceptance after the worker-order fix passes on Linux, macOS
+and Windows: full regression matrix `42696535985` and installed-package matrix
+`42696531908`. The package suite creates three sequential acknowledged PTYs,
+checks their final output, calls post-exit cleanup repeatedly and requires its
+Node probe to exit naturally. These results do not authorize live harness
+execution or satisfy the protected-content/descendant-containment gates.
+
 ## Existing implementation and important constraints
 
 - `src/server/cli.ts` is currently a server/browser launcher; `src/server/app.ts` and `src/server/routes/` compose services through Fastify. `src/server/runs/orchestrator.ts` owns managed execution, PTYs, preflight, frozen snapshots and run actions.
