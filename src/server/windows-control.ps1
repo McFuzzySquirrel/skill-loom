@@ -49,6 +49,16 @@ function Check-Parents([string]$path, [string]$user) {
     }
 }
 
+function Local-Path([string]$path) {
+    if ($path -notmatch '^[A-Za-z]:[\\/][^:]*$' -or $path.Length -gt 1024) { Fail 'WINDOWS_PROFILE_INVALID' }
+    $path = [System.IO.Path]::GetFullPath($path)
+    $drive = [System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($path))
+    if ($drive.DriveType -ne [System.IO.DriveType]::Fixed -or $drive.DriveFormat -notin @('NTFS', 'ReFS')) {
+        Fail 'WINDOWS_PROFILE_INVALID'
+    }
+    return $path
+}
+
 function New-Certificate([string]$name, [string]$usage) {
     $rsa = [System.Security.Cryptography.RSACng]::new(2048)
     try {
@@ -84,13 +94,7 @@ try {
         [Console]::Out.WriteLine((ConvertTo-Json -Compress -Depth 4 -InputObject @{ ok = $true; server = $server; client = $client }))
         exit 0
     }
-    $path = [string]$inputData.path
-    if ($path -notmatch '^[A-Za-z]:[\\/][^:]*$' -or $path.Length -gt 1024) { Fail 'WINDOWS_PROFILE_INVALID' }
-    $path = [System.IO.Path]::GetFullPath($path)
-    $drive = [System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($path))
-    if ($drive.DriveType -ne [System.IO.DriveType]::Fixed -or $drive.DriveFormat -notin @('NTFS', 'ReFS')) {
-        Fail 'WINDOWS_PROFILE_INVALID'
-    }
+    $path = Local-Path ([string]$inputData.path)
     $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
     try { $user = $identity.User.Value } finally { $identity.Dispose() }
     Check-Parents $path $user
@@ -110,6 +114,13 @@ try {
     $directory = [System.IO.DirectoryInfo]::new($path)
     if (-not $directory.Exists -or ($directory.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { Fail 'WINDOWS_PROFILE_UNSAFE' }
     Check-Acl ($directory.GetAccessControl()) $user $true
+    if ($inputData.operation -ne 'prepare') {
+        $canonical = Local-Path ([string]$inputData.canonicalPath)
+        Check-Parents $canonical $user
+        $canonicalDirectory = [System.IO.DirectoryInfo]::new($canonical)
+        if (-not $canonicalDirectory.Exists) { Fail 'WINDOWS_PROFILE_UNSAFE' }
+        Check-Acl ($canonicalDirectory.GetAccessControl()) $user $true
+    }
     if ($inputData.operation -eq 'prepare' -or $inputData.operation -eq 'check') {
         [Console]::Out.WriteLine('{"ok":true}')
         exit 0

@@ -31,6 +31,34 @@ if ($data.operation -eq 'widen-file') {
     [Console]::Out.WriteLine('{"ok":true}')
     exit 0
 }
+if ($data.operation -eq 'widen-parent') {
+    $directory = [System.IO.DirectoryInfo]::new($data.path)
+    $security = $directory.GetAccessControl()
+    $security.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
+        [System.Security.Principal.SecurityIdentifier]::new('S-1-1-0'),
+        [System.Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles,
+        [System.Security.AccessControl.AccessControlType]::Allow))
+    $directory.SetAccessControl($security)
+    [Console]::Out.WriteLine('{"ok":true}')
+    exit 0
+}
+if ($data.operation -eq 'map-drive') {
+    $used = [System.Environment]::GetLogicalDrives()
+    $drive = @('R:', 'S:', 'T:', 'U:', 'V:', 'W:', 'X:', 'Y:', 'Z:') |
+        Where-Object { $used -notcontains ($_ + '\') } | Select-Object -First 1
+    if (-not $drive) { throw 'No free fixture drive.' }
+    & "$env:SystemRoot\System32\subst.exe" $drive $data.path
+    if ($LASTEXITCODE -ne 0) { throw 'Drive fixture creation failed.' }
+    [Console]::Out.WriteLine((ConvertTo-Json -Compress -InputObject @{ drive = $drive }))
+    exit 0
+}
+if ($data.operation -eq 'unmap-drive') {
+    if ($data.drive -notmatch '^[R-Z]:$') { throw 'Invalid fixture drive.' }
+    & "$env:SystemRoot\System32\subst.exe" $data.drive /D
+    if ($LASTEXITCODE -ne 0) { throw 'Drive fixture removal failed.' }
+    [Console]::Out.WriteLine('{"ok":true}')
+    exit 0
+}
 if ($data.operation -ne 'cross-user') { throw 'Unknown fixture operation.' }
 
 # Only the explicitly enabled hosted-native test creates this disposable account.

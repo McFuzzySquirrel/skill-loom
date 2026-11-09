@@ -261,6 +261,27 @@ describe.skipIf(process.platform !== 'win32')('Windows private control', () => {
     });
   }, 90_000);
 
+  it('checks physical ancestors hidden behind a SUBST drive alias', async () => {
+    const unsafeParent = join(temporary, 'unsafe-parent');
+    const target = join(unsafeParent, 'mapped-target');
+    await mkdir(target, { recursive: true });
+    const physicalProfile = join(target, 'profile');
+    await verifyWindowsProfile(physicalProfile, 'prepare');
+    const result = await fixture({ operation: 'map-drive', path: target });
+    if (typeof result !== 'object' || result === null || !('drive' in result) ||
+        typeof result.drive !== 'string' || !/^[R-Z]:$/.test(result.drive)) {
+      throw new Error('Invalid drive fixture result.');
+    }
+    const drive = result.drive;
+    try {
+      const aliasedProfile = `${drive}\\profile`;
+      await verifyWindowsProfile(aliasedProfile);
+      await fixture({ operation: 'widen-parent', path: unsafeParent });
+      await expect(verifyWindowsProfile(aliasedProfile)).rejects.toMatchObject({ code: 'WINDOWS_PROFILE_UNSAFE' });
+      await expect(readWindowsControlMetadata(aliasedProfile)).rejects.toMatchObject({ code: 'WINDOWS_PROFILE_UNSAFE' });
+    } finally { await fixture({ operation: 'unmap-drive', drive }); }
+  }, 90_000);
+
   it.skipIf(process.env.LOOM_TEST_WINDOWS_CROSS_USER !== '1')('denies a real second local user access to metadata and authenticated IPC', async () => {
     const parent = join(process.env.PUBLIC!, `loom-ipc-${randomUUID()}`);
     await fixture({ operation: 'public-parent', path: parent });

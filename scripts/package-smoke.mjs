@@ -341,16 +341,20 @@ async function main() {
     const terminalProbe = `
       const { pathToFileURL } = require('node:url');
       (async () => {
+        process.stderr.write('Packaged PTY: importing runtime\\n');
         const path = require.resolve('skill-loom-cli/dist/src/server/terminal/pty.js');
         const { createTerminalSession } = await import(pathToFileURL(path).href);
+        process.stderr.write('Packaged PTY: creating session\\n');
         const session = createTerminalSession({
           executable: process.execPath,
           args: ['-e', "process.stdin.setRawMode(true);process.stdin.on('data',()=>process.exit(0));process.stdout.write('PACKAGED_PTY_OK\\\\r\\\\n');"],
         });
+        process.stderr.write('Packaged PTY: session created\\n');
         let acknowledged = false;
         const acknowledge = () => {
           if (!acknowledged && session.getBufferedOutput().includes('PACKAGED_PTY_OK')) {
             acknowledged = true;
+            process.stderr.write('Packaged PTY: acknowledging output\\n');
             session.write('\\r');
           }
         };
@@ -361,6 +365,7 @@ async function main() {
           throw new Error('Packaged PTY timed out.');
         }, 10000);
         session.onExit(({ exitCode }) => {
+          process.stderr.write('Packaged PTY: exit received\\n');
           clearTimeout(timeout);
           if (exitCode !== 0 || !session.getBufferedOutput().includes('PACKAGED_PTY_OK')) {
             throw new Error('Packaged PTY did not produce the expected output.');
@@ -368,10 +373,6 @@ async function main() {
         });
       })().catch((error) => { console.error(error); process.exitCode = 1; });
     `;
-    await execFileAsync(process.execPath, ['-e', terminalProbe], {
-      cwd: installedRoot, maxBuffer: 20 * 1024 * 1024, timeout: 15_000,
-    });
-
     const port = await findFreePort();
     const installedCli = join(installedRoot, 'node_modules', packageName, 'dist/src/server/cli.js');
     child = spawn(
@@ -473,6 +474,11 @@ async function main() {
       } finally { clearTimeout(timeout); }
     }
     if (child.exitCode !== 0) throw new Error('The packaged server did not stop cleanly.');
+    const terminalProbePath = join(installedRoot, 'terminal-probe.cjs');
+    await writeFile(terminalProbePath, terminalProbe);
+    await execFileAsync(process.execPath, [terminalProbePath], {
+      cwd: installedRoot, maxBuffer: 20 * 1024 * 1024, timeout: 15_000,
+    });
 
     console.log(
       `Package smoke passed: ${packageName}@${packageVersion}, ${String(files.length)} files, ${String(files.filter((path) => path.startsWith('package/dist/')).length)} dist files.`,

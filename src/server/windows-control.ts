@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { X509Certificate } from 'node:crypto';
+import { realpath } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
@@ -32,6 +33,12 @@ async function invoke(operation: 'prepare' | 'check' | 'metadata' | 'lock' | 'ce
   if (!isAbsolute(systemRoot)) throw new WindowsControlSecurityError('WINDOWS_PROFILE_INVALID');
   const executable = join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   const script = fileURLToPath(new URL('./windows-control.ps1', import.meta.url));
+  let canonicalPath: string | undefined;
+  if (path !== undefined && operation !== 'prepare') {
+    try { canonicalPath = await realpath(resolve(path)); } catch {
+      throw new WindowsControlSecurityError('WINDOWS_PROFILE_CHECK_FAILED');
+    }
+  }
   const { output, failed } = await new Promise<{ output: string; failed: boolean }>((done, reject) => {
     const child = execFile(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', script], {
       windowsHide: true, timeout: 45_000, maxBuffer: 128 * 1024, encoding: 'utf8',
@@ -43,7 +50,11 @@ async function invoke(operation: 'prepare' | 'check' | 'metadata' | 'lock' | 'ce
     child.stdin?.on('error', () => {
       reject(new WindowsControlSecurityError('WINDOWS_PROFILE_CHECK_FAILED'));
     });
-    child.stdin?.end(JSON.stringify({ version: 1, operation, ...(path === undefined ? {} : { path: resolve(path) }) }));
+    child.stdin?.end(JSON.stringify({
+      version: 1, operation,
+      ...(path === undefined ? {} : { path: resolve(path) }),
+      ...(canonicalPath === undefined ? {} : { canonicalPath }),
+    }));
   });
   let raw: unknown;
   try { raw = JSON.parse(output.trim()) as unknown; } catch {
@@ -59,6 +70,11 @@ async function invoke(operation: 'prepare' | 'check' | 'metadata' | 'lock' | 'ce
 export async function verifyWindowsProfile(path: string, operation: 'prepare' | 'check' | 'lock' = 'check'): Promise<void> {
   const result = await invoke(operation, path);
   if ('content' in result || 'server' in result) throw new WindowsControlSecurityError('WINDOWS_PROFILE_CHECK_FAILED');
+  if (operation === 'prepare') {
+    // A drive alias can hide physical ancestors from DirectoryInfo.Parent.
+    // Recheck the now-existing canonical location before any state is written.
+    await invoke('check', path);
+  }
 }
 
 export async function readWindowsControlMetadata(path: string): Promise<string | null> {
