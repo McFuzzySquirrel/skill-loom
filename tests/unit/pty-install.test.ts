@@ -1,6 +1,8 @@
 import { link, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
+import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ensurePtyHelper } from '../../install/ensure-pty-helper.mjs';
 
@@ -30,9 +32,69 @@ describe.skipIf(process.platform === 'win32')('macOS PTY installation', () => {
     expect((await lstat(helper)).mode & 0o777).toBe(0o740);
   });
 
-  it('does not modify dependencies on Windows', async () => {
-    await expect(ensurePtyHelper({ platform: 'win32', arch: process.arch, packageDirectory: 'unused' }))
+  it('does not modify dependencies on Linux', async () => {
+    await expect(ensurePtyHelper({ platform: 'linux', arch: process.arch, packageDirectory: 'unused' }))
       .resolves.toBeUndefined();
+  });
+
+  describe('Windows PTY installation', () => {
+    async function windowsFixture() {
+      root = await realpath(await mkdtemp(join(tmpdir(), 'loom-pty-windows-install-')));
+      const directory = join(root, 'lib');
+      await mkdir(directory);
+      const require = createRequire(import.meta.url);
+      const installed = join(dirname(require.resolve('node-pty/package.json')), 'lib/windowsPtyAgent.js');
+      // Windows npm postinstall may already have applied this exact compatibility fix.
+      const source = (await readFile(installed, 'utf8')).replace(
+        '        this._inSocket.destroy();\n        this._conoutSocketWorker.dispose();\n        this._outSocket.destroy();',
+        '        this._outSocket.destroy();',
+      );
+      const path = join(directory, 'windowsPtyAgent.js');
+      await writeFile(path, source);
+      return { path, source };
+    }
+
+    it('releases the natural-exit worker and input pipe without terminating processes', async () => {
+      const { path, source } = await windowsFixture();
+      await ensurePtyHelper({ platform: 'win32', arch: process.arch, packageDirectory: root });
+      const fixed = await readFile(path, 'utf8');
+      expect(fixed).not.toBe(source);
+      const exported: { WindowsPtyAgent?: { prototype: { _cleanUpProcess: (this: unknown) => void } } } = {};
+      runInNewContext(fixed, { exports: exported, require: () => ({}), setTimeout, clearTimeout, console });
+      const calls: string[] = [];
+      exported.WindowsPtyAgent!.prototype._cleanUpProcess.call({
+        _useConptyDll: false,
+        _inSocket: { readable: true, destroy() { calls.push('input'); } },
+        _outSocket: { readable: true, destroy() { calls.push('output'); } },
+        _conoutSocketWorker: { dispose() { calls.push('worker'); } },
+      });
+      expect(calls).toEqual(['input', 'worker', 'output']);
+      await ensurePtyHelper({ platform: 'win32', arch: process.arch, packageDirectory: root });
+      expect(await readFile(path, 'utf8')).toBe(fixed);
+    });
+
+    it('refuses unknown dependency bytes without overwriting them', async () => {
+      const { path } = await windowsFixture();
+      await writeFile(path, 'unexpected upstream release');
+      await expect(ensurePtyHelper({ platform: 'win32', arch: process.arch, packageDirectory: root }))
+        .rejects.toThrow('Unsupported node-pty');
+      expect(await readFile(path, 'utf8')).toBe('unexpected upstream release');
+    });
+
+    it('rejects linked agent files without modifying their targets', async () => {
+      const { path, source } = await windowsFixture();
+      const target = join(root, 'target.js');
+      await writeFile(target, source);
+      await rm(path);
+      await link(target, path);
+      await expect(ensurePtyHelper({ platform: 'win32', arch: process.arch, packageDirectory: root }))
+        .rejects.toThrow('private regular file');
+      expect(await readFile(target, 'utf8')).toBe(source);
+      await rm(path);
+      await symlink(target, path);
+      await expect(ensurePtyHelper({ platform: 'win32', arch: process.arch, packageDirectory: root })).rejects.toThrow();
+      expect(await readFile(target, 'utf8')).toBe(source);
+    });
   });
 
   it('rejects symlinked and hard-linked helpers rather than modifying another file', async () => {
