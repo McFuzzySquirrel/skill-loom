@@ -128,23 +128,23 @@ public static class WindowsNativeScopeFixture {
                 Require(new FileInfo(errorPath).Length <= 16384, "Fixture diagnostics exceeded their bound.");
                 throw new InvalidOperationException(File.ReadAllText(errorPath));
             }
-            static void LabelWorkspace(string workspace) {
-                IntPtr descriptor;
-                uint size;
-                Check(ConvertStringSecurityDescriptorToSecurityDescriptor("S:(ML;OICI;NW;;;LW)", 1, out descriptor, out size),
-                    "create fixture low-integrity label");
-                try {
-                    bool present, defaulted;
-                    IntPtr sacl;
-                    Check(GetSecurityDescriptorSacl(descriptor, out present, out sacl, out defaulted), "read fixture label");
-                    Require(present && sacl != IntPtr.Zero, "Missing workspace label.");
-                    uint result = SetNamedSecurityInfoW(workspace, 1, 0x10, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, sacl);
-                    if (result != 0) throw new Win32Exception((int)result, "label fixture workspace");
-                } finally { Check(LocalFree(descriptor) == IntPtr.Zero, "free fixture label"); }
-            }
             Require(elapsed.ElapsedMilliseconds < 10000, "Fixture readiness timed out: " + Path.GetFileName(path));
             Thread.Sleep(20);
         }
+    }
+    static void LabelWorkspace(string workspace) {
+        IntPtr descriptor;
+        uint size;
+        Check(ConvertStringSecurityDescriptorToSecurityDescriptor("S:(ML;OICI;NW;;;LW)", 1, out descriptor, out size),
+            "create fixture low-integrity label");
+        try {
+            bool present, defaulted;
+            IntPtr sacl;
+            Check(GetSecurityDescriptorSacl(descriptor, out present, out sacl, out defaulted), "read fixture label");
+            Require(present && sacl != IntPtr.Zero, "Missing workspace label.");
+            uint result = SetNamedSecurityInfoW(workspace, 1, 0x10, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, sacl);
+            if (result != 0) throw new Win32Exception((int)result, "label fixture workspace");
+        } finally { Check(LocalFree(descriptor) == IntPtr.Zero, "free fixture label"); }
     }
     static void Ready(string workspace, string role) {
         string file = Path.Combine(workspace, role + ".pid");
@@ -382,12 +382,19 @@ public static class WindowsNativeScopeFixture {
         }
         if (role != "grandchild") {
             string next = role == "worker" ? "child" : "grandchild";
-            using (Process child = Process.Start(StartInfo(executable, Quote(next) + " " + Quote(workspace), workspace))) {
+            var startup = new StartupEx();
+            startup.Basic.Size = (uint)Marshal.SizeOf(typeof(Startup));
+            ProcessInfo child;
+            Check(CreateProcessW(executable, new StringBuilder(Command(executable, next, workspace)),
+                IntPtr.Zero, IntPtr.Zero, false, 0x8 | 0x200, IntPtr.Zero, workspace, ref startup, out child),
+                "create detached descendant in a new process group");
+            Close(child.Thread);
+            try {
                 Ready(workspace, role);
                 if (role == "worker") { WaitFile(Path.Combine(workspace, "finish")); return 0; }
                 Thread.Sleep(30000);
                 throw new InvalidOperationException("Descendant safety deadline reached.");
-            }
+            } finally { Close(child.Process); }
         }
         Ready(workspace, role);
         Thread.Sleep(30000);
