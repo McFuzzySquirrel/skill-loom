@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -33,7 +33,7 @@ let store: ConfigStore;
 let app: FastifyInstance;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'loom-discovery-routes-'));
+  root = await realpath(await mkdtemp(join(tmpdir(), 'loom-discovery-routes-')));
   store = createConfigStore({
     env: { LOOM_CONFIG_DIR: join(root, 'config') },
     homeDirectory: () => join(root, 'home'),

@@ -28,7 +28,7 @@ const openCodeAgentBlob = 'd'.repeat(40);
 const copilotAgentBlob = 'e'.repeat(40);
 
 async function makeRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'loom-remote-test-'));
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-remote-test-')));
   roots.push(root);
   return root;
 }
