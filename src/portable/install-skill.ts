@@ -1,0 +1,65 @@
+import { randomUUID } from 'node:crypto';
+import { constants } from 'node:fs';
+import { link, lstat, mkdir, open, realpath, unlink } from 'node:fs/promises';
+import { dirname, join, relative, sep } from 'node:path';
+import type { BundleSkill } from '../shared/bundles.js';
+import { BundleError, decodeBundleFile, validatePackagePath } from './bundle.js';
+
+/**
+ * Write a reserved package directory without making it discoverable as a skill
+ * until all of its other files have been written.
+ */
+export async function writeBundleSkillFiles(
+  destination: string,
+  files: BundleSkill['files'],
+  options: { directoryMode: number; enforceFileMode?: boolean; publish?: typeof link } = { directoryMode: 0o700 },
+): Promise<void> {
+  const entry = files.find((file) => file.path === 'SKILL.md');
+  if (entry === undefined) throw new BundleError('BUNDLE_INVALID', 'Each skill package must include SKILL.md.');
+  for (const file of files) validatePackagePath(file.path);
+
+  async function ensureParent(target: string): Promise<void> {
+    let current = destination;
+    for (const segment of relative(destination, dirname(target)).split(sep).filter(Boolean)) {
+      current = join(current, segment);
+      try {
+        await mkdir(current, { mode: options.directoryMode });
+      } catch (error) {
+        if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error;
+      }
+      const info = await lstat(current);
+      if (!info.isDirectory() || info.isSymbolicLink() || await realpath(current) !== current) {
+        throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', 'A skill package directory changed during installation.');
+      }
+    }
+  }
+
+  async function writeFile(target: string, file: BundleSkill['files'][number], onCreate?: () => void): Promise<void> {
+    const handle = await open(target, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+      file.executable ? 0o755 : 0o644);
+    try {
+      onCreate?.();
+      await handle.writeFile(decodeBundleFile(file.content));
+      if (options.enforceFileMode) await handle.chmod(file.executable ? 0o755 : 0o644);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  }
+
+  for (const file of files) {
+    if (file.path === 'SKILL.md') continue;
+    const target = join(destination, ...file.path.split('/'));
+    await ensureParent(target);
+    await writeFile(target, file);
+  }
+
+  const temporary = join(dirname(destination), `.loom-skill-${randomUUID()}.tmp`);
+  let created = false;
+  try {
+    await writeFile(temporary, entry, () => { created = true; });
+    await (options.publish ?? link)(temporary, join(destination, 'SKILL.md'));
+  } finally {
+    if (created) await unlink(temporary);
+  }
+}

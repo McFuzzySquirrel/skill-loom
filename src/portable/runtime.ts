@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import {
-  chmod,
   lstat,
   link,
   mkdir,
@@ -29,6 +28,7 @@ import {
   decodeBundleFile,
   parseBundle,
 } from './bundle.js';
+import { writeBundleSkillFiles } from './install-skill.js';
 import {
   MAX_ATTEMPTS_PER_STEP,
   MAX_PORTABLE_STEPS,
@@ -398,24 +398,7 @@ async function installSkills(
       if (reuse.has(skill.name)) fail('REUSE_MISSING', `Skill "${skill.name}" selected for reuse is missing.`);
       await mkdir(destination, { mode: 0o755 });
       created.push(destination);
-      for (const file of skill.files) {
-        const target = join(destination, ...file.path.split('/'));
-        const parent = dirname(target);
-        const segments = relative(destination, parent).split(sep).filter(Boolean);
-        let current = destination;
-        for (const segment of segments) {
-          current = join(current, segment);
-          await ensureDirectory(current);
-        }
-        const handle = await open(target, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, file.executable ? 0o755 : 0o644);
-        try {
-          await handle.writeFile(decodeBundleFile(file.content));
-          await handle.sync();
-        } finally {
-          await handle.close();
-        }
-        await chmod(target, file.executable ? 0o755 : 0o644);
-      }
+      await writeBundleSkillFiles(destination, skill.files, { directoryMode: 0o700, enforceFileMode: true });
       installed.push({
         name: skill.name,
         directory: skill.directory,

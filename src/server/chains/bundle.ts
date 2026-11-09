@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, readFile, readdir, realpath, rm } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import type { BundlePreview, BundleSkill, ChainBundle } from '../../shared/bundles.js';
 import { projectSkillRootFor } from '../catalog/copy.js';
@@ -30,6 +30,7 @@ import {
   parseBundle,
   validatePackagePath,
 } from '../../portable/bundle.js';
+import { writeBundleSkillFiles } from '../../portable/install-skill.js';
 export { BundleError, MAX_BUNDLE_BYTES, parseBundle } from '../../portable/bundle.js';
 
 export { MAX_BUNDLE_REQUEST_BYTES } from '../../portable/bundle.js';
@@ -405,15 +406,7 @@ export async function importBundle(
           throw error;
         }
         created.push(destination);
-        for (const file of skill.files) {
-          const segments = file.path.split('/');
-          segments.pop();
-          if (segments.length > 0) await mkdir(join(destination, ...segments), { recursive: true, mode: 0o755 });
-          await writeFile(join(destination, file.path), decodeBundleFile(file.content), {
-            flag: 'wx',
-            mode: file.executable ? 0o755 : 0o644,
-          });
-        }
+        await writeBundleSkillFiles(destination, skill.files, { directoryMode: 0o755 });
       }
     }
     if (preview.bundle.version === 2) {
