@@ -26,9 +26,9 @@ Deliver both managed harness execution and execution in the calling agent's sess
 | Requirement | Status |
 | --- | --- |
 | Windows executable-mode installation | Implemented for reviewed new installations, copies, reuse, nested skills, and re-export. Legacy shared packages require restoration or fresh installation; missing records never silently become non-executable. |
-| Windows private IPC and ownership | Implemented: protected profile ACL validation and mutually authenticated, certificate-pinned loopback TLS; focused native Windows checks passed. Expanded production-owner and regression verification in progress. |
+| Windows private IPC and ownership | Implemented and natively verified: protected requested/canonical profile ACLs, mutually authenticated pinned loopback TLS, exclusive profile ownership, crash recovery, and UI/CLI sharing. Windows package-wide verification still fails on a separate natural-exit PTY resource leak. |
 | Protected managed skill execution | Blocked: a verified protected content view and harness-resolution boundary are still required. |
-| Descendant containment | Open: verified native containment or an explicitly approved VM backend is required; direct-child exit and terminal status are insufficient. |
+| Descendant containment | Open: verified native containment or an explicitly approved VM backend is required; direct-child exit and terminal status are insufficient. Windows natural-exit PTY resource cleanup also remains unresolved. |
 
 Installed-mode preservation does not complete the other three requirements or lift their execution and recovery gates.
 
@@ -37,7 +37,9 @@ helper shipped with Loom, not default named-pipe permissions. New profiles are
 created with a protected, inheritable current-user-only DACL. Existing unsafe
 profiles, reparse-point ancestors, broadly accessible metadata/lock files, and
 ancestors permitting untrusted deletion or ACL takeover are rejected without
-changing ACLs. System, administrators, and TrustedInstaller are privileged
+changing ACLs. Both the requested and canonical physical profile paths are
+checked: a SUBST drive must not hide an unsafe physical ancestor. System,
+administrators, and TrustedInstaller are privileged
 principals, not isolation targets. Profiles must be on a local fixed NTFS/ReFS
 drive with Windows PowerShell 5.1 and .NET 4.7.2+ available.
 
@@ -64,6 +66,33 @@ instead of also accepting EOF, and the second-user fixture depended on an
 unavailable PowerShell security module; both fixtures were corrected without
 weakening authentication. Protected execution and containment remain separate,
 unresolved requirements.
+
+Expanded Windows production-owner verification passed (`42689825325`), including
+concurrent real CLI updates visible through the UI and authenticated service
+shutdown. The latest focused Windows suite passed (`42692436546`: 23 tests),
+including real second-user denial, a SUBST-hidden unsafe ancestor, profile
+ownership, HTTP shutdown and terminal/event transport.
+
+The full regression matrix (`42689829919`) passed Linux but failed on Windows
+fixtures that pre-created inherited-ACL profiles and on two unmodified macOS
+project-claim race tests where both contenders reported busy. The Windows
+fixtures now create protected profiles; the subsequent full Windows suite
+passed (`42690884410`: 976 tests, before the final canonical-path guard).
+Focused macOS ownership, control and lifecycle tests passed (`42690892754`:
+25 tests). This is not a successful full macOS regression run.
+
+Native installed-package verification remains **failed**, not waived
+(`42690879884`, `42691546905`, `42692442530`). The latest probe successfully
+starts the actual installed CLI, authenticates control, copies bundled assets,
+stops the service and observes a clean service-process exit before reaching
+its PTY check. The separate installed PTY probe then receives its expected
+output and a process-exit event, but its Node process does not terminate before
+the outer deadline. The probe now uses an acknowledged exchange and a real
+script file, with diagnostic stage markers. Do not mask the retained PTY
+resources with a forced probe exit, a skipped assertion, or by claiming
+descendants are gone. A verified resource-release/containment backend is
+still required. The local Linux full suite and installed-package smoke pass;
+those results do not establish Windows package-wide cleanup.
 
 ## Existing implementation and important constraints
 

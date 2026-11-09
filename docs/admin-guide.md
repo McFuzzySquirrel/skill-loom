@@ -489,6 +489,13 @@ that responds but cannot be authenticated is refused, not taken over or shut
 down. Clean shutdown removes only that instance's metadata. Windows control
 does not lift the protected-content or descendant-containment execution gates.
 
+Windows installed-package verification still has a separate PTY cleanup
+blocker: the terminal emits output and a process-exit event, but the probe
+process retains resources and does not exit. Authenticated packaged control
+startup/status/stop succeeds before that check; the overall Windows package
+smoke is nevertheless failed. Do not interpret a terminal exit event as proof
+that terminal resources or escaped descendants have been cleaned up.
+
 Harness credentials belong to OpenCode or Copilot and stay in their own stores or environment. Skill Loom may inspect command output, credential-file presence, or environment-variable presence as authentication evidence, but it never reads credential values into its config, logs, or API responses. Preflight reports presence only.
 
 If you need multi-user or remote access, this project does not provide it. Treat that as a new architecture and security decision, not a configuration change.
