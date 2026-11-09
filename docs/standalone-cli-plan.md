@@ -379,7 +379,10 @@ Cross-harness duplication now creates the requested copy in one server mutation
 instead of creating it and then issuing a separate update. A changed-harness
 copy deliberately omits the native agent; a same-harness copy preserves it.
 This removes a partial-copy failure window but is not proof of the earlier
-browser timeout's cause.
+browser timeout's cause. UI duplicate actions also bind the source revision;
+the service serializes participating source mutations during copying and rejects
+stale revisions. The HTTP duplicate endpoint still accepts a request without
+that precondition for compatibility with existing clients.
 
 Create the claim before managed run creation or portable package installation.
 When the operation succeeds, its record identifies the same claim; when it fails,

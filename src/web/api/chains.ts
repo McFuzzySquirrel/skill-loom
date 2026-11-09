@@ -575,6 +575,7 @@ export function createChainsApi(fetchImpl: FetchLike = fetch): ChainsApi {
         {
           method: 'POST',
           body,
+          headers: revisionHeader(options.expectedRevision),
           ...optionsFor(options.signal),
         },
         fetchImpl,

@@ -605,8 +605,17 @@ test.describe('Chain inputs and save', () => {
     await expect(page.getByTestId('chain-dirty-indicator')).toContainText('Unsaved changes');
     await openFirstStepEditor(page);
     await expect(page.getByTestId('step-instruction')).toHaveValue('My unsaved instruction.');
+    await closeStepEditor(page);
+    await page.getByText('Harness and duplicate settings').click();
+    await page.getByTestId('harness-duplicate-target').selectOption('copilot');
+    await page.getByTestId('harness-duplicate-action').click();
+    await expect(page.getByTestId('chain-duplicate-error')).toContainText('CHAIN_STALE');
+    await expect(page.getByTestId('chain-dirty-indicator')).toContainText('Unsaved changes');
     const stored = await request.get(`/api/projects/${project.id}/chains/${chain.id}`);
     expect(((await stored.json()) as { chain: StoredChain }).chain.steps[0]?.instruction).toBe('External instruction.');
+    const listed = await request.get(`/api/projects/${project.id}/chains`);
+    const result = (await listed.json()) as { chains: StoredChain[] };
+    expect(result.chains.filter((item) => item.name.startsWith(draft.name))).toHaveLength(1);
   });
 });
 

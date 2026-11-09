@@ -309,9 +309,12 @@ export const chainRoutes: FastifyPluginAsync<ChainRoutesOptions> = async (
 
       try {
         const projectPath = await resolveProjectPath(registry, request.params.projectId);
+        const revision = request.headers['x-loom-chain-revision'] === undefined
+          ? undefined : chainRevisionHeader(request.headers);
         const chain = await service.duplicate(projectPath, request.params.chainId, {
           ...(parsed.data.name === undefined ? {} : { name: parsed.data.name }),
           ...(parsed.data.harness === undefined ? {} : { harness: parsed.data.harness }),
+          ...(revision === undefined ? {} : { expectedRevision: revision }),
           uniqueName: wantsUniqueName(query.data.uniqueName, parsed.data.uniqueName),
         });
         return reply.code(201).send(chainResponse(chain));

@@ -247,6 +247,20 @@ describe('chain CRUD through src/server/app.ts', () => {
     expect(stale.json()).toMatchObject({ error: { code: 'CHAIN_STALE' } });
     const current = await app.inject({ method: 'GET', url });
     expect(current.json<{ chain: Chain }>().chain.name).toBe('Reviewed change');
+    const staleCopy = await app.inject({
+      method: 'POST', url: `${url}/duplicate`, headers: { 'x-loom-chain-revision': revision },
+      payload: { harness: 'copilot' },
+    });
+    expect(staleCopy.statusCode).toBe(409);
+    expect(staleCopy.json()).toMatchObject({ error: { code: 'CHAIN_STALE' } });
+    expect(chainsOf((await listChains(app, projectId)).body)).toHaveLength(1);
+    const currentCopy = await app.inject({
+      method: 'POST', url: `${url}/duplicate`,
+      headers: { 'x-loom-chain-revision': current.json<{ revision: string }>().revision },
+      payload: { harness: 'copilot' },
+    });
+    expect(currentCopy.statusCode).toBe(201);
+    expect(chainOf(currentCopy.json()).harness).toBe('copilot');
   });
 
   it('persists and duplicates an exact native-agent selection', async () => {

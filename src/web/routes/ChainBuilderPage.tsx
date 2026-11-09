@@ -501,7 +501,10 @@ export function ChainBuilderPage({
     setDuplicateBusy(true);
     setDuplicateError(null);
     try {
-      const copy = await api.duplicateChain(projectId, chainId, { harness: target });
+      const copy = await api.duplicateChain(projectId, chainId, {
+        harness: target,
+        ...(state.document.revision === undefined ? {} : { expectedRevision: state.document.revision }),
+      });
       const agentNotice = ' Native agents are not copied when changing harnesses.';
       announce(
         `Duplicated ${source.name} as ${copy.name} with the ${

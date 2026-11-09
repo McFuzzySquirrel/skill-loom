@@ -105,6 +105,8 @@ export interface DuplicateChainOptions {
   name?: string;
   /** Select a different harness when creating the copy. */
   harness?: Chain['harness'];
+  /** Reject a copy if the source changed after it was loaded. */
+  expectedRevision?: string;
   /** Reject an explicit copy name that already exists (409). */
   uniqueName?: boolean;
 }
@@ -232,38 +234,41 @@ class ProjectChainService implements ChainService {
     options: DuplicateChainOptions = {},
   ): Promise<Chain> {
     const store = this.storeFor(projectPath);
-    const source = await store.read(chainId);
-    const name = await this.duplicateName(store, source, options);
-    const timestamp = this.timestamp();
-    const draft: ChainDraft = {
-      name,
-      harness: options.harness ?? source.harness,
-      sessionMode: source.sessionMode,
-      steps: source.steps,
-      inputs: source.inputs,
-      automaticPermissionOptIn: source.automaticPermissionOptIn,
-      ...(source.agent === undefined || (options.harness !== undefined && options.harness !== source.harness)
-        ? {} : { agent: source.agent }),
-    };
+    return withChainMutation(projectPath, chainId, async () => {
+      const source = await store.read(chainId);
+      assertRevision(source, options.expectedRevision);
+      const name = await this.duplicateName(store, source, options);
+      const timestamp = this.timestamp();
+      const draft: ChainDraft = {
+        name,
+        harness: options.harness ?? source.harness,
+        sessionMode: source.sessionMode,
+        steps: source.steps,
+        inputs: source.inputs,
+        automaticPermissionOptIn: source.automaticPermissionOptIn,
+        ...(source.agent === undefined || (options.harness !== undefined && options.harness !== source.harness)
+          ? {} : { agent: source.agent }),
+      };
 
-    const candidate = this.buildChain(draft, this.nextId(name), timestamp, timestamp);
+      const candidate = this.buildChain(draft, this.nextId(name), timestamp, timestamp);
 
-    for (let attempt = 1; attempt <= MAX_ID_ATTEMPTS; attempt += 1) {
-      try {
-        return await store.create(candidate);
-      } catch (error) {
-        if (!isAlreadyExists(error) || attempt === MAX_ID_ATTEMPTS) {
-          throw error;
+      for (let attempt = 1; attempt <= MAX_ID_ATTEMPTS; attempt += 1) {
+        try {
+          return await store.create(candidate);
+        } catch (error) {
+          if (!isAlreadyExists(error) || attempt === MAX_ID_ATTEMPTS) {
+            throw error;
+          }
+          candidate.id = this.nextId(name);
         }
-        candidate.id = this.nextId(name);
       }
-    }
 
-    throw new ChainServiceError(
-      CHAIN_SERVICE_ERROR_CODES.ID_GENERATION_FAILED,
-      'A unique chain id could not be generated.',
-      { attempts: MAX_ID_ATTEMPTS },
-    );
+      throw new ChainServiceError(
+        CHAIN_SERVICE_ERROR_CODES.ID_GENERATION_FAILED,
+        'A unique chain id could not be generated.',
+        { attempts: MAX_ID_ATTEMPTS },
+      );
+    });
   }
 
   async importChain(
