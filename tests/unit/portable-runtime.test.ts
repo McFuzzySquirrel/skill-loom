@@ -100,9 +100,12 @@ function command(
 }
 
 describe('portable bundle execution', () => {
-  it('reports safe system error codes without exposing underlying messages', async () => {
+  it.each([
+    ['EACCES', 'EACCES'],
+    ['SECRET_VALUE', undefined],
+  ])('reports only recognized system error codes without exposing messages', async (rawCode, systemCode) => {
     async function* failedInput() {
-      throw Object.assign(new Error('sensitive input and path'), { code: 'EACCES' });
+      throw Object.assign(new Error('sensitive input and path'), { code: rawCode });
       yield '';
     }
     let stderr = '';
@@ -116,10 +119,11 @@ describe('portable bundle execution', () => {
       error: {
         code: 'REQUEST_FAILED',
         message: 'The portable helper could not complete the request. Check file permissions and retry.',
-        systemCode: 'EACCES',
+        ...(systemCode === undefined ? {} : { systemCode }),
       },
     });
     expect(stderr).not.toContain('sensitive input and path');
+    expect(stderr).not.toContain('SECRET_VALUE');
   });
 
   it.skipIf(process.platform !== 'win32')('refuses executable bundle installation before claiming or creating a run', async () => {
