@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -405,6 +405,50 @@ describe('atomic writes', () => {
     await atomicWriteJson(target, createDefaultConfig());
 
     expect(JSON.parse(await readFile(target, 'utf8'))).toEqual(createDefaultConfig());
+    expect(temporaryFiles(await readdir(root))).toEqual([]);
+  });
+
+  it('retries transient Windows rename permission failures without exposing a partial target', async () => {
+    const root = await makeRoot();
+    const target = join(root, 'config.json');
+    const original = '{"old":true}\n';
+    await writeFile(target, original);
+    const waits: number[] = [];
+    let attempts = 0;
+    await atomicWriteJson(target, { new: true }, {
+      platform: 'win32',
+      delay: async (milliseconds) => { waits.push(milliseconds); },
+      renameFile: async (source, destination) => {
+        attempts += 1;
+        expect(await readFile(target, 'utf8')).toBe(original);
+        if (attempts <= 2) throw Object.assign(new Error('locked'), { code: 'EPERM' });
+        await rename(source, destination);
+      },
+    });
+    expect(attempts).toBe(3);
+    expect(waits).toEqual([10, 25]);
+    expect(JSON.parse(await readFile(target, 'utf8'))).toEqual({ new: true });
+    expect(temporaryFiles(await readdir(root))).toEqual([]);
+  });
+
+  it.each([
+    { platform: 'win32' as const, code: 'EPERM', attempts: 6 },
+    { platform: 'win32' as const, code: 'EIO', attempts: 1 },
+    { platform: 'linux' as const, code: 'EPERM', attempts: 1 },
+  ])('surfaces bounded rename failures on $platform ($code)', async ({ platform, code, attempts }) => {
+    const root = await makeRoot();
+    const target = join(root, 'config.json');
+    const original = '{"old":true}\n';
+    await writeFile(target, original);
+    const failure = Object.assign(new Error('rename failed'), { code });
+    let calls = 0;
+    await expect(atomicWriteJson(target, { new: true }, {
+      platform,
+      delay: async () => undefined,
+      renameFile: async () => { calls += 1; throw failure; },
+    })).rejects.toBe(failure);
+    expect(calls).toBe(attempts);
+    expect(await readFile(target, 'utf8')).toBe(original);
     expect(temporaryFiles(await readdir(root))).toEqual([]);
   });
 

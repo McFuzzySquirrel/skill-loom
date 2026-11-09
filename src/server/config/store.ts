@@ -3,6 +3,7 @@ import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
   CONFIG_FILE_NAME,
   CONFIG_VERSION,
@@ -171,7 +172,11 @@ export interface AtomicWriteDependencies {
   unlinkFile?: typeof unlink;
   makeTempId?: () => string;
   processId?: number;
+  platform?: NodeJS.Platform;
+  delay?: (milliseconds: number) => Promise<void>;
 }
+
+const WINDOWS_RENAME_RETRY_DELAYS_MS = [10, 25, 50, 100, 200] as const;
 
 /**
  * Write JSON through a temporary file in the target directory, fsync it, then
@@ -201,7 +206,19 @@ export async function atomicWriteJson(
     await handle.sync();
     await handle.close();
     handle = undefined;
-    await renameFile(temporary, target);
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await renameFile(temporary, target);
+        break;
+      } catch (error) {
+        const retryDelay = WINDOWS_RENAME_RETRY_DELAYS_MS[attempt];
+        if ((dependencies.platform ?? process.platform) !== 'win32' || errnoCode(error) !== 'EPERM' ||
+            retryDelay === undefined) {
+          throw error;
+        }
+        await (dependencies.delay ?? delay)(retryDelay);
+      }
+    }
     await syncDirectory(directory);
   } catch (error) {
     if (handle) {

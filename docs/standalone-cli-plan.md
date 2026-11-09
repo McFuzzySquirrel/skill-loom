@@ -147,6 +147,19 @@ These are requirements to implement and verify, not current guarantees:
    alive after direct-child cleanup. The fixture explicitly terminates that
    descendant afterward; it is evidence of the limitation, not a cleanup
    solution.
+   The focused automatic-runner and run-route suites passed on Linux, macOS
+   and Windows (`42667496576`). Automatic completion is now exposed only
+   after its final persistence succeeds; failed persistence pauses the run
+   without a completion event. A full hosted Windows suite passed
+   (`42667782904`), but an intermittent automatic-run persistence failure
+   reproduced during repeated Windows claim-completion tests (`42668268827`)
+   with `EPERM`; a later reproduction identified the atomic rename operation
+   (`42669079266`). The JSON writer now retries Windows `EPERM` rename errors
+   a bounded number of times before reporting failure, without replacing the
+   atomic rename with a copy. Persistent errors still pause the run. The fix
+   requires further Windows stress verification; a passing suite alone does not
+   establish that the intermittent failure is resolved. Diagnostics report
+   only recognized system codes and operations, not paths or content.
    A later full baseline after the profile-alias fixes passed Linux but failed
    12 of 65 macOS files and 25 of 65 Windows files (three Windows files
    skipped). This baseline predates the subsequent snapshot-mode changes.
