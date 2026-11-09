@@ -50,6 +50,19 @@ static void require_readonly(const char *path) {
   if (errno != EROFS) fail("reviewed write was not blocked by a read-only mount");
 }
 
+static void require_unprivileged_mapping(const char *path) {
+  FILE *mapping = fopen(path, "r");
+  if (mapping == NULL) fail("open namespace identity mapping");
+  unsigned long inner, outer, length;
+  char extra;
+  const int count = fscanf(mapping, "%lu %lu %lu %c", &inner, &outer, &length, &extra);
+  if (fclose(mapping) != 0) fail("close namespace identity mapping");
+  if (count != 3 || inner != 0 || outer == 0 || length != 1) {
+    fputs("The fixture must map only an unprivileged host identity to namespace root.\n", stderr);
+    exit(1);
+  }
+}
+
 static void worker(const char *path) {
   const int limit = getdtablesize();
   for (int fd = 3; fd < limit; fd++) close(fd);
@@ -114,6 +127,8 @@ int main(int argc, char **argv) {
     return 1;
   }
   alarm(30);
+  require_unprivileged_mapping("/proc/self/uid_map");
+  require_unprivileged_mapping("/proc/self/gid_map");
   // unshare --mount-proc has already installed a private procfs. NSpid in the
   // outer parent's procfs is measured by the unprivileged test driver instead.
   if (prctl(PR_SET_DUMPABLE, 0) != 0) fail("protect namespace init");

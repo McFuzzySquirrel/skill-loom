@@ -28,6 +28,9 @@ describe.skipIf(process.platform !== 'linux' || process.env.LOOM_TEST_PRIVILEGED
           process.env.RUNNER_ENVIRONMENT !== 'github-hosted') {
         throw new Error('Privileged native fixtures require explicitly opted-in disposable hosted Linux runners.');
       }
+      const uid = process.getuid!();
+      const gid = process.getgid!();
+      if (uid === 0 || gid === 0) throw new Error('The CI test driver must have an unprivileged UID and GID.');
       const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-linux-native-')));
       try {
         const binary = join(root, 'scope');
@@ -41,7 +44,8 @@ describe.skipIf(process.platform !== 'linux' || process.env.LOOM_TEST_PRIVILEGED
         for (const mode of ['finish', 'abort', 'owner-death'] as const) {
           const owner = spawn(process.execPath, [
             resolve('tests/fixtures/native-fixture-owner.cjs'),
-            '/usr/bin/unshare', '--user', '--map-root-user', '--mount', '--pid', '--fork',
+            '/usr/bin/unshare', '--user', `--map-users=0:${uid}:1`, `--map-groups=0:${gid}:1`,
+            '--setuid=0', '--setgid=0', '--mount', '--pid', '--fork',
             '--kill-child=KILL', '--mount-proc', binary, reviewed,
           ], { stdio: ['pipe', 'pipe', 'pipe'], env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin' } });
           let output = '';
@@ -95,6 +99,7 @@ describe.skipIf(process.platform !== 'linux' || process.env.LOOM_TEST_PRIVILEGED
             console.info(JSON.stringify({
               platform: 'linux', candidate: 'private-user-mount-pid-namespace', mode,
               readonlyMountEnforced: true, capabilityAndNestedNamespaceBypassDenied: true,
+              namespaceRootMapsToUnprivilegedHostIdentity: true,
               originalProcessesReaped: true,
             }));
           } finally {
