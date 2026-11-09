@@ -46,8 +46,9 @@ does not replace their instructions or make their decisions on the user's behalf
 1. Establish the desired outcome, target project, host, and permitted sources.
    Use `scenario-discovery` for catalog listing, approved refresh, full candidate
    inspection, proposals, explicit chain and redistribution review, and bundle
-   construction. Preserve each selected source, revision, repository path, and
-   fingerprint. Create and validate a CLI draft with exact remote step bindings;
+   construction. Preserve each selected candidate's identity and fingerprint,
+   including source, revision, and repository path for remote candidates.
+   Create and validate a CLI draft with exact bindings for remote skill steps;
    verify that its exported bundle matches the approved chain and packages.
    Do not execute candidate content during this phase.
 2. Offer a retained test workspace. If the user approves creating it, pass
