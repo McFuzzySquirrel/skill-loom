@@ -520,7 +520,7 @@ It returns:
 }
 ```
 
-Use `/api/health` to confirm the process is listening, the version, the resolved config directory, and the port. `activeRun` reflects the last persisted active-run pointer, not proof that a process is alive; updates can lag a live transition or remain after a failure. The endpoint does not initiate run recovery or read the config file. A corrupt or unreadable pointer returns an error rather than an inactive result. Use `GET /api/runs/active` or the UI's active-run banner for the owner's current run state.
+Use `/api/health` to confirm the process is listening, the version, the resolved config directory, and the port. `activeRun` reflects the existing run owner's current state when available and otherwise the last persisted pointer; it is not proof that a process or its descendants are alive. Persisted state may remain after a failure. The endpoint does not initiate run recovery or read the config file. A corrupt or unreadable pointer returns an error rather than an inactive result.
 
 `npm start` and the direct server entry log request/error output. The packaged CLI starts the server with the logger disabled and prints the config directory and URL. Skill Loom sends no telemetry, metrics, crash reports, or remote logs, so monitoring is local process supervision plus the health endpoint.
 

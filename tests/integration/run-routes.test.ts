@@ -1606,6 +1606,18 @@ describe('GET /api/runs and POST /api/runs/:runId/actions', () => {
     expect(healthDuring.json()).toMatchObject({
       activeRun: { active: true, runId: run.id, status: 'awaiting-user' },
     });
+    const pointerPath = join(configDirectory, 'active-run.json');
+    const originalPointer = await readFile(pointerPath, 'utf8');
+    const pointer = JSON.parse(originalPointer) as Record<string, unknown>;
+    await writeFile(pointerPath, JSON.stringify({ ...pointer, status: 'paused' }));
+    try {
+      const liveHealth = await harness.app.inject({ method: 'GET', url: '/api/health' });
+      expect(liveHealth.json()).toMatchObject({
+        activeRun: { active: true, runId: run.id, status: 'awaiting-user' },
+      });
+    } finally {
+      await writeFile(pointerPath, originalPointer);
+    }
 
     const done = await postAction(harness.app, run.id, { action: 'done' });
     expect(done.statusCode).toBe(200);

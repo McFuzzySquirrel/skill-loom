@@ -45,6 +45,8 @@ export interface RunOwnerOptions {
 
 export interface RunOwner {
   get(): Promise<RunOrchestrator>;
+  /** Observe an already-initialized owner without starting recovery. */
+  getIfInitialized(): Promise<RunOrchestrator | null>;
   recoverIfConfigured(): Promise<void>;
   withMutation<T>(task: () => Promise<T>): Promise<T>;
   withExclusiveMutation<T>(task: () => Promise<T>): Promise<T>;
@@ -138,6 +140,9 @@ export function createRunOwner(options: RunOwnerOptions): RunOwner {
 
   return {
     get,
+    async getIfInitialized() {
+      return orchestratorPromise === null ? null : orchestratorPromise;
+    },
     async recoverIfConfigured() {
       if ((options.runRecoverOnStartup ?? true) && existsSync(options.configStore.getConfigPath())) {
         await get();

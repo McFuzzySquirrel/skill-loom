@@ -426,7 +426,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       'http://localhost:5173',
     ],
     terminalManager,
-    ...(options.getActiveRun === undefined ? {} : { getActiveRun: options.getActiveRun }),
+    getActiveRun: options.getActiveRun ?? (async () => {
+      const orchestrator = await runOwner.getIfInitialized();
+      if (orchestrator === null) return undefined;
+      const active = await orchestrator.getActiveRun();
+      return { active: active.active, runId: active.runId, status: active.status };
+    }),
     ...(options.projectGitInit === undefined ? {} : { gitInit: options.projectGitInit }),
     ...(options.globalChainService === undefined
       ? {}

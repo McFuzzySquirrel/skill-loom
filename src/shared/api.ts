@@ -69,7 +69,7 @@ export function isApiErrorEnvelope(value: unknown): value is ApiErrorEnvelope {
   return typeof code === 'string' && code !== '' && typeof message === 'string';
 }
 
-/** Summary of the last persisted active-run pointer. */
+/** Active-run summary from the existing owner or its persisted pointer. */
 export interface ActiveRunSummary {
   active: boolean;
   runId: string | null;
