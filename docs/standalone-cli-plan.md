@@ -128,6 +128,10 @@ These are requirements to implement and verify, not current guarantees:
    mirrors. These checks do not lock files against concurrent writers.
    The full portable-runtime unit suite subsequently passed on hosted Windows
    (`42647762226`); executable-mode installation and reuse remain blocked.
+   The chain-bundle integration suite passed on hosted Windows (`42648524051`),
+   including rejection of executable bundle installation before skills are
+   written. POSIX file-mode and graceful signal tests do not establish Windows
+   ACL privacy or graceful Windows process shutdown.
    The focused Git blob-reader suite also passed on all three hosted platforms
    (`42647505376`), including timeout and direct-child reaping; this does not
    verify descendant containment.

@@ -284,15 +284,23 @@ describe('executable resolution', () => {
     expect(registry.resolveExecutable('opencode').executable).toBe(opencodePath);
   });
 
-  it('skips non-executable files and directories that share the command name', async () => {
-    const nonExecutableRoot = join(root, 'bin-non-exec');
+  it('skips directories that share the command name', async () => {
     const directoryRoot = join(root, 'bin-directory');
-    await writeExecutable(nonExecutableRoot, 'opencode', 0o644);
     await mkdir(join(directoryRoot, 'opencode'), { recursive: true });
-    await chmod(join(directoryRoot, 'opencode'), 0o755);
+    const registry = createHarnessRegistry({
+      pathEnv: pathValue(directoryRoot, binA),
+      cwd: root,
+    });
+
+    expect(registry.resolveExecutable('opencode').executable).toBe(opencodePath);
+  });
+
+  it.skipIf(process.platform === 'win32')('skips non-executable files that share the command name', async () => {
+    const nonExecutableRoot = join(root, 'bin-non-exec');
+    await writeExecutable(nonExecutableRoot, 'opencode', 0o644);
 
     const registry = createHarnessRegistry({
-      pathEnv: pathValue(nonExecutableRoot, directoryRoot, binA),
+      pathEnv: pathValue(nonExecutableRoot, binA),
       cwd: root,
     });
 

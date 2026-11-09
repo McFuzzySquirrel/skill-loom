@@ -125,7 +125,9 @@ describe('missing configuration', () => {
     const onDiskText = await readFile(store.getConfigPath(), 'utf8');
     expect(onDiskText.endsWith('\n')).toBe(true);
     expect(JSON.parse(onDiskText)).toEqual(createDefaultConfig());
-    expect((await stat(store.getConfigPath())).mode & 0o777).toBe(0o600);
+    if (process.platform !== 'win32') {
+      expect((await stat(store.getConfigPath())).mode & 0o777).toBe(0o600);
+    }
   });
 
   it('creates the file on the first update without a prior read', async () => {

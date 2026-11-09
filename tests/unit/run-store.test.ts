@@ -160,7 +160,9 @@ describe('run storage layout', () => {
 
     expect(created).toEqual(run);
     expect(await fileExists(runFile(run.id))).toBe(true);
-    expect((await stat(runFile(run.id))).mode & 0o777).toBe(0o600);
+    if (process.platform !== 'win32') {
+      expect((await stat(runFile(run.id))).mode & 0o777).toBe(0o600);
+    }
     expect(JSON.parse(await readFile(runFile(run.id), 'utf8'))).toEqual(run);
     expect(await temporaryFiles(runsDirectory())).toEqual([]);
 

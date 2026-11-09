@@ -163,7 +163,7 @@ describe('copySkillIntoProject', () => {
     expect(await stat(outside).then((info) => info.isDirectory())).toBe(true);
   });
 
-  it('preserves executable package-file permissions', async () => {
+  it.skipIf(process.platform === 'win32')('preserves executable package-file permissions', async () => {
     const script = join(sourcePath, 'scripts', 'check.sh');
     await mkdir(join(sourcePath, 'scripts'), { recursive: true });
     await writeFile(script, '#!/bin/sh\nexit 0\n', 'utf8');

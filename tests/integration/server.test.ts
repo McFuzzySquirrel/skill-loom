@@ -320,7 +320,7 @@ describe('production static serving and SPA fallback', () => {
 });
 
 describe('process lifecycle', () => {
-  it.each(['SIGTERM', 'SIGINT'] as const)(
+  it.skipIf(process.platform === 'win32').each(['SIGTERM', 'SIGINT'] as const)(
     'closes the real server and exits on %s',
     async (signal) => {
       const port = await freePort();

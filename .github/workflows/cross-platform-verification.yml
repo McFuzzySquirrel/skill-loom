@@ -12,7 +12,7 @@ on:
         description: Test scope
         type: choice
         default: full
-        options: [full, claims, portable, portable-no-follow, chain-bundles, catalog, catalog-collision, git-batch, profile-alias, snapshot-modes, macos-baseline, preflight, filesystem, harness-exe, cli, automatic, workspaces, library, package, mode-probe, containment-probe, terminal, terminal-macos-helper]
+        options: [full, claims, portable, portable-no-follow, chain-bundles, windows-baseline, catalog, catalog-collision, git-batch, profile-alias, snapshot-modes, macos-baseline, preflight, filesystem, harness-exe, cli, automatic, workspaces, library, package, mode-probe, containment-probe, terminal, terminal-macos-helper]
 
 permissions:
   contents: read
@@ -45,6 +45,8 @@ jobs:
         run: npx vitest run tests/unit/portable-runtime.test.ts -t "refuses oversized or linked|rejects a linked bundle|corrupt or unsafe sibling"
       - if: inputs.suite == 'chain-bundles'
         run: npx vitest run tests/integration/chain-bundles.test.ts
+      - if: inputs.suite == 'windows-baseline'
+        run: npx vitest run tests/unit/chain-store.test.ts tests/unit/config.test.ts tests/unit/run-store.test.ts tests/unit/catalog-copy.test.ts tests/unit/harness-registry.test.ts tests/integration/server.test.ts
       - if: inputs.suite == 'catalog'
         run: npx vitest run tests/unit/catalog-remote.test.ts tests/integration/discovery-routes.test.ts
       - if: inputs.suite == 'catalog-collision'

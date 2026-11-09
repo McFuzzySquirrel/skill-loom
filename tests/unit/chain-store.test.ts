@@ -135,7 +135,9 @@ describe('chain storage layout', () => {
 
     const onDisk = JSON.parse(await readFile(chainFile('chain-alpha'), 'utf8')) as Chain;
     expect(onDisk).toEqual(makeChain());
-    expect((await stat(chainFile('chain-alpha'))).mode & 0o777).toBe(0o600);
+    if (process.platform !== 'win32') {
+      expect((await stat(chainFile('chain-alpha'))).mode & 0o777).toBe(0o600);
+    }
     expect(await temporaryFiles(chainDirectory())).toEqual([]);
   });
 
