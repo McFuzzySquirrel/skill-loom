@@ -70,6 +70,8 @@ public static class WindowsNativeScopeFixture {
     [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr CreateJobObjectW(IntPtr attributes, IntPtr name);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool SetInformationJobObject(IntPtr job, int type, ref ExtendedLimits limits, uint size);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool QueryInformationJobObject(IntPtr job, int type, out Accounting value, uint size, IntPtr returned);
+    [DllImport("kernel32.dll", EntryPoint = "QueryInformationJobObject", SetLastError = true)]
+    static extern bool QueryProcessList(IntPtr job, int type, IntPtr value, uint size, IntPtr returned);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool IsProcessInJob(IntPtr process, IntPtr job, out bool member);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool TerminateJobObject(IntPtr job, uint code);
@@ -171,6 +173,24 @@ public static class WindowsNativeScopeFixture {
         Accounting value;
         Check(QueryInformationJobObject(job, 1, out value, (uint)Marshal.SizeOf(typeof(Accounting)), IntPtr.Zero), "query job");
         return value.ActiveProcesses;
+    }
+    static string DescribeJob(IntPtr job) {
+        int size = 8 + 32 * IntPtr.Size;
+        IntPtr buffer = Marshal.AllocHGlobal(size);
+        try {
+            Check(QueryProcessList(job, 3, buffer, (uint)size, IntPtr.Zero), "query bounded job diagnostics");
+            int count = Marshal.ReadInt32(buffer, 4);
+            Require(count >= 0 && count <= 32, "Job diagnostics exceeded their bound.");
+            var details = new List<string>();
+            for (int index = 0; index < count; index++) {
+                int pid = checked((int)Marshal.ReadIntPtr(buffer, 8 + index * IntPtr.Size).ToInt64());
+                string name;
+                try { using (Process process = Process.GetProcessById(pid)) name = process.ProcessName; }
+                catch (ArgumentException) { name = "already-exited"; }
+                details.Add(pid + ":" + name);
+            }
+            return string.Join(",", details.ToArray());
+        } finally { Marshal.FreeHGlobal(buffer); }
     }
     static void VerifyToken(IntPtr process, SecurityIdentifier expected) {
         IntPtr token;
@@ -281,7 +301,7 @@ public static class WindowsNativeScopeFixture {
             Require(GetProcessId(worker) == actor.ProcessId, "Worker is not the originally suspended process.");
             Capture(workspace, "child", expected, job);
             Capture(workspace, "grandchild", expected, job);
-            Require(Active(job) == 3, "Unexpected active job membership.");
+            Require(Active(job) == 3, "Unexpected active job membership: " + Active(job) + " [" + DescribeJob(job) + "].");
             Require(File.ReadAllText(Path.Combine(workspace, "checks")) == "read;write-denied;dacl-denied;dup-denied;breakaway-denied",
                 "Missing protection evidence.");
             if (mode == "owner-death") {
