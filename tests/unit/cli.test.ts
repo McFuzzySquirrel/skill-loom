@@ -220,6 +220,7 @@ describe('CLI output and environment', () => {
     expect(cliUsage()).toContain('Skill Loom');
     expect(cliUsage()).toContain('skill-loom');
     expect(cliUsage()).toContain('LOOM_CONFIG_DIR');
+    expect(cliUsage()).toContain('Catalog mutations and project catalog paging require a running service.');
   });
 
   it('prints help and version without starting the server', async () => {

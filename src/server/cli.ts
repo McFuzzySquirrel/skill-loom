@@ -71,7 +71,8 @@ Environment:
   LOOM_WEB_ROOT           Built web asset directory override
 
 Bundle inspection is read-only and returns JSON without starting the server.
-Catalog commands read configured sources and snapshots without starting the server.
+Read-only catalog source, limit, and snapshot commands do not start the server.
+Catalog mutations and project catalog paging require a running service.
 The server always binds to loopback. Open the printed URL in a browser.`;
 }
 

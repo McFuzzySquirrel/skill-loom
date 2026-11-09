@@ -443,7 +443,10 @@ The portable helper's minimum Node 24.0 release emits an experimental SQLite
 warning on stderr without a runtime flag. The skill now specifies
 `--disable-warning=ExperimentalWarning` for machine-readable errors, which also
 suppresses other experimental warnings. Node 24.0 portable and claim tests have
-passed with that invocation; this is not live harness verification.
+passed with that invocation. The control integration suite, including workspace
+evaluation, also passes under Node 24.0; subprocesses without the warning flag
+can still emit SQLite experimental warnings. This is not live harness
+verification.
 One combined browser run timed out waiting for a duplicated chain to appear
 after choosing another harness; fourteen isolated reruns passed. The cause was not
 established, so the combined-journey failure remains an open verification issue.
