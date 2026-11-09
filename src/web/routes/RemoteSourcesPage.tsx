@@ -12,12 +12,26 @@ import { RemoteCatalogLimits } from '../components/RemoteCatalogLimits';
 import { useStatusAnnouncer } from '../components/StatusRegion';
 import { Link } from '../router';
 
-function SnapshotContents({ snapshot }: { snapshot: RemoteSkillSnapshot }) {
+function SnapshotContents({ snapshot, disabled, refreshing, onRefresh }: {
+  snapshot: RemoteSkillSnapshot;
+  disabled: boolean;
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
   const [shown, setShown] = useState(50);
   const [shownAgents, setShownAgents] = useState(50);
   return (
     <section aria-label={`Snapshot ${snapshot.revision}`}>
       <h4>Commit <code>{snapshot.revision}</code></h4>
+      <button
+        type="button"
+        className="button button--secondary"
+        aria-label={`Refresh saved commit ${snapshot.revision}`}
+        disabled={disabled}
+        onClick={onRefresh}
+      >
+        {refreshing ? 'Refreshing saved commit…' : 'Refresh this saved commit'}
+      </button>
       {snapshot.packages.length === 0 ? (
         <p>No skill packages were found at this commit.</p>
       ) : (
@@ -123,11 +137,11 @@ export function RemoteSourcesPage({ api = catalogApi }: { api?: CatalogApi }) {
     }
   };
 
-  const refreshSource = async (source: RemoteSkillSource) => {
-    setBusyId(source.id);
+  const refreshSource = async (source: RemoteSkillSource, revision?: string) => {
+    setBusyId(revision === undefined ? source.id : `${source.id}:${revision}`);
     setError(null);
     try {
-      const snapshot = await api.refreshRemoteSource(source.id);
+      const snapshot = await api.refreshRemoteSource(source.id, revision === undefined ? {} : { revision });
       setSnapshots((current) => ({
         ...current,
         [source.id]: [
@@ -269,8 +283,15 @@ export function RemoteSourcesPage({ api = catalogApi }: { api?: CatalogApi }) {
                   Unregister
                 </button>
               </div>
-              {(snapshots[source.id] ?? []).map((snapshot) =>
-                <SnapshotContents key={snapshot.revision} snapshot={snapshot} />)}
+              {(snapshots[source.id] ?? []).map((snapshot) => (
+                <SnapshotContents
+                  key={snapshot.revision}
+                  snapshot={snapshot}
+                  disabled={busyId !== null}
+                  refreshing={busyId === `${source.id}:${snapshot.revision}`}
+                  onRefresh={() => void refreshSource(source, snapshot.revision)}
+                />
+              ))}
             </article>
           ))}
         </div>

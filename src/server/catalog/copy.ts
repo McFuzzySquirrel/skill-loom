@@ -12,7 +12,7 @@ import {
 import { basename, join } from 'node:path';
 import type { ScenarioSkillSource } from '../../shared/presets.js';
 import { SHARED_PROJECT_SKILLS_SEGMENTS, sharedProjectSkillRoot } from './project-paths.js';
-import { snapshotPackageFingerprint } from './snapshot-fingerprint.js';
+import { snapshotPackageFingerprint, snapshotReviewFingerprint } from './snapshot-fingerprint.js';
 import { REMOTE_SNAPSHOT_CONTENT, type SkillEntry, type SkillHarness } from './types.js';
 
 /**
@@ -236,7 +236,9 @@ export async function copySkillIntoProject(
       }
     }
     await visit(root, '', 0);
-    if ((remainingExecutables?.size ?? 0) !== 0 || snapshotPackageFingerprint(files) !== snapshot.fingerprint) {
+    if ((remainingExecutables?.size ?? 0) !== 0 ||
+        snapshotPackageFingerprint(files) !== snapshot.fingerprint ||
+        snapshotReviewFingerprint(files) !== snapshot.reviewFingerprint) {
       throw unsafe();
     }
   }

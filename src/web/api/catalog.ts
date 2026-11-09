@@ -240,7 +240,7 @@ export interface CatalogApi {
   ) => Promise<RemoteSkillSnapshot[]>;
   refreshRemoteSource: (
     sourceId: string,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; revision?: string },
   ) => Promise<RemoteSkillSnapshot>;
 }
 
@@ -888,7 +888,11 @@ export function createCatalogApi(fetchImpl: FetchLike = fetch): CatalogApi {
     async refreshRemoteSource(sourceId, options = {}): Promise<RemoteSkillSnapshot> {
       const value = await requestJson<unknown>(
         `/api/settings/remote-skill-sources/${encodeURIComponent(sourceId)}/refresh`,
-        { method: 'POST', ...optionsFor(options.signal) },
+        {
+          method: 'POST',
+          ...(options.revision === undefined ? {} : { body: { revision: options.revision } }),
+          ...optionsFor(options.signal),
+        },
         fetchImpl,
       );
       if (!isRecord(value)) throw invalidResponse('remote skill refresh');

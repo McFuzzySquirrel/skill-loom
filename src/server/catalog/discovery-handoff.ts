@@ -15,6 +15,7 @@ import {
 } from '../../shared/discovery-handoff.js';
 import { validatePackagePath } from '../../portable/bundle.js';
 import type { ConfigStore } from '../config/store.js';
+import { snapshotReviewFingerprint } from './snapshot-fingerprint.js';
 import {
   findRemoteSkillSnapshot,
   listRemoteSkillSources,
@@ -165,6 +166,9 @@ export async function prepareDiscoveryHandoff(
     const packageBytes = files.reduce((sum, file) => sum + Buffer.byteLength(file.content, 'base64'), 0);
     if (
       actualFingerprint !== packageInfo.fingerprint ||
+      snapshotReviewFingerprint(files.map((file) => ({
+        path: file.path, executable: file.executable, content: Buffer.from(file.content, 'base64'),
+      }))) !== resolvedPackage.reviewFingerprint ||
       files.length !== packageInfo.files ||
       packageBytes !== packageInfo.bytes
     ) {

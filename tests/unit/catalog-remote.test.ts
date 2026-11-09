@@ -19,6 +19,7 @@ import {
   type RemoteSourceGitRunner,
 } from '../../src/server/catalog/remote.js';
 import { writeSnapshotIndex } from '../../src/server/catalog/snapshot-index.js';
+import { snapshotPackageFingerprint, snapshotReviewFingerprint } from '../../src/server/catalog/snapshot-fingerprint.js';
 
 const roots: string[] = [];
 const revision = 'a'.repeat(40);
@@ -61,7 +62,7 @@ function fakeGit(tree = [
     async run(args, _cwd, _timeoutMs, maxOutputBytes) {
       commands.push(args);
       if (maxOutputBytes !== undefined) outputLimits.push(maxOutputBytes);
-      if (args[0] === 'clone' || args[1] === 'fetch') return { stdout: '' };
+      if (args[0] === 'clone' || args.includes('fetch')) return { stdout: '' };
       if (args.includes('rev-parse')) return { stdout: `${revision}\n` };
       if (args.includes('ls-tree')) return { stdout: tree };
       if (args.includes('cat-file')) {
@@ -79,7 +80,7 @@ describe('remote skill source snapshots', () => {
     const root = await makeRoot();
     const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
     await store.update({
-      remoteSkillSources: [{ id: 'demo-source', repository: 'https://example.com/acme/skills.git' }],
+      remoteSkillSources: [{ id: 'demo-source', repository: 'https://example.com/acme/skills.git', ref: 'main' }],
     });
     const refresh = () => refreshRemoteSkillSource(store, 'demo-source', {
       gitRunner: fakeGit().run, temporaryDirectory: root,
@@ -112,9 +113,128 @@ describe('remote skill source snapshots', () => {
     } else {
       await expect(resolveSnapshotPackagePath(store.getConfigDir(), snapshot, entry)).resolves.toBeTruthy();
     }
-    expect(await refresh()).toEqual(snapshot);
+    const historical = fakeGit();
+    expect(await refreshRemoteSkillSource(store, 'demo-source', {
+      revision, gitRunner: historical.run, temporaryDirectory: root,
+    })).toEqual(snapshot);
+    expect(historical.commands.some((args) => args.includes('fetch') && args.includes(revision))).toBe(true);
+    expect(historical.commands.find((args) => args[0] === 'clone')).not.toContain('--branch=main');
+    expect((await store.get()).remoteSkillSources[0]?.ref).toBe('main');
     expect(JSON.parse(await readFile(modePath, 'utf8'))).toEqual(expected);
     await expect(resolveSnapshotPackagePath(store.getConfigDir(), snapshot, entry)).resolves.toBeTruthy();
+  });
+
+  it('requires a framed review index and restores it only after a matching refresh', async () => {
+    const root = await makeRoot();
+    const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
+    await store.update({
+      remoteSkillSources: [{ id: 'demo-source', repository: 'https://example.com/acme/skills.git' }],
+    });
+    const refresh = () => refreshRemoteSkillSource(store, 'demo-source', {
+      gitRunner: fakeGit().run, temporaryDirectory: root,
+    });
+    const snapshot = await refresh();
+    const entry = snapshot.packages[0]!;
+    const path = join(store.getConfigDir(), 'catalog-sources', 'demo-source', revision, 'modes', `${entry.directory}.review.json`);
+    const index = await readFile(path, 'utf8');
+    for (const invalid of ['{"version":1,"fingerprint":"bad"}', '{"version":2,"fingerprint":"' + '0'.repeat(64) + '"}']) {
+      await writeFile(path, invalid);
+      await expect(resolveSnapshotPackagePath(store.getConfigDir(), snapshot, entry))
+        .rejects.toMatchObject({ code: REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT });
+      await expect(refresh()).rejects.toMatchObject({ code: REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT });
+    }
+    await writeFile(path, index);
+    await unlink(path);
+    const modePath = join(store.getConfigDir(), 'catalog-sources', 'demo-source', revision, 'modes', `${entry.directory}.json`);
+    const modes = await readFile(modePath, 'utf8');
+    await unlink(modePath);
+    await expect(resolveSnapshotPackagePath(store.getConfigDir(), snapshot, entry))
+      .rejects.toMatchObject({ code: REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT, details: { reason: 'REVIEW_INDEX_MISSING' } });
+    expect(await refreshRemoteSkillSource(store, 'demo-source', {
+      revision, gitRunner: fakeGit().run, temporaryDirectory: root,
+    })).toEqual(snapshot);
+    expect(await readFile(path, 'utf8')).toBe(index);
+    expect(await readFile(modePath, 'utf8')).toBe(modes);
+    await expect(resolveSnapshotPackagePath(store.getConfigDir(), snapshot, entry)).resolves.toBeTruthy();
+  });
+
+  it('rejects equal-length package substitutions that collide under the legacy fingerprint', async () => {
+    const root = await makeRoot();
+    const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
+    await store.update({
+      remoteSkillSources: [{ id: 'demo-source', repository: 'https://example.com/acme/skills.git' }],
+    });
+    const skill = Buffer.from('---\nname: demo-skill\ndescription: A remote demo.\n---\n');
+    const original = [
+      { path: 'SKILL.md', executable: false, content: skill },
+      { path: 'b', executable: false, content: Buffer.from('prefixc\0-\0suffix') },
+    ];
+    const altered = [
+      { path: 'SKILL.md', executable: false, content: Buffer.concat([skill, Buffer.from('b\0-\0prefix')]) },
+      { path: 'c', executable: false, content: Buffer.from('suffix') },
+    ];
+    expect(snapshotPackageFingerprint(original)).toBe(snapshotPackageFingerprint(altered));
+    expect(snapshotReviewFingerprint(original)).not.toBe(snapshotReviewFingerprint(altered));
+    const tree = [
+      `100644 blob ${skillBlob}\tcollection/demo/SKILL.md\0`,
+      `100644 blob ${readmeBlob}\tcollection/demo/b\0`,
+    ].join('');
+    const gitRunner: RemoteSourceGitRunner = async (args) => {
+      if (args[0] === 'clone' || args[1] === 'fetch') return { stdout: '' };
+      if (args.includes('rev-parse')) return { stdout: `${revision}\n` };
+      if (args.includes('ls-tree')) return { stdout: tree };
+      if (args.includes('cat-file')) return { stdout: args.at(-1) === skillBlob ? original[0]!.content : original[1]!.content };
+      throw new Error('Unexpected Git request.');
+    };
+    const refresh = () => refreshRemoteSkillSource(store, 'demo-source', { gitRunner, temporaryDirectory: root });
+    const snapshot = await refresh();
+    const entry = snapshot.packages[0]!;
+    const snapshotRoot = join(store.getConfigDir(), 'catalog-sources', 'demo-source', revision);
+    const packagePath = join(snapshotRoot, 'packages', entry.directory);
+    await writeFile(join(packagePath, 'SKILL.md'), altered[0]!.content);
+    await unlink(join(packagePath, 'b'));
+    await writeFile(join(packagePath, 'c'), altered[1]!.content);
+    await expect(resolveSnapshotPackagePath(store.getConfigDir(), snapshot, entry))
+      .rejects.toMatchObject({ code: REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT });
+    await expect(refresh()).rejects.toMatchObject({ code: REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT });
+    await unlink(join(snapshotRoot, 'modes', `${entry.directory}.review.json`));
+    await expect(refresh()).rejects.toMatchObject({ code: REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT });
+  });
+
+  it('only refreshes saved commits and rejects a different resolved commit', async () => {
+    const root = await makeRoot();
+    const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
+    await store.update({
+      remoteSkillSources: [{ id: 'demo-source', repository: 'https://example.com/acme/skills.git', ref: 'main' }],
+    });
+    await refreshRemoteSkillSource(store, 'demo-source', { gitRunner: fakeGit().run, temporaryDirectory: root });
+    for (const invalid of ['../invalid', 'f'.repeat(40)]) {
+      const unknown = fakeGit();
+      await expect(refreshRemoteSkillSource(store, 'demo-source', {
+        revision: invalid, gitRunner: unknown.run, temporaryDirectory: root,
+      })).rejects.toMatchObject({ code: REMOTE_SOURCE_ERROR_CODES.NOT_FOUND });
+      expect(unknown.commands).toEqual([]);
+    }
+    const base = fakeGit();
+    const mismatch: RemoteSourceGitRunner = async (args, cwd, timeout, maxOutput) =>
+      args.includes('rev-parse') ? { stdout: `${'f'.repeat(40)}\n` } :
+        base.run(args, cwd, timeout, maxOutput);
+    await expect(refreshRemoteSkillSource(store, 'demo-source', {
+      revision, gitRunner: mismatch, temporaryDirectory: root,
+    })).rejects.toMatchObject({ code: REMOTE_SOURCE_ERROR_CODES.CLONE_FAILED });
+    const resolutions: string[][] = [];
+    const failing: RemoteSourceGitRunner = async (args, cwd, timeout, maxOutput) => {
+      if (args.includes('rev-parse')) {
+        resolutions.push(args);
+        throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.CLONE_FAILED, 'missing commit');
+      }
+      return base.run(args, cwd, timeout, maxOutput);
+    };
+    await expect(refreshRemoteSkillSource(store, 'demo-source', {
+      revision, gitRunner: failing, temporaryDirectory: root,
+    })).rejects.toMatchObject({ code: REMOTE_SOURCE_ERROR_CODES.CLONE_FAILED });
+    expect(resolutions).toHaveLength(1);
+    expect(resolutions[0]).toContain('FETCH_HEAD^{commit}');
   });
 
   it('reuses an existing snapshot only after verifying its manifest, content, and index', async () => {

@@ -617,8 +617,13 @@ async function dispatch(
       return { sourceId: request.sourceId, removed: true };
     }
     case 'catalog.source.refresh': {
-      const request = parse(z.strictObject({ sourceId }));
-      const snapshot = await refreshRemoteSkillSource(configStore, request.sourceId, { ...(signal === undefined ? {} : { signal }) });
+      const request = parse(z.strictObject({
+        sourceId, revision: z.string().regex(/^[a-f0-9]{40,64}$/).optional(),
+      }));
+      const snapshot = await refreshRemoteSkillSource(configStore, request.sourceId, {
+        ...(signal === undefined ? {} : { signal }),
+        ...(request.revision === undefined ? {} : { revision: request.revision }),
+      });
       return { sourceId: snapshot.sourceId, revision: snapshot.revision, skills: snapshot.packages.length, agents: snapshot.agents.length };
     }
     case 'catalog.limits.get':

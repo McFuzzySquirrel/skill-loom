@@ -60,6 +60,7 @@ export interface SkillEntry {
   repositoryPath?: string;
   [REMOTE_SNAPSHOT_CONTENT]?: {
     fingerprint: string;
+    reviewFingerprint: string;
     executablePaths?: string[];
   };
   /** Copilot can report disabled entries; filesystem discovery is enabled. */

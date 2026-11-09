@@ -58,3 +58,37 @@ test('protects unsaved limits from navigation and repository removal', async ({ 
     await request.delete(`/api/settings/remote-skill-sources/${source.id}`);
   }
 });
+
+test('refreshes an explicitly selected saved commit', async ({ page, request }) => {
+  const repository = `https://example.invalid/saved-${String(process.pid)}.git`;
+  const added = await request.post('/api/settings/remote-skill-sources', { data: { repository, ref: 'main' } });
+  const { source } = await added.json() as { source: { id: string } };
+  const revision = 'a'.repeat(40);
+  const snapshot = { version: 1, sourceId: source.id, repository, revision, packages: [], agents: [] };
+  let releaseRefresh: () => void = () => {};
+  const pending = new Promise<void>((resolve) => { releaseRefresh = resolve; });
+  let body: unknown;
+  await page.route(`**/api/settings/remote-skill-sources/${source.id}/snapshots`, async (route) => {
+    await route.fulfill({ json: { snapshots: [snapshot] } });
+  });
+  await page.route(`**/api/settings/remote-skill-sources/${source.id}/refresh`, async (route) => {
+    body = route.request().postDataJSON();
+    await pending;
+    await route.fulfill({ status: 201, json: { snapshot } });
+  });
+  try {
+    await page.goto('/sources');
+    const button = page.getByRole('button', { name: `Refresh saved commit ${revision}` });
+    await button.focus();
+    await page.keyboard.press('Enter');
+    await expect(button).toBeDisabled();
+    await expect(button).toHaveText('Refreshing saved commit…');
+    await expect.poll(() => body).toEqual({ revision });
+    releaseRefresh();
+    await expect(button).toBeEnabled();
+    await expect(page.getByRole('status')).toContainText(`Refreshed ${repository} at commit ${revision.slice(0, 12)}`);
+  } finally {
+    releaseRefresh();
+    await request.delete(`/api/settings/remote-skill-sources/${source.id}`);
+  }
+});

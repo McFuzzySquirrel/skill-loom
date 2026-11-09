@@ -20,6 +20,7 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import { frontmatterString, parseSkillFrontmatter } from './frontmatter.js';
 import { createGitBlobReader, GitBatchError } from './git-batch.js';
+import { snapshotReviewFingerprint } from './snapshot-fingerprint.js';
 import { MAX_SNAPSHOT_INDEX_BYTES, readSnapshotIndex, SnapshotIndexTooLarge, writeSnapshotIndex } from './snapshot-index.js';
 import { exceedsStagingLimits, type StagingLimit } from './staging-limits.js';
 import {
@@ -68,6 +69,11 @@ const snapshotModesSchema = z.strictObject({
   executablePaths: z.array(z.string().min(1).max(4_096)).max(REMOTE_CATALOG_HARD_LIMITS.maxFiles),
 });
 type SnapshotModes = z.infer<typeof snapshotModesSchema>;
+const snapshotReviewSchema = z.strictObject({
+  version: z.literal(1),
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+});
+type SnapshotReview = z.infer<typeof snapshotReviewSchema>;
 
 export type RemoteSkillSnapshot = z.infer<typeof snapshotManifestSchema>;
 export type RemoteNativeAgent = RemoteSkillSnapshot['agents'][number];
@@ -86,6 +92,8 @@ export interface RemoteSourceOptions {
   temporaryDirectory?: string;
   /** Cancel work before snapshot publication. */
   signal?: AbortSignal;
+  /** Refresh an already saved exact commit without changing the configured ref. */
+  revision?: string;
 }
 
 export const REMOTE_SOURCE_ERROR_CODES = {
@@ -290,6 +298,18 @@ async function refreshRemoteSkillSourceUnlocked(
       { sourceId },
     );
   }
+  if (options.revision !== undefined) {
+    if (!/^[a-f0-9]{40,64}$/.test(options.revision) ||
+        await findRemoteSkillSnapshot(configStore.getConfigDir(), sourceId, options.revision) === undefined) {
+      throw new RemoteSourceError(
+        REMOTE_SOURCE_ERROR_CODES.NOT_FOUND,
+        'The saved remote snapshot was not found.',
+        { sourceId },
+      );
+    }
+  }
+  const ref = options.revision ?? source.ref;
+  const requestedCommit = ref !== undefined && isCommit(ref) ? ref.toLowerCase() : undefined;
   const limits = RemoteCatalogLimitsSchema.parse({
     ...config.remoteCatalogLimits,
     ...Object.fromEntries(Object.entries(source.limits ?? {}).filter(([, value]) => value !== undefined)),
@@ -318,7 +338,7 @@ async function refreshRemoteSkillSourceUnlocked(
         '--depth=1',
         '--filter=blob:none',
         '--no-tags',
-        ...(source.ref === undefined || isCommit(source.ref) ? [] : [`--branch=${source.ref}`]),
+        ...(ref === undefined || isCommit(ref) ? [] : [`--branch=${ref}`]),
         '--',
         source.repository,
         clonePath,
@@ -328,8 +348,8 @@ async function refreshRemoteSkillSourceUnlocked(
       limits.maxCommandOutputBytes,
     );
 
-    if (source.ref !== undefined && isCommit(source.ref)) {
-      await git(['-C', clonePath, 'fetch', '--depth=1', 'origin', source.ref], workRoot,
+    if (requestedCommit !== undefined) {
+      await git(['-C', clonePath, 'fetch', '--depth=1', 'origin', requestedCommit], workRoot,
         limits.commandTimeoutMs, limits.maxCommandOutputBytes);
     }
 
@@ -340,6 +360,7 @@ async function refreshRemoteSkillSourceUnlocked(
       limits.maxCommandOutputBytes,
     ).catch(async (error: unknown) => {
       checkCancelled();
+      if (requestedCommit !== undefined) throw error;
       if (error instanceof RemoteSourceError && error.code !== REMOTE_SOURCE_ERROR_CODES.CLONE_FAILED) throw error;
       return git(
         ['-C', clonePath, 'rev-parse', '--verify', 'HEAD^{commit}'],
@@ -355,6 +376,13 @@ async function refreshRemoteSkillSourceUnlocked(
         REMOTE_SOURCE_ERROR_CODES.CLONE_FAILED,
         'Git did not resolve the remote source to a valid commit.',
         { sourceId },
+      );
+    }
+    if (requestedCommit !== undefined && revision !== requestedCommit) {
+      throw new RemoteSourceError(
+        REMOTE_SOURCE_ERROR_CODES.CLONE_FAILED,
+        'Git resolved a different commit than the one requested.',
+        { sourceId, revision: requestedCommit },
       );
     }
 
@@ -473,6 +501,12 @@ async function refreshRemoteSkillSourceUnlocked(
           version: 1,
           executablePaths: fingerprintFiles.filter((file) => file.mode === 'x').map((file) => file.path),
         });
+        await writeSnapshotReview(temporarySnapshot, packageDirectory, {
+          version: 1,
+          fingerprint: snapshotReviewFingerprint(fingerprintFiles.map((file) => ({
+            path: file.path, content: file.content, executable: file.mode === 'x',
+          }))),
+        });
         const metadata = parseSkillFrontmatter(skillText);
         packageManifests.push({
           name: frontmatterString(metadata.data, 'name') ?? basename(packagePath),
@@ -571,6 +605,7 @@ async function refreshRemoteSkillSourceUnlocked(
           throw snapshotCorrupt('IMMUTABLE_MISMATCH');
         }
         const missingModes: Array<{ directory: string; modes: SnapshotModes }> = [];
+        const missingReviews: Array<{ directory: string; review: SnapshotReview }> = [];
         for (const entry of existing.packages) {
           checkCancelled();
           const stagedModes = await readSnapshotModes(temporarySnapshot, entry.directory);
@@ -579,8 +614,15 @@ async function refreshRemoteSkillSourceUnlocked(
           if (savedModes !== undefined && JSON.stringify(savedModes) !== JSON.stringify(stagedModes)) {
             throw snapshotCorrupt('MODE_INDEX_INVALID');
           }
-          await verifySnapshotPackage(configStore.getConfigDir(), existing, entry, savedModes ?? stagedModes);
+          const stagedReview = await readSnapshotReview(temporarySnapshot, entry.directory);
+          if (stagedReview === undefined) throw snapshotCorrupt('REVIEW_INDEX_INVALID');
+          const savedReview = await readSnapshotReview(snapshotRoot, entry.directory);
+          if (savedReview !== undefined && savedReview.fingerprint !== stagedReview.fingerprint) {
+            throw snapshotCorrupt('REVIEW_INDEX_INVALID');
+          }
+          await verifySnapshotPackage(configStore.getConfigDir(), existing, entry, savedModes ?? stagedModes, stagedReview);
           if (savedModes === undefined) missingModes.push({ directory: entry.directory, modes: stagedModes });
+          if (savedReview === undefined) missingReviews.push({ directory: entry.directory, review: stagedReview });
         }
         for (const entry of existing.agents) {
           checkCancelled();
@@ -590,6 +632,10 @@ async function refreshRemoteSkillSourceUnlocked(
         for (const entry of missingModes) {
           checkCancelled();
           await publishSnapshotModes(snapshotRoot, temporarySnapshot, entry.directory, entry.modes);
+        }
+        for (const entry of missingReviews) {
+          checkCancelled();
+          await publishSnapshotReview(snapshotRoot, temporarySnapshot, entry.directory, entry.review);
         }
         await rm(temporarySnapshot, { recursive: true, force: true });
       }
@@ -781,7 +827,7 @@ export async function resolveSnapshotPackage(
   configDirectory: string,
   snapshot: RemoteSkillSnapshot,
   packageInfo: RemoteSkillSnapshot['packages'][number],
-): Promise<{ path: string; executablePaths?: string[] }> {
+): Promise<{ path: string; reviewFingerprint: string; executablePaths?: string[] }> {
   const parsedSnapshot = snapshotManifestSchema.parse(snapshot);
   const registeredPackage = parsedSnapshot.packages.find((candidate) =>
     candidate.directory === packageInfo.directory &&
@@ -798,7 +844,8 @@ async function verifySnapshotPackage(
   parsedSnapshot: RemoteSkillSnapshot,
   selectedPackage: RemoteSkillSnapshot['packages'][number],
   modeOverride?: SnapshotModes,
-): Promise<{ path: string; executablePaths?: string[] }> {
+  reviewOverride?: SnapshotReview,
+): Promise<{ path: string; reviewFingerprint: string; executablePaths?: string[] }> {
   try {
     const configRoot = await realpath(configDirectory);
     const sourceRoot = join(configRoot, 'catalog-sources', parsedSnapshot.sourceId);
@@ -812,6 +859,8 @@ async function verifySnapshotPackage(
     }
 
     const modes = modeOverride ?? await readSnapshotModes(snapshotRoot, selectedPackage.directory);
+    const review = reviewOverride ?? await readSnapshotReview(snapshotRoot, selectedPackage.directory);
+    if (review === undefined) throw snapshotCorrupt('REVIEW_INDEX_MISSING');
     const remainingExecutables = modes === undefined ? undefined : new Set(modes.executablePaths);
     const fingerprint = createHash('sha256');
     const fingerprintFiles: Array<{ path: string; mode: string; content: Buffer }> = [];
@@ -868,8 +917,13 @@ async function verifySnapshotPackage(
         expectedFingerprint: selectedPackage.fingerprint,
       });
     }
+    const reviewFingerprint = snapshotReviewFingerprint(fingerprintFiles.map((file) => ({
+      path: file.path, content: file.content, executable: file.mode === 'x',
+    })));
+    if (reviewFingerprint !== review.fingerprint) throw snapshotCorrupt('CONTENT_MISMATCH');
     return {
       path: packageRoot,
+      reviewFingerprint,
       ...(modes === undefined ? {} : { executablePaths: modes.executablePaths }),
     };
   } catch (error) {
@@ -979,6 +1033,38 @@ async function writeSnapshotModes(root: string, directory: string, modes: Snapsh
   }
 }
 
+async function writeSnapshotReview(root: string, directory: string, review: SnapshotReview): Promise<void> {
+  const content = `${JSON.stringify(snapshotReviewSchema.parse(review))}\n`;
+  const handle = await open(join(root, 'modes', `${directory}.review.json`), 'wx', 0o600);
+  try {
+    await handle.writeFile(content, 'utf8');
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+async function readSnapshotReview(root: string, directory: string): Promise<SnapshotReview | undefined> {
+  if (!/^[a-f0-9]{64}$/.test(directory)) throw snapshotCorrupt('REVIEW_INDEX_INVALID');
+  const modeRoot = join(root, 'modes');
+  try {
+    const rootInfo = await lstat(modeRoot);
+    if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink() || await realpath(modeRoot) !== modeRoot) {
+      throw snapshotCorrupt('REVIEW_INDEX_INVALID');
+    }
+    const path = join(modeRoot, `${directory}.review.json`);
+    const info = await lstat(path);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 1024) {
+      throw snapshotCorrupt('REVIEW_INDEX_INVALID');
+    }
+    const { content } = await readBoundedSnapshotFile(path, 1024);
+    return snapshotReviewSchema.parse(JSON.parse(content.toString('utf8')) as unknown);
+  } catch (error) {
+    if (isErrno(error, 'ENOENT')) return undefined;
+    throw snapshotCorrupt('REVIEW_INDEX_INVALID');
+  }
+}
+
 async function readSnapshotModes(root: string, directory: string): Promise<SnapshotModes | undefined> {
   if (!/^[a-f0-9]{64}$/.test(directory)) throw snapshotCorrupt('MODE_INDEX_INVALID');
   const modeRoot = join(root, 'modes');
@@ -1042,20 +1128,64 @@ async function publishSnapshotModes(
   }
 }
 
-async function readBoundedSnapshotFile(path: string, maximumBytes: number): Promise<{ content: Buffer; executable: boolean }> {
-  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+async function publishSnapshotReview(
+  root: string,
+  temporaryRoot: string,
+  directory: string,
+  expected: SnapshotReview,
+): Promise<void> {
+  const modeRoot = join(root, 'modes');
   try {
-    const info = await file.stat();
-    if (!info.isFile() || info.size > maximumBytes) throw snapshotCorrupt('CONTENT_MISMATCH');
-    const buffer = Buffer.alloc(info.size + 1);
+    await mkdir(modeRoot, { mode: 0o700 });
+  } catch (error) {
+    if (!isErrno(error, 'EEXIST')) throw error;
+  }
+  const info = await lstat(modeRoot);
+  if (!info.isDirectory() || info.isSymbolicLink() || await realpath(modeRoot) !== modeRoot) {
+    throw snapshotCorrupt('REVIEW_INDEX_INVALID');
+  }
+  try {
+    await link(join(temporaryRoot, 'modes', `${directory}.review.json`),
+      join(modeRoot, `${directory}.review.json`));
+  } catch (error) {
+    if (!isErrno(error, 'EEXIST')) throw error;
+    const existing = await readSnapshotReview(root, directory);
+    if (JSON.stringify(existing) !== JSON.stringify(expected)) throw snapshotCorrupt('REVIEW_INDEX_INVALID');
+  }
+  const handle = await open(modeRoot, constants.O_RDONLY);
+  try {
+    try {
+      await handle.sync();
+    } catch (error) {
+      if (process.platform !== 'win32' || !isErrno(error, 'EPERM')) throw error;
+    }
+  } finally {
+    await handle.close();
+  }
+}
+
+async function readBoundedSnapshotFile(path: string, maximumBytes: number): Promise<{ content: Buffer; executable: boolean }> {
+  const before = await lstat(path, { bigint: true });
+  if (!before.isFile() || before.isSymbolicLink() || before.ino === 0n ||
+      before.size > BigInt(maximumBytes)) throw snapshotCorrupt('CONTENT_MISMATCH');
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const info = await file.stat({ bigint: true });
+    if (!info.isFile() || info.dev !== before.dev || info.ino !== before.ino ||
+        info.size !== before.size) throw snapshotCorrupt('CONTENT_MISMATCH');
+    const buffer = Buffer.alloc(Number(info.size) + 1);
     let bytes = 0;
     while (bytes < buffer.length) {
       const read = await file.read(buffer, bytes, buffer.length - bytes, bytes);
       if (read.bytesRead === 0) break;
       bytes += read.bytesRead;
     }
-    if (bytes !== info.size) throw snapshotCorrupt('CONTENT_MISMATCH');
-    return { content: buffer.subarray(0, bytes), executable: (info.mode & 0o111) !== 0 };
+    const after = await file.stat({ bigint: true });
+    const current = await lstat(path, { bigint: true });
+    if (bytes !== Number(info.size) || after.size !== info.size || after.mtimeNs !== info.mtimeNs ||
+        after.mode !== info.mode || !current.isFile() || current.isSymbolicLink() ||
+        current.dev !== info.dev || current.ino !== info.ino) throw snapshotCorrupt('CONTENT_MISMATCH');
+    return { content: buffer.subarray(0, bytes), executable: (info.mode & 0o111n) !== 0n };
   } finally {
     await file.close();
   }

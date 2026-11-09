@@ -721,9 +721,15 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRoutesOptions> = async (
       }
     });
 
-    app.post<{ Params: { sourceId: string } }>(
+    app.post<{ Params: { sourceId: string }; Body: unknown }>(
       '/api/settings/remote-skill-sources/:sourceId/refresh',
       async (request, reply) => {
+        const parsed = z.strictObject({
+          revision: z.string().regex(/^[a-f0-9]{40,64}$/).optional(),
+        }).safeParse(request.body ?? {});
+        if (!parsed.success) {
+          return reply.code(422).send(createApiErrorEnvelope(API_ERROR_CODES.VALIDATION_ERROR, 'The remote snapshot refresh request is not valid.'));
+        }
         const controller = new AbortController();
         const cancel = (): void => { controller.abort(); };
         const onClose = (): void => { if (!reply.raw.writableFinished) cancel(); };
@@ -734,7 +740,7 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRoutesOptions> = async (
           const snapshot = await refreshRemoteSkillSource(
             options.configStore,
             request.params.sourceId,
-            { signal: controller.signal },
+            { signal: controller.signal, ...(parsed.data.revision === undefined ? {} : { revision: parsed.data.revision }) },
           );
           return reply.code(201).send({ snapshot });
         } catch (error) {

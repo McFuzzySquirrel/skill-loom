@@ -20,7 +20,8 @@ class CatalogCliUsageError extends Error {}
 const USAGE = `Usage:
   skill-loom catalog source list [--config-dir <path>]
   skill-loom catalog source add [--config-dir <path>]                 # JSON on stdin
-  skill-loom catalog source remove|refresh --source <id> [--config-dir <path>]
+  skill-loom catalog source remove --source <id> [--config-dir <path>]
+  skill-loom catalog source refresh --source <id> [--revision <saved-commit>] [--config-dir <path>]
   skill-loom catalog limits show [--source <id>] [--config-dir <path>]
   skill-loom catalog limits set [--config-dir <path>]                  # JSON on stdin
   skill-loom catalog limits source --source <id> [--config-dir <path>]  # JSON on stdin
@@ -65,7 +66,9 @@ export async function runCatalogCli(
         ? ['config-dir', 'source']
         : operation === 'source add' || operation === 'limits set'
           ? ['config-dir']
-          : operation === 'source remove' || operation === 'source refresh' || operation === 'limits source'
+          : operation === 'source refresh'
+            ? ['config-dir', 'source', 'revision']
+          : operation === 'source remove' || operation === 'limits source'
             ? ['config-dir', 'source']
         : operation === 'project page'
           ? ['config-dir']
@@ -121,7 +124,10 @@ export async function runCatalogCli(
         if (!parsed.success) throw new CatalogCliUsageError('Stdin must contain a limits field.');
         input = { sourceId: required('source'), limits: parsed.data.limits };
       } else {
-        input = { sourceId: required('source') };
+        input = {
+          sourceId: required('source'),
+          ...(operation === 'source refresh' && flags.has('revision') ? { revision: required('revision') } : {}),
+        };
       }
       const response = await callControl(configDirectory, `catalog.${operation.replace(' ', '.')}`, input);
       if (!response.ok) {

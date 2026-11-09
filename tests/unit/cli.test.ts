@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
+import { snapshotReviewFingerprint } from '../../src/server/catalog/snapshot-fingerprint.js';
 import packageManifest from '../../package.json' with { type: 'json' };
 import {
   CliUsageError,
@@ -135,6 +136,11 @@ describe('CLI output and environment', () => {
       const fingerprint = createHash('sha256').update('SKILL.md\0-\0').update(content).digest('hex');
       await mkdir(packageDirectory, { recursive: true });
       await writeFile(join(packageDirectory, 'SKILL.md'), content);
+      await mkdir(join(snapshotDirectory, 'modes'));
+      await writeFile(join(snapshotDirectory, 'modes', `${directory}.review.json`), JSON.stringify({
+        version: 1,
+        fingerprint: snapshotReviewFingerprint([{ path: 'SKILL.md', executable: false, content }]),
+      }));
       await writeFile(join(snapshotDirectory, 'snapshot.json'), JSON.stringify({
         version: 1, sourceId: 'source', repository: 'https://example.invalid/skills.git', revision,
         packages: [{ name: 'alpha', description: '', repositoryPath: 'skills/alpha',

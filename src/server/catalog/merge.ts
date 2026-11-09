@@ -303,6 +303,7 @@ export function createCatalogService(options: CatalogServiceOptions): CatalogSer
                     repositoryPath: packageInfo.repositoryPath,
                     [REMOTE_SNAPSHOT_CONTENT]: {
                       fingerprint: packageInfo.fingerprint,
+                      reviewFingerprint: resolved.reviewFingerprint,
                       ...(resolved.executablePaths === undefined ? {} : { executablePaths: resolved.executablePaths }),
                     },
                     enabled: true,

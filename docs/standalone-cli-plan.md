@@ -194,6 +194,13 @@ These are requirements to implement and verify, not current guarantees:
    with partial copies removed on mismatch; hosted tests passed on Linux, macOS
    and Windows (`42654254374`). This is a point-in-time check, not a protected
    execution view, and it does not lift the Windows executable-mode gate.
+   The original snapshot fingerprint concatenates unframed file contents, so
+   different package trees can produce the same digest input. New snapshots
+   additionally store a length-framed digest built from the fetched Git files;
+   discovery, copy, export and handoff verify it. Legacy snapshots without that
+   index must be refreshed at the same revision before use. The digest and its
+   writable index are not an isolation boundary against an actor who can replace
+   both, and must not be used to lift managed-execution safeguards.
    The hosted Linux runner's read-only probe found cgroup v2 but no write
    access to its root or current cgroup. `/dev/kvm` was not accessible to
    the runner user and QEMU was not installed. This does not rule out a

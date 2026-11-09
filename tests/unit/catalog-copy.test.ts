@@ -21,6 +21,7 @@ import {
   projectSkillRootFor,
 } from '../../src/server/catalog/copy.js';
 import { REMOTE_SNAPSHOT_CONTENT, type SkillEntry } from '../../src/server/catalog/types.js';
+import { snapshotPackageFingerprint, snapshotReviewFingerprint } from '../../src/server/catalog/snapshot-fingerprint.js';
 import {
   scenarioCatalog,
   scenarioSkillPackagePath,
@@ -88,7 +89,13 @@ describe('copySkillIntoProject', () => {
       .digest('hex');
     const remote = entry({
       source: 'remote',
-      [REMOTE_SNAPSHOT_CONTENT]: { fingerprint, executablePaths: [] },
+      [REMOTE_SNAPSHOT_CONTENT]: {
+        fingerprint, executablePaths: [],
+        reviewFingerprint: snapshotReviewFingerprint([
+          { path: 'SKILL.md', executable: false, content: skill },
+          { path: 'templates/note.md', executable: false, content: template },
+        ]),
+      },
     });
     const copied = await copySkillIntoProject({ projectPath, harness: 'opencode', entry: remote });
     expect(await readFile(join(copied.destinationPath, 'SKILL.md'))).toEqual(skill);
@@ -108,10 +115,44 @@ describe('copySkillIntoProject', () => {
     await expect(stat(join(projectPath, '.agents'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('rejects a different package with the same legacy snapshot fingerprint and byte count', async () => {
+    await rm(join(sourcePath, 'templates'), { recursive: true });
+    const skill = await readFile(join(sourcePath, 'SKILL.md'));
+    const original = [
+      { path: 'SKILL.md', executable: false, content: skill },
+      { path: 'b', executable: false, content: Buffer.from('prefixc\0-\0suffix') },
+    ];
+    const altered = [
+      { path: 'SKILL.md', executable: false, content: Buffer.concat([skill, Buffer.from('b\0-\0prefix')]) },
+      { path: 'c', executable: false, content: Buffer.from('suffix') },
+    ];
+    expect(snapshotPackageFingerprint(original)).toBe(snapshotPackageFingerprint(altered));
+    expect(original.reduce((sum, file) => sum + file.content.length, 0))
+      .toBe(altered.reduce((sum, file) => sum + file.content.length, 0));
+    expect(snapshotReviewFingerprint(original)).not.toBe(snapshotReviewFingerprint(altered));
+    await writeFile(join(sourcePath, 'b'), original[1]!.content);
+    const remote = entry({
+      source: 'remote',
+      [REMOTE_SNAPSHOT_CONTENT]: {
+        fingerprint: snapshotPackageFingerprint(original),
+        reviewFingerprint: snapshotReviewFingerprint(original),
+        executablePaths: [],
+      },
+    });
+    await writeFile(join(sourcePath, 'SKILL.md'), altered[0]!.content);
+    await rm(join(sourcePath, 'b'));
+    await writeFile(join(sourcePath, 'c'), altered[1]!.content);
+    await expectCopyError(
+      copySkillIntoProject({ projectPath, harness: 'opencode', entry: remote }),
+      CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
+    );
+    expect(await readdir(projectSkillRootFor('opencode', projectPath))).toEqual([]);
+  });
+
   it('rejects remote snapshot mode metadata that references a missing file', async () => {
     const remote = entry({
       source: 'remote',
-      [REMOTE_SNAPSHOT_CONTENT]: { fingerprint: '0'.repeat(64), executablePaths: ['missing.sh'] },
+      [REMOTE_SNAPSHOT_CONTENT]: { fingerprint: '0'.repeat(64), reviewFingerprint: '0'.repeat(64), executablePaths: ['missing.sh'] },
     });
     await expectCopyError(
       copySkillIntoProject({ projectPath, harness: 'opencode', entry: remote }),
@@ -134,7 +175,14 @@ describe('copySkillIntoProject', () => {
       .digest('hex');
     const remote = entry({
       source: 'remote',
-      [REMOTE_SNAPSHOT_CONTENT]: { fingerprint, executablePaths: ['scripts/check.sh'] },
+      [REMOTE_SNAPSHOT_CONTENT]: {
+        fingerprint, executablePaths: ['scripts/check.sh'],
+        reviewFingerprint: snapshotReviewFingerprint([
+          { path: 'SKILL.md', executable: false, content: await readFile(join(sourcePath, 'SKILL.md')) },
+          { path: 'scripts/check.sh', executable: true, content: await readFile(script) },
+          { path: 'templates/note.md', executable: false, content: await readFile(join(sourcePath, 'templates', 'note.md')) },
+        ]),
+      },
     });
     const copied = await copySkillIntoProject({ projectPath, harness: 'opencode', entry: remote });
     expect((await stat(join(copied.destinationPath, 'scripts', 'check.sh'))).mode & 0o111).not.toBe(0);

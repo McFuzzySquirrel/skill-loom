@@ -456,6 +456,24 @@ describe('extra skill directory settings', () => {
 });
 
 describe('remote skill source settings and catalog snapshots', () => {
+  it('validates saved-commit refresh requests before attempting Git', async () => {
+    const app = await buildTestApp();
+    const add = await app.inject({
+      method: 'POST',
+      url: '/api/settings/remote-skill-sources',
+      payload: { repository: 'https://example.com/acme/skills.git' },
+    });
+    const source = add.json<{ source: { id: string } }>().source;
+    const url = `/api/settings/remote-skill-sources/${source.id}/refresh`;
+    for (const payload of [{ revision: '../invalid' }, { revision: 1 }, { extra: true }]) {
+      const response = await app.inject({ method: 'POST', url, payload });
+      expect(response.statusCode).toBe(422);
+      expect(envelope(response.json<unknown>()).error.code).toBe('VALIDATION_ERROR');
+    }
+    const missing = await app.inject({ method: 'POST', url, payload: { revision: 'f'.repeat(40) } });
+    expect(missing.statusCode).toBe(404);
+  });
+
   it('updates global and per-source budgets without affecting other sources', async () => {
     const app = await buildTestApp();
     const add = await app.inject({

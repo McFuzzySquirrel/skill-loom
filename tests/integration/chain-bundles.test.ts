@@ -8,6 +8,7 @@ import { buildApp } from '../../src/server/app.js';
 import { importReviewedBundle, reviewBundleImport } from '../../src/server/bundles/reviewed-import.js';
 import { createCatalogService } from '../../src/server/catalog/merge.js';
 import { scanOpenCodeSkills } from '../../src/server/catalog/opencode.js';
+import { snapshotReviewFingerprint } from '../../src/server/catalog/snapshot-fingerprint.js';
 import { MAX_BUNDLE_BYTES, MAX_BUNDLE_REQUEST_BYTES, parseBundle } from '../../src/server/chains/bundle.js';
 import { createChainService, type ChainService } from '../../src/server/chains/service.js';
 import { createConfigStore } from '../../src/server/config/store.js';
@@ -569,6 +570,7 @@ describe('portable chain bundles', () => {
           repositoryPath: 'skills/review',
           [REMOTE_SNAPSHOT_CONTENT]: {
             fingerprint: createHash('sha256').update('SKILL.md\0-\0').update(firstText).digest('hex'),
+            reviewFingerprint: snapshotReviewFingerprint([{ path: 'SKILL.md', executable: false, content: Buffer.from(firstText) }]),
             executablePaths: [],
           },
         }),
@@ -582,6 +584,7 @@ describe('portable chain bundles', () => {
           repositoryPath: 'skills/review',
           [REMOTE_SNAPSHOT_CONTENT]: {
             fingerprint: createHash('sha256').update('SKILL.md\0-\0').update(selectedText).digest('hex'),
+            reviewFingerprint: snapshotReviewFingerprint([{ path: 'SKILL.md', executable: false, content: Buffer.from(selectedText) }]),
             executablePaths: [],
           },
         }),
