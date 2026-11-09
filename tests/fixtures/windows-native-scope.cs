@@ -111,16 +111,27 @@ public static class WindowsNativeScopeFixture {
         foreach (string value in arguments) result += " " + Quote(value);
         return result;
     }
+    static SortedDictionary<string, string> MinimumEnvironment(string workspace) {
+        string windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        return new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
+            { "APPDATA", Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) },
+            { "LOCALAPPDATA", Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) },
+            { "PATH", Environment.SystemDirectory },
+            { "SystemDrive", Path.GetPathRoot(windows).TrimEnd('\\') },
+            { "SystemRoot", windows },
+            { "TEMP", workspace },
+            { "TMP", workspace },
+            { "USERPROFILE", Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) },
+            { "windir", windows }
+        };
+    }
     static ProcessStartInfo StartInfo(string executable, string arguments, string workspace) {
         var start = new ProcessStartInfo(executable, arguments);
         start.UseShellExecute = false;
         start.CreateNoWindow = true;
         start.WorkingDirectory = workspace;
         start.EnvironmentVariables.Clear();
-        start.EnvironmentVariables["SystemRoot"] = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-        start.EnvironmentVariables["PATH"] = Environment.SystemDirectory;
-        start.EnvironmentVariables["TEMP"] = workspace;
-        start.EnvironmentVariables["TMP"] = workspace;
+        foreach (var entry in MinimumEnvironment(workspace)) start.EnvironmentVariables[entry.Key] = entry.Value;
         return start;
     }
     static void WaitFile(string path) {
@@ -243,9 +254,11 @@ public static class WindowsNativeScopeFixture {
             Marshal.StructureToPtr(caps, capsBuffer, false);
             Check(UpdateProcThreadAttribute(attributes, 0, new IntPtr(0x20009), capsBuffer,
                 new IntPtr(Marshal.SizeOf(typeof(Capabilities))), IntPtr.Zero, IntPtr.Zero), "set AppContainer");
-            string windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-            environment = Marshal.StringToHGlobalUni("PATH=" + Environment.SystemDirectory + "\0SystemRoot=" + windows +
-                "\0TEMP=" + workspace + "\0TMP=" + workspace + "\0\0");
+            var environmentText = new StringBuilder();
+            foreach (var entry in MinimumEnvironment(workspace)) environmentText.Append(entry.Key + "=" + entry.Value + "\0");
+            byte[] environmentBytes = Encoding.Unicode.GetBytes(environmentText.ToString() + "\0");
+            environment = Marshal.AllocHGlobal(environmentBytes.Length);
+            Marshal.Copy(environmentBytes, 0, environment, environmentBytes.Length);
             var startup = new StartupEx();
             startup.Basic.Size = (uint)Marshal.SizeOf(typeof(StartupEx));
             startup.Attributes = attributes;
