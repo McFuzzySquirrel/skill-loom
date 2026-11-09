@@ -547,7 +547,27 @@ async function refreshRemoteSkillSourceUnlocked(
       try {
         await rename(temporarySnapshot, snapshotRoot);
       } catch (error) {
-        if (!isErrno(error, 'EEXIST') && !isErrno(error, 'ENOTEMPTY')) throw error;
+        if (!isErrno(error, 'EEXIST') && !isErrno(error, 'ENOTEMPTY') &&
+            !(process.platform === 'win32' && isErrno(error, 'EPERM'))) throw error;
+        try {
+          await lstat(snapshotRoot);
+        } catch (inspectionError) {
+          if (isErrno(inspectionError, 'ENOENT')) throw error;
+          throw inspectionError;
+        }
+        const existing = await readSnapshot(snapshotRoot);
+        if (JSON.stringify(existing) !== JSON.stringify(manifest)) {
+          throw snapshotCorrupt('IMMUTABLE_MISMATCH');
+        }
+        for (const entry of existing.packages) {
+          checkCancelled();
+          await verifySnapshotPackage(configStore.getConfigDir(), existing, entry);
+        }
+        for (const entry of existing.agents) {
+          checkCancelled();
+          await verifySnapshotAgent(configStore.getConfigDir(), existing, entry);
+        }
+        await verifyExistingSnapshotIndex(snapshotRoot, existing, checkCancelled);
         await rm(temporarySnapshot, { recursive: true, force: true });
       }
       return await readSnapshot(snapshotRoot);
@@ -739,7 +759,14 @@ export async function resolveSnapshotPackagePath(
   if (registeredPackage === undefined) {
     throw snapshotCorrupt();
   }
-  const selectedPackage = registeredPackage;
+  return verifySnapshotPackage(configDirectory, parsedSnapshot, registeredPackage);
+}
+
+async function verifySnapshotPackage(
+  configDirectory: string,
+  parsedSnapshot: RemoteSkillSnapshot,
+  selectedPackage: RemoteSkillSnapshot['packages'][number],
+): Promise<string> {
   try {
     const configRoot = await realpath(configDirectory);
     const sourceRoot = join(configRoot, 'catalog-sources', parsedSnapshot.sourceId);
@@ -823,6 +850,14 @@ export async function resolveSnapshotAgentPath(
   );
   if (registeredAgent === undefined) throw snapshotCorrupt();
 
+  return verifySnapshotAgent(configDirectory, parsedSnapshot, registeredAgent);
+}
+
+async function verifySnapshotAgent(
+  configDirectory: string,
+  parsedSnapshot: RemoteSkillSnapshot,
+  registeredAgent: RemoteNativeAgent,
+): Promise<string> {
   try {
     const configRoot = await realpath(configDirectory);
     const sourceRoot = join(configRoot, 'catalog-sources', parsedSnapshot.sourceId);
@@ -853,6 +888,38 @@ export async function resolveSnapshotAgentPath(
   } catch (error) {
     if (error instanceof RemoteSourceError) throw error;
     throw snapshotCorrupt();
+  }
+}
+
+async function verifyExistingSnapshotIndex(
+  root: string,
+  snapshot: RemoteSkillSnapshot,
+  checkCancelled: () => void,
+): Promise<void> {
+  for (const kind of ['skill', 'agent'] as const) {
+    const expected = [...(kind === 'skill' ? snapshot.packages : snapshot.agents)]
+      .sort((a, b) => comparePaths(a.name, b.name) ||
+        comparePaths(a.repositoryPath, b.repositoryPath) || comparePaths(a.directory, b.directory));
+    for (let offset = 0; offset < expected.length || offset === 0; offset += 1000) {
+      checkCancelled();
+      let page;
+      try {
+        page = await readSnapshotIndex(root, snapshot.sourceId, snapshot.revision, {
+          kind, search: '', offset, limit: 1000,
+        });
+      } catch {
+        throw snapshotCorrupt('INDEX_INVALID');
+      }
+      if (page === null || 'stale' in page) break;
+      const entries = expected.slice(offset, offset + 1000);
+      const searches = entries.map((entry) =>
+        `${entry.name}\n${entry.description}\n${entry.repositoryPath}`.toLowerCase());
+      if (page.repository !== snapshot.repository || page.total !== expected.length ||
+          JSON.stringify(page.items) !== JSON.stringify(entries) ||
+          JSON.stringify(page.searches) !== JSON.stringify(searches)) {
+        throw snapshotCorrupt('INDEX_INVALID');
+      }
+    }
   }
 }
 

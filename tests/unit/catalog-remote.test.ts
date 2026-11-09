@@ -75,6 +75,77 @@ function fakeGit(tree = [
 }
 
 describe('remote skill source snapshots', () => {
+  it('reuses an existing snapshot only after verifying its manifest, content, and index', async () => {
+    const root = await makeRoot();
+    const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
+    await store.update({
+      remoteSkillSources: [{ id: 'demo-source', repository: 'https://example.com/acme/skills.git' }],
+    });
+    const tree = [
+      `100644 blob ${skillBlob}\tcollection/demo/SKILL.md\0`,
+      `100644 blob ${openCodeAgentBlob}\t.opencode/agents/reviewer.md\0`,
+    ].join('');
+    const refresh = () => refreshRemoteSkillSource(store, 'demo-source', {
+      gitRunner: fakeGit(tree).run, temporaryDirectory: root,
+    });
+    const initial = await refresh();
+    expect(await refresh()).toEqual(initial);
+
+    const snapshotRoot = join(store.getConfigDir(), 'catalog-sources', 'demo-source', revision);
+    const skillPath = join(snapshotRoot, 'packages', initial.packages[0]!.directory, 'SKILL.md');
+    const skill = await readFile(skillPath);
+    await writeFile(skillPath, 'tampered skill');
+    await expect(refresh()).rejects.toMatchObject({
+      code: REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT, details: { reason: 'CONTENT_MISMATCH' },
+    });
+    expect(await readFile(skillPath, 'utf8')).toBe('tampered skill');
+    await writeFile(skillPath, skill);
+
+    const agentPath = join(snapshotRoot, 'agents', initial.agents[0]!.directory, 'agent.md');
+    const agent = await readFile(agentPath);
+    await writeFile(agentPath, Buffer.alloc(agent.length, 0x61));
+    await expect(refresh()).rejects.toMatchObject({
+      code: REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT, details: { reason: 'CONTENT_MISMATCH' },
+    });
+    await writeFile(agentPath, agent);
+
+    const manifestPath = join(snapshotRoot, 'snapshot.json');
+    const manifest = await readFile(manifestPath);
+    await writeFile(manifestPath, JSON.stringify({
+      ...initial, packages: [{ ...initial.packages[0]!, description: 'tampered metadata' }],
+    }));
+    await expect(refresh()).rejects.toMatchObject({
+      code: REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT, details: { reason: 'IMMUTABLE_MISMATCH' },
+    });
+    await writeFile(manifestPath, manifest);
+    await unlink(join(snapshotRoot, 'snapshot-index.sqlite'));
+    await writeSnapshotIndex(snapshotRoot, initial);
+
+    const indexPath = join(snapshotRoot, 'snapshot-index.sqlite');
+    const database = new DatabaseSync(indexPath);
+    try {
+      database.prepare('UPDATE entries SET item = ? WHERE kind = ?')
+        .run(JSON.stringify({ ...initial.packages[0]!, description: 'tampered index' }), 'skill');
+    } finally {
+      database.close();
+    }
+    await expect(refresh()).rejects.toMatchObject({
+      code: REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT, details: { reason: 'INDEX_INVALID' },
+    });
+    const alteredIndex = new DatabaseSync(indexPath);
+    try {
+      alteredIndex.prepare('UPDATE entries SET item = ?, search = ? WHERE kind = ?')
+        .run(JSON.stringify(initial.packages[0]), 'incorrect search', 'skill');
+    } finally {
+      alteredIndex.close();
+    }
+    await expect(refresh()).rejects.toMatchObject({
+      code: REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT, details: { reason: 'INDEX_INVALID' },
+    });
+    expect(await readFile(manifestPath)).toEqual(manifest);
+    expect(await readdir(join(store.getConfigDir(), 'catalog-sources', 'demo-source'))).toEqual([revision]);
+  });
+
   it('uses a canonical snapshot root when a config ancestor is an alias', async () => {
     const root = await makeRoot();
     const alias = join(root, 'alias');

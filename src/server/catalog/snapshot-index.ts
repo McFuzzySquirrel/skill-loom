@@ -72,7 +72,7 @@ export async function readSnapshotIndex(
   sourceId: string,
   revision: string,
   request: { kind: 'skill' | 'agent'; search: string; offset: number; limit: number },
-): Promise<{ repository: string; total: number; items: unknown[] } | { stale: true } | null> {
+): Promise<{ repository: string; total: number; items: unknown[]; searches: string[] } | { stale: true } | null> {
   const indexPath = join(root, INDEX_FILE);
   let indexInfo;
   try {
@@ -111,17 +111,21 @@ export async function readSnapshotIndex(
         count.total < 0 || count.total > expectedCount) {
       throw new Error('Invalid snapshot index count.');
     }
-    const rows = database.prepare('SELECT item FROM entries WHERE kind = ? AND instr(search, ?) > 0 ORDER BY position LIMIT ? OFFSET ?')
+    const rows = database.prepare('SELECT item, search FROM entries WHERE kind = ? AND instr(search, ?) > 0 ORDER BY position LIMIT ? OFFSET ?')
       .all(request.kind, search, request.limit, request.offset);
     const items = rows.map((item) => {
       if (typeof item.item !== 'string') throw new Error('Invalid snapshot index entry.');
       return JSON.parse(item.item) as unknown;
     });
+    const searches = rows.map((item) => {
+      if (typeof item.search !== 'string') throw new Error('Invalid snapshot index search.');
+      return item.search;
+    });
     const after = await lstat(manifestPath, { bigint: true });
     if (after.size !== manifest.size || after.mtimeNs !== manifest.mtimeNs || after.ino !== manifest.ino) {
       throw new Error('Snapshot manifest changed during paging.');
     }
-    return { repository: metadata.repository, total: count.total, items };
+    return { repository: metadata.repository, total: count.total, items, searches };
   } finally {
     database.close();
   }
