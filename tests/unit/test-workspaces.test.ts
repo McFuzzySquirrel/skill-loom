@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -172,6 +173,52 @@ describe('managed test workspaces', () => {
     await operation;
     await expect(removal).rejects.toMatchObject({ code: TEST_WORKSPACE_ERROR_CODES.ACTIVE });
     expect((await reviewProjectCoordination(workspace.path)).claim).toMatchObject({ runId: 'run-competing' });
+  });
+
+  it('blocks a separate helper during and after workspace retirement', async () => {
+    const { source, chain, service } = await setup();
+    const workspace = await service.create({ sourceProjectId: source.id, sourceChainId: chain.id });
+    const bundlePath = join(root, 'retirement.loom.json');
+    await writeFile(bundlePath, JSON.stringify({
+      format: 'skill-loom-chain', version: 1,
+      chain: {
+        name: 'Portable test', harness: 'opencode', sessionMode: 'shared',
+        steps: [{ id: 'one', kind: 'instruction', instruction: 'Review.' }], inputs: [],
+      },
+      skills: [],
+    }));
+    const inspected = await executePortableRequest({
+      command: 'inspect', projectPath: workspace.path, bundlePath,
+    }) as { reviewDigest: string };
+    const payload = JSON.stringify({
+      reviewDigest: inspected.reviewDigest, installConfirmed: true, actualHost: 'opencode',
+      progression: 'supervised', inputs: {},
+      sessionDecision: {
+        requested: 'shared', mechanism: 'current-conversation', description: 'Current conversation.', confirmed: true,
+      },
+    });
+    const prepare = () => new Promise<{ code: number | null; error: string }>((resolve, reject) => {
+      const child = spawn(process.execPath, [
+        '--disable-warning=ExperimentalWarning',
+        join(process.cwd(), '.github', 'skills', 'loom-run-bundle', 'scripts', 'loom-bundle.mjs'),
+        'prepare', '--project', workspace.path, '--bundle', bundlePath,
+      ], { stdio: ['pipe', 'pipe', 'pipe'] });
+      let error = '';
+      child.stderr.on('data', (chunk: Buffer) => { error += chunk.toString(); });
+      child.once('error', reject);
+      child.once('close', (code) => resolve({ code, error }));
+      child.stdin.end(payload);
+    });
+    await withProjectRetirementTransaction(workspace.path, async (tx) => {
+      const busy = await prepare();
+      expect(busy.code).toBe(1);
+      expect(JSON.parse(busy.error)).toMatchObject({ error: { code: 'PROJECT_CLAIM_BUSY' } });
+      tx.retire('2026-01-02T00:00:00.000Z');
+    });
+    const retired = await prepare();
+    expect(retired.code).toBe(1);
+    expect(JSON.parse(retired.error)).toMatchObject({ error: { code: 'PROJECT_CLAIM_RETIRED' } });
+    await expect(service.remove(workspace.id)).resolves.toEqual({ id: workspace.id, removed: true });
   });
 
   it('creates a hidden, self-contained project copy and removes only that workspace', async () => {
