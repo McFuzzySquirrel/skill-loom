@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   CATALOG_COPY_ERROR_CODES,
   CatalogCopyError,
+  MAX_SKILL_PACKAGE_BYTES,
   copySkillIntoProject,
   projectSkillRootFor,
 } from '../../src/server/catalog/copy.js';
@@ -306,5 +307,34 @@ describe('copySkillIntoProject', () => {
     );
     expect(error.details.path).toContain('outside-link');
     expect(await readdir(join(projectPath, '.agents', 'skills'))).toEqual([]);
+  });
+
+  it('accepts the byte limit and rejects an oversized package without leaving a partial copy', async () => {
+    const skillBytes = (await stat(join(sourcePath, 'SKILL.md'))).size;
+    const templateBytes = (await stat(join(sourcePath, 'templates', 'note.md'))).size;
+    const payload = join(sourcePath, 'payload.bin');
+    await writeFile(payload, Buffer.alloc(MAX_SKILL_PACKAGE_BYTES - skillBytes - templateBytes));
+    const first = await copySkillIntoProject({ projectPath, harness: 'opencode', entry: entry() });
+    expect((await stat(join(first.destinationPath, 'payload.bin'))).size)
+      .toBe(MAX_SKILL_PACKAGE_BYTES - skillBytes - templateBytes);
+    await writeFile(payload, Buffer.alloc(MAX_SKILL_PACKAGE_BYTES - skillBytes - templateBytes + 1));
+    await expectCopyError(
+      copySkillIntoProject({ projectPath, harness: 'opencode', entry: entry() }),
+      CATALOG_COPY_ERROR_CODES.TOO_LARGE,
+    );
+    expect(await readdir(projectSkillRootFor('opencode', projectPath))).toEqual(['release-notes']);
+  });
+
+  it('rejects packages whose empty directories exceed the depth limit', async () => {
+    let path = sourcePath;
+    for (let depth = 0; depth < 33; depth += 1) {
+      path = join(path, 'nested');
+      await mkdir(path);
+    }
+    await expectCopyError(
+      copySkillIntoProject({ projectPath, harness: 'opencode', entry: entry() }),
+      CATALOG_COPY_ERROR_CODES.TOO_LARGE,
+    );
+    expect(await readdir(projectSkillRootFor('opencode', projectPath))).toEqual([]);
   });
 });

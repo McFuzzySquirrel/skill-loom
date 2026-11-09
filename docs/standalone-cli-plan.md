@@ -190,6 +190,10 @@ These are requirements to implement and verify, not current guarantees:
    Focused hosted Linux, macOS and Windows tests passed for migration,
    tamper rejection, handoff, bundle export and the standalone handoff builder;
    the Windows test also verified that executable installation is blocked.
+   Remote copies are now checked against the discovered snapshot fingerprint,
+   with partial copies removed on mismatch; hosted tests passed on Linux, macOS
+   and Windows (`42654254374`). This is a point-in-time check, not a protected
+   execution view, and it does not lift the Windows executable-mode gate.
    The hosted Linux runner's read-only probe found cgroup v2 but no write
    access to its root or current cgroup. `/dev/kvm` was not accessible to
    the runner user and QEMU was not installed. This does not rule out a

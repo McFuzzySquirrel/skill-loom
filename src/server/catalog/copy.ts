@@ -4,7 +4,7 @@ import {
   lstat,
   mkdir,
   open,
-  readdir,
+  opendir,
   realpath,
   rm,
   writeFile,
@@ -61,6 +61,8 @@ export const MAX_SKILL_PACKAGE_BYTES = 10 * 1024 * 1024;
 export const MAX_SKILL_PACKAGE_FILES = 1_000;
 /** Bounded unique-directory attempts when the target name is already used. */
 const MAX_NAME_ATTEMPTS = 100;
+const MAX_COPY_DEPTH = 32;
+const MAX_COPY_ENTRIES = MAX_SKILL_PACKAGE_FILES * (MAX_COPY_DEPTH + 1);
 
 export interface CopySkillIntoProjectInput {
   /** Canonical project directory. */
@@ -170,7 +172,7 @@ export async function copySkillIntoProject(
     allowNameSuffix,
   );
 
-  const budget = { files: 0, bytes: 0 };
+  const budget = { files: 0, bytes: 0, entries: 0 };
   try {
     await copyDirectory(sourceDirectory, destination, budget);
     if (entry.source === 'remote' && remoteContent !== undefined) {
@@ -203,6 +205,7 @@ export async function copySkillIntoProject(
     const remainingExecutables = snapshot.executablePaths === undefined
       ? undefined : new Set(snapshot.executablePaths);
     let bytes = 0;
+    let entries = 0;
     const unsafe = () => new CatalogCopyError(
       CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
       'The copied remote package differs from the verified snapshot. Refresh and review it again.',
@@ -211,7 +214,9 @@ export async function copySkillIntoProject(
     async function visit(directory: string, prefix: string, depth: number): Promise<void> {
       const directoryInfo = await lstat(directory);
       if (depth > 32 || !directoryInfo.isDirectory() || directoryInfo.isSymbolicLink()) throw unsafe();
-      for (const entry of await readdir(directory, { withFileTypes: true })) {
+      for await (const entry of await opendir(directory)) {
+        entries += 1;
+        if (entries > MAX_COPY_ENTRIES) throw unsafe();
         const path = join(directory, entry.name);
         const relativePath = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
         const before = await lstat(path, { bigint: true });
@@ -446,12 +451,25 @@ async function reserveDestination(
 async function copyDirectory(
   source: string,
   destination: string,
-  budget: { files: number; bytes: number },
+  budget: { files: number; bytes: number; entries: number },
+  depth = 0,
 ): Promise<void> {
-  const entries = await readdir(source, { withFileTypes: true });
-  entries.sort((left, right) => left.name.localeCompare(right.name));
-
-  for (const entry of entries) {
+  const directory = await lstat(source);
+  if (!directory.isDirectory() || directory.isSymbolicLink() || await realpath(source) !== source) {
+    throw new CatalogCopyError(
+      CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
+      'A skill package directory changed during copying.',
+      { path: source },
+    );
+  }
+  if (depth > MAX_COPY_DEPTH) {
+    throw new CatalogCopyError(CATALOG_COPY_ERROR_CODES.TOO_LARGE, 'The skill package exceeds the directory depth limit.');
+  }
+  for await (const entry of await opendir(source)) {
+    budget.entries += 1;
+    if (budget.entries > MAX_COPY_ENTRIES) {
+      throw new CatalogCopyError(CATALOG_COPY_ERROR_CODES.TOO_LARGE, 'The skill package exceeds the entry limit.');
+    }
     const sourcePath = join(source, entry.name);
     const destinationPath = join(destination, entry.name);
 
@@ -465,7 +483,7 @@ async function copyDirectory(
 
     if (entry.isDirectory()) {
       await mkdir(destinationPath, { mode: 0o755 });
-      await copyDirectory(sourcePath, destinationPath, budget);
+      await copyDirectory(sourcePath, destinationPath, budget, depth + 1);
       continue;
     }
 
