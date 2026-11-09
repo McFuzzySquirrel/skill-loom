@@ -17,6 +17,7 @@ public static class WindowsNativeScopeFixture {
     static readonly object OutputLock = new object();
     static readonly StringBuilder TerminalOutput = new StringBuilder();
     static Exception TerminalError;
+    static IntPtr ActorConsoleOutput;
 
     [StructLayout(LayoutKind.Sequential)] struct Coord {
         public short X, Y;
@@ -122,6 +123,8 @@ public static class WindowsNativeScopeFixture {
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool ReadFile(IntPtr file, byte[] buffer, uint size, out uint read, IntPtr overlapped);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool WriteFile(IntPtr file, byte[] buffer, uint size, out uint written, IntPtr overlapped);
     [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr GetStdHandle(int id);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern IntPtr CreateFileW(string path, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetConsoleMode(IntPtr console, out uint mode);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool SetConsoleMode(IntPtr console, uint mode);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetConsoleScreenBufferInfo(IntPtr console, out ConsoleInfo info);
@@ -562,12 +565,22 @@ public static class WindowsNativeScopeFixture {
             Marshal.ThrowExceptionForHR(DeleteAppContainerProfile(profile));
         });
     }
+    static void WriteConsoleMarker(string marker) {
+        byte[] output = Encoding.ASCII.GetBytes(marker + "\r\n");
+        uint written;
+        Check(WriteFile(ActorConsoleOutput, output, (uint)output.Length, out written, IntPtr.Zero), "write pseudoconsole marker");
+        Require(written == output.Length, "Incomplete pseudoconsole marker.");
+    }
     static int Actor(string[] args) {
         string role = args[0], workspace = args[1];
         string executable = typeof(WindowsNativeScopeFixture).Assembly.Location;
         if (role == "worker") {
             if (args.Length == 5 && args[4] == "terminal") {
-                IntPtr input = GetStdHandle(-10), output = GetStdHandle(-11);
+                IntPtr input = CreateFileW("CONIN$", 0xc0000000, 3, IntPtr.Zero, 3, 0, IntPtr.Zero);
+                Check(input != new IntPtr(-1), "open attached pseudoconsole input");
+                IntPtr output = CreateFileW("CONOUT$", 0xc0000000, 3, IntPtr.Zero, 3, 0, IntPtr.Zero);
+                Check(output != new IntPtr(-1), "open attached pseudoconsole output");
+                ActorConsoleOutput = output;
                 uint mode;
                 Check(GetConsoleMode(input, out mode), "verify pseudoconsole input");
                 Check(SetConsoleMode(input, mode & ~7u), "set raw fixture console input");
@@ -578,8 +591,7 @@ public static class WindowsNativeScopeFixture {
                 uint count;
                 Check(ReadFile(input, byteRead, 1, out count, IntPtr.Zero), "read pseudoconsole input");
                 Require(count == 1 && byteRead[0] == (byte)'L', "Wrong pseudoconsole input.");
-                Console.WriteLine("LOOM_TERMINAL_READY");
-                Console.Out.Flush();
+                WriteConsoleMarker("LOOM_TERMINAL_READY");
             }
             string reviewed = args[2];
             Require(File.ReadAllText(reviewed) == "reviewed fixture content", "Reviewed read failed.");
@@ -624,8 +636,7 @@ public static class WindowsNativeScopeFixture {
                 if (role == "worker") {
                     WaitFile(Path.Combine(workspace, "finish"));
                     if (args.Length == 5 && args[4] == "terminal") {
-                        Console.WriteLine("LOOM_TERMINAL_FINISHED");
-                        Console.Out.Flush();
+                        WriteConsoleMarker("LOOM_TERMINAL_FINISHED");
                     }
                     return 0;
                 }
