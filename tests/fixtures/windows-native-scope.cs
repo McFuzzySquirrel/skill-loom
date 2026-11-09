@@ -549,31 +549,26 @@ public static class WindowsNativeScopeFixture {
                 WithCleanup(ReapHandles, delegate { Close(survivingBroker); });
             });
         }
-        static int LeaseOwner(string root, string profile, bool terminal) {
-            string prefix = terminal ? "terminal-lease-" : "lease-";
-            string workspace = Path.Combine(root, terminal ? "terminal-owner-loss" : "owner-loss");
-            string executable = typeof(WindowsNativeScopeFixture).Assembly.Location;
-            var start = StartInfo(executable, CommandArguments(prefix + "broker", root, profile), workspace);
-            start.RedirectStandardInput = true;
-            using (Process broker = Process.Start(start)) {
-                WithCleanup(delegate {
-                    WaitFile(Path.Combine(root, prefix + "broker-ready"));
-                    File.WriteAllText(Path.Combine(root, prefix + "broker.pid"), broker.Id.ToString());
-                    File.WriteAllText(Path.Combine(root, prefix + "owner-ready"), "verified");
-                    Thread.Sleep(30000);
-                    throw new InvalidOperationException("Actual owner death was not exercised.");
-                }, delegate {
-                    broker.StandardInput.Close();
-                    Require(broker.WaitForExit(5000) && broker.ExitCode == 0, "Owner failed to clean up broker.");
-                });
-            }
-            return 0;
+    }
+    static int LeaseOwner(string root, string profile, bool terminal) {
+        string prefix = terminal ? "terminal-lease-" : "lease-";
+        string workspace = Path.Combine(root, terminal ? "terminal-owner-loss" : "owner-loss");
+        string executable = typeof(WindowsNativeScopeFixture).Assembly.Location;
+        var start = StartInfo(executable, Quote(prefix + "broker") + " " + Quote(root) + " " + Quote(profile), workspace);
+        start.RedirectStandardInput = true;
+        using (Process broker = Process.Start(start)) {
+            WithCleanup(delegate {
+                WaitFile(Path.Combine(root, prefix + "broker-ready"));
+                File.WriteAllText(Path.Combine(root, prefix + "broker.pid"), broker.Id.ToString());
+                File.WriteAllText(Path.Combine(root, prefix + "owner-ready"), "verified");
+                Thread.Sleep(30000);
+                throw new InvalidOperationException("Actual owner death was not exercised.");
+            }, delegate {
+                broker.StandardInput.Close();
+                Require(broker.WaitForExit(5000) && broker.ExitCode == 0, "Owner failed to clean up broker.");
+            });
         }
-        static string CommandArguments(params string[] arguments) {
-            var result = new List<string>();
-            foreach (string value in arguments) result.Add(Quote(value));
-            return string.Join(" ", result.ToArray());
-        }
+        return 0;
     }
     public static void Probe(string root, string executable) {
         string profile = "loom-native-" + Guid.NewGuid().ToString("N");
