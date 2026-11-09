@@ -221,10 +221,9 @@ These are requirements to implement and verify, not current guarantees:
    first, after other files, with the top-level entry last. A process interrupted
    between links can still expose complete nested skills before the top-level
    package is published; abandoned incomplete directories and temporary files
-   require inspection and cleanup. Actual
-   process interruption immediately before and after the link and the focused
-   publication suites passed on hosted Linux and Windows (jobs in
-   `42673113745`) and macOS (`42673286458`). This ordering is not proof of
+   require inspection and cleanup. Actual process interruption before any link,
+   after a nested link, and after the top-level link and the focused publication
+   suites passed on hosted Linux, macOS and Windows (`42674918360`). This ordering is not proof of
    power-loss durability, safe execution isolation, or Windows executable-mode
    installation.
    Focused hosted Linux, macOS and Windows tests passed for migration,
