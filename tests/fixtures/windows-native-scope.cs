@@ -123,6 +123,7 @@ public static class WindowsNativeScopeFixture {
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool ReadFile(IntPtr file, byte[] buffer, uint size, out uint read, IntPtr overlapped);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool WriteFile(IntPtr file, byte[] buffer, uint size, out uint written, IntPtr overlapped);
     [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr GetStdHandle(int id);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool SetHandleInformation(IntPtr handle, uint mask, uint flags);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     static extern IntPtr CreateFileW(string path, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetConsoleMode(IntPtr console, out uint mode);
@@ -424,7 +425,7 @@ public static class WindowsNativeScopeFixture {
             } finally { Close(actor.Thread); }
             if (terminal) {
                 uint written;
-                byte[] input = Encoding.ASCII.GetBytes("L");
+                byte[] input = Encoding.ASCII.GetBytes("LS");
                 Check(WriteFile(inputWrite, input, (uint)input.Length, out written, IntPtr.Zero), "write pseudoconsole input");
                 Require(written == input.Length, "Incomplete pseudoconsole input.");
             }
@@ -439,6 +440,7 @@ public static class WindowsNativeScopeFixture {
                     "Pseudoconsole host and actor job scopes were not distinct.");
                 foreach (uint pid in members) Require(CapturedPids.Contains(pid), "Untracked terminal Job member.");
                 RequireTerminalOutput("LOOM_TERMINAL_READY");
+                RequireTerminalOutput("LOOM_STDIO_VERIFIED");
             } else {
                 Require(members.Count == 4 && Active(job) == 4, "Expected three actors and one console host.");
                 foreach (uint pid in members) {
@@ -559,7 +561,7 @@ public static class WindowsNativeScopeFixture {
             RunScope(root, executable, profile, "abort", true);
             OwnerDeath(root, executable, profile, app, true);
             Require(File.ReadAllText(Path.Combine(root, "reviewed.txt")) == "reviewed fixture content", "Reviewed bytes changed.");
-            Console.WriteLine("{\"platform\":\"windows\",\"candidate\":\"appcontainer-job\",\"protectedWritesDenied\":true,\"breakawayDenied\":true,\"brokerHandleDuplicationDenied\":true,\"originalProcessesTerminated\":true,\"originalConsoleHostsTerminated\":true,\"conptyInputOutputResizeVerified\":true,\"conptyBrokerDeathVerified\":true,\"modes\":[\"finish\",\"abort\",\"broker-death\"]}");
+            Console.WriteLine("{\"platform\":\"windows\",\"candidate\":\"appcontainer-job\",\"protectedWritesDenied\":true,\"breakawayDenied\":true,\"brokerHandleDuplicationDenied\":true,\"originalProcessesTerminated\":true,\"originalConsoleHostsTerminated\":true,\"conptyInputOutputResizeVerified\":true,\"conptyBrokerDeathVerified\":true,\"conptyInheritedStdioVerified\":true,\"modes\":[\"finish\",\"abort\",\"broker-death\"]}");
         }, delegate {
             FreeSid(sid);
             Marshal.ThrowExceptionForHR(DeleteAppContainerProfile(profile));
@@ -570,6 +572,45 @@ public static class WindowsNativeScopeFixture {
         uint written;
         Check(WriteFile(ActorConsoleOutput, output, (uint)output.Length, out written, IntPtr.Zero), "write pseudoconsole marker");
         Require(written == output.Length, "Incomplete pseudoconsole marker.");
+    }
+    static int StandardConsoleProbe() {
+        uint mode;
+        Check(GetConsoleMode(GetStdHandle(-10), out mode), "verify inherited standard input");
+        Check(GetConsoleMode(GetStdHandle(-11), out mode), "verify inherited standard output");
+        Check(GetConsoleMode(GetStdHandle(-12), out mode), "verify inherited standard error");
+        Require(Console.Read() == 'S', "Inherited standard input did not receive expected byte.");
+        Console.WriteLine("LOOM_STDIO_VERIFIED");
+        Console.Out.Flush();
+        return 0;
+    }
+    static void ProbeInheritedStdio(string executable, string workspace, IntPtr input, IntPtr output) {
+        Check(SetHandleInformation(input, 1, 1), "mark console input inheritable");
+        Check(SetHandleInformation(output, 1, 1), "mark console output inheritable");
+        try {
+            var startup = new StartupEx();
+            startup.Basic.Size = (uint)Marshal.SizeOf(typeof(Startup));
+            startup.Basic.Flags = 0x100;
+            startup.Basic.Input = input;
+            startup.Basic.Output = output;
+            startup.Basic.Error = output;
+            ProcessInfo probe;
+            Check(CreateProcessW(executable, new StringBuilder(Command(executable, "stdio-probe", workspace)),
+                IntPtr.Zero, IntPtr.Zero, true, 0, IntPtr.Zero, workspace, ref startup, out probe),
+                "launch inherited standard-console probe");
+            try {
+                Require(WaitForSingleObject(probe.Process, 5000) == 0, "Standard-console probe did not exit.");
+                uint code;
+                Check(GetExitCodeProcess(probe.Process, out code), "query standard-console probe exit");
+                if (code != 0) {
+                    string errorPath = Path.Combine(workspace, "stdio-probe.error");
+                    if (File.Exists(errorPath)) throw new InvalidOperationException(File.ReadAllText(errorPath));
+                    throw new InvalidOperationException("Standard-console probe failed: " + code);
+                }
+            } finally { Close(probe.Thread); Close(probe.Process); }
+        } finally {
+            Check(SetHandleInformation(input, 1, 0), "clear console input inheritance");
+            Check(SetHandleInformation(output, 1, 0), "clear console output inheritance");
+        }
     }
     static int Actor(string[] args) {
         string role = args[0], workspace = args[1];
@@ -591,6 +632,7 @@ public static class WindowsNativeScopeFixture {
                 uint count;
                 Check(ReadFile(input, byteRead, 1, out count, IntPtr.Zero), "read pseudoconsole input");
                 Require(count == 1 && byteRead[0] == (byte)'L', "Wrong pseudoconsole input.");
+                ProbeInheritedStdio(executable, workspace, input, output);
                 WriteConsoleMarker("LOOM_TERMINAL_READY");
             }
             string reviewed = args[2];
@@ -651,6 +693,7 @@ public static class WindowsNativeScopeFixture {
     public static int Main(string[] args) {
         try {
             if (args.Length == 1 && args[0] == "nop") return 0;
+            if (args.Length == 2 && args[0] == "stdio-probe") return StandardConsoleProbe();
             if (args.Length == 3 && (args[0] == "broker" || args[0] == "terminal-broker")) {
                 RunScope(args[1], typeof(WindowsNativeScopeFixture).Assembly.Location, args[2], "owner-death", args[0] == "terminal-broker");
                 return 0;
@@ -658,7 +701,7 @@ public static class WindowsNativeScopeFixture {
             Require(args.Length >= 2 && (args[0] == "worker" || args[0] == "child" || args[0] == "grandchild"), "Invalid fixture role.");
             return Actor(args);
         } catch (Exception error) {
-            if (args.Length >= 2 && (args[0] == "worker" || args[0] == "child" || args[0] == "grandchild" || args[0] == "broker" || args[0] == "terminal-broker")) {
+            if (args.Length >= 2 && (args[0] == "worker" || args[0] == "child" || args[0] == "grandchild" || args[0] == "broker" || args[0] == "terminal-broker" || args[0] == "stdio-probe")) {
                 File.WriteAllText(Path.Combine(args[1], args[0] + ".error"), error.ToString());
             }
             Console.Error.WriteLine(error);
