@@ -12,7 +12,7 @@ on:
         description: Test scope
         type: choice
         default: full
-        options: [full, claims, portable, catalog, catalog-collision, profile-alias, snapshot-modes, macos-baseline, workspaces, library, package, mode-probe, containment-probe, terminal, terminal-macos-helper]
+        options: [full, claims, portable, catalog, catalog-collision, profile-alias, snapshot-modes, macos-baseline, preflight, workspaces, library, package, mode-probe, containment-probe, terminal, terminal-macos-helper]
 
 permissions:
   contents: read
@@ -53,6 +53,8 @@ jobs:
         run: npx vitest run tests/unit/catalog-remote.test.ts tests/integration/discovery-routes.test.ts tests/unit/scenario-discovery-handoff-helper.test.ts tests/unit/portable-runtime.test.ts -t "binds versioned Git|exports fingerprint-bound|prepares exact pinned|validates a complete handoff|refuses executable bundle installation|using a alias config path"
       - if: inputs.suite == 'macos-baseline'
         run: npx vitest run tests/integration/catalog-routes.test.ts tests/integration/chain-bundles.test.ts tests/integration/control.test.ts tests/integration/presets-routes.test.ts tests/unit/agent-copy.test.ts tests/unit/catalog-opencode.test.ts tests/unit/catalog-merge.test.ts tests/unit/chain-store.test.ts tests/unit/cli.test.ts tests/unit/portable-runtime.test.ts tests/unit/project-registry.test.ts tests/unit/run-store.test.ts
+      - if: inputs.suite == 'preflight'
+        run: npx vitest run tests/unit/preflight-engine.test.ts
       - if: inputs.suite == 'workspaces'
         run: npx vitest run tests/unit/test-workspaces.test.ts tests/integration/test-workspace-routes.test.ts
       - if: inputs.suite == 'library'

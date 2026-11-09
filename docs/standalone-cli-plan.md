@@ -92,7 +92,11 @@ These are requirements to implement and verify, not current guarantees:
    1.1.0's prebuilt `spawn-helper` mode `0644`. The package postinstall now
    grants owner execute permission to a private regular helper, and a clean
    macOS runner passed the focused terminal suite without a manual repair.
-   The full Windows suite remains unverified after the latest fixes.
+   The latest full hosted Windows run (`42641761658`) failed 17 of 65 test
+   files (47 tests failed, 839 passed, 52 skipped); three files were skipped.
+   Remaining failures include platform-specific fixtures and executable mode
+   handling, and still need diagnosis before Windows suite coverage can be
+   claimed.
    A later full baseline after the profile-alias fixes passed Linux but failed
    12 of 65 macOS files and 25 of 65 Windows files (three Windows files
    skipped). This baseline predates the subsequent snapshot-mode changes.
