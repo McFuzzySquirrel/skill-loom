@@ -12,7 +12,7 @@ on:
         description: Test scope
         type: choice
         default: full
-        options: [full, claims, portable, workspaces, library, package, terminal, terminal-macos-helper]
+        options: [full, claims, portable, catalog, workspaces, library, package, terminal, terminal-macos-helper]
 
 permissions:
   contents: read
@@ -41,6 +41,8 @@ jobs:
         run: npx vitest run tests/unit/project-claim.test.ts
       - if: inputs.suite == 'portable'
         run: npx vitest run tests/unit/portable-runtime.test.ts
+      - if: inputs.suite == 'catalog'
+        run: npx vitest run tests/unit/catalog-remote.test.ts tests/integration/discovery-routes.test.ts
       - if: inputs.suite == 'workspaces'
         run: npx vitest run tests/unit/test-workspaces.test.ts tests/integration/test-workspace-routes.test.ts
       - if: inputs.suite == 'library'

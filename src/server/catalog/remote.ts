@@ -571,9 +571,10 @@ export async function listRemoteSkillSnapshots(
   if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(sourceId)) {
     throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.NOT_FOUND, 'The remote source id is invalid.');
   }
-  const root = join(resolve(configDirectory), 'catalog-sources', sourceId);
   let names: string[];
+  let root: string;
   try {
+    root = join(await realpath(configDirectory), 'catalog-sources', sourceId);
     names = await readdir(root);
   } catch (error) {
     if (isErrno(error, 'ENOENT')) return [];
@@ -632,7 +633,12 @@ export async function listRemoteSnapshotPage(
       !/^[a-f0-9]{40,64}$/.test(revision)) {
     throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.INVALID, 'The remote snapshot page request is not valid.');
   }
-  const root = join(resolve(configDirectory), 'catalog-sources', sourceId, revision);
+  let root: string;
+  try {
+    root = join(await realpath(configDirectory), 'catalog-sources', sourceId, revision);
+  } catch {
+    throw snapshotCorrupt();
+  }
   const { kind, offset, limit, search } = parsed.data;
   let indexed;
   try {
@@ -690,7 +696,13 @@ export async function inspectRemoteSnapshotCandidate(
       !/^[a-f0-9]{40,64}$/.test(revision)) {
     throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.INVALID, 'The remote candidate request is not valid.');
   }
-  const snapshot = await readSnapshot(join(resolve(configDirectory), 'catalog-sources', sourceId, revision));
+  let configRoot: string;
+  try {
+    configRoot = await realpath(configDirectory);
+  } catch {
+    throw snapshotCorrupt();
+  }
+  const snapshot = await readSnapshot(join(configRoot, 'catalog-sources', sourceId, revision));
   if (snapshot.sourceId !== sourceId || snapshot.revision !== revision) throw snapshotCorrupt();
   const candidates = parsed.data.kind === 'skill' ? snapshot.packages : snapshot.agents;
   const matches = candidates.filter((candidate) => candidate.repositoryPath === parsed.data.repositoryPath);
@@ -893,7 +905,13 @@ async function ensureSnapshotRoot(configDirectory: string, sourceId: string, rev
   if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(sourceId) || !/^[a-f0-9]{40,64}$/.test(revision)) {
     throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.NOT_FOUND, 'The remote source identity is invalid.');
   }
-  const root = resolve(configDirectory);
+  const configuredRoot = resolve(configDirectory);
+  await mkdir(configuredRoot, { recursive: true, mode: 0o700 });
+  const rootInfo = await lstat(configuredRoot);
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) {
+    throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.NOT_FOUND, 'The remote source storage path is unsafe.');
+  }
+  const root = await realpath(configuredRoot);
   const sources = join(root, 'catalog-sources');
   const sourceDirectory = join(sources, sourceId);
   const snapshot = join(sourceDirectory, revision);

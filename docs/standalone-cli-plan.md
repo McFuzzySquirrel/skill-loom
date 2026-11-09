@@ -84,8 +84,10 @@ These are requirements to implement and verify, not current guarantees:
    noncanonical temporary paths, PTY startup, and Windows-specific filesystem
    behavior; these are not yet all diagnosed. The workflow retains the full
    suite and permits explicit focused runs while the failures are resolved.
-   The focused claim suite has passed on all three platforms (four existing
-   Windows cases skipped), but an earlier macOS race failed once and remains
+   A subsequent full run still failed on macOS (20 of 65 test files) and
+   Windows (31 of 65; three test files skipped). The focused claim suite has
+   since passed on all three platforms, including the formerly skipped
+   cross-process Windows cases, but an earlier macOS race failed once and remains
    under investigation. A clean hosted macOS ARM64 install gave `node-pty`
    1.1.0's prebuilt `spawn-helper` mode `0644`. The package postinstall now
    grants owner execute permission to a private regular helper, and a clean

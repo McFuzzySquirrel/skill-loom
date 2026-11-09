@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, readdir, rm, truncate, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, truncate, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -75,6 +75,44 @@ function fakeGit(tree = [
 }
 
 describe('remote skill source snapshots', () => {
+  it('uses a canonical snapshot root when a config ancestor is an alias', async () => {
+    const root = await makeRoot();
+    const alias = join(root, 'alias');
+    await symlink(root, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(alias, 'config') } });
+    await store.update({
+      remoteSkillSources: [{ id: 'alias-source', repository: 'https://example.com/skills.git' }],
+    });
+
+    await refreshRemoteSkillSource(store, 'alias-source', { gitRunner: fakeGit().run, temporaryDirectory: root });
+    const snapshots = await listRemoteSkillSnapshots(store.getConfigDir(), 'alias-source');
+    expect(snapshots).toHaveLength(1);
+    const page = await listRemoteSnapshotPage(store.getConfigDir(), 'alias-source', revision, {
+      kind: 'skill', search: '', offset: 0, limit: 50,
+    });
+    expect(page.items).toHaveLength(1);
+    const inspected = await inspectRemoteSnapshotCandidate(store.getConfigDir(), 'alias-source', revision, {
+      kind: 'skill', repositoryPath: 'collection/demo',
+    });
+    expect(inspected.path).toBe(await realpath(inspected.path));
+  });
+
+  it('rejects a symlink as the configured snapshot directory', async () => {
+    const root = await makeRoot();
+    const target = join(root, 'target');
+    const config = join(root, 'config');
+    await mkdir(target);
+    await symlink(target, config, process.platform === 'win32' ? 'junction' : 'dir');
+    const store = createConfigStore({ env: { LOOM_CONFIG_DIR: config } });
+    await store.update({
+      remoteSkillSources: [{ id: 'link-source', repository: 'https://example.com/skills.git' }],
+    });
+    await expect(refreshRemoteSkillSource(store, 'link-source', {
+      gitRunner: fakeGit().run, temporaryDirectory: root,
+    })).rejects.toMatchObject({ code: REMOTE_SOURCE_ERROR_CODES.NOT_FOUND });
+    expect(await readdir(target)).toEqual(['config.json']);
+  });
+
   it('serializes refresh and unregister for the same source', async () => {
     const root = await makeRoot();
     const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
