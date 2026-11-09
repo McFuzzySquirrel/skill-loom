@@ -95,8 +95,10 @@ These are requirements to implement and verify, not current guarantees:
    The full cross-platform suite remains failing.
    Workspace storage, workspace inspection, global drafts and global templates
    now canonicalize config ancestors (including macOS `/var` aliases) while
-   rejecting a symlink as the configured directory or storage child. Local
-   lifecycle and symlink-rejection tests pass; hosted verification is pending.
+   rejecting a symlink as the configured directory or storage child. Focused
+   lifecycle and symlink-rejection tests passed on hosted Linux, macOS and
+   Windows; the discovery-workspace alias test passed on Linux and macOS but
+   remains blocked on Windows by executable-mode preservation.
    This does not establish that every profile surface supports aliases. Focused Windows
    terminal suite initially failed on resize, exit status, locked test
    directories, missing-executable expectations, and timeouts. Passing
