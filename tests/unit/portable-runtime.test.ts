@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { access, chmod, mkdtemp, mkdir, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -353,6 +353,21 @@ describe('portable bundle execution', () => {
     await expect(executePortableRequest({ command: 'inspect', bundlePath, projectPath: project }))
       .rejects.toMatchObject({ code: 'PACKAGE_TOO_LARGE' });
     await expect(readFile(join(project, '.loom', '.gitignore'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('rejects a linked bundle in both standalone helper mirrors', async () => {
+    const linked = join(root, 'linked-helper.loom.json');
+    await symlink(bundlePath, linked, 'file');
+    for (const prefix of ['.github/skills', 'skill']) {
+      const helper = join(process.cwd(), prefix, 'loom-run-bundle', 'scripts', 'loom-bundle.mjs');
+      const result = spawnSync(process.execPath, [
+        '--disable-warning=ExperimentalWarning', helper, 'inspect', '--bundle', linked, '--project', project,
+      ], { encoding: 'utf8', timeout: 15_000 });
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(1);
+      expect(JSON.parse(result.stderr)).toMatchObject({ ok: false, error: { code: 'BUNDLE_INVALID' } });
+      expect(result.stdout).toBe('');
+    }
   });
 
   it('requires per-step confirmation, preserves order and records completion', async () => {

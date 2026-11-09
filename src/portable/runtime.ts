@@ -13,6 +13,7 @@ import {
   rm,
   stat,
   unlink,
+  type FileHandle,
 } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { ChainBundle, BundleSkill } from '../shared/bundles.js';
@@ -179,14 +180,51 @@ async function ensureSkillRoot(project: string): Promise<string> {
   return skills;
 }
 
-async function readBoundedFile(path: string, limit: number, nonblocking = false): Promise<{ content: Buffer; executable: boolean }> {
-  let handle;
+async function openCheckedFile(
+  path: string,
+  unsafeCode: string,
+  changedCode: string,
+): Promise<{ handle: FileHandle; verifyPath: () => Promise<void> }> {
+  const before = await lstat(path, { bigint: true });
+  if (!before.isFile() || before.isSymbolicLink() || before.ino === 0n) {
+    fail(unsafeCode, 'The file must be a regular file with a verifiable identity, not a symbolic link.');
+  }
+  let handle: FileHandle;
   try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | (nonblocking ? constants.O_NONBLOCK : 0));
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   } catch (error) {
-    if (isErrno(error, 'ELOOP')) fail('PACKAGE_UNSAFE', 'An existing package file is a symbolic link.');
+    if (isErrno(error, 'ELOOP')) fail(unsafeCode, 'The file must not be a symbolic link.');
     throw error;
   }
+  const matches = (info: { dev: bigint; ino: bigint }): boolean =>
+    info.dev === before.dev && info.ino === before.ino;
+  const verifyPath = async (): Promise<void> => {
+    let current;
+    try {
+      current = await lstat(path, { bigint: true });
+    } catch (error) {
+      if (isErrno(error, 'ENOENT')) fail(changedCode, 'The file changed while it was inspected. Review it again.');
+      throw error;
+    }
+    if (!current.isFile() || current.isSymbolicLink() || !matches(current)) {
+      fail(changedCode, 'The file changed while it was inspected. Review it again.');
+    }
+  };
+  try {
+    const opened = await handle.stat({ bigint: true });
+    if (!opened.isFile() || !matches(opened)) {
+      fail(changedCode, 'The file changed while it was opened. Review it again.');
+    }
+    await verifyPath();
+    return { handle, verifyPath };
+  } catch (error) {
+    await handle.close();
+    throw error;
+  }
+}
+
+async function readBoundedFile(path: string, limit: number): Promise<{ content: Buffer; executable: boolean }> {
+  const { handle, verifyPath } = await openCheckedFile(path, 'PACKAGE_UNSAFE', 'PACKAGE_CHANGED');
   try {
     const info = await handle.stat();
     if (!info.isFile() || info.size > limit) {
@@ -204,6 +242,7 @@ async function readBoundedFile(path: string, limit: number, nonblocking = false)
         after.mode !== info.mode) {
       fail('PACKAGE_CHANGED', 'An existing package changed while it was inspected. Review it again.');
     }
+    await verifyPath();
     return { content: data.subarray(0, offset), executable: (info.mode & 0o111) !== 0 };
   } finally {
     await handle.close();
@@ -466,7 +505,7 @@ async function withRunLock<T>(directory: string, task: () => Promise<T>): Promis
 async function readRunRecord(path: string, project: string, maximumBytes = MAX_BUNDLE_REQUEST_BYTES) {
   let content: Buffer;
   try {
-    ({ content } = await readBoundedFile(path, maximumBytes, true));
+    ({ content } = await readBoundedFile(path, maximumBytes));
   } catch (error) {
     if (!(error instanceof PortableRunError)) throw error;
     if (error.code === 'PACKAGE_TOO_LARGE' && maximumBytes < MAX_BUNDLE_REQUEST_BYTES) {
@@ -565,13 +604,7 @@ export interface PortableRequest {
 
 async function loadPortableBundle(path: string | undefined): Promise<ChainBundle> {
   if (!path || !isAbsolute(path)) fail('BUNDLE_PATH_INVALID', 'Provide an absolute bundle file path.');
-  let handle;
-  try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-  } catch (error) {
-    if (isErrno(error, 'ELOOP')) fail('BUNDLE_INVALID', 'The bundle must not be a symbolic link.');
-    throw error;
-  }
+  const { handle, verifyPath } = await openCheckedFile(path, 'BUNDLE_INVALID', 'BUNDLE_INVALID');
   try {
     const info = await handle.stat();
     if (!info.isFile() || info.size > MAX_BUNDLE_REQUEST_BYTES) {
@@ -588,6 +621,7 @@ async function loadPortableBundle(path: string | undefined): Promise<ChainBundle
     if (offset !== info.size || after.size !== info.size || after.mtimeMs !== info.mtimeMs) {
       fail('BUNDLE_INVALID', 'The bundle changed while being read; inspect it again.');
     }
+    await verifyPath();
     const bundle = parseBundle(JSON.parse(data.subarray(0, offset).toString('utf8')) as unknown);
     if (bundle.chain.steps.length > MAX_PORTABLE_STEPS) {
       fail('CHAIN_TOO_LARGE', `Portable chains are limited to ${String(MAX_PORTABLE_STEPS)} steps.`);
