@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
   return WEXITSTATUS(status);
 }
 #else
-#include <grp.h>
+#include "native-fixture-identity.h"
 
 int main(int argc, char **argv) {
   if (argc < 3 || getuid() != 0 || geteuid() != 0) {
@@ -57,11 +57,7 @@ int main(int argc, char **argv) {
     fputs("Invalid fixture UID.\n", stderr);
     return 1;
   }
-  if (setgroups(0, NULL) != 0 || setgid(65534) != 0 || setuid((uid_t)target) != 0 ||
-      getuid() != target || geteuid() != target) {
-    perror("Could not drop fixture identity");
-    return 1;
-  }
+  drop_fixture_identity((uid_t)target);
   execv(argv[2], &argv[2]);
   perror("Could not execute the fixture after dropping identity");
   return 1;

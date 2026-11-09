@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { randomInt, randomUUID } from 'node:crypto';
 import { chmod, link, lstat, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -11,6 +11,69 @@ const identitySchema = z.strictObject({
   realUid: z.number().int().nonnegative(),
   effectiveUid: z.number().int().nonnegative(),
 });
+
+async function exerciseScope(
+  mode: 'finish' | 'abort' | 'owner-death',
+  uid: number,
+  binary: string,
+  profile: string,
+  descendants: string,
+): Promise<void> {
+  const owner = spawn(process.execPath, [
+    resolve('tests/fixtures/macos-native-owner.cjs'), binary, String(uid), profile, descendants,
+  ], { stdio: ['pipe', 'pipe', 'pipe'], env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin' } });
+  let output = '';
+  let errors = '';
+  const ended = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolveExit, reject) => {
+    owner.once('error', reject);
+    owner.once('close', (code, signal) => resolveExit({ code, signal }));
+  });
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => reject(new Error(`Native scope ${mode} timed out: ${errors}`)), 15_000);
+  });
+  try {
+    const ready = new Promise<number[]>((resolveReady, reject) => {
+      owner.stdout.on('data', (chunk: Buffer) => {
+        if (Buffer.byteLength(output) + chunk.length > 64 * 1024) return reject(new Error('Native fixture output exceeded its bound.'));
+        output += chunk.toString('utf8');
+        const line = output.split('\n').find((entry) => entry.startsWith('{"ready":'));
+        if (line !== undefined) {
+          try {
+            resolveReady(z.strictObject({ ready: z.array(z.number().int().positive()).length(3) }).parse(
+              JSON.parse(line) as unknown,
+            ).ready);
+          } catch (error) { reject(error); }
+        }
+      });
+      owner.stderr.on('data', (chunk: Buffer) => {
+        if (Buffer.byteLength(errors) + chunk.length > 64 * 1024) return reject(new Error('Native fixture diagnostics exceeded their bound.'));
+        errors += chunk.toString('utf8');
+      });
+      void ended.then(() => reject(new Error(`Native scope exited before readiness: ${errors}`)), reject);
+    });
+    const pids = await Promise.race([ready, deadline]);
+    expect(new Set(pids).size).toBe(3);
+    const alive = await execute('/bin/ps', ['-p', pids.join(','), '-o', 'pid=,uid=,state='], { timeout: 5000 });
+    const processes = alive.stdout.trim().split(/\r?\n/).map((line) => line.trim().split(/\s+/));
+    expect(processes).toHaveLength(3);
+    expect(processes.every((entry) => Number(entry[1]) === uid && !entry[2]?.startsWith('Z'))).toBe(true);
+    if (mode === 'owner-death') owner.kill('SIGKILL');
+    else owner.stdin.write(mode === 'finish' ? 'F' : 'A');
+    const exit = await Promise.race([ended, deadline]);
+    if (mode === 'owner-death') expect(exit.signal).toBe('SIGKILL');
+    else expect(exit).toEqual({ code: 0, signal: null });
+    expect(output).toContain('SCOPE_EMPTY');
+    expect(errors).toBe('');
+    await execute('/usr/bin/sudo', ['-n', binary, String(uid), '--verify-empty'], {
+      timeout: 10_000, env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
+    });
+  } finally {
+    clearTimeout(timeout);
+    owner.stdin.end();
+    if (owner.exitCode === null && owner.signalCode === null) owner.kill('SIGKILL');
+  }
+}
 
 describe.skipIf(process.platform !== 'darwin' || process.env.LOOM_TEST_PRIVILEGED_NATIVE !== '1')(
   'disposable macOS identity feasibility (not an execution backend)',
@@ -33,8 +96,11 @@ describe.skipIf(process.platform !== 'darwin' || process.env.LOOM_TEST_PRIVILEGE
       let created = false;
       let rootOwned = false;
       let operationError: unknown;
+      let fixtureUid: number | undefined;
+      const scopeBinary = join(root, 'scope');
+      const descendants = join(root, 'descendants');
       const files = ['launch', 'identity', 'setuid-identity', 'profile.sb', 'reviewed.txt', 'exec-child', 'setuid-alias', 'try-write']
-        .map((name) => join(root, name));
+        .map((name) => join(root, name)).concat([scopeBinary, descendants]);
       try {
         const users = await execute('/usr/bin/dscl', ['.', '-list', '/Users', 'UniqueID'], { timeout: 15_000 });
         if (users.stdout.trim().split(/\r?\n/).some((line) => line.trim().split(/\s+/)[0] === account)) {
@@ -46,6 +112,7 @@ describe.skipIf(process.platform !== 'darwin' || process.env.LOOM_TEST_PRIVILEGE
           if (attempt > 100) throw new Error('Could not allocate a disposable fixture UID.');
           uid = randomInt(10000, 60001);
         }
+        fixtureUid = uid;
         const source = resolve('tests/fixtures/macos-native-identity.c');
         await execute('/usr/bin/clang', ['-Wall', '-Wextra', '-Werror', '-o', files[0]!, source], { timeout: 60_000 });
         for (const output of [files[1]!, files[2]!]) {
@@ -53,6 +120,13 @@ describe.skipIf(process.platform !== 'darwin' || process.env.LOOM_TEST_PRIVILEGE
         }
         await execute('/usr/bin/clang', ['-Wall', '-Wextra', '-Werror', '-DEXEC_CHILD', '-o', files[5]!, source], { timeout: 60_000 });
         await execute('/usr/bin/clang', ['-Wall', '-Wextra', '-Werror', '-DTRY_WRITE', '-o', files[7]!, source], { timeout: 60_000 });
+        for (const [fixture, output] of [
+          ['macos-native-scope.c', scopeBinary], ['macos-native-descendants.c', descendants],
+        ]) {
+          await execute('/usr/bin/clang', [
+            '-Wall', '-Wextra', '-Werror', '-o', output!, resolve('tests/fixtures', fixture!),
+          ], { timeout: 60_000 });
+        }
         await link(files[2]!, files[6]!);
         await writeFile(files[3]!, '(version 1)\n(allow default)\n');
         await writeFile(files[4]!, 'reviewed fixture content\n');
@@ -106,6 +180,10 @@ describe.skipIf(process.platform !== 'darwin' || process.env.LOOM_TEST_PRIVILEGE
           forkAndSetsidAllowed: true,
           directInheritedAndHardlinkedSetuidExecDenied: true,
         }));
+        for (const mode of ['finish', 'abort', 'owner-death'] as const) {
+          await exerciseScope(mode, uid, scopeBinary, files[3]!, descendants);
+          console.info(JSON.stringify({ platform: 'darwin', candidate: 'distinct-uid-scope', mode, verifiedEmpty: true }));
+        }
       } catch (error) {
         operationError = error;
         throw error;
@@ -113,6 +191,8 @@ describe.skipIf(process.platform !== 'darwin' || process.env.LOOM_TEST_PRIVILEGE
         const cleanupErrors: unknown[] = [];
         if (created) {
           try {
+            if (fixtureUid === undefined) throw new Error('The disposable identity is unknown; refusing account deletion.');
+            await sudo([scopeBinary, String(fixtureUid), '--verify-empty']);
             const current = await sudo(['/usr/bin/dscl', '.', '-read', record, 'RealName']);
             if (current.stdout.trim().replace(/\s+/g, ' ') !== `RealName: ${marker}`) {
               throw new Error('Fixture account marker changed; refusing account deletion.');
@@ -132,6 +212,6 @@ describe.skipIf(process.platform !== 'darwin' || process.env.LOOM_TEST_PRIVILEGE
           );
         }
       }
-    }, 180_000);
+    }, 300_000);
   },
 );
