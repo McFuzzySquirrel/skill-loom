@@ -6,6 +6,7 @@ import type { BundlePreview, BundleSkill, ChainBundle } from '../../shared/bundl
 import { projectSkillRootFor } from '../catalog/copy.js';
 import { SHARED_PROJECT_SKILLS_SEGMENTS, sharedProjectSkillRoot } from '../catalog/project-paths.js';
 import { resolveSkillCatalogEntry } from '../catalog/skill-resolution.js';
+import { snapshotPackageFingerprint } from '../catalog/snapshot-fingerprint.js';
 import {
   installNativeAgentContentIntoProject,
   inspectInstalledNativeAgent,
@@ -177,12 +178,10 @@ export async function exportBundle(
       }
       await collect(source, '', 0);
       if (snapshotContent !== undefined) {
-        const fingerprint = createHash('sha256');
-        for (const file of [...skill.files].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0)) {
-          fingerprint.update(file.path).update('\0').update(file.executable ? 'x' : '-')
-            .update('\0').update(Buffer.from(file.content, 'base64'));
-        }
-        if ((remainingExecutables?.size ?? 0) !== 0 || fingerprint.digest('hex') !== snapshotContent.fingerprint) {
+        const fingerprint = snapshotPackageFingerprint(skill.files.map((file) => ({
+          path: file.path, executable: file.executable, content: Buffer.from(file.content, 'base64'),
+        })));
+        if ((remainingExecutables?.size ?? 0) !== 0 || fingerprint !== snapshotContent.fingerprint) {
           invalid('A remote package changed during export. Refresh and review it again.');
         }
       }

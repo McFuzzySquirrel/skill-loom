@@ -1,8 +1,9 @@
+import { constants } from 'node:fs';
 import {
-  copyFile,
   chmod,
   lstat,
   mkdir,
+  open,
   readdir,
   realpath,
   rm,
@@ -11,6 +12,7 @@ import {
 import { basename, join } from 'node:path';
 import type { ScenarioSkillSource } from '../../shared/presets.js';
 import { SHARED_PROJECT_SKILLS_SEGMENTS, sharedProjectSkillRoot } from './project-paths.js';
+import { snapshotPackageFingerprint } from './snapshot-fingerprint.js';
 import { REMOTE_SNAPSHOT_CONTENT, type SkillEntry, type SkillHarness } from './types.js';
 
 /**
@@ -88,6 +90,13 @@ export async function copySkillIntoProject(
   const { entry, projectPath, harness, allowNameSuffix = true } = input;
 
   const remoteContent = entry[REMOTE_SNAPSHOT_CONTENT];
+  if (entry.source === 'remote' && remoteContent === undefined) {
+    throw new CatalogCopyError(
+      CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
+      'The remote package has no verified snapshot fingerprint. Refresh the source and retry.',
+      { skillId: entry.id },
+    );
+  }
   if (process.platform === 'win32' && entry.source === 'remote' &&
       (remoteContent === undefined || (remoteContent.executablePaths?.length ?? 0) > 0)) {
     throw new CatalogCopyError(
@@ -164,6 +173,9 @@ export async function copySkillIntoProject(
   const budget = { files: 0, bytes: 0 };
   try {
     await copyDirectory(sourceDirectory, destination, budget);
+    if (entry.source === 'remote' && remoteContent !== undefined) {
+      await verifyRemoteCopy(destination, remoteContent, entry.id);
+    }
   } catch (error) {
     await removePartialCopy(
       destination,
@@ -182,11 +194,84 @@ export async function copySkillIntoProject(
     );
   }
 
+  async function verifyRemoteCopy(
+    root: string,
+    snapshot: NonNullable<SkillEntry[typeof REMOTE_SNAPSHOT_CONTENT]>,
+    skillId: string,
+  ): Promise<void> {
+    const files: Array<{ path: string; content: Buffer; executable: boolean }> = [];
+    const remainingExecutables = snapshot.executablePaths === undefined
+      ? undefined : new Set(snapshot.executablePaths);
+    let bytes = 0;
+    const unsafe = () => new CatalogCopyError(
+      CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
+      'The copied remote package differs from the verified snapshot. Refresh and review it again.',
+      { skillId },
+    );
+    async function visit(directory: string, prefix: string, depth: number): Promise<void> {
+      const directoryInfo = await lstat(directory);
+      if (depth > 32 || !directoryInfo.isDirectory() || directoryInfo.isSymbolicLink()) throw unsafe();
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        const relativePath = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
+        const before = await lstat(path, { bigint: true });
+        if (before.isSymbolicLink()) throw unsafe();
+        if (before.isDirectory()) {
+          await visit(path, relativePath, depth + 1);
+          continue;
+        }
+        if (!before.isFile() || files.length >= MAX_SKILL_PACKAGE_FILES) throw unsafe();
+        const { content, mode } = await readCheckedCopyFile(path, MAX_SKILL_PACKAGE_BYTES - bytes, unsafe);
+        const executable = (mode & 0o111n) !== 0n;
+        const recordedExecutable = remainingExecutables?.delete(relativePath);
+        if (recordedExecutable !== undefined && process.platform !== 'win32' &&
+            executable !== recordedExecutable) throw unsafe();
+        bytes += content.length;
+        files.push({ path: relativePath, content, executable: recordedExecutable ?? executable });
+      }
+    }
+    await visit(root, '', 0);
+    if ((remainingExecutables?.size ?? 0) !== 0 || snapshotPackageFingerprint(files) !== snapshot.fingerprint) {
+      throw unsafe();
+    }
+  }
+
   return {
     name: entry.name,
     source: entry.source,
     destinationPath: destination,
   };
+}
+
+async function readCheckedCopyFile(
+  path: string,
+  limit: number,
+  unsafe: () => CatalogCopyError,
+): Promise<{ content: Buffer; mode: bigint }> {
+  const before = await lstat(path, { bigint: true });
+  if (!before.isFile() || before.isSymbolicLink() || before.ino === 0n || before.size > BigInt(limit)) throw unsafe();
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const info = await handle.stat({ bigint: true });
+    if (!info.isFile() || info.dev !== before.dev || info.ino !== before.ino || info.size !== before.size) {
+      throw unsafe();
+    }
+    const content = Buffer.alloc(Number(info.size) + 1);
+    let length = 0;
+    while (length < content.length) {
+      const result = await handle.read(content, length, content.length - length, length);
+      if (result.bytesRead === 0) break;
+      length += result.bytesRead;
+    }
+    const after = await handle.stat({ bigint: true });
+    const current = await lstat(path, { bigint: true });
+    if (length !== Number(info.size) || after.size !== info.size || after.mtimeNs !== info.mtimeNs ||
+        after.mode !== info.mode || !current.isFile() || current.isSymbolicLink() ||
+        current.dev !== info.dev || current.ino !== info.ino) throw unsafe();
+    return { content: content.subarray(0, length), mode: info.mode };
+  } finally {
+    await handle.close();
+  }
 }
 
 export async function copyBundledScenarioSkill(
@@ -408,10 +493,24 @@ async function copyDirectory(
       );
     }
 
-    await copyFile(sourcePath, destinationPath);
-    if ((info.mode & 0o111) !== 0) {
-      await chmod(destinationPath, info.mode & 0o777);
+    const checked = await readCheckedCopyFile(sourcePath, MAX_SKILL_PACKAGE_BYTES - (budget.bytes - info.size),
+      () => new CatalogCopyError(
+        CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
+        'The skill package changed during copying or contains an unsafe file.',
+        { path: sourcePath },
+      ));
+    if (checked.content.length !== info.size) {
+      throw new CatalogCopyError(
+        CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
+        'The skill package changed during copying.',
+        { path: sourcePath },
+      );
     }
+    await writeFile(destinationPath, checked.content, {
+      flag: 'wx',
+      mode: Number(checked.mode & 0o777n),
+    });
+    await chmod(destinationPath, Number(checked.mode & 0o777n));
   }
 }
 
