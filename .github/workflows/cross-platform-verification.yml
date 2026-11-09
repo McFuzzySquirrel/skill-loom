@@ -94,9 +94,12 @@ jobs:
       - if: inputs.suite == 'descendant-cleanup'
         run: npx vitest run tests/unit/headless-process.test.ts
       - if: inputs.suite == 'macos-native-boundary'
+        shell: bash
         env:
           LOOM_TEST_MACOS_BOUNDARY: '1'
-        run: npx vitest run tests/integration/macos-native-boundary.test.ts
+        run: |
+          node -e "if (process.platform !== 'darwin') throw Error('This probe requires macOS');"
+          npx vitest run tests/integration/macos-native-boundary.test.ts
       - if: inputs.suite == 'workspaces'
         run: npx vitest run tests/unit/test-workspaces.test.ts tests/integration/test-workspace-routes.test.ts
       - if: inputs.suite == 'library'

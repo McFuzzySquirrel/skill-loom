@@ -119,6 +119,39 @@ checks their final output, calls post-exit cleanup repeatedly and requires its
 Node probe to exit naturally. These results do not authorize live harness
 execution or satisfy the protected-content/descendant-containment gates.
 
+### Native-only backend feasibility
+
+The user requires native host execution; an isolated Linux guest with separate
+authentication and a copied workspace was declined. No VM is being provisioned.
+
+The offline macOS probe (`42699026856`) demonstrates a rejected containment
+candidate, not a working backend. Under an inherited `sandbox-exec` profile
+that denies `process-info-setcontrol`, both `setsid()` and `setpgid()` still
+succeed and leave the original process group. A control profile denying
+`process-fork` blocks the fixture's children, but disabling all subprocesses
+is not a compatible replacement for tool-capable harness execution. The
+fixture creates no retained descendants and reaps each child. Reproduce with
+the explicit `macos-native-boundary` workflow suite. Do not equate that
+suite's passing negative assertions with containment support.
+
+A prerequisite probe in the current Linux development environment
+also successfully entered a private user/mount/PID namespace using `unshare`;
+no global cgroup or namespace settings were changed. This identifies another
+native Linux candidate, not an implemented or verified execution backend.
+It still needs protected mount construction, initial placement, capability
+removal, terminal handling, owner-death cleanup, recovery, harness-resolution
+proof and native regression coverage.
+
+Native Windows still needs a restricted execution identity plus race-free
+job assignment and ConPTY lifecycle integration; a job object alone does not
+bind reviewed content. Native macOS needs a different enforceable boundary
+than process groups or the tested sandbox rule. Investigating a privileged
+broker with constrained execution identities is a possible next direction,
+not an established guarantee. Any administrator/root helper, account or ACL
+provisioning, signed entitlement, changed credential access, or system
+extension must be explicitly specified and approved before installation.
+Both outstanding execution gates remain closed.
+
 ## Existing implementation and important constraints
 
 - `src/server/cli.ts` is currently a server/browser launcher; `src/server/app.ts` and `src/server/routes/` compose services through Fastify. `src/server/runs/orchestrator.ts` owns managed execution, PTYs, preflight, frozen snapshots and run actions.
