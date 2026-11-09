@@ -20,7 +20,7 @@ async function exerciseScope(
   descendants: string,
 ): Promise<void> {
   const owner = spawn(process.execPath, [
-    resolve('tests/fixtures/macos-native-owner.cjs'), binary, String(uid), profile, descendants,
+    resolve('tests/fixtures/native-fixture-owner.cjs'), binary, String(uid), profile, descendants,
   ], { stdio: ['pipe', 'pipe', 'pipe'], env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin' } });
   let output = '';
   let errors = '';
@@ -79,7 +79,8 @@ describe.skipIf(process.platform !== 'darwin' || process.env.LOOM_TEST_PRIVILEGE
   'disposable macOS identity feasibility (not an execution backend)',
   () => {
     it('measures protected content access and inherited-sandbox setuid execution', async () => {
-      if (process.env.GITHUB_ACTIONS !== 'true' || process.env.RUNNER_OS !== 'macOS') {
+      if (process.env.GITHUB_ACTIONS !== 'true' || process.env.RUNNER_OS !== 'macOS' ||
+          process.env.RUNNER_ENVIRONMENT !== 'github-hosted') {
         throw new Error('Privileged native fixtures are restricted to explicitly opted-in disposable macOS runners.');
       }
       const ownerUid = process.getuid!();
