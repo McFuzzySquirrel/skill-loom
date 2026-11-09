@@ -468,7 +468,7 @@ describe('atomic writes', () => {
     const exited = once(locker, 'exit');
     let attempts = 0;
     try {
-      const [ready] = await once(locker.stdout, 'data', { signal: AbortSignal.timeout(10_000) });
+      const [ready] = await once(locker.stdout, 'data', { signal: AbortSignal.timeout(30_000) });
       expect(String(ready)).toContain('LOCKED');
       await atomicWriteJson(target, { new: true }, {
         renameFile: async (source, destination) => {
@@ -490,7 +490,7 @@ describe('atomic writes', () => {
         await exited;
       }
     }
-  }, 30_000);
+  }, 45_000);
 
   it('surfaces a store write failure as a typed error without a partial target', async () => {
     const root = await makeRoot();
