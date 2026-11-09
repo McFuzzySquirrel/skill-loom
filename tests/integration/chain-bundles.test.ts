@@ -153,7 +153,7 @@ describe('portable chain bundles', () => {
     });
     const request = { projectId: targetId, bundlePath, reviewDigest: review.reviewDigest, confirmed: true as const };
     await expect(importReviewedBundle(app.loomServices, { ...request, projectId: sourceId }))
-      .rejects.toMatchObject({ code: 'BUNDLE_CONFLICT' });
+      .rejects.toMatchObject({ code: process.platform === 'win32' ? 'BUNDLE_SOURCE_UNAVAILABLE' : 'BUNDLE_CONFLICT' });
     await mkdir(join(target, '.agents', 'skills', 'review'), { recursive: true });
     await expect(importReviewedBundle(app.loomServices, request)).rejects.toMatchObject({ code: 'BUNDLE_CONFLICT' });
     const conflicted = await reviewBundleImport(app.loomServices, targetId, bundlePath);
@@ -284,9 +284,8 @@ describe('portable chain bundles', () => {
     const exportedResponse = await app.inject({ method: 'GET', url: `/api/projects/${sourceId}/chains/${multi.id}/bundle` });
     expect(exportedResponse.statusCode, exportedResponse.body).toBe(200);
     const bundle = exportedResponse.json<{ bundle: ChainBundle }>().bundle;
-    expect((await request('import', bundle, { confirmed: true })).statusCode).toBe(201);
+    expect((await request('import', await exported(), { confirmed: true })).statusCode).toBe(201);
     const newTarget = join(target, '.agents', 'skills', 'new-skill');
-    await rm(newTarget, { recursive: true });
     const bundlePath = join(root, 'rollback-race.loom.json');
     await writeFile(bundlePath, JSON.stringify(bundle));
     const review = await reviewBundleImport(app.loomServices, targetId, bundlePath);

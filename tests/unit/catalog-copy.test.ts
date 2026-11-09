@@ -6,6 +6,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  realpath,
   rm,
   stat,
   symlink,
@@ -34,7 +35,7 @@ let projectPath: string;
 let sourcePath: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'loom-catalog-copy-'));
+  root = await realpath(await mkdtemp(join(tmpdir(), 'loom-catalog-copy-')));
   projectPath = join(root, 'project');
   sourcePath = join(root, 'personal-skills', 'release-notes');
   await mkdir(projectPath, { recursive: true });
@@ -385,6 +386,9 @@ describe('copySkillIntoProject', () => {
     const templateBytes = (await stat(join(sourcePath, 'templates', 'note.md'))).size;
     const payload = join(sourcePath, 'payload.bin');
     await writeFile(payload, Buffer.alloc(MAX_SKILL_PACKAGE_BYTES - skillBytes - templateBytes));
+    if (process.platform === 'win32') {
+      execFileSync('git', ['-C', root, 'add', '--', 'personal-skills/release-notes/payload.bin']);
+    }
     const first = await copySkillIntoProject({ projectPath, harness: 'opencode', entry: entry() });
     expect((await stat(join(first.destinationPath, 'payload.bin'))).size)
       .toBe(MAX_SKILL_PACKAGE_BYTES - skillBytes - templateBytes);
