@@ -249,7 +249,8 @@ remaining, and the probe session deleted. A `clear` between `working` and
 `idle` can make the product check fail even when the looser signal observation
 passes. Inspect `harnesses.opencode.signal`, checks, and warnings; do not treat
 that mismatch, a version warning, a failed cleanup, or a failed/blocked check
-as a pass.
+as a pass. A successful session-delete command is not enough if the subsequent
+session list cannot verify absence; that cleanup result fails closed.
 
 This verifies the captured interactive signal and session recall, **not** an
 end-to-end automatic chain or actual skill invocation. A passing result alone

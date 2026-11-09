@@ -76,7 +76,9 @@ describe.skipIf(process.platform === 'win32')('live execution probe scope', () =
 case "$1" in
   --version) printf '2.2.5\\n'; exit 0 ;;
   auth) printf '[]\\n'; exit 0 ;;
-  session) exit 0 ;;
+  session)
+    if [ "$2" = list ] && [ "$FAKE_LIST_FAIL" = 1 ]; then exit 1; fi
+    exit 0 ;;
 esac
 /bin/sleep 0.1
 if [ "$FAKE_EARLY_TOKEN" = 1 ]; then printf 'PINEAPPLE\\r\\n'; fi
@@ -87,7 +89,7 @@ printf '\\033]7501;state=idle\\007'
 /bin/sleep 1
 `);
       await chmod(opencode, 0o755);
-      for (const scenario of ['working-idle', 'clear', 'early-token'] as const) {
+      for (const scenario of ['working-idle', 'clear', 'early-token', 'unverified-cleanup'] as const) {
         const evidencePath = join(root, `${scenario}.json`);
         const result = spawnSync(process.execPath, [
           '--import', 'tsx', resolve('scripts/live-execution.ts'),
@@ -101,6 +103,7 @@ printf '\\033]7501;state=idle\\007'
             LOOM_LIVE_OPENCODE_MODEL: 'fixture/model',
             FAKE_CLEAR: scenario === 'clear' ? '1' : '0',
             FAKE_EARLY_TOKEN: scenario === 'early-token' ? '1' : '0',
+            FAKE_LIST_FAIL: scenario === 'unverified-cleanup' ? '1' : '0',
           },
           encoding: 'utf8',
           timeout: 30_000,
@@ -111,6 +114,7 @@ printf '\\033]7501;state=idle\\007'
           result: string;
           checks: Array<{ id: string; status: string }>;
           harnesses: { opencode: { signal: { productStateMachine: { completed: boolean } } } };
+          cleanup: { opencodeSessionCleanupPassed: boolean; opencodeSessions: Array<{ deleted: boolean; verifiedAbsent: boolean }> };
         };
         expect(evidence.scope).toBe('opencode');
         expect(evidence.result).toBe(scenario === 'working-idle' ? 'passed' : 'failed');
@@ -123,6 +127,12 @@ printf '\\033]7501;state=idle\\007'
           id: 'opencode.seed',
           status: scenario === 'early-token' ? 'failed' : 'passed',
         }));
+        expect(evidence.cleanup.opencodeSessionCleanupPassed).toBe(scenario !== 'unverified-cleanup');
+        if (scenario === 'unverified-cleanup') {
+          expect(evidence.cleanup.opencodeSessions).toContainEqual(expect.objectContaining({
+            existed: null, deleted: true, verifiedAbsent: false,
+          }));
+        }
       }
     } finally {
       await rm(root, { recursive: true, force: true });

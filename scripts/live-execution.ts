@@ -297,7 +297,7 @@ interface CleanupRecord {
   ptySessionsRemaining: number;
   opencodeSessions: Array<{
     sessionId: string;
-    existed: boolean;
+    existed: boolean | null;
     deleted: boolean;
     verifiedAbsent: boolean;
   }>;
@@ -1729,7 +1729,7 @@ async function deleteOpenCodeSession(input: {
   sessionId: string;
   env: NodeJS.ProcessEnv;
   cwd: string;
-}): Promise<{ existed: boolean; deleted: boolean; verifiedAbsent: boolean }> {
+}): Promise<{ existed: boolean | null; deleted: boolean; verifiedAbsent: boolean }> {
   const existed = await openCodeSessionExists(input);
   if (existed === false) {
     return { existed: false, deleted: true, verifiedAbsent: true };
@@ -1746,12 +1746,10 @@ async function deleteOpenCodeSession(input: {
   );
   const deleted = result.exitCode === 0 && !result.timedOut && result.errorCode === undefined;
   const after = await openCodeSessionExists(input);
-  // A successful delete is accepted when the follow-up list cannot run, but a
-  // list that still contains the session is always a cleanup failure.
-  const verifiedAbsent = after === false || (after === null && deleted);
+  const verifiedAbsent = after === false;
 
   return {
-    existed: existed === true || (existed === null && deleted),
+    existed,
     deleted: deleted || after === false,
     verifiedAbsent,
   };
@@ -1798,7 +1796,7 @@ async function performCleanup(): Promise<CleanupRecord> {
       } catch {
         opencodeSessions.push({
           sessionId,
-          existed: true,
+          existed: null,
           deleted: false,
           verifiedAbsent: false,
         });
