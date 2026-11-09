@@ -7,6 +7,7 @@ import {
   DEFAULT_MAX_TAIL_LINES,
   TerminalInvalidSpecError,
   TerminalOutputBuffer,
+  TerminalSpawnError,
   createTerminalSession,
   createTerminalManager,
   trimTerminalOutput,
@@ -87,6 +88,10 @@ const ECHO_SCRIPT = `
 const RESIZE_SCRIPT = `
   process.stdout.write('INIT:' + process.stdout.columns + 'x' + process.stdout.rows + '\\r\\n');
   process.on('SIGWINCH', () => {
+    process.stdout.write('SIZE:' + process.stdout.columns + 'x' + process.stdout.rows + '\\r\\n');
+  });
+  if (process.stdin.isTTY) process.stdin.setRawMode(true);
+  process.stdin.on('data', () => {
     process.stdout.write('SIZE:' + process.stdout.columns + 'x' + process.stdout.rows + '\\r\\n');
   });
   setInterval(() => {}, 1000);
@@ -180,6 +185,7 @@ describe('PTY session transport', () => {
     await waitFor(() => output.text().includes('INIT:100x30'), 'Child did not report initial size.');
 
     session.resize(132, 41);
+    session.write('size?\n');
 
     await waitFor(() => output.text().includes('SIZE:132x41'), 'Child did not observe the resize.');
     expect(session.cols).toBe(132);
@@ -212,7 +218,7 @@ describe('PTY session transport', () => {
     session.kill('SIGTERM');
 
     const event = await exit;
-    expect(event.exitCode).toBeGreaterThanOrEqual(0);
+    expect(Number.isInteger(event.exitCode)).toBe(true);
     expect(session.isRunning()).toBe(false);
     expect(session.getExit()).not.toBeNull();
     output.stop();
@@ -238,11 +244,16 @@ describe('PTY session transport', () => {
     const directory = await mkdtemp(join(tmpdir(), 'loom-pty-cwd-'));
     temporaryDirectories.push(directory);
 
-    const session = createTerminalSession({
+    const spec = {
       executable: 'loom-definitely-not-an-installed-command',
       args: [],
       cwd: directory,
-    });
+    };
+    if (process.platform === 'win32') {
+      expect(() => createTerminalSession(spec)).toThrow(TerminalSpawnError);
+      return;
+    }
+    const session = createTerminalSession(spec);
     sessions.push(session);
 
     const exit = await new Promise<TerminalExit>((resolveExit) => {

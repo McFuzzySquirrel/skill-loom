@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { CHAIN_VERSION, type Chain, type ChainSessionMode } from '../../src/server/chains/model.js';
 import { createCopilotAdapter } from '../../src/server/harness/copilot.js';
@@ -25,10 +26,10 @@ import {
 import { createTerminalSession, type TerminalExit, type TerminalSession } from '../../src/server/terminal/pty.js';
 
 const CREATED_AT = '2026-11-04T10:00:00.000Z';
-const PROJECT_PATH = '/tmp/loom-supervised-project';
+const PROJECT_PATH = resolve('/tmp/loom-supervised-project');
 
-const OPENCODE_EXECUTABLE = '/opt/loom/bin/opencode';
-const COPILOT_EXECUTABLE = '/opt/loom/bin/copilot';
+const OPENCODE_EXECUTABLE = resolve('/opt/loom/bin/opencode');
+const COPILOT_EXECUTABLE = resolve('/opt/loom/bin/copilot');
 
 function makeChain(overrides: Partial<Chain> = {}): Chain {
   return {
