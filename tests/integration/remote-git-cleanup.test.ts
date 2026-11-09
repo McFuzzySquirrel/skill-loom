@@ -156,9 +156,14 @@ setInterval(() => {}, 1000);
     },
     20_000,
   );
-  it.skipIf(process.platform !== 'linux').each(['clone', 'cat-file'])(
-    'cancels a stalled %s process group without publishing a partial snapshot',
-    async (stage) => {
+  it.skipIf(process.platform !== 'linux').each([
+    { stage: 'clone', action: 'cancel' },
+    { stage: 'cat-file', action: 'cancel' },
+    { stage: 'clone', action: 'timeout' },
+    { stage: 'cat-file', action: 'timeout' },
+  ])(
+    'cleans up a stalled $stage process group after $action without publishing a partial snapshot',
+    async ({ stage, action }) => {
       const root = await mkdtemp(join(tmpdir(), 'loom-git-cancel-'));
       const executable = join(root, 'git');
       const pidPath = join(root, 'child.pid');
@@ -196,6 +201,9 @@ if ((stage === 'clone' && isClone) || (stage === 'cat-file' && isBatch)) {
           remoteCatalogLimits: { cloneTimeoutMs: 10_000, commandTimeoutMs: 10_000 },
         });
         const baseline = await refreshRemoteSkillSource(store, 'cancel-test', { temporaryDirectory: root });
+        if (action === 'timeout') {
+          await store.update({ remoteCatalogLimits: { cloneTimeoutMs: 5000, commandTimeoutMs: 5000 } });
+        }
         process.env.LOOM_TEST_CANCEL_STAGE = stage;
         const controller = new AbortController();
         const pending = refreshRemoteSkillSource(store, 'cancel-test', { temporaryDirectory: root, signal: controller.signal });
@@ -210,8 +218,10 @@ if ((stage === 'clone' && isClone) || (stage === 'cat-file' && isBatch)) {
           }
         }
         expect(pid).toBeGreaterThan(0);
-        controller.abort();
-        await expect(pending).rejects.toMatchObject({ code: 'REMOTE_SOURCE_CANCELLED' });
+        if (action === 'cancel') controller.abort();
+        await expect(pending).rejects.toMatchObject({
+          code: action === 'cancel' ? 'REMOTE_SOURCE_CANCELLED' : 'REMOTE_SOURCE_TIMEOUT',
+        });
         try {
           const status = await readFile(`/proc/${String(pid)}/stat`, 'utf8');
           expect(status.split(') ')[1]?.[0]).toBe('Z');

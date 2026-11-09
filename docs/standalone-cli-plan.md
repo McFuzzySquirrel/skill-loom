@@ -197,9 +197,10 @@ does not prevent reviewing an otherwise valid pinned selection.
 An HTTP or control client disconnect now requests cancellation of its catalog
 refresh. A queued refresh does not start Git after cancellation; active Git
 process groups are terminated and unpublished staging is removed. Linux tests
-cover cancellation during clone and blob retrieval and preserve the previous
-snapshot. A publication rename already in progress may still complete; Windows
-process-tree cleanup remains unverified.
+cover cancellation and timeouts during clone and blob retrieval, including
+unresponsive descendants, and preserve the previous snapshot. A publication
+rename already in progress may still complete; Windows process-tree cleanup
+remains unverified.
 Real Git-command fixtures exercise staging entry and byte limits immediately
 below, at, and above their thresholds while preserving the previous snapshot.
 The 1,000-package/20,000-file local Git fixture now measures the test process's
