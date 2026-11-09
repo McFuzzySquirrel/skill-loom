@@ -75,6 +75,30 @@ function unsafe(message: string, cause?: unknown): ProjectClaimError {
   return new ProjectClaimError('PROJECT_CLAIM_UNSAFE', message, cause === undefined ? undefined : { cause });
 }
 
+function isDatabaseBusy(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'errcode' in error &&
+    typeof error.errcode === 'number' && (error.errcode & 255) === 5;
+}
+
+async function openExclusiveDatabase(path: string): Promise<DatabaseSync> {
+  const deadline = performance.now() + 100;
+  for (;;) {
+    let database: DatabaseSync | undefined;
+    try {
+      database = new DatabaseSync(path);
+      database.exec('PRAGMA busy_timeout = 0; PRAGMA synchronous = FULL; BEGIN EXCLUSIVE');
+      return database;
+    } catch (error) {
+      // Concurrent connection initialization can transiently block both
+      // contenders. Drop all locks before retrying; never replay a callback.
+      database?.close();
+      const remaining = deadline - performance.now();
+      if (!isDatabaseBusy(error) || remaining <= 0) throw error;
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, Math.min(10 + Math.random() * 10, remaining)));
+    }
+  }
+}
+
 async function ensureDatabase(projectPath: string): Promise<{
   identity: ProjectClaimTransaction['identity']; path: string;
 }> {
@@ -254,8 +278,7 @@ async function runProjectClaimTransaction<T>(
     let active = true;
     let taskFailed = false;
     try {
-      database = new DatabaseSync(path);
-      database.exec('PRAGMA busy_timeout = 0; PRAGMA synchronous = FULL; BEGIN EXCLUSIVE');
+      database = await openExclusiveDatabase(path);
       begun = true;
       const versionRow = database.prepare('PRAGMA user_version').get();
       const version = versionRow?.user_version;
@@ -402,8 +425,7 @@ async function runProjectClaimTransaction<T>(
       }
       if (taskFailed) throw error;
       if (error instanceof ProjectClaimError) throw error;
-      if (typeof error === 'object' && error !== null && 'errcode' in error &&
-          typeof error.errcode === 'number' && (error.errcode & 255) === 5) {
+      if (isDatabaseBusy(error)) {
         throw new ProjectClaimError('PROJECT_CLAIM_BUSY', 'Another process is updating the project claim.', { cause: error });
       }
       throw unsafe('The project claim transaction failed.', error);

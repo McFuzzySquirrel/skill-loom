@@ -119,6 +119,19 @@ describe('project claim transaction', () => {
     await withProjectClaimTransaction(root, async (tx) => expect(tx.read()).toBeNull());
   });
 
+  it('does not replay a callback that fails with a raw SQLite busy error', async () => {
+    const root = await project();
+    const failure = Object.assign(new Error('injected SQLite busy'), { errcode: 5 });
+    let calls = 0;
+    await expect(withProjectClaimTransaction(root, async (tx) => {
+      calls += 1;
+      tx.acquire(claim(root));
+      throw failure;
+    })).rejects.toBe(failure);
+    expect(calls).toBe(1);
+    await withProjectClaimTransaction(root, async (tx) => expect(tx.read()).toBeNull());
+  });
+
   it('serializes competing transactions within a process', async () => {
     const root = await project();
     let release: (() => void) | undefined;

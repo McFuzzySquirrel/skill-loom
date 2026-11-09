@@ -324,7 +324,12 @@ async function main() {
     const version = await execFileAsync(
       npmCommand,
       [...npmArguments, 'exec', '--yes', `--package=${tarball}`, '--', 'skill-loom', '--version'],
-      { cwd: repoRoot, maxBuffer: 20 * 1024 * 1024, env: { ...process.env, CI: '1' } },
+      {
+        cwd: repoRoot, maxBuffer: 20 * 1024 * 1024,
+        // A fresh tarball path gives npm exec a fresh installation cache. Keep
+        // it inside this smoke's cleanup boundary instead of growing ~/.npm.
+        env: { ...process.env, CI: '1', npm_config_cache: join(temporaryRoot, 'npm-cache') },
+      },
     );
     if (!version.stdout.includes(`Skill Loom ${packageVersion}`)) {
       throw new Error(`Unexpected --version output: ${version.stdout.trim()}`);
