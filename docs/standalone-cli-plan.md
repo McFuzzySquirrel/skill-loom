@@ -240,7 +240,9 @@ projects need manual ignore-file and Git-index review.
 An integration journey now exports the same project skill bundle through CLI
 and UI, then inspects, prepares, steps, explicitly recovers an interrupted
 attempt, and records its outcome in a separate project using a simulated
-portable host. This does not constitute live harness evidence.
+portable host. Its Copilot catalog uses an injected fixture scoped to the
+temporary project, not the host's installed CLI or personal skills. This does
+not constitute live harness evidence.
 An integrated fixture now carries a pinned catalog selection through the CLI
 handoff and standalone discovery bundle builder through a disposable workspace
 test and artifact check before reviewed CLI import, UI chain inspection, and

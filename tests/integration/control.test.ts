@@ -1,6 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
+import { access, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { createConnection, createServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +11,7 @@ import { spawn as spawnPty } from 'node-pty';
 import { describe, expect, it, vi } from 'vitest';
 import { executePortableRequest } from '../../src/portable/runtime.js';
 import { createConfigStore } from '../../src/server/config/store.js';
+import { createCatalogService, createDefaultCatalogAdapters } from '../../src/server/catalog/merge.js';
 import { attachControlTerminal, callControl, startControlServer, streamControlEvents } from '../../src/server/control.js';
 import { runCli } from '../../src/server/cli.js';
 import { startServer } from '../../src/server/index.js';
@@ -495,6 +497,30 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
 
   it('shares profile updates between the CLI and the running UI owner', async () => {
     const root = await mkdtemp(join(tmpdir(), 'loom-control-app-'));
+    const configStore = createConfigStore({ env: { LOOM_CONFIG_DIR: root }, homeDirectory: () => join(root, 'home') });
+    const copilotRunner = vi.fn(async ({ cwd }: { cwd: string }) => {
+      const skillsRoot = join(cwd, '.agents', 'skills');
+      let directories: Dirent[];
+      try {
+        directories = await readdir(skillsRoot, { withFileTypes: true });
+      } catch (error) {
+        if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+        directories = [];
+      }
+      const skills = [];
+      for (const entry of directories) {
+        if (!entry.isDirectory()) continue;
+        const path = join(skillsRoot, entry.name);
+        try {
+          await access(join(path, 'SKILL.md'));
+        } catch (error) {
+          if (error instanceof Error && 'code' in error && error.code === 'ENOENT') continue;
+          throw error;
+        }
+        skills.push({ name: entry.name, path, source: 'project', enabled: true });
+      }
+      return { exitCode: 0, stdout: JSON.stringify(skills), stderr: '', timedOut: false };
+    });
     const reservation = createServer();
     await new Promise<void>((ready, reject) => {
       reservation.once('error', reject);
@@ -505,6 +531,11 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
     const started = await startServer({
       host: '127.0.0.1', port, serveStatic: false,
       env: { ...process.env, LOOM_CONFIG_DIR: root },
+      configStore,
+      catalogService: createCatalogService({
+        configStore,
+        adapters: createDefaultCatalogAdapters({ homeDirectory: join(root, 'home'), copilotRunner }),
+      }),
       runRecoverOnStartup: false,
     });
     try {
@@ -677,6 +708,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       const projectBundle = JSON.parse(await readFile(projectBundlePath, 'utf8'));
       expect(projectBundle).toEqual(uiBundle.json<{ bundle: unknown }>().bundle);
       expect(projectBundle).toMatchObject({ skills: [{ name: 'local-review' }] });
+      expect(copilotRunner).toHaveBeenCalled();
       const portableProject = join(root, 'portable-project');
       await mkdir(portableProject);
       const portableReview = await executePortableRequest({
