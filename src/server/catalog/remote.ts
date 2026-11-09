@@ -859,6 +859,7 @@ async function verifySnapshotPackage(
     }
 
     const modes = modeOverride ?? await readSnapshotModes(snapshotRoot, selectedPackage.directory);
+    if (process.platform === 'win32' && modes === undefined) throw snapshotCorrupt('MODE_INDEX_MISSING');
     const review = reviewOverride ?? await readSnapshotReview(snapshotRoot, selectedPackage.directory);
     if (review === undefined) throw snapshotCorrupt('REVIEW_INDEX_MISSING');
     const remainingExecutables = modes === undefined ? undefined : new Set(modes.executablePaths);

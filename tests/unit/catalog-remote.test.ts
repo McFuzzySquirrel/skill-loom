@@ -147,14 +147,34 @@ describe('remote skill source snapshots', () => {
     await unlink(path);
     const modePath = join(store.getConfigDir(), 'catalog-sources', 'demo-source', revision, 'modes', `${entry.directory}.json`);
     const modes = await readFile(modePath, 'utf8');
-    await unlink(modePath);
     await expect(resolveSnapshotPackagePath(store.getConfigDir(), snapshot, entry))
       .rejects.toMatchObject({ code: REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT, details: { reason: 'REVIEW_INDEX_MISSING' } });
+    await unlink(modePath);
     expect(await refreshRemoteSkillSource(store, 'demo-source', {
       revision, gitRunner: fakeGit().run, temporaryDirectory: root,
     })).toEqual(snapshot);
     expect(await readFile(path, 'utf8')).toBe(index);
     expect(await readFile(modePath, 'utf8')).toBe(modes);
+    await expect(resolveSnapshotPackagePath(store.getConfigDir(), snapshot, entry)).resolves.toBeTruthy();
+  });
+
+  it.skipIf(process.platform !== 'win32')('requires Git mode metadata on Windows even for non-executable files', async () => {
+    const root = await makeRoot();
+    const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
+    await store.update({
+      remoteSkillSources: [{ id: 'demo-source', repository: 'https://example.com/acme/skills.git' }],
+    });
+    const tree = `100644 blob ${skillBlob}\tcollection/demo/SKILL.md\0`;
+    const refresh = () => refreshRemoteSkillSource(store, 'demo-source', {
+      gitRunner: fakeGit(tree).run, temporaryDirectory: root,
+    });
+    const snapshot = await refresh();
+    const entry = snapshot.packages[0]!;
+    const modes = join(store.getConfigDir(), 'catalog-sources', 'demo-source', revision, 'modes', `${entry.directory}.json`);
+    await unlink(modes);
+    await expect(resolveSnapshotPackagePath(store.getConfigDir(), snapshot, entry))
+      .rejects.toMatchObject({ code: REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT, details: { reason: 'MODE_INDEX_MISSING' } });
+    await refresh();
     await expect(resolveSnapshotPackagePath(store.getConfigDir(), snapshot, entry)).resolves.toBeTruthy();
   });
 

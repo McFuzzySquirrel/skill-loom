@@ -100,7 +100,7 @@ export async function copySkillIntoProject(
     );
   }
   if (process.platform === 'win32' && entry.source === 'remote' &&
-      (remoteContent === undefined || (remoteContent.executablePaths?.length ?? 0) > 0)) {
+      (remoteContent?.executablePaths === undefined || remoteContent.executablePaths.length > 0)) {
     throw new CatalogCopyError(
       CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
       'Windows cannot yet preserve the reviewed executable modes of this remote package during installation.',

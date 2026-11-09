@@ -115,6 +115,18 @@ describe('copySkillIntoProject', () => {
     await expect(stat(join(projectPath, '.agents'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it.skipIf(process.platform !== 'win32')('rejects a remote copy without explicit Windows mode metadata', async () => {
+    const remote = entry({
+      source: 'remote',
+      [REMOTE_SNAPSHOT_CONTENT]: { fingerprint: '0'.repeat(64), reviewFingerprint: '0'.repeat(64) },
+    });
+    await expectCopyError(
+      copySkillIntoProject({ projectPath, harness: 'opencode', entry: remote }),
+      CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
+    );
+    await expect(stat(join(projectPath, '.agents'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('rejects a different package with the same legacy snapshot fingerprint and byte count', async () => {
     await rm(join(sourcePath, 'templates'), { recursive: true });
     const skill = await readFile(join(sourcePath, 'SKILL.md'));

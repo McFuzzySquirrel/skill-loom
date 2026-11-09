@@ -360,6 +360,24 @@ describe('portable bundle execution', () => {
     })).rejects.toMatchObject({ code: 'REVIEW_STALE' });
   });
 
+  it('refuses a prepared step after a legacy-colliding installed package substitution', async () => {
+    const directory = join(project, '.agents', 'skills', 'review');
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, 'SKILL.md'), skillText);
+    await writeFile(join(directory, 'x'), Buffer.from('prefix\x00y\x00f\x000\x00suffix'));
+    const prepared = await prepare({ reuseSkills: ['review'], differingReuseConfirmed: true });
+    await writeFile(join(directory, 'SKILL.md'), Buffer.concat([
+      Buffer.from(skillText), Buffer.from('\x00x\x00f\x000\x00prefix'),
+    ]));
+    await rm(join(directory, 'x'));
+    await writeFile(join(directory, 'y'), 'suffix');
+    await expect(command('step', prepared.runId, prepared.revision, { confirmed: true }))
+      .rejects.toMatchObject({ code: 'PACKAGE_CHANGED' });
+    await expect(command('status', prepared.runId, prepared.revision)).resolves.toMatchObject({
+      run: { status: 'ready', revision: prepared.revision },
+    });
+  });
+
   it('inspects v2 agents but refuses to silently run with a different current agent', async () => {
     const agentText = '---\nname: reviewer\ndescription: Review changes\n---\nReview the task.\n';
     const fingerprint = createHash('sha256').update(agentText).digest('hex');
