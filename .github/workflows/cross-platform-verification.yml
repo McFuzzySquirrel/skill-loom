@@ -43,5 +43,8 @@ jobs:
         run: npx vitest run tests/unit/portable-runtime.test.ts
       - if: inputs.suite == 'workspaces'
         run: npx vitest run tests/unit/test-workspaces.test.ts tests/integration/test-workspace-routes.test.ts
+      - if: inputs.suite == 'terminal' && runner.os == 'macOS'
+        run: |
+          node -e "const fs = require('node:fs'); for (const p of ['node_modules/node-pty/build/Release/spawn-helper', 'node_modules/node-pty/prebuilds/darwin-' + process.arch + '/spawn-helper']) { if (fs.existsSync(p)) { const s = fs.statSync(p); let executable = true; try { fs.accessSync(p, fs.constants.X_OK); } catch { executable = false; } console.log(JSON.stringify({path: p, mode: (s.mode & 0o777).toString(8), executable})); } }"
       - if: inputs.suite == 'terminal'
         run: npx vitest run tests/unit/pty.test.ts tests/unit/supervised-runner.test.ts tests/integration/terminal-ws.test.ts
