@@ -87,6 +87,10 @@ try {
     $path = [string]$inputData.path
     if ($path -notmatch '^[A-Za-z]:[\\/][^:]*$' -or $path.Length -gt 1024) { Fail 'WINDOWS_PROFILE_INVALID' }
     $path = [System.IO.Path]::GetFullPath($path)
+    $drive = [System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($path))
+    if ($drive.DriveType -ne [System.IO.DriveType]::Fixed -or $drive.DriveFormat -notin @('NTFS', 'ReFS')) {
+        Fail 'WINDOWS_PROFILE_INVALID'
+    }
     $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
     try { $user = $identity.User.Value } finally { $identity.Dispose() }
     Check-Parents $path $user
@@ -102,6 +106,7 @@ try {
         $security.AddAccessRule($rule)
         $null = [System.IO.Directory]::CreateDirectory($path, $security)
     }
+    Check-Parents $path $user
     $directory = [System.IO.DirectoryInfo]::new($path)
     if (-not $directory.Exists -or ($directory.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { Fail 'WINDOWS_PROFILE_UNSAFE' }
     Check-Acl ($directory.GetAccessControl()) $user $true

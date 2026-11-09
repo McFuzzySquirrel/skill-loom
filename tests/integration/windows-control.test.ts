@@ -2,6 +2,7 @@ import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { randomUUID, X509Certificate } from 'node:crypto';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -14,6 +15,7 @@ import { createWindowsControlCertificates, readWindowsControlMetadata, verifyWin
 import { createRunOwner } from '../../src/server/runs/owner.js';
 import { CHAIN_VERSION, parseChain } from '../../src/server/chains/model.js';
 import { createRunRecord } from '../../src/server/runs/model.js';
+import { startServer } from '../../src/server/index.js';
 import type { RunOrchestrator } from '../../src/server/runs/orchestrator.js';
 import { createTerminalManager } from '../../src/server/terminal/pty.js';
 
@@ -82,6 +84,46 @@ describe.skipIf(process.platform !== 'win32')('Windows private control', () => {
       } finally { socket.destroy(); }
     } finally { await service.close(); owner.release(); }
     await expect(access(join(profile, 'control.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  }, 90_000);
+
+  it('shares CLI mutations with the production UI owner and stops through authenticated control', async () => {
+    const reservation = createServer();
+    await new Promise<void>((ready, reject) => {
+      reservation.once('error', reject);
+      reservation.listen(0, '127.0.0.1', ready);
+    });
+    const address = reservation.address();
+    if (address === null || typeof address === 'string') throw new Error('No reserved port.');
+    await new Promise<void>((done, reject) => reservation.close((error) => error ? reject(error) : done()));
+    const started = await startServer({
+      configStore: await config(), host: '127.0.0.1', port: address.port,
+      serveStatic: false, runRecoverOnStartup: false,
+    });
+    const cli = (args: string[], input?: unknown) => new Promise<unknown>((done, reject) => {
+      const child = execFile(process.execPath, [
+        '--import', 'tsx', 'src/server/cli.ts', ...args, '--config-dir', profile,
+      ], { encoding: 'utf8', timeout: 30_000 }, (error, stdout) => {
+        if (error !== null) reject(error);
+        else {
+          try { done(JSON.parse(stdout) as unknown); } catch (parseError) { reject(parseError); }
+        }
+      });
+      child.stdin?.end(input === undefined ? '' : JSON.stringify(input));
+    });
+    try {
+      expect(await cli(['service', 'status'])).toMatchObject({ ok: true, result: { state: 'running' } });
+      await Promise.all(['one', 'two'].map((name) =>
+        cli(['catalog', 'source', 'add'], { repository: `https://example.invalid/${name}.git` })));
+      const response = await started.app.inject('/api/settings/remote-skill-sources');
+      expect(response.json<{ remoteSkillSources: Array<{ repository: string }> }>().remoteSkillSources
+        .map((source) => source.repository).sort()).toEqual([
+        'https://example.invalid/one.git', 'https://example.invalid/two.git',
+      ]);
+      expect(await cli(['service', 'stop'])).toMatchObject({ ok: true });
+      await vi.waitFor(() => expect(started.app.loomLifecycle.state).toBe('stopped'), { timeout: 15_000 });
+      const next = await acquireProfileOwner(profile);
+      next.release();
+    } finally { await started.stop(); }
   }, 90_000);
 
   it('denies absent and untrusted client certificates without returning application bytes', async () => {

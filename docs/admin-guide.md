@@ -186,7 +186,7 @@ artifact, review the content and redistribution rights separately, and extract
 own 100-package, 2,000-file, 20 MiB decoded, and 30 MiB JSON limits; stdin and
 control requests are limited to 64 KiB.
 
-On Unix-like systems, `skill-loom service start` starts the same profile-owning
+`skill-loom service start` starts the same profile-owning
 server without opening a browser; it still binds the normal loopback HTTP
 listener. A UI-started server also exposes the local control endpoint. Use
 `service status` and `service stop` against the same `--config-dir`; normal
@@ -371,9 +371,8 @@ missing files and mismatches fail their checks, while unsafe paths and unreadabl
 files return errors. Checks are sequential observations, not an atomic snapshot,
 and do not establish semantic correctness or prove a skill was invoked.
 
-The current control transport is not available on Windows; the existing UI
-launcher and read-only catalog commands remain available there. Unix control
-supports draft editing, terminal attachment, and restricted reviewed managed
+Control uses a private Unix socket or mutually authenticated loopback TLS on
+Windows. Both support draft editing, terminal attachment, and restricted reviewed managed
 starts and actions as described above; skill-bearing CLI starts remain blocked.
 Current portable helpers block preparation and step execution if another
 unfinished portable run is recorded in the project. The bounded conflict scan
@@ -450,7 +449,7 @@ inspect both files and the live process state rather than assuming rollback.
 
 ## Identity, Secrets, and TLS
 
-The browser HTTP interface has **no application identity, authentication, or authorization**. It is **loopback-only** by design and refuses a non-loopback host. There is no TLS listener and no supported reverse-proxy deployment. Do not expose the port through a proxy, tunnel, container publish, or remote host.
+The browser HTTP interface has **no application identity, authentication, or authorization**. It is **loopback-only** by design and refuses a non-loopback host. There is no browser HTTPS listener and no supported reverse-proxy deployment. Do not expose the port through a proxy, tunnel, container publish, or remote host.
 
 The Unix local control endpoint uses an owner-only runtime directory and a
 per-instance bearer capability in `control.json`, readable only by the profile
@@ -458,6 +457,37 @@ owner. Treat that file as a secret: do not share, commit, or back it up. It is
 removed on clean shutdown and replaced after a safely checked stale endpoint.
 This mechanism does not isolate processes running as the same operating-system
 user and does not add authentication to the browser HTTP interface.
+
+Windows control instead uses TLS 1.3 on an ephemeral IPv4 loopback port, pinned
+per-instance server and client certificates, `loom-control-v1` ALPN and the
+same bearer/protocol/application-version handshake. It does not use Node's
+default named-pipe permissions. The shipped PowerShell/.NET helper creates new
+profiles with a protected, inheritable current-user-only DACL and checks
+ownership, ancestors and metadata/lock-file ACLs before access. Untrusted
+ancestor deletion or ACL takeover, reparse points, hard-linked control files,
+and broadly accessible profiles or metadata are rejected. Administrators,
+SYSTEM and TrustedInstaller are privileged, trusted principals; this is not
+isolation from them or from another process running as the same user.
+
+Windows profiles require a local fixed NTFS/ReFS drive, Windows PowerShell 5.1
+with .NET 4.7.2+ and permission to run the shipped script. Execution-policy or
+constrained-language restrictions fail closed; Loom does not change policy,
+elevate, or fall back to an unsecured listener. Existing ACLs are never silently
+changed. For an older or inherited-ACL profile, stop all owners and use
+`skill-loom service start --config-dir <new-unused-local-profile-path>` to
+create a private profile. Review any config and durable run/claim state before
+migrating it; choosing a new profile does not resolve an old active run or
+prove that its descendants exited. Do not delete run records or claims to
+bypass recovery safeguards.
+
+On Windows, `control.json` also holds the temporary client PKCS#12 private key
+and both public certificates. The server private key stays in process memory.
+Protect this file as a secret and exclude it from backups. Certificates expire
+after one year; stop the owner and restart to rotate them. A crashed owner is
+recovered through the SQLite OS lock and a refused stale endpoint; an endpoint
+that responds but cannot be authenticated is refused, not taken over or shut
+down. Clean shutdown removes only that instance's metadata. Windows control
+does not lift the protected-content or descendant-containment execution gates.
 
 Harness credentials belong to OpenCode or Copilot and stay in their own stores or environment. Skill Loom may inspect command output, credential-file presence, or environment-variable presence as authentication evidence, but it never reads credential values into its config, logs, or API responses. Preflight reports presence only.
 
@@ -467,14 +497,14 @@ If you need multi-user or remote access, this project does not provide it. Treat
 
 | Path | Contents | Notes |
 |---|---|---|
-| `~/.config/loom/config.json` | Global config, executable overrides, extra skill directories, remote sources, recent projects, managed-workspace ownership, and UI preferences. | Override the directory with `LOOM_CONFIG_DIR`. POSIX creation requests owner-only permissions; Windows ACL privacy is not verified and must be configured separately. |
+| `~/.config/loom/config.json` | Global config, executable overrides, extra skill directories, remote sources, recent projects, managed-workspace ownership, and UI preferences. | Override the directory with `LOOM_CONFIG_DIR`. POSIX creation requests owner-only permissions; Windows service startup requires a verified protected private profile. |
 | `~/.config/loom/drafts/*.json` | Project-independent chain drafts. | Separate from templates and project chains; back up with the config directory. |
 | Browser download location (`*.loom-discovery.json`) | A user-prepared discovery handoff containing the goal and exact selected candidate packages. | Not retained by the server. It can contain private or redistribution-restricted content; protect or remove it according to your local policy. |
 | `~/.config/loom/test-workspaces/<uuid>/` | Managed disposable projects created by **Test in disposable workspace**. | Retained until explicit cleanup from **Test workspaces**. Cleanup refuses the workspace holding the global active run. |
 | `~/.config/loom/discovery-workspaces/<uuid>/` | Reviewed handoff, bundled `scenario-discovery` package, managed project, result file, and run state for interactive scenario discovery. | Retained until explicit cleanup from **Discover workflows**. Cleanup refuses the workspace holding the global active run. |
 | `~/.config/loom/active-run.json` | Single global active-run pointer. | Holds the active run's project path, run id, and status. Do not edit while a run is live. |
 | `~/.config/loom/profile-owner.sqlite` | Profile ownership lock. | One server may own a profile at a time. Do not remove or replace this file while the server is running; the operating system releases the lock on process exit. Store the profile on a filesystem that supports SQLite locking. |
-| `~/.config/loom/control.json` | Temporary local control endpoint and bearer capability on Unix. | Owner-only; do not share, back up, or remove while the server is running. |
+| `~/.config/loom/control.json` | Temporary local control endpoint and bearer capability; Windows also includes client TLS credentials. | Private to the profile owner; do not share, commit, back up, or remove while the server is running. |
 | `~/.config/loom/chains/*.json` | Global chain templates. | Independent snapshots; importing copies one into a project with a new id. |
 | `<project>/.loom/chains/*.json` | Saved project chains. | Versioned JSON, atomic writes. Back up or version these recipes. |
 | `<project>/.loom/runs/*.json` | Run snapshots, statuses, actions, and bounded tails. | At most 200 lines or 32 KiB per step. Never a full transcript. This repository git-ignores `.loom/runs/`. |
@@ -509,7 +539,7 @@ Remote snapshots store a bounded versioned executable-mode index derived from Gi
 
 Back up both installed-mode records with their package. Missing, unsafe, inconsistent, or unexpected metadata blocks review and export; Windows shared packages without either record are also blocked, including legacy shared packages. Restore the complete records and files, or reinstall a reviewed bundle into a fresh directory. Ordinary rollback removes only the failing attempt's registry receipt; crashes retain evidence for operator inspection after confirming no installer is active. Existing-path edits retain mode intent but invalidate previous content approval; new or removed paths need a new reviewed installation. Only validated operational mode metadata is omitted from bundle inventories. See the [Windows mode and recovery instructions](user-guide.md#share-a-chain-and-its-skills), including explicit Git staging when `core.filemode=false`.
 
-These are mode-preservation and point-in-time review guarantees, not authenticated metadata, protected content, verified Windows private IPC, descendant containment, or proof of power-loss durability where directory fsync is unavailable. Reviewed managed-execution safeguards and durable project claims remain in place.
+These are mode-preservation and point-in-time review guarantees, not authenticated package metadata, protected content, descendant containment, or proof of power-loss durability where directory fsync is unavailable. Windows private IPC is a separate control-transport guarantee. Reviewed managed-execution safeguards and durable project claims remain in place.
 
 New remote snapshots also store a length-framed content digest derived from the fetched Git tree. Older snapshots without it are omitted from discovery until refreshed at the same revision and verified against the fetched contents; refreshing a newer branch tip does not upgrade a different historical revision. On the remote repositories page, use **Refresh this saved commit**, or run `skill-loom catalog source refresh --source <id> --revision <saved-commit>`. This requires Git access to that commit and does not change the configured ref. Alternatively, review and select the newer snapshot. The digest detects inconsistent package files or metadata, but neither it nor its writable index protects against an actor who can rewrite both.
 
@@ -629,7 +659,7 @@ For the full troubleshooting contract, including the dirty Git tree, node-pty, m
 ## Security and Privacy Checklist
 
 - [ ] `LOOM_HOST` is loopback (or unset) and the process is not published through a proxy, tunnel, or container port.
-- [ ] `~/.config/loom` is readable only by the intended local user. POSIX config writes request restrictive permissions; on Windows, verify the directory's inherited ACL separately.
+- [ ] `~/.config/loom` is private to the intended local user. POSIX config writes request restrictive permissions; Windows service startup verifies a protected private profile and refuses unsafe existing ACLs.
 - [ ] No credential, token, API key, or secret is pasted into `config.json`, a chain, a run, or a support report.
 - [ ] Harness CLIs are authenticated in their own stores; Skill Loom reports presence only.
 - [ ] Copilot folder trust is persisted through Copilot's **Yes, and remember this folder for future sessions** dialog choice; `~/.copilot/config.json` is not edited by hand unless you are repairing Copilot itself.

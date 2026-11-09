@@ -117,7 +117,7 @@ export async function startServer(options: BuildAppOptions & { enableControl?: b
   let control: { close(): Promise<void> } | undefined;
   let controlReady = false;
   try {
-    if (options.enableControl ?? process.platform !== 'win32') {
+    if (options.enableControl !== false) {
       control = await startControlServer(configStore, {
         services: app.loomServices,
         runOwner: app.loomRunOwner,

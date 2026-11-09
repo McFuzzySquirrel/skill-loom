@@ -78,9 +78,13 @@ The CLI can also inspect a bundle without starting the workspace:
 This read-only command emits JSON and does not install or run the bundle.
 `skill-loom catalog --help` describes commands for listing and refreshing Git
 sources and searching pinned snapshots or a registered project's local catalog.
-On Unix-like systems, start the shared
-owner without opening a browser with `skill-loom service start`; use
+Start the shared owner without opening a browser with
+`skill-loom service start`; use
 `skill-loom service status` and `skill-loom service stop` to check and stop it.
+Unix uses a private socket; Windows uses mutually authenticated loopback TLS
+and requires a protected private profile on local NTFS/ReFS storage, Windows
+PowerShell 5.1 and .NET 4.7.2+. Unsafe existing Windows profiles are rejected,
+not silently reconfigured; see the administrator guide.
 The owner also supports project registration, draft creation and model
 validation, bundle export, and reviewed import without package reuse; see the
 [administrator guide](docs/admin-guide.md#cli-flags). Managed run start and
@@ -297,7 +301,7 @@ The CLI flags `--port` and `--config-dir` set `LOOM_PORT` and `LOOM_CONFIG_DIR`.
 
 Skill Loom is **loopback-only**. The server binds to `127.0.0.1` by default, refuses any non-loopback `LOOM_HOST`, and has **no authentication** because there is no remote access. Never expose the port through a reverse proxy, tunnel, container port publish, or remote host.
 
-The server owns all filesystem traversal, persistence, process spawning, and PTY handling. The browser performs no shell execution and receives only typed API and WebSocket data. Skill Loom sends no telemetry, crash reports, or remote logs. Git network access occurs only when a user explicitly refreshes a registered repository; user-invoked harness CLIs and package installation may also use the network. Harness credentials are not persisted or logged. The Unix control endpoint uses a separate, temporary bearer capability stored in an owner-readable profile file; see the [administrator guide](docs/admin-guide.md#identity-secrets-and-tls).
+The server owns all filesystem traversal, persistence, process spawning, and PTY handling. The browser performs no shell execution and receives only typed API and WebSocket data. Skill Loom sends no telemetry, crash reports, or remote logs. Git network access occurs only when a user explicitly refreshes a registered repository; user-invoked harness CLIs and package installation may also use the network. Harness credentials are not persisted or logged. Local control uses a separate, temporary bearer capability in a private profile file; Windows also stores temporary client TLS credentials there. See the [administrator guide](docs/admin-guide.md#identity-secrets-and-tls).
 
 Harness children are spawned with an executable plus an argument array, never a shell command string. Project paths are canonicalized, path traversal outside the intended data directory is rejected, and harness, skill, and run content is rendered as escaped text or raw terminal text, never as HTML.
 

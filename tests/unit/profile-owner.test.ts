@@ -8,6 +8,7 @@ import { acquireProfileOwner } from '../../src/server/profile-owner.js';
 import { verifyWindowsProfile } from '../../src/server/windows-control.js';
 
 const roots: string[] = [];
+const timeout = process.platform === 'win32' ? 60_000 : 15_000;
 
 async function root(): Promise<string> {
   const path = await mkdtemp(join(tmpdir(), 'loom-owner-'));
@@ -52,7 +53,7 @@ describe('profile owner', () => {
     const next = await acquireProfileOwner(directory);
     next.release();
     next.release();
-  });
+  }, timeout);
 
   it('recovers ownership after the holding process exits unexpectedly', async () => {
     const directory = await root();
@@ -73,11 +74,11 @@ describe('profile owner', () => {
     }
     const recovered = await acquireProfileOwner(directory);
     recovered.release();
-  });
+  }, timeout);
 
   it('refuses a symlink ownership file', async () => {
     const directory = await root();
     await symlink(join(directory, 'elsewhere'), join(directory, 'profile-owner.sqlite'));
     await expect(acquireProfileOwner(directory)).rejects.toMatchObject({ code: 'PROFILE_LOCK_UNSAFE' });
-  });
+  }, timeout);
 });

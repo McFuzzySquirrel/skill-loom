@@ -26,21 +26,22 @@ Deliver both managed harness execution and execution in the calling agent's sess
 | Requirement | Status |
 | --- | --- |
 | Windows executable-mode installation | Implemented for reviewed new installations, copies, reuse, nested skills, and re-export. Legacy shared packages require restoration or fresh installation; missing records never silently become non-executable. |
-| Windows private IPC and ownership | In progress: protected profile ACL validation and mutually authenticated, certificate-pinned loopback TLS implemented; native Windows verification remains required before enabling control for the UI launcher by default. |
+| Windows private IPC and ownership | Implemented: protected profile ACL validation and mutually authenticated, certificate-pinned loopback TLS; focused native Windows checks passed. Expanded production-owner and regression verification in progress. |
 | Protected managed skill execution | Blocked: a verified protected content view and harness-resolution boundary are still required. |
 | Descendant containment | Open: verified native containment or an explicitly approved VM backend is required; direct-child exit and terminal status are insufficient. |
 
 Installed-mode preservation does not complete the other three requirements or lift their execution and recovery gates.
 
-The Windows control candidate uses the OS-provided Windows PowerShell/.NET
+The Windows control transport uses the OS-provided Windows PowerShell/.NET
 helper shipped with Loom, not default named-pipe permissions. New profiles are
 created with a protected, inheritable current-user-only DACL. Existing unsafe
 profiles, reparse-point ancestors, broadly accessible metadata/lock files, and
 ancestors permitting untrusted deletion or ACL takeover are rejected without
 changing ACLs. System, administrators, and TrustedInstaller are privileged
-principals, not isolation targets. Profiles must be on a local drive.
+principals, not isolation targets. Profiles must be on a local fixed NTFS/ReFS
+drive with Windows PowerShell 5.1 and .NET 4.7.2+ available.
 
-The candidate binds an exclusive loopback TCP port, requires TLS 1.3 and the
+The transport binds an exclusive loopback TCP port, requires TLS 1.3 and the
 `loom-control-v1` ALPN protocol, and authenticates both peers with fresh,
 independently generated self-signed certificates. The private profile's
 `control.json` contains the server certificate, client certificate and client
@@ -56,8 +57,13 @@ recovery and event/terminal parity. The `windows-control` workflow suite also
 explicitly enables a disposable second-local-user test on the hosted Windows
 runner; it verifies a public fixture is readable while the private metadata,
 profile writes and authenticated IPC are denied, and removes that account.
-No native result is recorded yet. Protected execution and containment remain
-separate, unresolved requirements.
+Focused native Windows verification passed (`42689270663`), including the
+actual second-user denial and process-crash recovery. The initial run
+(`42688419395`) failed because one denial fixture waited only for a TLS error
+instead of also accepting EOF, and the second-user fixture depended on an
+unavailable PowerShell security module; both fixtures were corrected without
+weakening authentication. Protected execution and containment remain separate,
+unresolved requirements.
 
 ## Existing implementation and important constraints
 

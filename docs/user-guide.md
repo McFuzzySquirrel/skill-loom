@@ -22,9 +22,15 @@ You need:
 
 Skill Loom does not install or authenticate harnesses for you, and it does not send prompts to a hosted service of its own.
 
+On Windows, service startup also requires a protected private profile on a
+local fixed NTFS/ReFS drive, Windows PowerShell 5.1 and .NET 4.7.2+. Unsafe
+existing profile ACLs are refused rather than silently changed. See the
+[administrator's profile instructions](admin-guide.md#identity-secrets-and-tls)
+before choosing a fresh profile or migrating an existing one.
+
 ## Sign In and First Use
 
-There is **no sign-in**. Skill Loom binds to loopback and has **no authentication** because it is not designed for remote access. Do not expose the port through a reverse proxy, tunnel, container port publish, or remote host.
+There is **no browser sign-in**. The browser interface binds to loopback and has **no authentication** because it is not designed for remote access. The separate CLI control channel authenticates its local clients; it does not protect the browser interface. Do not expose either port through a reverse proxy, tunnel, container port publish, or remote host.
 
 On first load you land on **Start**, which organizes the main journeys around your goal rather than storage type:
 

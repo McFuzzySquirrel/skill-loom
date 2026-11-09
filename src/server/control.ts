@@ -224,21 +224,21 @@ function connectControl(metadata: Metadata): Socket {
   let socket: TLSSocket;
   try {
     socket = connectTls({
-    host: '127.0.0.1',
-    port: Number(metadata.socket.split(':').at(-1)),
-    servername: 'localhost',
-    ca: serverCertificate.toString(),
-    pfx: Buffer.from(credentials.clientPfx, 'base64'),
-    passphrase: '',
-    rejectUnauthorized: true,
-    minVersion: 'TLSv1.3',
-    ALPNProtocols: ['loom-control-v1'],
-    checkServerIdentity: (_hostname, peer) => {
-      if (!peer.raw.equals(serverCertificate.raw)) {
-        return new ControlError('CONTROL_AUTH_FAILED', 'Local control server authentication failed.');
-      }
-      return undefined;
-    },
+      host: '127.0.0.1',
+      port: Number(metadata.socket.split(':').at(-1)),
+      servername: 'localhost',
+      ca: serverCertificate.toString(),
+      pfx: Buffer.from(credentials.clientPfx, 'base64'),
+      passphrase: '',
+      rejectUnauthorized: true,
+      minVersion: 'TLSv1.3',
+      ALPNProtocols: ['loom-control-v1'],
+      checkServerIdentity: (_hostname, peer) => {
+        if (!peer.raw.equals(serverCertificate.raw)) {
+          return new ControlError('CONTROL_AUTH_FAILED', 'Local control server authentication failed.');
+        }
+        return undefined;
+      },
     });
   } catch {
     throw new ControlError('CONTROL_UNSAFE', 'The local control TLS credentials are invalid or unsupported.');
