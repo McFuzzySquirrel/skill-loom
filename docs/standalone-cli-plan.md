@@ -131,7 +131,8 @@ These are requirements to implement and verify, not current guarantees:
    (`42647120313`) passed the focused tests, including both standalone helper
    mirrors. These checks do not lock files against concurrent writers.
    The full portable-runtime unit suite subsequently passed on hosted Windows
-   (`42647762226`); executable-mode installation and reuse remain blocked.
+   (`42647762226`); executable-mode installation and reuse were still blocked
+   at that checkpoint.
    The chain-bundle integration suite passed on hosted Windows (`42648524051`),
    including rejection of executable bundle installation before skills are
    written. POSIX file-mode and graceful signal tests do not establish Windows
@@ -229,7 +230,7 @@ These are requirements to implement and verify, not current guarantees:
    executable-mode installation.
    Focused hosted Linux, macOS and Windows tests passed for migration,
    tamper rejection, handoff, bundle export and the standalone handoff builder;
-   the Windows test also verified that executable installation is blocked.
+   the Windows test also verified the then-active executable-installation gate.
    Remote copies are now checked against the discovered snapshot fingerprint,
    with partial copies removed on mismatch; hosted tests passed on Linux, macOS
    and Windows (`42654254374`). This is a point-in-time check, not a protected
@@ -273,8 +274,18 @@ These are requirements to implement and verify, not current guarantees:
    removes only that attempt's registry receipt, while crashes retain evidence
    for explicit inspection and cleanup. Tests cover real installer termination,
    simultaneous reservations, missing/corrupt metadata, content and path changes,
-   differing reuse, and executable round-trips. Local focused checks have passed;
-   native hosted verification of this implementation is pending. These records
+   differing reuse, and executable round-trips, including both standalone helper
+   mirrors and explicit staging with `core.filemode=false`. Nested skill views
+   project the parent package's validated mode record onto the selected subtree;
+   only the actual validated metadata directory is excluded from inventories.
+   The expanded focused
+   suite passed on hosted Linux, macOS, and Windows (`42682868777`), after an
+   earlier run exposed noncanonical fixture paths, checkout line-ending
+   conversion, and an intentionally retained registry entry in a removal fixture.
+   Those issues were corrected without weakening record validation or
+   no-overwrite publication. The local full suite passed (71 files, 1,011 tests;
+   15 platform-specific skips) and the package smoke check passed with the shipped
+   bundled manifest. Full hosted suites are pending. These records
    are not authenticated or immutable and cannot replace protected execution,
    private Windows IPC, or descendant containment. Power-loss durability is not
    established on Windows filesystems without directory fsync.

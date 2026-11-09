@@ -19,6 +19,7 @@ import {
 } from '../../src/server/runs/test-workspaces.js';
 import { withWorkspaceLifecycleLock } from '../../src/server/runs/workspace-lock.js';
 import { executePortableRequest } from '../../src/portable/runtime.js';
+import { writeInstalledModeIndex } from '../../src/portable/installed-modes.js';
 import { withProjectClaimTransaction, withProjectRetirementTransaction } from '../../src/shared/project-claim.js';
 import { clearReviewedProjectClaim, enableReviewedProjectProtocol, reviewProjectCoordination } from '../../src/shared/project-coordination.js';
 
@@ -449,10 +450,11 @@ describe('managed test workspaces', () => {
       await expect(service.create({ sourceProjectId: source.id, sourceChainId: skillChain.id }))
         .rejects.toMatchObject({
           code: TEST_WORKSPACE_ERROR_CODES.CREATE_FAILED,
-          message: expect.stringContaining('Track its files in Git'),
+          message: expect.stringContaining('Installed executable-mode metadata'),
         });
-      execFileSync('git', ['-C', source.canonicalPath, 'init', '--quiet']);
-      execFileSync('git', ['-C', source.canonicalPath, 'add', '--', `.agents/skills/${skillName}/SKILL.md`]);
+      await writeInstalledModeIndex(join(source.canonicalPath, '.agents', 'skills', skillName), [
+        { path: 'SKILL.md', executable: false, content: Buffer.from(skillText) },
+      ]);
     }
 
     const workspace = await service.create({

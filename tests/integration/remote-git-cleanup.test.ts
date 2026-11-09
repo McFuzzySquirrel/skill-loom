@@ -222,12 +222,14 @@ if ((stage === 'clone' && isClone) || (stage === 'cat-file' && isBatch)) {
         await expect(pending).rejects.toMatchObject({
           code: action === 'cancel' ? 'REMOTE_SOURCE_CANCELLED' : 'REMOTE_SOURCE_TIMEOUT',
         });
-        try {
-          const status = await readFile(`/proc/${String(pid)}/stat`, 'utf8');
-          expect(status.split(') ')[1]?.[0]).toBe('Z');
-        } catch (error) {
-          if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
-        }
+        await vi.waitFor(async () => {
+          try {
+            const status = await readFile(`/proc/${String(pid)}/stat`, 'utf8');
+            expect(status.split(') ')[1]?.[0]).toBe('Z');
+          } catch (error) {
+            if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+          }
+        }, { timeout: 5_000, interval: 25 });
         expect(await listRemoteSkillSnapshots(store.getConfigDir(), 'cancel-test')).toEqual([baseline]);
         expect((await readdir(root)).filter((name) => name.startsWith('skill-loom-source-'))).toEqual([]);
         const snapshotDir = join(store.getConfigDir(), 'catalog-sources', 'cancel-test');
@@ -438,12 +440,14 @@ setInterval(() => {}, 1000);
         .rejects.toMatchObject({ code: 'REMOTE_SOURCE_TIMEOUT' });
       const pid = Number(await readFile(childPidPath, 'utf8'));
       expect(Number.isInteger(pid) && pid > 0).toBe(true);
-      try {
-        const status = await readFile(`/proc/${String(pid)}/stat`, 'utf8');
-        expect(status.split(') ')[1]?.[0]).toBe('Z');
-      } catch (error) {
-        if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
-      }
+      await vi.waitFor(async () => {
+        try {
+          const status = await readFile(`/proc/${String(pid)}/stat`, 'utf8');
+          expect(status.split(') ')[1]?.[0]).toBe('Z');
+        } catch (error) {
+          if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+        }
+      }, { timeout: 5_000, interval: 25 });
     } finally {
       if (oldPath === undefined) delete process.env.PATH;
       else process.env.PATH = oldPath;

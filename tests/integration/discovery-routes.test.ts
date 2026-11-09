@@ -79,7 +79,7 @@ afterEach(async () => {
 });
 
 describe('discovery handoff route', () => {
-  it('exports fingerprint-bound Git executable modes without silently installing them on Windows', async () => {
+  it('exports fingerprint-bound Git executable modes and installs only after explicit copy or import', async () => {
     const catalog = createCatalogService({
       configStore: store,
       adapters: [{
@@ -100,12 +100,11 @@ describe('discovery handoff route', () => {
       .groups.flatMap((group) => group.entries).find((entry) => entry.name === 'handoff-skill');
     expect(selected).toBeDefined();
     expect(JSON.stringify(selected)).not.toContain('executablePaths');
-    if (process.platform === 'win32') {
-      await expect(copySkillIntoProject({ entry: selected!, projectPath: root, harness: 'opencode' }))
-        .rejects.toMatchObject({ code: 'SKILL_SOURCE_UNSAFE' });
-      await expect(importBundle(bundle, root, catalog, chains, []))
-        .rejects.toMatchObject({ code: 'BUNDLE_SOURCE_UNAVAILABLE' });
-    }
+    const copyProject = join(root, 'copy-target');
+    await mkdir(copyProject);
+    const copied = await copySkillIntoProject({ entry: selected!, projectPath: copyProject, harness: 'opencode' });
+    expect(await readFile(join(copied.destinationPath, 'scripts', 'check.sh'))).toEqual(Buffer.from(scriptContent));
+    await expect(importBundle(bundle, root, catalog, chains, [])).resolves.toMatchObject({ harness: 'opencode' });
 
     const snapshotPackage = selected!.packagePath;
     await writeFile(join(snapshotPackage, 'SKILL.md'), 'tampered');

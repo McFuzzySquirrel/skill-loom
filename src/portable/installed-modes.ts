@@ -17,7 +17,7 @@ export const InstalledModeIndexSchema = z.strictObject({
     sha256: z.string().regex(/^[a-f0-9]{64}$/),
   })).min(1).max(MAX_BUNDLE_FILES),
 });
-export type InstalledModeIndex = z.infer<typeof InstalledModeIndexSchema>;
+export type InstalledModeIndex = z.infer<typeof InstalledModeIndexSchema> & { metadataDirectory: string };
 
 export type InstalledModeReceipt = { registryPath: string; content: string };
 
@@ -38,6 +38,17 @@ function paths(directory: string) {
     registry: join(project, '.loom', 'package-modes'),
     key: `${key}.json`,
   };
+}
+
+function sharedPackageRoot(directory: string): string | null {
+  let current = directory;
+  for (let depth = 0; depth <= 32; depth += 1) {
+    if (basename(dirname(current)) === 'skills' && basename(dirname(dirname(current))) === '.agents') return current;
+    const parent = dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+  return null;
 }
 
 function missing(error: unknown): boolean {
@@ -158,8 +169,9 @@ export async function discardInstalledModeIndex(receipt: InstalledModeReceipt): 
 
 /** Read both copies; neither missing metadata nor a partial install is repaired. */
 export async function readInstalledModeIndex(directory: string): Promise<InstalledModeIndex | null> {
-  if (basename(dirname(directory)) !== 'skills' || basename(dirname(dirname(directory))) !== '.agents') return null;
-  const location = paths(directory);
+  const packageRoot = sharedPackageRoot(directory);
+  if (packageRoot === null) return null;
+  const location = paths(packageRoot);
   for (const parent of [join(location.project, '.loom'), location.registry, location.metadata]) {
     try {
       const info = await lstat(parent);
@@ -209,7 +221,13 @@ export async function readInstalledModeIndex(directory: string): Promise<Install
     if (seen.has(key)) unsafe();
     seen.add(key);
   }
-  return result.data;
+  const prefix = relative(packageRoot, directory).split(sep).join('/');
+  return {
+    ...result.data,
+    metadataDirectory: location.metadata,
+    files: prefix === '' ? result.data.files : result.data.files.filter((file) =>
+      file.path.startsWith(`${prefix}/`)).map((file) => ({ ...file, path: file.path.slice(prefix.length + 1) })),
+  };
 }
 
 // Original hashes are install receipts; subsequent reviews bind current bytes to path intent.

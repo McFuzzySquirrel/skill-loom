@@ -141,7 +141,7 @@ export async function exportBundle(
     async function collect(directory: string, prefix: string, depth: number): Promise<void> {
       if (depth > 32) invalid('The skill package exceeds the directory depth limit.');
       for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
-        if (prefix === '' && entry.name === '.loom' && installedModes !== null) continue;
+        if (prefix === '' && entry.name === '.loom' && installedModes?.metadataDirectory === join(source, '.loom')) continue;
         const path = prefix + entry.name;
         validatePackagePath(path);
         const absolute = join(directory, entry.name);

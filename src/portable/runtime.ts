@@ -310,7 +310,7 @@ export async function treeFingerprint(
     }
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const entry of entries) {
-      if (prefix === '' && entry.name === '.loom' && modeIndex !== null) continue;
+      if (prefix === '' && entry.name === '.loom' && modeIndex?.metadataDirectory === join(directory, '.loom')) continue;
       const path = join(root, entry.name);
       const relativePath = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
       const info = await lstat(path);

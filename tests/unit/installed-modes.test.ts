@@ -178,12 +178,29 @@ describe('installed executable-mode records', () => {
         await link(source, target);
       },
     });
+
     expect(receipt).toBeDefined();
     const inventory: Parameters<typeof treeFingerprint>[1] = [];
     expect(await treeFingerprint(destination, inventory)).toBe(packageFingerprint(bundleFiles));
     expect(inventory.map((entry) => entry.path)).toEqual(['scripts', 'scripts/run.sh', 'SKILL.md'].sort((a, b) => a.localeCompare(b)));
     await writeFile(join(destination, 'scripts', 'run.sh'), 'changed');
     expect(await treeFingerprint(destination)).not.toBe(packageFingerprint(bundleFiles));
+  });
+
+  it('projects parent mode records into a nested skill without hiding nested private files', async () => {
+    const { destination } = await setup();
+    const nestedFiles = bundleFiles.map((file) => ({ ...file, path: `nested/${file.path}` }));
+    await writeBundleSkillFiles(destination, [...bundleFiles, ...nestedFiles], {
+      directoryMode: 0o700, enforceFileMode: true, recordExecutableModes: true,
+    });
+    const nested = join(destination, 'nested');
+    const modes = await readInstalledModeIndex(nested);
+    expect(modes?.files.map((file) => file.path)).toEqual(['SKILL.md', 'scripts/run.sh']);
+    expect(modes?.metadataDirectory).toBe(join(destination, '.loom'));
+    expect(await treeFingerprint(nested)).toBe(packageFingerprint(bundleFiles));
+    await mkdir(join(nested, '.loom'));
+    await writeFile(join(nested, '.loom', 'hidden.txt'), 'must not be excluded');
+    await expect(treeFingerprint(nested)).rejects.toThrow(/metadata/);
   });
 
   it.each(['added', 'removed', 'mode'])('rejects a package with %s files or intent', async (change) => {

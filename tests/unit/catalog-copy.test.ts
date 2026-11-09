@@ -25,6 +25,7 @@ import {
 import { REMOTE_SNAPSHOT_CONTENT, type SkillEntry } from '../../src/server/catalog/types.js';
 import { snapshotPackageFingerprint, snapshotReviewFingerprint } from '../../src/server/catalog/snapshot-fingerprint.js';
 import { treeFingerprint } from '../../src/portable/runtime.js';
+import { writeBundleSkillFiles } from '../../src/portable/install-skill.js';
 import {
   scenarioCatalog,
   scenarioSkillPackagePath,
@@ -87,6 +88,28 @@ async function expectCopyError(
 }
 
 describe('copySkillIntoProject', () => {
+  it('copies a nested skill using its parent installed-mode records', async () => {
+    const wrapper = join(root, 'other-project', '.agents', 'skills', 'wrapper');
+    await mkdir(wrapper, { recursive: true });
+    const files = [
+      { path: 'SKILL.md', content: Buffer.from('---\nname: wrapper\n---\nBody\n').toString('base64'), executable: false },
+      { path: 'nested/SKILL.md', content: Buffer.from('---\nname: nested\n---\nBody\n').toString('base64'), executable: false },
+      { path: 'nested/run.sh', content: Buffer.from('#!/bin/sh\nexit 0\n').toString('base64'), executable: true },
+    ];
+    await writeBundleSkillFiles(wrapper, files, {
+      directoryMode: 0o700, enforceFileMode: true, recordExecutableModes: true,
+    });
+    const packagePath = join(wrapper, 'nested');
+    const copied = await copySkillIntoProject({
+      projectPath, harness: 'opencode',
+      entry: entry({ name: 'nested', packagePath, path: join(packagePath, 'SKILL.md') }),
+    });
+    const inventory: Parameters<typeof treeFingerprint>[1] = [];
+    await treeFingerprint(copied.destinationPath, inventory);
+    expect(inventory.find((item) => item.path === 'run.sh')).toMatchObject({ executable: true });
+    expect(await readdir(copied.destinationPath)).not.toContain('nested');
+  });
+
   it('binds a remote copy to the verified snapshot and removes altered copies', async () => {
     const skill = await readFile(join(sourcePath, 'SKILL.md'));
     const template = await readFile(join(sourcePath, 'templates', 'note.md'));

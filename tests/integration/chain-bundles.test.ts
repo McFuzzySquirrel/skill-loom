@@ -499,6 +499,35 @@ describe('portable chain bundles', () => {
     await expect(lstat(join(target, '.agents', 'skills', 'review'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('exports a nested installed skill using its parent mode record, not staged Windows mode bits', async () => {
+    const bundle = await exported();
+    const nestedFiles = [
+      { path: 'nested/SKILL.md', executable: false, content: Buffer.from('---\nname: nested\n---\nNested instructions.\n').toString('base64') },
+      { path: 'nested/run.sh', executable: true, content: Buffer.from('#!/bin/sh\nexit 0\n').toString('base64') },
+    ];
+    bundle.skills[0]!.files.push(...nestedFiles);
+    const response = await request('import', bundle, { confirmed: true });
+    expect(response.statusCode, response.body).toBe(201);
+    const packagePath = join(target, '.agents', 'skills', 'review', 'nested');
+    discoveryOverride = {
+      entries: [catalogEntry({ name: 'nested', packagePath, path: join(packagePath, 'SKILL.md') })],
+      warnings: [],
+    };
+    const nestedChain = await chains.create(target, {
+      name: 'Nested review', harness: 'opencode', sessionMode: 'shared',
+      steps: [{ id: 'one', skillName: 'nested', instruction: 'Review.' }], inputs: [],
+    });
+    if (process.platform === 'win32') {
+      execFileSync('git', ['-C', target, 'init', '--quiet']);
+      execFileSync('git', ['-C', target, 'add', '--', '.agents']);
+    }
+    const result = await app.inject({ method: 'GET', url: `/api/projects/${targetId}/chains/${nestedChain.id}/bundle` });
+    expect(result.statusCode, result.body).toBe(200);
+    expect(result.json<{ bundle: ChainBundle }>().bundle.skills[0]?.files).toEqual(
+      nestedFiles.map((file) => ({ ...file, path: file.path.slice('nested/'.length) })).sort((a, b) => a.path.localeCompare(b.path)),
+    );
+  });
+
   it('requires explicit confirmation and never writes during preview', async () => {
     const response = await request('import', await exported());
     expect(response.statusCode).toBe(422);

@@ -560,7 +560,7 @@ async function copyDirectory(
     const sourcePath = join(source, entry.name);
     const destinationPath = join(destination, entry.name);
     const packagePath = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
-    if (prefix === '' && entry.name === '.loom' && sourceModes !== null) continue;
+    if (prefix === '' && entry.name === '.loom' && sourceModes?.metadataDirectory === join(source, '.loom')) continue;
 
     if (entry.isSymbolicLink()) {
       throw new CatalogCopyError(
