@@ -15,7 +15,7 @@ import { canonicalConfigRoot } from '../config/canonical-root.js';
 import type { TestWorkspaceRecord } from '../config/schema.js';
 import type { ProjectRegistry } from '../projects/registry.js';
 import { readActiveRunPointerFile } from './store.js';
-import { exportBundle, importBundle } from '../chains/bundle.js';
+import { BundleError, exportBundle, importBundle } from '../chains/bundle.js';
 import { withWorkspaceLifecycleLock } from './workspace-lock.js';
 import { removeRetiredWorkspace, WorkspaceRemovalError } from './workspace-removal.js';
 
@@ -214,7 +214,9 @@ async function createWorkspace(
     if (error instanceof TestWorkspaceError) throw error;
     throw new TestWorkspaceError(
       TEST_WORKSPACE_ERROR_CODES.CREATE_FAILED,
-      'The disposable chain workspace could not be created.',
+      error instanceof BundleError
+        ? `The disposable chain workspace could not be created: ${error.message}`
+        : 'The disposable chain workspace could not be created.',
       projectSource
         ? { sourceProjectId: input.sourceProjectId, sourceChainId: input.sourceChainId }
         : { sourceDraftId: input.sourceDraftId },

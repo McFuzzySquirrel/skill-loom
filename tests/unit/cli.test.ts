@@ -141,6 +141,9 @@ describe('CLI output and environment', () => {
         version: 1,
         fingerprint: snapshotReviewFingerprint([{ path: 'SKILL.md', executable: false, content }]),
       }));
+      await writeFile(join(snapshotDirectory, 'modes', `${directory}.json`), JSON.stringify({
+        version: 1, executablePaths: [],
+      }));
       await writeFile(join(snapshotDirectory, 'snapshot.json'), JSON.stringify({
         version: 1, sourceId: 'source', repository: 'https://example.invalid/skills.git', revision,
         packages: [{ name: 'alpha', description: '', repositoryPath: 'skills/alpha',

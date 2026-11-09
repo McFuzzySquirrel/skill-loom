@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -383,7 +383,6 @@ describe('managed test workspaces', () => {
     await mkdir(remotePackage, { recursive: true });
     await writeFile(join(projectPackage, 'SKILL.md'), skillText);
     await writeFile(join(remotePackage, 'SKILL.md'), skillText);
-
     const projectSkill: SkillEntry = {
       id: 'copilot-project-better-accessibility',
       harness: 'copilot',
@@ -445,6 +444,16 @@ describe('managed test workspaces', () => {
       steps: [{ id: 'step-1', skillName, instruction: 'Apply the selected skill.' }],
       inputs: [],
     });
+
+    if (process.platform === 'win32') {
+      await expect(service.create({ sourceProjectId: source.id, sourceChainId: skillChain.id }))
+        .rejects.toMatchObject({
+          code: TEST_WORKSPACE_ERROR_CODES.CREATE_FAILED,
+          message: expect.stringContaining('Track its files in Git'),
+        });
+      execFileSync('git', ['-C', source.canonicalPath, 'init', '--quiet']);
+      execFileSync('git', ['-C', source.canonicalPath, 'add', '--', `.agents/skills/${skillName}/SKILL.md`]);
+    }
 
     const workspace = await service.create({
       sourceProjectId: source.id,
