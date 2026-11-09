@@ -358,7 +358,7 @@ async function refreshRemoteSkillSourceUnlocked(
       limits.commandTimeoutMs,
       limits.maxCommandOutputBytes,
     );
-    const files = parseTree(outputText(tree.stdout));
+    const files = parseTree(decodeTreeOutput(tree.stdout, sourceId));
     const packages = findSkillPackages(files);
     const agents = findNativeAgentFiles(files);
     if (packages.length > limits.maxPackages) throw tooLarge(sourceId, 'maxPackages', limits.maxPackages);
@@ -918,6 +918,20 @@ interface NativeAgentFile extends TreeFile {
   harness: RemoteNativeAgent['harness'];
   repositoryPath: string;
   agentPath: string;
+}
+
+function decodeTreeOutput(output: string | Buffer, sourceId: string): string {
+  if (typeof output === 'string') return output;
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(output);
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+    throw new RemoteSourceError(
+      REMOTE_SOURCE_ERROR_CODES.INVALID_PACKAGE,
+      'The remote tree contains a path that is not valid UTF-8.',
+      { sourceId },
+    );
+  }
 }
 
 function parseTree(output: string): TreeFile[] {

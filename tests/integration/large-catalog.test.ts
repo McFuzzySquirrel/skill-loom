@@ -76,6 +76,66 @@ afterEach(async () => {
 });
 
 describe('large remote catalog', () => {
+  it('rejects invalid UTF-8 Git paths without publishing a changed snapshot', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'loom-git-paths-'));
+    roots.push(root);
+    const repository = join(root, 'source.git');
+    execFileSync('git', ['init', '--bare', '--quiet', repository]);
+    const git = (args: string[], input?: string | Buffer): string => execFileSync(
+      'git',
+      [`--git-dir=${repository}`, ...args],
+      { ...(input === undefined ? {} : { input }), encoding: 'utf8' },
+    ).trim();
+    const skill = git(['hash-object', '-w', '--stdin'], '---\nname: skill\n---\nInstructions.\n');
+    const other = git(['hash-object', '-w', '--stdin'], 'content\n');
+    const commit = (invalid: boolean): string => {
+      const entries = [
+        Buffer.from(`100644 blob ${skill}\tSKILL.md\0`),
+        Buffer.from(`100644 blob ${other}\tvalid-\ufffd.txt\0`),
+      ];
+      if (invalid) {
+        entries.push(Buffer.from(`100644 blob ${other}\tinvalid-`), Buffer.from([0xff]), Buffer.from('.txt\0'));
+      }
+      const tree = git(['mktree', '-z'], Buffer.concat(entries));
+      const result = git(
+        ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit-tree', tree],
+        'Fixture\n',
+      );
+      git(['update-ref', 'refs/heads/main', result]);
+      return result;
+    };
+    const first = commit(false);
+    git(['symbolic-ref', 'HEAD', 'refs/heads/main']);
+    const config = join(root, 'gitconfig');
+    const remote = 'https://example.invalid/paths.git';
+    execFileSync('git', ['config', '--file', config, `url.file://${repository}.insteadOf`, remote]);
+    const previousGlobal = process.env.GIT_CONFIG_GLOBAL;
+    const previousSystem = process.env.GIT_CONFIG_NOSYSTEM;
+    process.env.GIT_CONFIG_GLOBAL = config;
+    process.env.GIT_CONFIG_NOSYSTEM = '1';
+    try {
+      const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
+      await store.update({ remoteSkillSources: [{ id: 'paths', repository: remote }] });
+      const original = await refreshRemoteSkillSource(store, 'paths', { temporaryDirectory: root });
+      expect(original).toMatchObject({ revision: first, packages: [{ files: 2 }] });
+      const second = commit(true);
+      expect(second).not.toBe(first);
+      await expect(refreshRemoteSkillSource(store, 'paths', { temporaryDirectory: root }))
+        .rejects.toMatchObject({
+          code: 'REMOTE_SOURCE_INVALID_PACKAGE',
+          message: 'The remote tree contains a path that is not valid UTF-8.',
+          details: { sourceId: 'paths' },
+        });
+      expect(await listRemoteSkillSnapshots(store.getConfigDir(), 'paths')).toEqual([original]);
+      expect((await readdir(root)).filter((name) => name.startsWith('skill-loom-source-'))).toEqual([]);
+    } finally {
+      if (previousGlobal === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+      else process.env.GIT_CONFIG_GLOBAL = previousGlobal;
+      if (previousSystem === undefined) delete process.env.GIT_CONFIG_NOSYSTEM;
+      else process.env.GIT_CONFIG_NOSYSTEM = previousSystem;
+    }
+  });
+
   it('refreshes 1,000 pinned skills with 20,000 package files', async () => {
     const root = await mkdtemp(join(tmpdir(), 'loom-large-catalog-'));
     roots.push(root);

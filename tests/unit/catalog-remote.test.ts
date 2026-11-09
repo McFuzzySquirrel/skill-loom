@@ -301,6 +301,39 @@ describe('remote skill source snapshots', () => {
     ]);
   });
 
+  it('rejects invalid UTF-8 tree paths without changing the prior snapshot', async () => {
+    const root = await makeRoot();
+    const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
+    await store.update({
+      remoteSkillSources: [{ id: 'demo-source', repository: 'https://example.com/acme/skills.git' }],
+    });
+    const base = fakeGit();
+    const original = await refreshRemoteSkillSource(store, 'demo-source', {
+      gitRunner: base.run,
+      temporaryDirectory: root,
+    });
+    const invalidTree = Buffer.concat([
+      Buffer.from(`100644 blob ${skillBlob}\tcollection/demo/SKILL.md\0`),
+      Buffer.from(`100644 blob ${readmeBlob}\tcollection/demo/invalid-`),
+      Buffer.from([0xff]),
+      Buffer.from('.txt\0'),
+    ]);
+    const runner: RemoteSourceGitRunner = async (...args) => {
+      if (args[0].includes('ls-tree')) return { stdout: invalidTree };
+      return base.run(...args);
+    };
+    await expect(refreshRemoteSkillSource(store, 'demo-source', {
+      gitRunner: runner,
+      temporaryDirectory: root,
+    })).rejects.toMatchObject({
+      code: REMOTE_SOURCE_ERROR_CODES.INVALID_PACKAGE,
+      message: 'The remote tree contains a path that is not valid UTF-8.',
+      details: { sourceId: 'demo-source' },
+    });
+    expect(await listRemoteSkillSnapshots(store.getConfigDir(), 'demo-source')).toEqual([original]);
+    expect((await readdir(root)).filter((name) => name.startsWith('skill-loom-source-'))).toEqual([]);
+  });
+
   it('enforces package and agent count boundaries without replacing the prior snapshot', async () => {
     const root = await makeRoot();
     const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });

@@ -119,6 +119,9 @@ staging, total snapshot bytes, and timeouts. Each setting has a finite maximum.
 Staging is polled during Git operations and checked again afterward, so it is
 not a hard filesystem quota. Existing snapshots remain readable when budgets
 are lowered. Discovery handoffs and bundles retain their independent limits.
+Git tree paths must be valid UTF-8; a source containing a non-UTF-8 path is
+rejected rather than silently changing its identity, and existing snapshots
+remain available.
 Disconnecting a refresh client requests cancellation: Git processes are
 terminated and unpublished staging is removed; a request waiting behind
 another refresh stops waiting without starting Git. Cancellation is best effort
