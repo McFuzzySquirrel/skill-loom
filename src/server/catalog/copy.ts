@@ -231,7 +231,7 @@ async function copySkillIntoProjectWithNotice(
     const remainingExecutables = snapshot.executablePaths === undefined
       ? undefined : new Set(snapshot.executablePaths);
     let bytes = entry.content.length;
-    let entries = 0;
+    let entries = 1;
     const unsafe = () => new CatalogCopyError(
       CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
       'The copied remote package differs from the verified snapshot. Refresh and review it again.',
