@@ -224,6 +224,13 @@ describe('PTY session transport', () => {
     output.stop();
   });
 
+  it('records termination requested before the child produces output', async () => {
+    const session = start("setTimeout(() => process.stdout.write('READY\\r\\n'), 300); setInterval(() => {}, 1000);");
+    session.kill('SIGTERM');
+    await waitFor(() => !session.isRunning(), 'The early termination request did not complete.', 8_000);
+    expect(session.getExit()).not.toBeNull();
+  });
+
   it('rejects invalid geometry and working directories', async () => {
     expect(() =>
       createTerminalSession({

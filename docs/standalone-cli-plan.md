@@ -94,9 +94,12 @@ These are requirements to implement and verify, not current guarantees:
    from its configured spelling, including paths under macOS `/var` aliases;
    canonicalizing test fixtures allowed the focused macOS workspace suite to
    pass but does not resolve that user-facing limitation. Focused Windows
-   terminal tests also fail on resize, exit status, locked test directories,
-   missing-executable expectations, and timeouts, so ConPTY behavior is not
-   yet verified.
+   terminal suite initially failed on resize, exit status, locked test
+   directories, missing-executable expectations, and timeouts. Passing
+   POSIX signals to `node-pty` on Windows caused deferred asynchronous errors;
+   the transport now requests Windows termination without a POSIX signal,
+   and the focused Windows terminal suite has passed. This does not verify
+   termination before PTY readiness or descendant containment.
 
 ### Versioned CLI and process interface
 
