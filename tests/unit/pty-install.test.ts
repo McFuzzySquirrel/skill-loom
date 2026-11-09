@@ -36,8 +36,9 @@ describe.skipIf(process.platform === 'win32')('macOS PTY installation', () => {
     await expect(ensurePtyHelper({ platform: 'linux', arch: process.arch, packageDirectory: 'unused' }))
       .resolves.toBeUndefined();
   });
+});
 
-  describe('Windows PTY installation', () => {
+describe('Windows PTY installation', () => {
     async function windowsFixture() {
       root = await realpath(await mkdtemp(join(tmpdir(), 'loom-pty-windows-install-')));
       const directory = join(root, 'lib');
@@ -90,6 +91,24 @@ describe.skipIf(process.platform === 'win32')('macOS PTY installation', () => {
       await expect(ensurePtyHelper({ platform: 'win32', arch: process.arch, packageDirectory: root }))
         .rejects.toThrow('private regular file');
       expect(await readFile(target, 'utf8')).toBe(source);
+    });
+
+    it('rejects a linked lib directory without modifying the agent', async () => {
+      const { source } = await windowsFixture();
+      const actual = join(root, 'actual-lib');
+      await mkdir(actual);
+      const target = join(actual, 'windowsPtyAgent.js');
+      await writeFile(target, source);
+      await rm(join(root, 'lib'), { recursive: true });
+      await symlink(actual, join(root, 'lib'), process.platform === 'win32' ? 'junction' : 'dir');
+      await expect(ensurePtyHelper({ platform: 'win32', arch: process.arch, packageDirectory: root })).rejects.toThrow();
+      expect(await readFile(target, 'utf8')).toBe(source);
+    });
+
+    it.skipIf(process.platform === 'win32')('rejects a symlinked agent without modifying the target', async () => {
+      const { path, source } = await windowsFixture();
+      const target = join(root, 'target.js');
+      await writeFile(target, source);
       await rm(path);
       await symlink(target, path);
       await expect(ensurePtyHelper({ platform: 'win32', arch: process.arch, packageDirectory: root })).rejects.toThrow();
@@ -97,6 +116,7 @@ describe.skipIf(process.platform === 'win32')('macOS PTY installation', () => {
     });
   });
 
+describe.skipIf(process.platform === 'win32')('macOS PTY helper safety', () => {
   it('rejects symlinked and hard-linked helpers rather than modifying another file', async () => {
     const { helper } = await fixture();
     const target = join(root, 'target');

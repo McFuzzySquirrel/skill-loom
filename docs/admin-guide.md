@@ -489,12 +489,16 @@ that responds but cannot be authenticated is refused, not taken over or shut
 down. Clean shutdown removes only that instance's metadata. Windows control
 does not lift the protected-content or descendant-containment execution gates.
 
-Windows installed-package verification still has a separate PTY cleanup
-blocker: the terminal emits output and a process-exit event, but the probe
-process retains resources and does not exit. Authenticated packaged control
-startup/status/stop succeeds before that check; the overall Windows package
-smoke is nevertheless failed. Do not interpret a terminal exit event as proof
-that terminal resources or escaped descendants have been cleaned up.
+Windows installation applies a compatibility fix to the pinned `node-pty`
+1.1.0 JavaScript agent: natural exit drains terminal output, then destroys
+the input pipe and disposes the conout worker as well as closing the output
+pipe. The installer checks the complete upstream file hash and accepts only
+the exact original or already-fixed implementation; unknown versions, linked
+files and linked library directories fail explicitly. Re-run `npm install`
+after rebuilding or replacing the dependency; do not disable postinstall.
+Native installed-package verification now observes natural process exit
+without forcing exit or killing by an exited child's PID. This releases PTY
+resources, not escaped descendants; it does not lift the containment gate.
 
 Harness credentials belong to OpenCode or Copilot and stay in their own stores or environment. Skill Loom may inspect command output, credential-file presence, or environment-variable presence as authentication evidence, but it never reads credential values into its config, logs, or API responses. Preflight reports presence only.
 

@@ -26,9 +26,9 @@ Deliver both managed harness execution and execution in the calling agent's sess
 | Requirement | Status |
 | --- | --- |
 | Windows executable-mode installation | Implemented for reviewed new installations, copies, reuse, nested skills, and re-export. Legacy shared packages require restoration or fresh installation; missing records never silently become non-executable. |
-| Windows private IPC and ownership | Implemented and natively verified: protected requested/canonical profile ACLs, mutually authenticated pinned loopback TLS, exclusive profile ownership, crash recovery, and UI/CLI sharing. Windows package-wide verification still fails on a separate natural-exit PTY resource leak. |
+| Windows private IPC and ownership | Implemented and natively verified: protected requested/canonical profile ACLs, mutually authenticated pinned loopback TLS, exclusive profile ownership, crash recovery, and UI/CLI sharing. Installed-package control and natural PTY exit now pass. |
 | Protected managed skill execution | Blocked: a verified protected content view and harness-resolution boundary are still required. |
-| Descendant containment | Open: verified native containment or an explicitly approved VM backend is required; direct-child exit and terminal status are insufficient. Windows natural-exit PTY resource cleanup also remains unresolved. |
+| Descendant containment | Open: verified native containment or an explicitly approved VM backend is required; direct-child exit and terminal status are insufficient. Windows natural-exit PTY resource cleanup is fixed separately, not proof of containment. |
 
 Installed-mode preservation does not complete the other three requirements or lift their execution and recovery gates.
 
@@ -81,18 +81,18 @@ passed (`42690884410`: 976 tests, before the final canonical-path guard).
 Focused macOS ownership, control and lifecycle tests passed (`42690892754`:
 25 tests). This is not a successful full macOS regression run.
 
-Native installed-package verification remains **failed**, not waived
-(`42690879884`, `42691546905`, `42692442530`). The latest probe successfully
-starts the actual installed CLI, authenticates control, copies bundled assets,
-stops the service and observes a clean service-process exit before reaching
-its PTY check. The separate installed PTY probe then receives its expected
-output and a process-exit event, but its Node process does not terminate before
-the outer deadline. The probe now uses an acknowledged exchange and a real
-script file, with diagnostic stage markers. Do not mask the retained PTY
-resources with a forced probe exit, a skipped assertion, or by claiming
-descendants are gone. A verified resource-release/containment backend is
-still required. The local Linux full suite and installed-package smoke pass;
-those results do not establish Windows package-wide cleanup.
+The earlier native installed-package failures (`42690879884`, `42691546905`,
+`42692442530`) exposed retained input-pipe/conout-worker resources after the
+pinned `node-pty` 1.1.0 agent's natural-exit path. Installation now applies an
+exact-file-hash-bound compatibility fix that disposes those resources after
+the existing output-drain interval. It never calls the process-killing path
+after natural exit, does not alter native binaries, and refuses unknown
+dependency bytes or linked replacement targets. Native Windows package smoke
+now passes (`42693749252`), including actual installed service control,
+asset copying, clean service shutdown and natural PTY probe-process exit
+without a forced exit. Native terminal regressions also pass (`42693753747`:
+51 tests). This fixes the resource leak, not descendant escape; protected
+execution and verified containment backends are still required.
 
 ## Existing implementation and important constraints
 

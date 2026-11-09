@@ -245,7 +245,7 @@ npm exec --package ./skill-loom-cli-0.1.0.tgz -- skill-loom --help
 
 The CLI starts the same production server and prints the loopback URL and config directory. It opens the default browser only when stdout is a TTY; `--no-open` and `CI` disable that. Once the package is published, the command becomes `npx skill-loom-cli`.
 
-The packed package contains `dist/src`, `dist/web`, the compiled package metadata, a macOS PTY installation helper, `docs/OPERATIONS.md`, and the package manifest. It excludes source, tests, build scripts, and the other documentation files. The native `node-pty` toolchain may still be required when npm installs the package.
+The packed package contains `dist/src`, `dist/web`, the compiled package metadata, a cross-platform PTY installation helper, `docs/OPERATIONS.md`, and the package manifest. It excludes source, tests, build scripts, and the other documentation files. The native `node-pty` toolchain may still be required when npm installs the package. The helper repairs the macOS spawn-helper owner-execute permission and applies a hash-bound Windows `node-pty` 1.1.0 natural-exit resource cleanup fix; unknown dependency bytes fail installation rather than receiving an unverified patch.
 
 ## Commands
 

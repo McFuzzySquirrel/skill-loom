@@ -344,33 +344,41 @@ async function main() {
         process.stderr.write('Packaged PTY: importing runtime\\n');
         const path = require.resolve('skill-loom-cli/dist/src/server/terminal/pty.js');
         const { createTerminalSession } = await import(pathToFileURL(path).href);
-        process.stderr.write('Packaged PTY: creating session\\n');
-        const session = createTerminalSession({
-          executable: process.execPath,
-          args: ['-e', "process.stdin.setRawMode(true);process.stdin.on('data',()=>process.exit(0));process.stdout.write('PACKAGED_PTY_OK\\\\r\\\\n');"],
-        });
-        process.stderr.write('Packaged PTY: session created\\n');
-        let acknowledged = false;
-        const acknowledge = () => {
-          if (!acknowledged && session.getBufferedOutput().includes('PACKAGED_PTY_OK')) {
-            acknowledged = true;
-            process.stderr.write('Packaged PTY: acknowledging output\\n');
-            session.write('\\r');
-          }
-        };
-        session.onData(acknowledge);
-        acknowledge();
-        const timeout = setTimeout(() => {
-          session.kill();
-          throw new Error('Packaged PTY timed out.');
-        }, 10000);
-        session.onExit(({ exitCode }) => {
-          process.stderr.write('Packaged PTY: exit received\\n');
-          clearTimeout(timeout);
-          if (exitCode !== 0 || !session.getBufferedOutput().includes('PACKAGED_PTY_OK')) {
-            throw new Error('Packaged PTY did not produce the expected output.');
-          }
-        });
+        for (let index = 0; index < 3; index++) {
+          process.stderr.write('Packaged PTY: creating session ' + index + '\\n');
+          await new Promise((resolve, reject) => {
+            const session = createTerminalSession({
+              executable: process.execPath,
+              args: ['-e', "process.stdin.setRawMode(true);process.stdin.on('data',()=>{process.stdout.write('PACKAGED_PTY_DRAINED\\\\r\\\\n');process.exit(0)});process.stdout.write('PACKAGED_PTY_OK\\\\r\\\\n');"],
+            });
+            let acknowledged = false;
+            const acknowledge = () => {
+              if (!acknowledged && session.getBufferedOutput().includes('PACKAGED_PTY_OK')) {
+                acknowledged = true;
+                session.write('\\r');
+              }
+            };
+            const unsubscribe = session.onData(acknowledge);
+            acknowledge();
+            const timeout = setTimeout(() => {
+              session.kill();
+              reject(new Error('Packaged PTY timed out.'));
+            }, 10000);
+            session.onExit(({ exitCode }) => {
+              process.stderr.write('Packaged PTY: exit received ' + index + '\\n');
+              clearTimeout(timeout);
+              unsubscribe();
+              // Must not kill by a recycled PID after natural exit.
+              session.kill();
+              session.kill();
+              if (exitCode !== 0 || !session.getBufferedOutput().includes('PACKAGED_PTY_DRAINED')) {
+                reject(new Error('Packaged PTY lost its final output.'));
+              } else {
+                resolve();
+              }
+            });
+          });
+        }
       })().catch((error) => { console.error(error); process.exitCode = 1; });
     `;
     const port = await findFreePort();
