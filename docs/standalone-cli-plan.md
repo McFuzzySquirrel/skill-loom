@@ -184,7 +184,9 @@ These are requirements to implement and verify, not current guarantees:
    before and after `chmod(0755)` on Windows. A versioned per-package Git mode
    index is now checked against snapshot fingerprints and carried through
    handoff and bundle export; legacy snapshots gain an index only after refresh
-   verifies their contents. Windows installation and reuse of executable bundle
+   verifies their contents. Windows discovery, export and copy reject missing
+   mode metadata rather than inferring it from filesystem modes; hosted
+   Linux, macOS and Windows checks passed (`42659438142`). Windows installation and reuse of executable bundle
    packages and remote executable-package copy remain explicitly blocked until
    reviewed mode metadata can also be preserved and validated after install.
    Focused hosted Linux, macOS and Windows tests passed for migration,
