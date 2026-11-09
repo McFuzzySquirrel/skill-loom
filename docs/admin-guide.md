@@ -328,7 +328,13 @@ remove a workspace with an active run, unresolved run record, or retained
 project claim. Before confirming removal, stop all work and descendants as well
 as older Skill Loom services and helpers using the workspace; nonparticipating
 clients are not protected by coordination. Workspace retirement blocks new
-participating run operations before the directory is moved and removed.
+participating run operations before the directory is moved and removed. Verified
+retirement evidence is saved in the profile before deletion, so removal can be
+retried if the final profile update fails. A missing workspace without that
+evidence, or a partially deleted retired workspace whose retirement database is
+missing, fails closed and needs operator investigation. Older Skill Loom
+versions may not understand a profile containing this in-progress evidence;
+stop or update them before resuming removal.
 These directories are not OS sandboxes.
 `workspace inspect` accepts `{"workspaceId":"...","path":"relative/path"}`
 on stdin, pages directory entries, and returns regular files up to 1 MiB as

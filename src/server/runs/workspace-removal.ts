@@ -1,6 +1,8 @@
 import { lstat, realpath, rename, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import type { ConfigStore } from '../config/store.js';
+import type { WorkspaceRetirementEvidence } from '../config/schema.js';
 import {
   PROJECT_CLAIM_APPLICATION_ID, PROJECT_CLAIM_DATABASE_VERSION, ProjectRetirementSchema,
   withProjectRetirementTransaction,
@@ -29,13 +31,31 @@ async function present(path: string) {
  * the atomic rename; moving the directory prevents later recreation at that
  * project path. A deterministic retired name makes interrupted removal retryable.
  */
-export async function removeRetiredWorkspace(root: string, id: string): Promise<void> {
+export async function removeRetiredWorkspace(
+  root: string,
+  id: string,
+  options: {
+    configStore: ConfigStore;
+    kind: 'test' | 'discovery';
+    projectId: string;
+    evidence?: WorkspaceRetirementEvidence;
+  },
+): Promise<void> {
   const path = join(root, id);
   const retiredPath = join(root, `.retired-${id}`);
   const current = await present(path);
   const existingRetired = await present(retiredPath);
   if (current !== undefined && existingRetired !== undefined) {
     throw new WorkspaceRemovalError('UNSAFE', 'Both the workspace and its retired copy exist.');
+  }
+  if (current !== undefined && options.evidence !== undefined) {
+    throw new WorkspaceRemovalError('UNSAFE', 'A workspace exists after its removal was verified.');
+  }
+  if (current === undefined && existingRetired === undefined) {
+    if (options.evidence === undefined) {
+      throw new WorkspaceRemovalError('UNSAFE', 'The missing workspace has no verified retirement evidence.');
+    }
+    return;
   }
   if (current !== undefined) {
     if (!current.isDirectory() || current.isSymbolicLink() || await realpath(path) !== path) {
@@ -58,12 +78,46 @@ export async function removeRetiredWorkspace(root: string, id: string): Promise<
     await rename(path, retiredPath);
   }
   if (current !== undefined || existingRetired !== undefined) {
-    await verifyRetiredWorkspace(retiredPath, path);
+    const evidence = await verifyRetiredWorkspace(retiredPath, path);
+    if (options.evidence !== undefined && !sameEvidence(options.evidence, evidence)) {
+      throw new WorkspaceRemovalError('UNSAFE', 'The retired workspace does not match its saved evidence.');
+    }
+    if (options.evidence === undefined) {
+      await saveRetirementEvidence(options.configStore, options.kind, id, options.projectId, evidence);
+    }
     await rm(retiredPath, { recursive: true });
   }
 }
 
-async function verifyRetiredWorkspace(retiredPath: string, originalPath: string): Promise<void> {
+function sameEvidence(a: WorkspaceRetirementEvidence, b: WorkspaceRetirementEvidence): boolean {
+  return a.version === b.version &&
+    a.projectDevice === b.projectDevice && a.projectInode === b.projectInode;
+}
+
+async function saveRetirementEvidence(
+  configStore: ConfigStore,
+  kind: 'test' | 'discovery',
+  id: string,
+  projectId: string,
+  evidence: WorkspaceRetirementEvidence,
+): Promise<void> {
+  await configStore.update((current) => {
+    const records = kind === 'test' ? current.testWorkspaces : current.discoveryWorkspaces;
+    const record = records.find((item) => item.id === id);
+    if (record === undefined || record.projectId !== projectId ||
+        (record.retirement !== undefined && !sameEvidence(record.retirement, evidence))) {
+      throw new WorkspaceRemovalError('UNSAFE', 'The workspace ownership record changed during retirement.');
+    }
+    return kind === 'test'
+      ? { testWorkspaces: current.testWorkspaces.map((item) => item.id === id ? { ...item, retirement: evidence } : item) }
+      : { discoveryWorkspaces: current.discoveryWorkspaces.map((item) => item.id === id ? { ...item, retirement: evidence } : item) };
+  });
+}
+
+async function verifyRetiredWorkspace(
+  retiredPath: string,
+  originalPath: string,
+): Promise<WorkspaceRetirementEvidence> {
   const directory = await lstat(retiredPath, { bigint: true });
   const databasePath = join(retiredPath, '.loom', 'project-claim.sqlite');
   const databaseFile = await lstat(databasePath);
@@ -88,6 +142,11 @@ async function verifyRetiredWorkspace(retiredPath: string, originalPath: string)
         record.data.projectDevice !== String(directory.dev) || record.data.projectInode !== String(directory.ino)) {
       throw new WorkspaceRemovalError('UNSAFE', 'The workspace retirement record does not match the retired directory.');
     }
+    return {
+      version: 1,
+      projectDevice: String(directory.dev),
+      projectInode: String(directory.ino),
+    };
   } finally {
     database.close();
   }

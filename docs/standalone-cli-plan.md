@@ -348,9 +348,13 @@ claim blocks a managed start, and that a managed claim blocks portable
 preparation; neither conflicting operation is allowed to dispatch work.
 Test and discovery workspace removal now rejects retained claims and unresolved
 records, commits a retirement marker under the project transaction, and moves
-the workspace out of its registered path before deletion. A retry handles a
-completed retirement or rename; partial deletion that destroys the retirement
-evidence fails closed and needs operator investigation. Database version 1 is
+the workspace out of its registered path before deletion. It persists verified
+workspace identity in the profile before deletion, allowing retry after a failed
+final profile update. A missing workspace without that evidence, a recreated
+workspace, and partial deletion that destroys the retirement database fail
+closed and need operator investigation. A retry also handles a completed
+retirement or rename. Older versions can reject profiles containing this
+in-progress evidence and must be stopped or updated. Database version 1 is
 migrated under the transaction to version 2; older participating clients reject
 the newer schema and must be stopped and updated. Nonparticipating clients and
 descendants still require the operator's explicit attention.

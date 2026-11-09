@@ -333,7 +333,12 @@ async function removeWorkspaceLocked(
   }
 
   try {
-    await removeRetiredWorkspace(workspaceRoot, id);
+    await removeRetiredWorkspace(workspaceRoot, id, {
+      configStore: options.configStore,
+      kind: 'test',
+      projectId: record.projectId,
+      ...(record.retirement === undefined ? {} : { evidence: record.retirement }),
+    });
     await options.configStore.update((current) => ({
       testWorkspaces: current.testWorkspaces.filter((candidate) => candidate.id !== id),
       recentProjects: current.recentProjects.filter((candidate) => candidate.id !== record.projectId),

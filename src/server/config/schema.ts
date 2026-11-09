@@ -43,6 +43,13 @@ export const RecentProjectSchema = z.strictObject({
 });
 export type RecentProject = z.infer<typeof RecentProjectSchema>;
 
+export const WorkspaceRetirementEvidenceSchema = z.strictObject({
+  version: z.literal(1),
+  projectDevice: z.string().regex(/^[0-9]+$/),
+  projectInode: z.string().regex(/^[0-9]+$/),
+});
+export type WorkspaceRetirementEvidence = z.infer<typeof WorkspaceRetirementEvidenceSchema>;
+
 export const TestWorkspaceRecordSchema = z.strictObject({
   id: z.uuid(),
   projectId: NonEmptyStringSchema,
@@ -51,6 +58,7 @@ export const TestWorkspaceRecordSchema = z.strictObject({
   sourceDraftId: NonEmptyStringSchema.optional(),
   chainId: NonEmptyStringSchema,
   createdAt: z.iso.datetime({ offset: true }),
+  retirement: WorkspaceRetirementEvidenceSchema.optional(),
 }).superRefine((record, context) => {
   const projectSource = record.sourceProjectId !== undefined && record.sourceChainId !== undefined;
   const draftSource = record.sourceDraftId !== undefined;
@@ -80,6 +88,7 @@ export const DiscoveryWorkspaceRecordSchema = z.strictObject({
   runId: NonEmptyStringSchema.optional(),
   resultFingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   importedDraftId: NonEmptyStringSchema.optional(),
+  retirement: WorkspaceRetirementEvidenceSchema.optional(),
 });
 export type DiscoveryWorkspaceRecord = z.infer<typeof DiscoveryWorkspaceRecordSchema>;
 

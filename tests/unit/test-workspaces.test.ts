@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CatalogService } from '../../src/server/catalog/merge.js';
 import type { SkillEntry } from '../../src/server/catalog/types.js';
-import { createConfigStore } from '../../src/server/config/store.js';
+import { atomicWriteJson, createConfigStore, type ConfigStoreOptions } from '../../src/server/config/store.js';
 import { createChainService } from '../../src/server/chains/service.js';
 import { createProjectRegistry } from '../../src/server/projects/registry.js';
 import {
@@ -28,7 +28,7 @@ afterEach(async () => {
   if (root !== undefined) await rm(root, { recursive: true, force: true });
 });
 
-async function setup() {
+async function setup(atomicWrite?: ConfigStoreOptions['atomicWrite']) {
   root = await mkdtemp(join(tmpdir(), 'loom-test-workspace-'));
   const configDirectory = join(root, 'config');
   const projectPath = join(root, 'source-project');
@@ -36,6 +36,7 @@ async function setup() {
   const configStore = createConfigStore({
     env: { LOOM_CONFIG_DIR: configDirectory },
     homeDirectory: () => join(root, 'home'),
+    ...(atomicWrite === undefined ? {} : { atomicWrite }),
   });
   const projectRegistry = createProjectRegistry({ configStore });
   const source = await projectRegistry.openProject(projectPath);
@@ -137,6 +138,104 @@ describe('managed test workspaces', () => {
       if (move) await rename(workspace.path, join(workspace.path, '..', `.retired-${workspace.id}`));
       await expect(service.remove(workspace.id)).resolves.toEqual({ id: workspace.id, removed: true });
     }
+  });
+
+  it('refuses to forget a missing workspace without verified retirement evidence', async () => {
+    const { source, chain, service, configStore } = await setup();
+    const workspace = await service.create({ sourceProjectId: source.id, sourceChainId: chain.id });
+    await rm(workspace.path, { recursive: true });
+
+    await expect(service.remove(workspace.id)).rejects.toMatchObject({
+      code: TEST_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
+    });
+    expect((await configStore.get()).testWorkspaces).toContainEqual(
+      expect.objectContaining({ id: workspace.id, projectId: workspace.projectId }),
+    );
+  });
+
+  it.each(['evidence', 'finalize'] as const)(
+    'recovers workspace removal after a failed %s configuration write',
+    async (failurePhase) => {
+      let fail = false;
+      const { source, chain, service, configStore } = await setup(async (target, value) => {
+        const document = value as { testWorkspaces?: Array<{ retirement?: unknown }> };
+        if (fail && (failurePhase === 'evidence'
+          ? document.testWorkspaces?.some((item) => item.retirement !== undefined)
+          : document.testWorkspaces?.length === 0)) {
+          throw new Error('Simulated configuration write failure');
+        }
+        await atomicWriteJson(target, value);
+      });
+      const workspace = await service.create({ sourceProjectId: source.id, sourceChainId: chain.id });
+      const retiredPath = join(workspace.path, '..', `.retired-${workspace.id}`);
+      fail = true;
+      await expect(service.remove(workspace.id)).rejects.toMatchObject({
+        code: TEST_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
+      });
+      const record = (await configStore.get()).testWorkspaces.find((item) => item.id === workspace.id);
+      expect(record).toBeDefined();
+      if (failurePhase === 'evidence') {
+        expect(record?.retirement).toBeUndefined();
+        expect((await stat(retiredPath)).isDirectory()).toBe(true);
+      } else {
+        expect(record?.retirement).toMatchObject({ version: 1 });
+        await expect(stat(retiredPath)).rejects.toMatchObject({ code: 'ENOENT' });
+        await mkdir(workspace.path);
+        await writeFile(join(workspace.path, 'keep.txt'), 'replacement');
+        fail = false;
+        await expect(service.remove(workspace.id)).rejects.toMatchObject({
+          code: TEST_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
+        });
+        expect(await readFile(join(workspace.path, 'keep.txt'), 'utf8')).toBe('replacement');
+        await rm(workspace.path, { recursive: true });
+      }
+      fail = false;
+      await expect(service.remove(workspace.id)).resolves.toEqual({ id: workspace.id, removed: true });
+      expect((await configStore.get()).testWorkspaces).toEqual([]);
+    },
+  );
+
+  it('fails closed if a partially deleted retired workspace loses its retirement database', async () => {
+    const { source, chain, service, configStore } = await setup();
+    const workspace = await service.create({ sourceProjectId: source.id, sourceChainId: chain.id });
+    const info = await stat(workspace.path, { bigint: true });
+    await withProjectRetirementTransaction(workspace.path, async (tx) => tx.retire('2026-01-02T00:00:00.000Z'));
+    const retiredPath = join(workspace.path, '..', `.retired-${workspace.id}`);
+    await rename(workspace.path, retiredPath);
+    await configStore.update((current) => ({
+      testWorkspaces: current.testWorkspaces.map((item) => item.id === workspace.id ? {
+        ...item,
+        retirement: { version: 1, projectDevice: String(info.dev), projectInode: String(info.ino) },
+      } : item),
+    }));
+    await rm(join(retiredPath, '.loom', 'project-claim.sqlite'));
+
+    await expect(service.remove(workspace.id)).rejects.toMatchObject({
+      code: TEST_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
+    });
+    expect((await stat(retiredPath)).isDirectory()).toBe(true);
+    expect((await configStore.get()).testWorkspaces).toHaveLength(1);
+  });
+
+  it('does not delete a retired workspace whose identity disagrees with saved evidence', async () => {
+    const { source, chain, service, configStore } = await setup();
+    const workspace = await service.create({ sourceProjectId: source.id, sourceChainId: chain.id });
+    const info = await stat(workspace.path, { bigint: true });
+    await withProjectRetirementTransaction(workspace.path, async (tx) => tx.retire('2026-01-02T00:00:00.000Z'));
+    const retiredPath = join(workspace.path, '..', `.retired-${workspace.id}`);
+    await rename(workspace.path, retiredPath);
+    await configStore.update((current) => ({
+      testWorkspaces: current.testWorkspaces.map((item) => item.id === workspace.id ? {
+        ...item,
+        retirement: { version: 1, projectDevice: String(info.dev), projectInode: String(info.ino + 1n) },
+      } : item),
+    }));
+
+    await expect(service.remove(workspace.id)).rejects.toMatchObject({
+      code: TEST_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
+    });
+    expect((await stat(retiredPath)).isDirectory()).toBe(true);
+    expect((await configStore.get()).testWorkspaces).toHaveLength(1);
   });
 
   it('does not remove an unverified directory occupying a retired workspace path', async () => {

@@ -717,11 +717,14 @@ async function removeWorkspaceLocked(
       if (!info.isDirectory() || info.isSymbolicLink() || await realpath(expectedPath) !== expectedPath) {
         throw new Error('unsafe workspace');
       }
-      await removeRetiredWorkspace(workspaceRoot, id);
-      workspaceExists = false;
-    } else {
-      await removeRetiredWorkspace(workspaceRoot, id);
     }
+    await removeRetiredWorkspace(workspaceRoot, id, {
+      configStore: options.configStore,
+      kind: 'discovery',
+      projectId: record.projectId,
+      ...(record.retirement === undefined ? {} : { evidence: record.retirement }),
+    });
+    workspaceExists = false;
     await options.configStore.update((current) => ({
       discoveryWorkspaces: current.discoveryWorkspaces.filter((candidate) => candidate.id !== id),
       recentProjects: current.recentProjects.filter((candidate) => candidate.id !== record.projectId),

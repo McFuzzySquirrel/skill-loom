@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -16,6 +16,7 @@ import { resolveSkillCatalogEntry } from '../../src/server/catalog/skill-resolut
 import { createConfigStore, type ConfigStore } from '../../src/server/config/store.js';
 import { callControl, startControlServer } from '../../src/server/control.js';
 import { runCli } from '../../src/server/cli.js';
+import { removeRetiredWorkspace } from '../../src/server/runs/workspace-removal.js';
 import { DiscoveryHandoffSchema, MAX_HANDOFF_BYTES, MAX_HANDOFF_FILES } from '../../src/shared/discovery-handoff.js';
 import {
   acquireProjectRunClaim, clearReviewedProjectClaim, enableReviewedProjectProtocol, reviewProjectCoordination,
@@ -652,6 +653,15 @@ describe('discovery handoff route', () => {
     expect(denied.json()).toMatchObject({ error: { code: 'DISCOVERY_WORKSPACE_ACTIVE' } });
     const claimReview = await reviewProjectCoordination(workspace.path);
     await clearReviewedProjectClaim(workspace.path, claimReview.reviewDigest, true, true);
+    await removeRetiredWorkspace(dirname(workspace.path), workspace.id, {
+      configStore: store,
+      kind: 'discovery',
+      projectId: workspace.projectId,
+    });
+    expect((await store.get()).discoveryWorkspaces.find((item) => item.id === workspace.id))
+      .toMatchObject({ retirement: { version: 1 } });
+    await expect(stat(workspace.path)).rejects.toMatchObject({ code: 'ENOENT' });
     expect((await app.inject({ method: 'DELETE', url: `/api/discovery/workspaces/${workspace.id}` })).statusCode).toBe(200);
+    expect((await store.get()).discoveryWorkspaces).toEqual([]);
   });
 });
