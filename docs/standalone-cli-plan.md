@@ -214,17 +214,17 @@ These are requirements to implement and verify, not current guarantees:
    stage-zero Git index entries, and refuses untracked or conflicted files
    instead of deriving modes from Windows filesystem stat results. The Git
    index and bundle suites passed on Linux, macOS and Windows (`42661183535`).
-   Bundle import and the portable helper now write other package files before
-   publishing `SKILL.md` via an exclusive hard link. This prevents an ordinary
-   interrupted process from exposing a partial package as a discoverable skill;
-   abandoned incomplete directories and temporary files require inspection
-   and cleanup. Actual process interruption immediately before and after the
-   link was tested locally on Linux and on hosted Windows (the Windows job in
-   `42671516929`). The earlier hosted Linux and macOS jobs in `42671088783`
-   passed the publication suite before those interruption cases were added;
-   later hosted macOS dispatches did not start a job. This ordering is not
-   proof of power-loss durability, safe execution isolation, or Windows
-   executable-mode installation.
+   Bundle import, catalog copy, and the portable helper now write other
+   package files before publishing `SKILL.md` via an exclusive hard link.
+   Remote copies are fingerprint-verified and bundled-skill attribution is
+   written before publication. This prevents an ordinary interrupted process
+   from exposing a partial package as a discoverable skill; abandoned incomplete
+   directories and temporary files require inspection and cleanup. Actual
+   process interruption immediately before and after the link and the focused
+   publication suites passed on hosted Linux and Windows (jobs in
+   `42673113745`) and macOS (`42673286458`). This ordering is not proof of
+   power-loss durability, safe execution isolation, or Windows executable-mode
+   installation.
    Focused hosted Linux, macOS and Windows tests passed for migration,
    tamper rejection, handoff, bundle export and the standalone handoff builder;
    the Windows test also verified that executable installation is blocked.
