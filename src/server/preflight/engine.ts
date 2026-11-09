@@ -33,6 +33,7 @@ import {
   TRUST_REASONS,
   type TrustCheckResult,
 } from './trust.js';
+import { renderManualCommand } from './manual-command.js';
 
 /**
  * Deterministic preflight engine.
@@ -1125,7 +1126,10 @@ function trustCheck(
     projectPath,
     reason: result?.reason ?? TRUST_REASONS.CONFIG_UNREADABLE,
     evidence: result?.evidence ?? [],
-    ...(manualFallback === null ? {} : { manualCommand: manualFallback }),
+    ...(manualFallback === null ? {} : {
+      manualCommand: manualFallback,
+      manualCommandText: renderManualCommand(manualFallback),
+    }),
   };
 
   if (result === null) {

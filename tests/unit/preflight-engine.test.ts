@@ -656,6 +656,9 @@ describe('preflight engine: hard blocks', () => {
       harness: 'copilot',
       state: 'untrusted',
       configPath: join(HOME, '.copilot', 'config.json'),
+      manualCommandText: process.platform === 'win32'
+        ? `& '${COPILOT.replaceAll("'", "''")}' '-C' '${PROJECT.replaceAll("'", "''")}'`
+        : `${COPILOT} -C ${PROJECT}`,
     });
   });
 

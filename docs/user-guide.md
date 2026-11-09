@@ -154,6 +154,8 @@ The export excludes input default values, run records, terminal output, local ca
 
 On Windows, Git executable flags from refreshed remote snapshots are retained in handoffs and exports. Installation or reuse of a bundle with executable files, and copying a remote package with executable files into a project, are currently blocked because Windows installation cannot yet preserve those flags safely. Refresh an older remote snapshot to attach verified mode metadata.
 
+For the Copilot folder-trust manual fallback, run the displayed command in PowerShell on Windows or a POSIX-compatible shell on macOS and Linux. Skill Loom does not execute this displayed command.
+
 Each skill must resolve to an enabled, readable package for the chain's selected harness. A single project-local package takes precedence over same-name personal or extra-directory copies; multiple distinct project packages remain ambiguous. If there is no project copy, only one available non-project package can be exported. Missing, disabled, ambiguous, or non-filesystem skills block export. Bundles support up to 100 skill packages, 2,000 files, and 20 MiB of decoded file content; the JSON upload limit is 30 MiB. Directory names and file paths must be portable and safe, and directory nesting is bounded.
 
 ### Import a shared chain
