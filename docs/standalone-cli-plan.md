@@ -99,7 +99,9 @@ These are requirements to implement and verify, not current guarantees:
    Several macOS failures compared canonical results to noncanonical temporary
    fixture paths; those fixtures now use canonical roots without weakening
    explicit alias tests. Removing a deleted extra-skill directory also now
-   resolves aliases in its surviving ancestors. Hosted verification is pending.
+   resolves aliases in its surviving ancestors. The focused hosted macOS suite
+   covering all 12 formerly failing files passed; a fresh full run is still
+   needed before claiming macOS suite coverage.
    Workspace storage, workspace inspection, global drafts and global templates
    now canonicalize config ancestors (including macOS `/var` aliases) while
    rejecting a symlink as the configured directory or storage child. Focused
