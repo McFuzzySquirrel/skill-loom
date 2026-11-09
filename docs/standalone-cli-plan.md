@@ -100,8 +100,8 @@ These are requirements to implement and verify, not current guarantees:
    now canonicalize config ancestors (including macOS `/var` aliases) while
    rejecting a symlink as the configured directory or storage child. Focused
    lifecycle and symlink-rejection tests passed on hosted Linux, macOS and
-   Windows; the discovery-workspace alias test passed on Linux and macOS but
-   remains blocked on Windows by executable-mode preservation.
+   Windows; the discovery-workspace alias test also passed on all three after
+   snapshot-mode preservation was added.
    This does not establish that every profile surface supports aliases. Focused Windows
    terminal suite initially failed on resize, exit status, locked test
    directories, missing-executable expectations, and timeouts. Passing
@@ -129,7 +129,9 @@ These are requirements to implement and verify, not current guarantees:
    verifies their contents. Windows installation and reuse of executable bundle
    packages and remote executable-package copy remain explicitly blocked until
    reviewed mode metadata can also be preserved and validated after install.
-   Hosted verification of the mode changes is pending.
+   Focused hosted Linux, macOS and Windows tests passed for migration,
+   tamper rejection, handoff, bundle export and the standalone handoff builder;
+   the Windows test also verified that executable installation is blocked.
    The hosted Linux runner's read-only probe found cgroup v2 but no write
    access to its root or current cgroup. `/dev/kvm` was not accessible to
    the runner user and QEMU was not installed. This does not rule out a
