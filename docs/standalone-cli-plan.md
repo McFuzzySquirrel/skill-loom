@@ -154,6 +154,18 @@ not an execution backend: terminal integration, protected whole-tree staging,
 alternate harness-resolution proof, authenticated broker requests and durable
 crash/restart recovery remain unimplemented.
 
+The hardened follow-up (`42712185106`) explicitly maps namespace UID/GID zero
+to the unprivileged hosted test driver's UID/GID, sets the initial namespace
+identity accordingly, and checks both kernel mapping files before mounting or
+forking. The earlier `sudo unshare --map-root-user` invocation mapped host root
+into the namespace; dropping capabilities did not change that underlying file
+ownership identity. The corrected probe still passes read-only mounts,
+remount/nested-namespace denials, finish, abort and owner-death reaping.
+Production must use a dedicated constrained host identity and protected
+backing storage, not merely the test driver's identity or a read-only bind
+over an otherwise writable/shared backing inode. Neither fixture setup
+establishes host-wide filesystem, credential or alternate-skill isolation.
+
 Native Windows still needs a restricted execution identity plus race-free
 job assignment and ConPTY lifecycle integration; a job object alone does not
 bind reviewed content. Native macOS needs a different enforceable boundary
@@ -265,11 +277,26 @@ the lease. The final native component probe passed (`42710717572`), including
 these lease cases, actual inherited stdin/stdout/stderr, protected file/DACL
 denials, broker-handle/breakaway denial, and original actor/console-host handle
 termination across all eight scope cases. Output draining must finish
-naturally and propagates errors. This verifies components, not a production
-execution backend or actual user/service-process-death handling.
-No production code is changed by these fixtures. CLI-owner-death handling,
+naturally and propagates errors. The stronger follow-up (`42711464071`) kills
+a real, separate owner process rather than closing its pipe from the test.
+The test holds the original surviving broker handle, verifies that broker is
+the owner's direct child before termination, and requires a zero broker exit
+after EOF-driven cleanup along with original actor/console-host termination.
+Both ordinary and ConPTY cases pass. This remains an offline fixture, not
+production service lifecycle integration.
+No production code is changed by these fixtures. Production owner-loss wiring,
 alternate skill/config resolution and production broker safety remain open.
 No managed execution gate is enabled by this experiment.
+
+The macOS broker-death extension passed (`42711779065`). A trusted supervisor
+kills and reaps its own privileged broker child while keeping the owner lease
+open, verifies that the dedicated UID still has detached processes, and starts
+a new independent root process to perform dropped-UID cleanup. Final empty
+verification includes zombies. This explicitly demonstrates that **macOS
+broker death alone is not containment teardown**: a separate watchdog or
+restart reconciler with trusted durable identity inventory is required. The
+fixture passes its known UID explicitly; it does not implement that inventory,
+production authentication or automatic restart recovery.
 
 The next implementation milestone is the production broker boundary, not
 more process-count proxies: authenticated bounded requests, exact immutable
