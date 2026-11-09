@@ -14,6 +14,11 @@ Deliver both managed harness execution and execution in the calling agent's sess
 - A user may explicitly choose supervised or automatic/agent-driven progression. Supervised is the default. Neither selection broadens harness or tool permissions.
 - Preserve existing bundle v1/v2 readers and their independent, smaller size caps unless a specific compatibility review justifies a format change. A large catalog does not mean a large bundle.
 - Preserve one active managed run per config profile, exact source pinning, explicit recovery, non-overwriting imports, and documented harness capability restrictions. No telemetry or hosted backend.
+- Linux, macOS, and Windows are required targets for the standalone managed
+  workflow. Prefer native harness execution when it can meet the reviewed
+  content and descendant-cleanup guarantees; a Linux VM fallback is acceptable
+  when native execution cannot. Disclose the backend and its prerequisites and
+  obtain any additional approvals before provisioning or execution.
 - This document tracks the approved scope, milestone status, and acceptance gates. Update it alongside implementation.
 
 ## Existing implementation and important constraints
@@ -34,6 +39,43 @@ Deliver both managed harness execution and execution in the calling agent's sess
 3. Use a user-private local IPC endpoint (Unix socket / Windows named pipe or equivalent), protected by directory and endpoint permissions and authenticated client/owner handshake appropriate to the platform. Define startup handshake, protocol and application version negotiation, endpoint discovery, ownership metadata, stale-owner recovery and cleanup. Do not trust a stale PID alone; handle PID reuse, crashes, races, unsupported platforms and permissions failures explicitly. Keep the existing browser attack surface and origin protections intact; do not expose an unauthenticated remote listener.
 4. Take an exclusive cross-process profile ownership lock before startup recovery or any mutable service access, including the web server; reject a second owner without disturbing the live run. Ensure commands that mutate config, snapshots, projects, chains or managed runs route through the owner; read-only offline artifact inspection can run without it. Atomic JSON renames alone are not a lock. Test simultaneous UI/CLI startup and updates from real separate processes.
 5. Managed processes belong to the service, not a short-lived client. Client disconnect does not imply completion or a retry. Specify stop behavior: refuse normal stop with an active run; an explicit abort/stop path terminates and reaps children, persists the honest result, then releases ownership. On service crash/startup only the verified new owner performs interruption recovery; never assume an interrupted attempt succeeded or replay it.
+
+### Cross-platform managed execution gates
+
+These are requirements to implement and verify, not current guarantees:
+
+1. Define a backend-neutral contract for reviewed content, process containment,
+   terminal attachment, shutdown and crash recovery. Bind exact chain and
+   package contents, destination, inputs and intended action to review. Before
+   each start or execution action, provide a protected view of the reviewed
+   packages and verify that the harness resolves from it, including native
+   agents where supported. Prevent substitution through writable project,
+   personal or other skill locations within the documented threat model.
+   Availability of content does not prove that the model invoked a skill.
+2. Select a verified native backend where available: investigate Linux
+   delegated cgroups with race-free initial placement, Windows job objects
+   with race-free process assignment and ConPTY support, and a macOS native
+   containment mechanism that demonstrably prevents descendant escape. Do not
+   treat process groups, a direct child's exit, or a proposed API as evidence
+   of containment. An unavailable or unverified backend must fail closed.
+3. If native guarantees cannot be met, offer an explicitly approved Linux VM
+   backend on macOS and Windows. Specify installation, guest provisioning,
+   harness and authentication setup, project synchronization, terminal
+   transport, protected package staging, network access, permissions, and
+   cleanup before implementation. VM execution must not silently replace the
+   user's host harness or change their project and trust semantics. It is not
+   a promise of isolation from an administrator or unrelated host writers.
+4. Implement Windows user-private control transport and ownership before
+   claiming Windows CLI parity. Keep existing execution blocks and retained
+   project claims until the selected backend proves cleanup, including after
+   failure, service crash, restart, and explicit reconciliation. Neither a
+   terminal status nor operator confirmation alone proves descendants exited.
+5. Test actual Linux, macOS, and Windows hosts, including supported native and VM
+   paths, with adversarial package replacement, alternate skill locations,
+   detached descendants, failed termination, crashes, cancellation, terminal
+   reattachment, and independently reviewed retries. Live harness tests require
+   separate approval and cannot be replaced by fake-process tests. Document
+   unsupported configurations and fail closed until each acceptance gate passes.
 
 ### Versioned CLI and process interface
 
