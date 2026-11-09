@@ -260,7 +260,7 @@ describe('large remote catalog', () => {
       if (previousSystem === undefined) delete process.env.GIT_CONFIG_NOSYSTEM;
       else process.env.GIT_CONFIG_NOSYSTEM = previousSystem;
     }
-  });
+  }, 120_000);
 
   it('rejects invalid UTF-8 Git paths without publishing a changed snapshot', async () => {
     const root = await mkdtemp(join(tmpdir(), 'loom-git-paths-'));

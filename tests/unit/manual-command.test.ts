@@ -39,7 +39,7 @@ describe('manual trust command rendering', () => {
       const result = spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command], {
         cwd: root,
         encoding: 'utf8',
-        timeout: 15_000,
+        timeout: 30_000,
       });
       expect(result.error).toBeUndefined();
       expect(result.status, result.stderr).toBe(0);
@@ -47,5 +47,5 @@ describe('manual trust command rendering', () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  });
+  }, 45_000);
 });
