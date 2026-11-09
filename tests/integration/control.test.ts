@@ -1,7 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import type { Dirent } from 'node:fs';
-import { access, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { createConnection, createServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -37,6 +37,9 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       const opened = await callControl(configDirectory, 'project.open', { path: project });
       if (!opened.ok) throw new Error('Project registration failed.');
       const projectId = (opened.result as { project: { id: string } }).project.id;
+      expect(await callControl(configDirectory, 'run.list', { projectId }))
+        .toEqual({ protocolVersion: 1, ok: true, result: { records: [] } });
+      await expect(access(join(project, '.loom', 'project-claim.sqlite'))).rejects.toMatchObject({ code: 'ENOENT' });
       const timestamp = '2026-01-01T00:00:00.000Z';
       const chain = parseChain({
         version: CHAIN_VERSION, id: 'chain-one', name: 'Test', harness: 'copilot', sessionMode: 'shared',
@@ -51,6 +54,27 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       const originalPointer = await readFile(pointer, 'utf8');
       let output = '';
       let error = '';
+      expect(await runCli(['run', 'list', '--config-dir', configDirectory], {
+        env: {}, stdin: Readable.from([JSON.stringify({ projectId })]),
+        stdout: { write: (chunk) => { output += String(chunk); return true; }, isTTY: false },
+        stderr: { write: (chunk) => { error += String(chunk); return true; } },
+      })).toBe(0);
+      expect(error).toBe('');
+      expect(JSON.parse(output)).toMatchObject({
+        ok: true, result: { records: [{
+          kind: 'managed', runId: run.id, status: 'starting', unresolved: true,
+          fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+        }] },
+      });
+      expect(output).not.toContain('Review.');
+      expect(await readFile(runFile, 'utf8')).toBe(originalRun);
+      expect(await readFile(pointer, 'utf8')).toBe(originalPointer);
+      await expect(access(join(project, '.loom', 'project-claim.sqlite'))).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(await callControl(configDirectory, 'run.list', { projectId: 'not-registered' }))
+        .toMatchObject({ ok: false, error: { code: 'PROJECT_NOT_FOUND' } });
+      expect(await callControl(configDirectory, 'run.list', { projectId, extra: true }))
+        .toMatchObject({ ok: false, error: { code: 'CONTROL_INVALID_REQUEST' } });
+      output = '';
       expect(await runCli(['project', 'coordination-review', '--config-dir', configDirectory], {
         env: {}, stdin: Readable.from([JSON.stringify({ projectId })]),
         stdout: { write: (chunk) => { output += String(chunk); return true; }, isTTY: false },
@@ -73,10 +97,20 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       expect(await callControl(configDirectory, 'project.coordination.review', { projectId, extra: true }))
         .toMatchObject({ ok: false, error: { code: 'CONTROL_INVALID_REQUEST' } });
       await writeFile(runFile, '{broken');
+      expect(await callControl(configDirectory, 'run.list', { projectId }))
+        .toMatchObject({ ok: false, error: { code: 'PROJECT_RUN_RECORDS_UNSAFE' } });
       expect(await callControl(configDirectory, 'project.coordination.review', { projectId }))
         .toMatchObject({ ok: false, error: { code: 'PROJECT_RUN_RECORDS_UNSAFE' } });
       expect(await readFile(runFile, 'utf8')).toBe('{broken');
+      await rename(join(project, '.loom'), join(root, 'held-loom'));
+      await symlink(join(root, 'held-loom'), join(project, '.loom'));
+      expect(await callControl(configDirectory, 'run.list', { projectId }))
+        .toMatchObject({ ok: false, error: { code: 'PROJECT_RUN_RECORDS_UNSAFE' } });
+      await unlink(join(project, '.loom'));
+      await rename(join(root, 'held-loom'), join(project, '.loom'));
       await rm(project, { recursive: true });
+      expect(await callControl(configDirectory, 'run.list', { projectId }))
+        .toMatchObject({ ok: false, error: { code: 'PROJECT_RUN_RECORDS_UNSAFE' } });
       expect(await callControl(configDirectory, 'project.coordination.review', { projectId }))
         .toMatchObject({ ok: false, error: { code: 'PROJECT_CLAIM_UNSAFE' } });
     } finally {
@@ -725,6 +759,12 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
           },
         },
       }) as { runId: string; revision: number };
+      const portableRegistration = await callControl(root, 'project.open', { path: portableProject });
+      if (!portableRegistration.ok) throw new Error('Portable project registration failed.');
+      const portableProjectId = (portableRegistration.result as { project: { id: string } }).project.id;
+      expect(await callControl(root, 'run.list', { projectId: portableProjectId })).toMatchObject({
+        ok: true, result: { records: [{ kind: 'portable', runId: portableRun.runId, status: 'ready', unresolved: true }] },
+      });
       const portableStep = await executePortableRequest({
         command: 'step', projectPath: portableProject, runId: portableRun.runId,
         input: { revision: portableRun.revision, confirmed: true },
@@ -747,6 +787,9 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
         command: 'status', projectPath: portableProject, runId: portableRun.runId,
       })).resolves.toMatchObject({
         run: { status: 'completed', steps: [{ attempts: [{ status: 'done', summary: 'Simulated host result.' }] }] },
+      });
+      expect(await callControl(root, 'run.list', { projectId: portableProjectId })).toMatchObject({
+        ok: true, result: { records: [{ kind: 'portable', runId: portableRun.runId, status: 'completed', unresolved: false }] },
       });
       let invalidBundleError = '';
       expect(await runCli([

@@ -19,6 +19,7 @@ const HELP = `Usage:
   skill-loom discovery handoff [--config-dir <path>]            # JSON on stdin
   skill-loom run preflight [--config-dir <path>]               # JSON on stdin
   skill-loom run review-start|start [--config-dir <path>]     # JSON on stdin; restricted instruction-only
+  skill-loom run list [--config-dir <path>]                   # JSON on stdin: {"projectId":"..."}
   skill-loom run active [--config-dir <path>]
   skill-loom run show [--config-dir <path>]                   # JSON on stdin
   skill-loom run events [--config-dir <path>]                 # JSON on stdin; JSON Lines on stdout
@@ -80,6 +81,7 @@ export async function runControlCli(
       'run preflight': { operation: 'run.preflight', input: 'json' },
       'run review-start': { operation: 'run.start.review', input: 'json' },
       'run start': { operation: 'run.start', input: 'json' },
+      'run list': { operation: 'run.list', input: 'json' },
       'run active': { operation: 'run.active', input: 'none' },
       'run show': { operation: 'run.show', input: 'json' },
       'run events': { operation: 'run.events', input: 'json' },

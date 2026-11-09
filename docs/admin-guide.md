@@ -244,6 +244,15 @@ harness or approve execution.
 including `projectId` and `chainId`, as JSON on stdin. It returns the shared
 preflight report; it does not start a run. Preflight can invoke local harness
 authentication/version and Git checks without sending a model prompt.
+`run list` reads `{"projectId":"..."}` on stdin and returns bounded managed
+and portable run-record summaries, ordered by kind and ID, without initializing
+the run owner or project coordination. The scan fails if any record is corrupt,
+unsafe, or exceeds its shared 1,000-record / 64 MiB limit; it does not omit
+bad records. It observes files sequentially, not as an atomic snapshot, and
+neither a terminal status nor `unresolved: false` proves processes stopped or
+that a retained claim was released. Use `project coordination-review` for claim
+state. Managed IDs can be inspected with `run show`; portable IDs use the
+portable helper's status command.
 `run active` reports the shared active run, and `run show` reads a `runId`
 from JSON on stdin to inspect a run. `run abort` accepts a `runId`,
 `confirmed: true`, and an optional `reason` in JSON on stdin; it aborts the

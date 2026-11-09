@@ -51,7 +51,7 @@ import { withWorkspaceLifecycleLock } from './runs/workspace-lock.js';
 import { ProjectClaimError } from '../shared/project-claim.js';
 import { ProjectCoordinationError, reviewProjectCoordination } from '../shared/project-coordination.js';
 import { coordinationActionSchema, executeCoordinationAction, ProjectCoordinationActionError } from './projects/coordination.js';
-import { ProjectRunRecordsError } from '../shared/project-run-records.js';
+import { ProjectRunRecordsError, scanProjectRunRecords } from '../shared/project-run-records.js';
 import {
   TerminalTransportError,
   type TerminalAttachment,
@@ -458,6 +458,23 @@ async function dispatch(
         const run = await orchestrator.createRun({ ...request, mode: reviewed.evidence.request.mode, expectedStart: reviewed.expected });
         return orchestrator.getRunView(run.id);
       }));
+    }
+    case 'run.list': {
+      const request = parse(z.strictObject({ projectId: z.string().max(255) }));
+      const path = await projectPath(request.projectId);
+      try {
+        const info = await lstat(path);
+        const loomPath = join(path, '.loom');
+        const loom = await lstat(loomPath);
+        if (!info.isDirectory() || info.isSymbolicLink() || await realpath(path) !== path ||
+            !loom.isDirectory() || loom.isSymbolicLink() || await realpath(loomPath) !== loomPath) {
+          throw new ProjectRunRecordsError('The registered project directory is unsafe or unavailable.');
+        }
+      } catch (error) {
+        if (error instanceof ProjectRunRecordsError) throw error;
+        throw new ProjectRunRecordsError('The registered project directory is unsafe or unavailable.', { cause: error });
+      }
+      return { records: await scanProjectRunRecords(path) };
     }
     case 'run.active':
       parse(z.strictObject({}));

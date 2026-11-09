@@ -399,6 +399,10 @@ last persisted active-run pointer if the owner has not initialized, rather
 than an inactive placeholder. It does not start recovery. A corrupt pointer
 fails the endpoint instead of being silently treated as inactive. Neither
 source is proof of process or descendant liveness.
+The CLI can also list bounded managed and portable run-record summaries for a
+registered project without initializing coordination or recovery. It fails on
+unsafe or corrupt records rather than silently omitting them. The scan is not
+an atomic snapshot and does not report retained claims or prove process exit.
 Test and discovery workspace removal now rejects retained claims and unresolved
 records, commits a retirement marker under the project transaction, and moves
 the workspace out of its registered path before deletion. It persists verified
