@@ -75,6 +75,48 @@ function fakeGit(tree = [
 }
 
 describe('remote skill source snapshots', () => {
+  it('binds versioned Git executable modes to snapshot fingerprints and migrates legacy snapshots', async () => {
+    const root = await makeRoot();
+    const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
+    await store.update({
+      remoteSkillSources: [{ id: 'demo-source', repository: 'https://example.com/acme/skills.git' }],
+    });
+    const refresh = () => refreshRemoteSkillSource(store, 'demo-source', {
+      gitRunner: fakeGit().run, temporaryDirectory: root,
+    });
+    const snapshot = await refresh();
+    const entry = snapshot.packages[0]!;
+    const snapshotRoot = join(store.getConfigDir(), 'catalog-sources', 'demo-source', revision);
+    const modePath = join(snapshotRoot, 'modes', `${entry.directory}.json`);
+    const expected = { version: 1, executablePaths: ['scripts/check.sh'] };
+    expect(JSON.parse(await readFile(modePath, 'utf8'))).toEqual(expected);
+    await expect(resolveSnapshotPackagePath(store.getConfigDir(), snapshot, entry)).resolves.toBeTruthy();
+
+    for (const invalid of [
+      { version: 1, executablePaths: [] },
+      { version: 1, executablePaths: ['missing.sh', 'scripts/check.sh'] },
+      { version: 1, executablePaths: ['scripts/check.sh', 'scripts/check.sh'] },
+      { version: 1, executablePaths: ['../outside'] },
+      { version: 2, executablePaths: ['scripts/check.sh'] },
+    ]) {
+      await writeFile(modePath, JSON.stringify(invalid));
+      await expect(resolveSnapshotPackagePath(store.getConfigDir(), snapshot, entry))
+        .rejects.toMatchObject({ code: REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT });
+      await expect(refresh()).rejects.toMatchObject({ code: REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT });
+    }
+
+    await unlink(modePath);
+    if (process.platform === 'win32') {
+      await expect(resolveSnapshotPackagePath(store.getConfigDir(), snapshot, entry))
+        .rejects.toMatchObject({ code: REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT });
+    } else {
+      await expect(resolveSnapshotPackagePath(store.getConfigDir(), snapshot, entry)).resolves.toBeTruthy();
+    }
+    expect(await refresh()).toEqual(snapshot);
+    expect(JSON.parse(await readFile(modePath, 'utf8'))).toEqual(expected);
+    await expect(resolveSnapshotPackagePath(store.getConfigDir(), snapshot, entry)).resolves.toBeTruthy();
+  });
+
   it('reuses an existing snapshot only after verifying its manifest, content, and index', async () => {
     const root = await makeRoot();
     const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });

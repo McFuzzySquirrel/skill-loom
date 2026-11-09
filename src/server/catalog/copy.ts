@@ -11,7 +11,7 @@ import {
 import { basename, join } from 'node:path';
 import type { ScenarioSkillSource } from '../../shared/presets.js';
 import { SHARED_PROJECT_SKILLS_SEGMENTS, sharedProjectSkillRoot } from './project-paths.js';
-import type { SkillEntry, SkillHarness } from './types.js';
+import { REMOTE_SNAPSHOT_CONTENT, type SkillEntry, type SkillHarness } from './types.js';
 
 /**
  * Copy a discovered skill package into the current project.
@@ -86,6 +86,16 @@ export async function copySkillIntoProject(
   input: CopySkillIntoProjectInput,
 ): Promise<CopySkillIntoProjectResult> {
   const { entry, projectPath, harness, allowNameSuffix = true } = input;
+
+  const remoteContent = entry[REMOTE_SNAPSHOT_CONTENT];
+  if (process.platform === 'win32' && entry.source === 'remote' &&
+      (remoteContent === undefined || (remoteContent.executablePaths?.length ?? 0) > 0)) {
+    throw new CatalogCopyError(
+      CATALOG_COPY_ERROR_CODES.SOURCE_UNSAFE,
+      'Windows cannot yet preserve the reviewed executable modes of this remote package during installation.',
+      { skillId: entry.id },
+    );
+  }
 
   if (entry.source === 'project') {
     throw new CatalogCopyError(

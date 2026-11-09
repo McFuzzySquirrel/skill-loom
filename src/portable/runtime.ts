@@ -746,6 +746,9 @@ export async function executePortableRequest(request: PortableRequest): Promise<
     if (reviewed.reviewDigest !== input.reviewDigest) {
       fail('REVIEW_STALE', 'The bundle, project, or existing package state changed since inspection; review it again.');
     }
+    if (process.platform === 'win32' && bundle.skills.some((skill) => skill.files.some((file) => file.executable))) {
+      fail('EXECUTABLE_MODES_UNSUPPORTED', 'Windows cannot yet preserve executable modes when installing or reusing bundle skills.');
+    }
     const directory = await ensureRunDirectory(project);
     const id = randomUUID();
     return beginCoordinatedProjectRun(project, 'portable', id, () => withRunLock(directory, async () => {

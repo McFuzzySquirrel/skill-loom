@@ -93,6 +93,9 @@ These are requirements to implement and verify, not current guarantees:
    grants owner execute permission to a private regular helper, and a clean
    macOS runner passed the focused terminal suite without a manual repair.
    The full cross-platform suite remains failing.
+   A later full baseline after the profile-alias fixes passed Linux but failed
+   12 of 65 macOS files and 25 of 65 Windows files (three Windows files
+   skipped). This baseline predates the subsequent snapshot-mode changes.
    Workspace storage, workspace inspection, global drafts and global templates
    now canonicalize config ancestors (including macOS `/var` aliases) while
    rejecting a symlink as the configured directory or storage child. Focused
@@ -120,9 +123,13 @@ These are requirements to implement and verify, not current guarantees:
    manifest and index rejection; executable-mode preservation remains separate
    and unresolved. A hosted
    filesystem probe observed `0644` to `0755` on Linux and macOS, but `0666`
-   before and after `chmod(0755)` on Windows. Git executable modes therefore
-   need a verified representation carried through snapshot validation,
-   handoff, bundle export, and installation; do not bypass fingerprint checks.
+   before and after `chmod(0755)` on Windows. A versioned per-package Git mode
+   index is now checked against snapshot fingerprints and carried through
+   handoff and bundle export; legacy snapshots gain an index only after refresh
+   verifies their contents. Windows installation and reuse of executable bundle
+   packages and remote executable-package copy remain explicitly blocked until
+   reviewed mode metadata can also be preserved and validated after install.
+   Hosted verification of the mode changes is pending.
    The hosted Linux runner's read-only probe found cgroup v2 but no write
    access to its root or current cgroup. `/dev/kvm` was not accessible to
    the runner user and QEMU was not installed. This does not rule out a

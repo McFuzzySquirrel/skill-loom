@@ -13,6 +13,10 @@ import {
   unregisterRemoteSkillSource,
 } from '../../src/server/catalog/remote.js';
 import { resolveSkillCatalogEntry } from '../../src/server/catalog/skill-resolution.js';
+import { copySkillIntoProject } from '../../src/server/catalog/copy.js';
+import { createCatalogService } from '../../src/server/catalog/merge.js';
+import { createChainService } from '../../src/server/chains/service.js';
+import { exportBundle, importBundle } from '../../src/server/chains/bundle.js';
 import { createConfigStore, type ConfigStore } from '../../src/server/config/store.js';
 import { callControl, startControlServer } from '../../src/server/control.js';
 import { runCli } from '../../src/server/cli.js';
@@ -75,6 +79,43 @@ afterEach(async () => {
 });
 
 describe('discovery handoff route', () => {
+  it('exports fingerprint-bound Git executable modes without silently installing them on Windows', async () => {
+    const catalog = createCatalogService({
+      configStore: store,
+      adapters: [{
+        harness: 'opencode', usesExtraDirectories: false,
+        async discover() { return { entries: [], warnings: [] }; },
+      }],
+    });
+    const chains = createChainService();
+    const chain = await chains.create(root, {
+      name: 'Mode preservation', harness: 'opencode', sessionMode: 'shared',
+      steps: [{ id: 'one', kind: 'skill', skillName: 'handoff-skill', instruction: 'Review.' }],
+      inputs: [],
+    });
+    const bundle = await exportBundle(chain, root, catalog);
+    expect(bundle.skills[0]?.files.find((file) => file.path === 'scripts/check.sh'))
+      .toMatchObject({ executable: true, content: Buffer.from(scriptContent).toString('base64') });
+    const selected = (await catalog.getCatalog({ projectPath: root, harness: 'opencode' }))
+      .groups.flatMap((group) => group.entries).find((entry) => entry.name === 'handoff-skill');
+    expect(selected).toBeDefined();
+    expect(JSON.stringify(selected)).not.toContain('executablePaths');
+    if (process.platform === 'win32') {
+      await expect(copySkillIntoProject({ entry: selected!, projectPath: root, harness: 'opencode' }))
+        .rejects.toMatchObject({ code: 'SKILL_SOURCE_UNSAFE' });
+      await expect(importBundle(bundle, root, catalog, chains, []))
+        .rejects.toMatchObject({ code: 'BUNDLE_SOURCE_UNAVAILABLE' });
+    }
+
+    const snapshotPackage = selected!.packagePath;
+    await writeFile(join(snapshotPackage, 'SKILL.md'), 'tampered');
+    const pinnedCatalog = { ...catalog, async getCatalog() {
+      const current = await catalog.getCatalog({ projectPath: root, harness: 'opencode' });
+      return { ...current, groups: [{ source: 'remote' as const, count: 1, entries: [selected!] }] };
+    } };
+    await expect(exportBundle(chain, root, pinnedCatalog)).rejects.toMatchObject({ code: 'BUNDLE_INVALID' });
+  });
+
   it.each(['config', 'workspace'] as const)('rejects a symbolic link at the discovery %s boundary', async (boundary) => {
     const { listRemoteSkillSnapshots } = await import('../../src/server/catalog/remote.js');
     const snapshot = (await listRemoteSkillSnapshots(store.getConfigDir(), 'test-source'))[0]!;

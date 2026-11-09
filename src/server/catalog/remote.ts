@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { constants } from 'node:fs';
 import {
   chmod,
+  link,
   lstat,
   mkdir,
   mkdtemp,
@@ -62,6 +63,11 @@ const snapshotManifestSchema = z.strictObject({
   })).max(REMOTE_CATALOG_HARD_LIMITS.maxAgents).default([]),
 });
 const MAX_SNAPSHOT_MANIFEST_BYTES = 256 * 1024 * 1024;
+const snapshotModesSchema = z.strictObject({
+  version: z.literal(1),
+  executablePaths: z.array(z.string().min(1).max(4_096)).max(REMOTE_CATALOG_HARD_LIMITS.maxFiles),
+});
+type SnapshotModes = z.infer<typeof snapshotModesSchema>;
 
 export type RemoteSkillSnapshot = z.infer<typeof snapshotManifestSchema>;
 export type RemoteNativeAgent = RemoteSkillSnapshot['agents'][number];
@@ -412,6 +418,7 @@ async function refreshRemoteSkillSourceUnlocked(
     try {
       const packageManifests: RemoteSkillSnapshot['packages'] = [];
       const agentManifests: RemoteNativeAgent[] = [];
+      await mkdir(join(temporarySnapshot, 'modes'), { mode: 0o700 });
       let totalFiles = indexedPackages.totalFiles;
       let totalBytes = 0;
       for (const packagePath of packages) {
@@ -462,6 +469,10 @@ async function refreshRemoteSkillSourceUnlocked(
             .update('\0')
             .update(file.content);
         }
+        await writeSnapshotModes(temporarySnapshot, packageDirectory, {
+          version: 1,
+          executablePaths: fingerprintFiles.filter((file) => file.mode === 'x').map((file) => file.path),
+        });
         const metadata = parseSkillFrontmatter(skillText);
         packageManifests.push({
           name: frontmatterString(metadata.data, 'name') ?? basename(packagePath),
@@ -559,15 +570,27 @@ async function refreshRemoteSkillSourceUnlocked(
         if (JSON.stringify(existing) !== JSON.stringify(manifest)) {
           throw snapshotCorrupt('IMMUTABLE_MISMATCH');
         }
+        const missingModes: Array<{ directory: string; modes: SnapshotModes }> = [];
         for (const entry of existing.packages) {
           checkCancelled();
-          await verifySnapshotPackage(configStore.getConfigDir(), existing, entry);
+          const stagedModes = await readSnapshotModes(temporarySnapshot, entry.directory);
+          if (stagedModes === undefined) throw snapshotCorrupt('MODE_INDEX_INVALID');
+          const savedModes = await readSnapshotModes(snapshotRoot, entry.directory);
+          if (savedModes !== undefined && JSON.stringify(savedModes) !== JSON.stringify(stagedModes)) {
+            throw snapshotCorrupt('MODE_INDEX_INVALID');
+          }
+          await verifySnapshotPackage(configStore.getConfigDir(), existing, entry, savedModes ?? stagedModes);
+          if (savedModes === undefined) missingModes.push({ directory: entry.directory, modes: stagedModes });
         }
         for (const entry of existing.agents) {
           checkCancelled();
           await verifySnapshotAgent(configStore.getConfigDir(), existing, entry);
         }
         await verifyExistingSnapshotIndex(snapshotRoot, existing, checkCancelled);
+        for (const entry of missingModes) {
+          checkCancelled();
+          await publishSnapshotModes(snapshotRoot, temporarySnapshot, entry.directory, entry.modes);
+        }
         await rm(temporarySnapshot, { recursive: true, force: true });
       }
       return await readSnapshot(snapshotRoot);
@@ -751,6 +774,14 @@ export async function resolveSnapshotPackagePath(
   snapshot: RemoteSkillSnapshot,
   packageInfo: RemoteSkillSnapshot['packages'][number],
 ): Promise<string> {
+  return (await resolveSnapshotPackage(configDirectory, snapshot, packageInfo)).path;
+}
+
+export async function resolveSnapshotPackage(
+  configDirectory: string,
+  snapshot: RemoteSkillSnapshot,
+  packageInfo: RemoteSkillSnapshot['packages'][number],
+): Promise<{ path: string; executablePaths?: string[] }> {
   const parsedSnapshot = snapshotManifestSchema.parse(snapshot);
   const registeredPackage = parsedSnapshot.packages.find((candidate) =>
     candidate.directory === packageInfo.directory &&
@@ -766,7 +797,8 @@ async function verifySnapshotPackage(
   configDirectory: string,
   parsedSnapshot: RemoteSkillSnapshot,
   selectedPackage: RemoteSkillSnapshot['packages'][number],
-): Promise<string> {
+  modeOverride?: SnapshotModes,
+): Promise<{ path: string; executablePaths?: string[] }> {
   try {
     const configRoot = await realpath(configDirectory);
     const sourceRoot = join(configRoot, 'catalog-sources', parsedSnapshot.sourceId);
@@ -779,6 +811,8 @@ async function verifySnapshotPackage(
       }
     }
 
+    const modes = modeOverride ?? await readSnapshotModes(snapshotRoot, selectedPackage.directory);
+    const remainingExecutables = modes === undefined ? undefined : new Set(modes.executablePaths);
     const fingerprint = createHash('sha256');
     const fingerprintFiles: Array<{ path: string; mode: string; content: Buffer }> = [];
     let files = 0;
@@ -798,11 +832,15 @@ async function verifySnapshotPackage(
         validateRelativePackagePath(filePath, parsedSnapshot.sourceId, selectedPackage.repositoryPath);
         if (files >= selectedPackage.files) throw snapshotCorrupt('CONTENT_MISMATCH');
         const { content, executable } = await readBoundedSnapshotFile(path, selectedPackage.bytes - bytes);
+        const recordedExecutable = remainingExecutables?.delete(filePath);
+        if (recordedExecutable !== undefined && process.platform !== 'win32' && recordedExecutable !== executable) {
+          throw snapshotCorrupt('CONTENT_MISMATCH');
+        }
         files += 1;
         bytes += content.byteLength;
         fingerprintFiles.push({
           path: filePath,
-          mode: executable ? 'x' : '-',
+          mode: (recordedExecutable ?? executable) ? 'x' : '-',
           content,
         });
       }
@@ -817,7 +855,8 @@ async function verifySnapshotPackage(
         .update(file.content);
     }
     const actualFingerprint = fingerprint.digest('hex');
-    if (files !== selectedPackage.files || bytes !== selectedPackage.bytes ||
+    if ((remainingExecutables?.size ?? 0) !== 0 ||
+        files !== selectedPackage.files || bytes !== selectedPackage.bytes ||
         actualFingerprint !== selectedPackage.fingerprint) {
       throw snapshotCorrupt('CONTENT_MISMATCH', {
         files,
@@ -829,7 +868,10 @@ async function verifySnapshotPackage(
         expectedFingerprint: selectedPackage.fingerprint,
       });
     }
-    return packageRoot;
+    return {
+      path: packageRoot,
+      ...(modes === undefined ? {} : { executablePaths: modes.executablePaths }),
+    };
   } catch (error) {
     if (error instanceof RemoteSourceError) throw error;
     throw snapshotCorrupt();
@@ -920,6 +962,83 @@ async function verifyExistingSnapshotIndex(
         throw snapshotCorrupt('INDEX_INVALID');
       }
     }
+  }
+}
+
+async function writeSnapshotModes(root: string, directory: string, modes: SnapshotModes): Promise<void> {
+  const content = `${JSON.stringify(snapshotModesSchema.parse(modes))}\n`;
+  if (Buffer.byteLength(content, 'utf8') > MAX_SNAPSHOT_MANIFEST_BYTES) {
+    throw snapshotCorrupt('MODE_INDEX_INVALID');
+  }
+  const handle = await open(join(root, 'modes', `${directory}.json`), 'wx', 0o600);
+  try {
+    await handle.writeFile(content, 'utf8');
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+async function readSnapshotModes(root: string, directory: string): Promise<SnapshotModes | undefined> {
+  if (!/^[a-f0-9]{64}$/.test(directory)) throw snapshotCorrupt('MODE_INDEX_INVALID');
+  const modeRoot = join(root, 'modes');
+  try {
+    const rootInfo = await lstat(modeRoot);
+    if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink() || await realpath(modeRoot) !== modeRoot) {
+      throw snapshotCorrupt('MODE_INDEX_INVALID');
+    }
+    const path = join(modeRoot, `${directory}.json`);
+    const info = await lstat(path);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_SNAPSHOT_MANIFEST_BYTES) {
+      throw snapshotCorrupt('MODE_INDEX_INVALID');
+    }
+    const { content } = await readBoundedSnapshotFile(path, MAX_SNAPSHOT_MANIFEST_BYTES);
+    const modes = snapshotModesSchema.parse(JSON.parse(content.toString('utf8')) as unknown);
+    let previous: string | undefined;
+    for (const item of modes.executablePaths) {
+      validateRelativePackagePath(item, '', '');
+      if (previous !== undefined && comparePaths(previous, item) >= 0) throw snapshotCorrupt('MODE_INDEX_INVALID');
+      previous = item;
+    }
+    return modes;
+  } catch (error) {
+    if (isErrno(error, 'ENOENT')) return undefined;
+    throw snapshotCorrupt('MODE_INDEX_INVALID');
+  }
+}
+
+async function publishSnapshotModes(
+  root: string,
+  temporaryRoot: string,
+  directory: string,
+  expected: SnapshotModes,
+): Promise<void> {
+  const modeRoot = join(root, 'modes');
+  try {
+    await mkdir(modeRoot, { mode: 0o700 });
+  } catch (error) {
+    if (!isErrno(error, 'EEXIST')) throw error;
+  }
+  const info = await lstat(modeRoot);
+  if (!info.isDirectory() || info.isSymbolicLink() || await realpath(modeRoot) !== modeRoot) {
+    throw snapshotCorrupt('MODE_INDEX_INVALID');
+  }
+  try {
+    await link(join(temporaryRoot, 'modes', `${directory}.json`), join(modeRoot, `${directory}.json`));
+  } catch (error) {
+    if (!isErrno(error, 'EEXIST')) throw error;
+    const existing = await readSnapshotModes(root, directory);
+    if (JSON.stringify(existing) !== JSON.stringify(expected)) throw snapshotCorrupt('MODE_INDEX_INVALID');
+  }
+  const handle = await open(modeRoot, constants.O_RDONLY);
+  try {
+    try {
+      await handle.sync();
+    } catch (error) {
+      if (process.platform !== 'win32' || !isErrno(error, 'EPERM')) throw error;
+    }
+  } finally {
+    await handle.close();
   }
 }
 

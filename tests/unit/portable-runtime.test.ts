@@ -40,7 +40,7 @@ const bundle: ChainBundle = {
     }, {
       path: 'check.bin',
       content: Buffer.from([0, 1, 128, 255]).toString('base64'),
-      executable: true,
+      executable: process.platform !== 'win32',
     }],
   }],
 };
@@ -98,6 +98,15 @@ function command(
 }
 
 describe('portable bundle execution', () => {
+  it.skipIf(process.platform !== 'win32')('refuses executable bundle installation before claiming or creating a run', async () => {
+    const executableBundle = structuredClone(bundle);
+    executableBundle.skills[0]!.files[1]!.executable = true;
+    await writeFile(bundlePath, JSON.stringify(executableBundle));
+    await expect(prepare()).rejects.toMatchObject({ code: 'EXECUTABLE_MODES_UNSUPPORTED' });
+    await expect(stat(join(project, '.agents'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect((await reviewProjectCoordination(project)).claim).toBeNull();
+  });
+
   it('retains a portable claim through mutations and terminal status until separately cleared', async () => {
     const initial = await reviewProjectCoordination(project);
     await enableReviewedProjectProtocol(project, initial.reviewDigest, true);

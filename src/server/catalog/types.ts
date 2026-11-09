@@ -28,6 +28,8 @@ export const SKILL_SOURCES = [
   'remote',
 ] as const;
 export type SkillSource = (typeof SKILL_SOURCES)[number];
+/** Internal verification data; symbol keys are omitted from catalog JSON. */
+export const REMOTE_SNAPSHOT_CONTENT = Symbol('remote-snapshot-content');
 
 /** Display and grouping order from the skill-catalog feature document. */
 export const SKILL_SOURCE_ORDER: readonly SkillSource[] = SKILL_SOURCES;
@@ -56,6 +58,10 @@ export interface SkillEntry {
   repository?: string;
   revision?: string;
   repositoryPath?: string;
+  [REMOTE_SNAPSHOT_CONTENT]?: {
+    fingerprint: string;
+    executablePaths?: string[];
+  };
   /** Copilot can report disabled entries; filesystem discovery is enabled. */
   enabled: boolean;
 }

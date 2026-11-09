@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { chmod, mkdir, mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, open, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -110,15 +110,43 @@ async function main() {
       skills,
     })}\n`, { flag: 'wx', mode: 0o600 });
     const helper = fileURLToPath(new URL('./build-bundle.mjs', import.meta.url));
+    const stagedOutput = join(stage, 'verified.loom.json');
     const result = spawnSync(process.execPath, [
       helper,
       '--manifest',
       buildManifest,
       '--out',
-      outputPath,
-    ], { stdio: 'inherit', shell: false });
+      stagedOutput,
+    ], { encoding: 'utf8', shell: false });
     if (result.error) throw result.error;
-    assert(result.status === 0, 'The existing Skill Loom bundle validator rejected the approved chain.');
+    assert(result.status === 0,
+      `The existing Skill Loom bundle validator rejected the approved chain: ${result.stderr.trim()}`);
+    const bundle = JSON.parse(await readFile(stagedOutput, 'utf8'));
+    for (const candidate of selected) {
+      const skill = bundle.skills.find((item) => item.name === candidate.name);
+      assert(skill && skill.files.length === candidate.files.length,
+        `The staged package for ${candidate.name} differs from the reviewed handoff.`);
+      const reviewed = new Map(candidate.files.map((file) => [file.path, file]));
+      for (const file of skill.files) {
+        const source = reviewed.get(file.path);
+        assert(source && source.content === file.content,
+          `The staged package for ${candidate.name} differs from the reviewed handoff.`);
+        file.executable = source.executable;
+        reviewed.delete(file.path);
+      }
+      assert(reviewed.size === 0, `The staged package for ${candidate.name} differs from the reviewed handoff.`);
+    }
+    const output = await open(outputPath, 'wx', 0o600);
+    try {
+      await output.writeFile(`${JSON.stringify(bundle, null, 2)}\n`, 'utf8');
+      await output.sync();
+    } catch (error) {
+      await output.close();
+      await unlink(outputPath);
+      throw error;
+    }
+    await output.close();
+    console.log(`Created ${basename(outputPath)} with ${selected.length} skill package(s).`);
   } finally {
     await rm(stage, { recursive: true, force: true });
   }

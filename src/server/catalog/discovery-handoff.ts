@@ -18,7 +18,7 @@ import type { ConfigStore } from '../config/store.js';
 import {
   findRemoteSkillSnapshot,
   listRemoteSkillSources,
-  resolveSnapshotPackagePath,
+  resolveSnapshotPackage,
   RemoteSourceError,
   type RemoteSkillSnapshot,
 } from './remote.js';
@@ -140,7 +140,7 @@ export async function prepareDiscoveryHandoff(
     } catch {
       throw unavailable('The selected package name cannot be represented safely in a portable chain bundle.');
     }
-    const packagePath = await resolveSnapshotPackagePath(
+    const resolvedPackage = await resolveSnapshotPackage(
       configStore.getConfigDir(),
       snapshot,
       packageInfo,
@@ -155,7 +155,8 @@ export async function prepareDiscoveryHandoff(
       throw error;
     });
     const files = await collectPackage(
-      packagePath, MAX_HANDOFF_FILES - totalFiles, MAX_HANDOFF_BYTES - totalBytes,
+      resolvedPackage.path, MAX_HANDOFF_FILES - totalFiles, MAX_HANDOFF_BYTES - totalBytes,
+      resolvedPackage.executablePaths,
     ).catch((error: unknown) => {
       if (error instanceof DiscoveryHandoffError) throw error;
       throw unsafe();
@@ -215,8 +216,14 @@ export async function prepareDiscoveryHandoff(
   return validated;
 }
 
-async function collectPackage(root: string, remainingFiles: number, remainingBytes: number): Promise<DiscoveryHandoffFile[]> {
+async function collectPackage(
+  root: string,
+  remainingFiles: number,
+  remainingBytes: number,
+  executablePaths?: string[],
+): Promise<DiscoveryHandoffFile[]> {
   const files: DiscoveryHandoffFile[] = [];
+  const remainingExecutables = executablePaths === undefined ? undefined : new Set(executablePaths);
   let bytes = 0;
   async function visit(directory: string, prefix: string, depth: number): Promise<void> {
     if (depth > 32) throw unsafe();
@@ -247,11 +254,16 @@ async function collectPackage(root: string, remainingFiles: number, remainingByt
         const after = await handle.stat();
         if (bytesRead !== opened.size || after.size !== opened.size || after.mtimeMs !== opened.mtimeMs ||
             after.mode !== opened.mode) throw unsafe();
+        const executable = (opened.mode & 0o111) !== 0;
+        const recordedExecutable = remainingExecutables?.delete(path);
+        if (recordedExecutable !== undefined && process.platform !== 'win32' && recordedExecutable !== executable) {
+          throw unsafe();
+        }
         bytes += bytesRead;
         files.push({
           path,
           content: content.subarray(0, bytesRead).toString('base64'),
-          executable: (opened.mode & 0o111) !== 0,
+          executable: recordedExecutable ?? executable,
         });
       } finally {
         await handle.close();
@@ -263,6 +275,7 @@ async function collectPackage(root: string, remainingFiles: number, remainingByt
     throw unsafe();
   }
   await visit(root, '', 0);
+  if ((remainingExecutables?.size ?? 0) !== 0) throw unsafe();
   return files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 }
 

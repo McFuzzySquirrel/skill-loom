@@ -14,7 +14,7 @@ import {
   removeNativeAgentIfUnchanged,
 } from '../catalog/agent-copy.js';
 import type { CatalogService } from '../catalog/merge.js';
-import { CATALOG_WARNING_CODES, type SkillEntry } from '../catalog/types.js';
+import { CATALOG_WARNING_CODES, REMOTE_SNAPSHOT_CONTENT, type SkillEntry } from '../catalog/types.js';
 import type { Chain } from './model.js';
 import type { ChainService } from './service.js';
 import {
@@ -125,6 +125,13 @@ export async function exportBundle(
       }
     }
     const skill: BundleSkill = { name, directory, files: [] };
+    const snapshotContent = selected[REMOTE_SNAPSHOT_CONTENT];
+    if (process.platform === 'win32' && selected.source === 'remote' && snapshotContent === undefined) {
+      throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', 'The remote package modes cannot be verified on Windows. Refresh the source and retry.');
+    }
+    const remainingExecutables = snapshotContent?.executablePaths === undefined
+      ? undefined
+      : new Set(snapshotContent.executablePaths);
     async function collect(directory: string, prefix: string, depth: number): Promise<void> {
       if (depth > 32) invalid('The skill package exceeds the directory depth limit.');
       for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -146,7 +153,16 @@ export async function exportBundle(
             const content = Buffer.alloc(info.size + 1);
             const { bytesRead } = await handle.read(content, 0, content.length, 0);
             if (bytesRead !== info.size) invalid('A package changed during export. Retry after editing finishes.');
-            skill.files.push({ path, content: content.subarray(0, bytesRead).toString('base64'), executable: (info.mode & 0o111) !== 0 });
+            const executable = (info.mode & 0o111) !== 0;
+            const recordedExecutable = remainingExecutables?.delete(path);
+            if (recordedExecutable !== undefined && process.platform !== 'win32' && recordedExecutable !== executable) {
+              invalid('A remote package changed during export. Refresh and review it again.');
+            }
+            skill.files.push({
+              path,
+              content: content.subarray(0, bytesRead).toString('base64'),
+              executable: recordedExecutable ?? executable,
+            });
           } finally {
             await handle.close();
           }
@@ -160,6 +176,16 @@ export async function exportBundle(
         invalid('Export refuses symbolic links in skill package paths.');
       }
       await collect(source, '', 0);
+      if (snapshotContent !== undefined) {
+        const fingerprint = createHash('sha256');
+        for (const file of [...skill.files].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0)) {
+          fingerprint.update(file.path).update('\0').update(file.executable ? 'x' : '-')
+            .update('\0').update(Buffer.from(file.content, 'base64'));
+        }
+        if ((remainingExecutables?.size ?? 0) !== 0 || fingerprint.digest('hex') !== snapshotContent.fingerprint) {
+          invalid('A remote package changed during export. Refresh and review it again.');
+        }
+      }
     } catch (error) {
       if (error instanceof BundleError) throw error;
       throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', `The complete package for skill "${name}" could not be read. Check its files and permissions, then retry.`);
@@ -342,6 +368,12 @@ export async function importBundle(
   verifyReuse?: () => Promise<void>,
 ): Promise<Chain> {
   const preview = await previewBundle(raw, projectPath, catalog, requireCompleteDiscovery);
+  if (process.platform === 'win32' && preview.bundle.skills.some((skill) => skill.files.some((file) => file.executable))) {
+    throw new BundleError(
+      'BUNDLE_SOURCE_UNAVAILABLE',
+      'Windows cannot yet preserve executable modes when installing or reusing bundle skills.',
+    );
+  }
   const reuse = new Set(reuseSkills);
   if (reuse.size !== reuseSkills.length || [...reuse].some((name) =>
     !preview.skills.some((skill) => skill.name === name && skill.conflict))) {

@@ -18,12 +18,13 @@ import {
   RemoteSourceError,
   listRemoteSkillSnapshots,
   resolveSnapshotAgentPath,
-  resolveSnapshotPackagePath,
+  resolveSnapshotPackage,
 } from './remote.js';
 import {
   CATALOG_ERROR_CODES,
   CATALOG_WARNING_CODES,
   CatalogError,
+  REMOTE_SNAPSHOT_CONTENT,
   SKILL_HARNESSES,
   SKILL_SOURCE_ORDER,
   SKILL_SOURCES,
@@ -272,11 +273,12 @@ export function createCatalogService(options: CatalogServiceOptions): CatalogSer
             for (const snapshot of snapshots) {
               for (const packageInfo of snapshot.packages) {
                 try {
-                  const packagePath = await resolveSnapshotPackagePath(
+                  const resolved = await resolveSnapshotPackage(
                     options.configDirectory,
                     snapshot,
                     packageInfo,
                   );
+                  const packagePath = resolved.path;
                   const skillPath = join(packagePath, 'SKILL.md');
                   const metadata = parseSkillFrontmatter(await readFile(skillPath, 'utf8'));
                   const name = frontmatterString(metadata.data, 'name') ?? packageInfo.name;
@@ -299,6 +301,10 @@ export function createCatalogService(options: CatalogServiceOptions): CatalogSer
                     repository: snapshot.repository,
                     revision: snapshot.revision,
                     repositoryPath: packageInfo.repositoryPath,
+                    [REMOTE_SNAPSHOT_CONTENT]: {
+                      fingerprint: packageInfo.fingerprint,
+                      ...(resolved.executablePaths === undefined ? {} : { executablePaths: resolved.executablePaths }),
+                    },
                     enabled: true,
                   });
                 } catch (error) {
