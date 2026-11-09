@@ -6,27 +6,39 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const WINDOWS_AGENT_HASH = '8636d16b38266112204061a22b135734177c242837982fd3a4055be726efa64a';
+const WINDOWS_CONNECTION_HASH = '1440f70908fb1f55911ac8e936a1230f68a9c00c03096fcef6788eac6aad9d62';
 const WINDOWS_CLEANUP = [
   '        this._inSocket.readable = false;',
   '        this._outSocket.readable = false;',
   '        this._outSocket.destroy();',
 ].join('\n');
-const WINDOWS_CLEANUP_FIXED = [
+const WINDOWS_CLEANUP_PREVIOUS = [
   '        this._inSocket.readable = false;',
   '        this._outSocket.readable = false;',
   '        this._inSocket.destroy();',
   '        this._conoutSocketWorker.dispose();',
   '        this._outSocket.destroy();',
 ].join('\n');
+const WINDOWS_CLEANUP_FIXED = [
+  '        if (this._loomCleanupPending) { return; }',
+  '        this._loomCleanupPending = true;',
+  '        this._inSocket.readable = false;',
+  '        this._outSocket.readable = false;',
+  '        this._inSocket.destroy();',
+  '        var outSocket = this._outSocket;',
+  '        this._conoutSocketWorker._destroySocket().then(function () {',
+  '            outSocket.destroy();',
+  '        }, function (error) { outSocket.destroy(error); });',
+].join('\n');
+const WINDOWS_KILL = '    WindowsPtyAgent.prototype.kill = function () {\n';
+const WINDOWS_KILL_FIXED = WINDOWS_KILL + '        if (this._exitCode !== undefined) { return; }\n';
+const hash = (value) => createHash('sha256').update(value).digest('hex');
 
-async function ensureWindowsPtyCleanup(packageDirectory) {
-  const root = await realpath(packageDirectory);
-  const directory = join(root, 'lib');
-  if (await realpath(directory) !== directory) throw new Error('The node-pty lib directory must not be a symbolic link.');
-  const path = join(directory, 'windowsPtyAgent.js');
+async function readWindowsPtyFile(directory, name) {
+  const path = join(directory, name);
   const before = await lstat(path);
   if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1 || before.size > 64 * 1024) {
-    throw new Error('The node-pty Windows agent must be a bounded, private regular file.');
+    throw new Error('The node-pty Windows implementation must be a bounded, private regular file.');
   }
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   let bytes;
@@ -38,15 +50,27 @@ async function ensureWindowsPtyCleanup(packageDirectory) {
     }
     bytes = await handle.readFile();
   } finally { await handle.close(); }
+  return { path, before, bytes };
+}
+
+async function ensureWindowsPtyCleanup(packageDirectory) {
+  const root = await realpath(packageDirectory);
+  const directory = join(root, 'lib');
+  if (await realpath(directory) !== directory) throw new Error('The node-pty lib directory must not be a symbolic link.');
+  const { path, before, bytes } = await readWindowsPtyFile(directory, 'windowsPtyAgent.js');
+  const connection = await readWindowsPtyFile(directory, 'windowsConoutConnection.js');
+  if (hash(connection.bytes) !== WINDOWS_CONNECTION_HASH) throw new Error('Unsupported node-pty conout lifecycle implementation.');
   const source = bytes.toString('utf8');
-  const original = source.replace(WINDOWS_CLEANUP_FIXED, WINDOWS_CLEANUP);
-  const hash = (value) => createHash('sha256').update(value).digest('hex');
+  const original = source.replace(WINDOWS_CLEANUP_FIXED, WINDOWS_CLEANUP)
+    .replace(WINDOWS_CLEANUP_PREVIOUS, WINDOWS_CLEANUP).replace(WINDOWS_KILL_FIXED, WINDOWS_KILL);
   if (hash(original) !== WINDOWS_AGENT_HASH) {
     throw new Error('Unsupported node-pty Windows agent bytes; review the natural-exit cleanup compatibility patch before updating node-pty.');
   }
-  if (source !== original) return;
-  if (source.split(WINDOWS_CLEANUP).length !== 2) throw new Error('Unexpected node-pty Windows cleanup implementation.');
-  const fixed = source.replace(WINDOWS_CLEANUP, WINDOWS_CLEANUP_FIXED);
+  if (original.split(WINDOWS_CLEANUP).length !== 2 || original.split(WINDOWS_KILL).length !== 2) {
+    throw new Error('Unexpected node-pty Windows cleanup implementation.');
+  }
+  const fixed = original.replace(WINDOWS_CLEANUP, WINDOWS_CLEANUP_FIXED).replace(WINDOWS_KILL, WINDOWS_KILL_FIXED);
+  if (source === fixed) return;
   const temporary = join(directory, `.loom-pty-${randomUUID()}.tmp`);
   try {
     const output = await open(temporary, 'wx', before.mode & 0o777);
