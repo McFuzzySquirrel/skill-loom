@@ -92,7 +92,8 @@ These are requirements to implement and verify, not current guarantees:
    1.1.0's prebuilt `spawn-helper` mode `0644`. The package postinstall now
    grants owner execute permission to a private regular helper, and a clean
    macOS runner passed the focused terminal suite without a manual repair.
-   The full hosted Windows suite passed (`42651250191`) after a preceding run
+   The full hosted Windows suite passed (`42651250191`, then `42652141592`
+   after bounded ignore-file reads) after a preceding run
    (`42649899302`) failed 2 tests. A repeated cross-process test identified an
    `EPERM` replacing `.loom/.gitignore` during concurrent portable setup; the
    fix appends ignore rules instead and a focused race passed on Linux, macOS,
