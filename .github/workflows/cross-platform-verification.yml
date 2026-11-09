@@ -46,7 +46,7 @@ jobs:
       - if: inputs.suite == 'portable-claim-race'
         run: npx vitest run tests/unit/portable-runtime.test.ts -t "reports underlying errors during repeated cross-process claim races"
       - if: inputs.suite == 'chain-bundles'
-        run: npx vitest run tests/integration/chain-bundles.test.ts
+        run: npx vitest run tests/unit/git-file-modes.test.ts tests/integration/chain-bundles.test.ts
       - if: inputs.suite == 'windows-baseline'
         run: npx vitest run tests/unit/chain-store.test.ts tests/unit/config.test.ts tests/unit/run-store.test.ts tests/unit/catalog-copy.test.ts tests/unit/harness-registry.test.ts tests/integration/server.test.ts
       - if: inputs.suite == 'remote-copy'

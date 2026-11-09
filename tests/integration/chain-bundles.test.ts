@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -41,6 +42,11 @@ beforeEach(async () => {
   await writeFile(join(packagePath, 'scripts', 'check.sh'), '#!/bin/sh\nexit 0\n');
   await chmod(join(packagePath, 'scripts', 'check.sh'), 0o755);
   await writeFile(join(packagePath, 'asset.bin'), binary);
+  if (process.platform === 'win32') {
+    execFileSync('git', ['-C', source, 'init', '--quiet']);
+    execFileSync('git', ['-C', source, 'add', '--', '.opencode/skills/review']);
+    execFileSync('git', ['-C', source, 'update-index', '--chmod=-x', '--', '.opencode/skills/review/scripts/check.sh']);
+  }
   const configStore = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') }, homeDirectory: () => join(root, 'home') });
   discoveryOverride = undefined;
   chains = createChainService();
@@ -122,6 +128,18 @@ function catalogEntry(overrides: Partial<SkillEntry> = {}): SkillEntry {
 }
 
 describe('portable chain bundles', () => {
+  it.skipIf(process.platform !== 'win32')('exports tracked Windows files using Git executable intent and rejects untracked files', async () => {
+    execFileSync('git', ['-C', source, 'update-index', '--chmod=+x', '--', '.opencode/skills/review/scripts/check.sh']);
+    const result = await exported();
+    expect(result.skills[0]!.files.find((file) => file.path === 'scripts/check.sh')?.executable).toBe(true);
+    await writeFile(join(source, '.opencode', 'skills', 'review', 'new.sh'), 'untracked\n');
+    const response = await app.inject({ method: 'GET', url: `/api/projects/${sourceId}/chains/${chain.id}/bundle` });
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toMatchObject({
+      error: { code: 'BUNDLE_SOURCE_UNAVAILABLE', message: expect.stringContaining('untracked') },
+    });
+  });
+
   it('binds headless approval to the bundle, destination, and conflict state without reusing skills', async () => {
     const bundle = await exported();
     const bundlePath = join(root, 'review.loom.json');
@@ -250,6 +268,9 @@ describe('portable chain bundles', () => {
     const newSource = join(source, '.opencode', 'skills', 'new-skill');
     await mkdir(newSource, { recursive: true });
     await writeFile(join(newSource, 'SKILL.md'), '---\nname: new-skill\ndescription: New fixture\n---\nInspect the result.\n');
+    if (process.platform === 'win32') {
+      execFileSync('git', ['-C', source, 'add', '--', '.opencode/skills/new-skill']);
+    }
     const multi = await chains.create(source, {
       name: 'Two packages', harness: 'opencode', sessionMode: 'shared',
       steps: [

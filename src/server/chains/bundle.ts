@@ -7,6 +7,7 @@ import { projectSkillRootFor } from '../catalog/copy.js';
 import { SHARED_PROJECT_SKILLS_SEGMENTS, sharedProjectSkillRoot } from '../catalog/project-paths.js';
 import { resolveSkillCatalogEntry } from '../catalog/skill-resolution.js';
 import { snapshotPackageFingerprint, snapshotReviewFingerprint } from '../catalog/snapshot-fingerprint.js';
+import { readGitExecutablePaths } from './git-file-modes.js';
 import {
   installNativeAgentContentIntoProject,
   inspectInstalledNativeAgent,
@@ -177,6 +178,10 @@ export async function exportBundle(
         invalid('Export refuses symbolic links in skill package paths.');
       }
       await collect(source, '', 0);
+      if (process.platform === 'win32' && snapshotContent === undefined) {
+        const executablePaths = await readGitExecutablePaths(source, skill.files.map((file) => file.path));
+        for (const file of skill.files) file.executable = executablePaths.has(file.path);
+      }
       if (snapshotContent !== undefined) {
         const files = skill.files.map((file) => ({
           path: file.path, executable: file.executable, content: Buffer.from(file.content, 'base64'),

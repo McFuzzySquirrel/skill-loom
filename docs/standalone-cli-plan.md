@@ -193,6 +193,9 @@ These are requirements to implement and verify, not current guarantees:
    Linux, macOS and Windows checks passed (`42659438142`). Windows installation and reuse of executable bundle
    packages and remote executable-package copy remain explicitly blocked until
    reviewed mode metadata can also be preserved and validated after install.
+   Windows export of other filesystem packages reads executable intent from
+   stage-zero Git index entries, and refuses untracked or conflicted files
+   instead of deriving modes from Windows filesystem stat results.
    Focused hosted Linux, macOS and Windows tests passed for migration,
    tamper rejection, handoff, bundle export and the standalone handoff builder;
    the Windows test also verified that executable installation is blocked.
