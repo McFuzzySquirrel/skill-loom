@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { randomInt, randomUUID } from 'node:crypto';
-import { chmod, lstat, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, link, lstat, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { z } from 'zod';
@@ -33,7 +33,8 @@ describe.skipIf(process.platform !== 'darwin' || process.env.LOOM_TEST_PRIVILEGE
       let created = false;
       let rootOwned = false;
       let operationError: unknown;
-      const files = ['launch', 'identity', 'setuid-identity', 'profile.sb', 'reviewed.txt'].map((name) => join(root, name));
+      const files = ['launch', 'identity', 'setuid-identity', 'profile.sb', 'reviewed.txt', 'exec-child', 'setuid-alias', 'try-write']
+        .map((name) => join(root, name));
       try {
         const users = await execute('/usr/bin/dscl', ['.', '-list', '/Users', 'UniqueID'], { timeout: 15_000 });
         if (users.stdout.trim().split(/\r?\n/).some((line) => line.trim().split(/\s+/)[0] === account)) {
@@ -50,6 +51,9 @@ describe.skipIf(process.platform !== 'darwin' || process.env.LOOM_TEST_PRIVILEGE
         for (const output of [files[1]!, files[2]!]) {
           await execute('/usr/bin/clang', ['-Wall', '-Wextra', '-Werror', '-DREPORT_IDENTITY', '-o', output, source], { timeout: 60_000 });
         }
+        await execute('/usr/bin/clang', ['-Wall', '-Wextra', '-Werror', '-DEXEC_CHILD', '-o', files[5]!, source], { timeout: 60_000 });
+        await execute('/usr/bin/clang', ['-Wall', '-Wextra', '-Werror', '-DTRY_WRITE', '-o', files[7]!, source], { timeout: 60_000 });
+        await link(files[2]!, files[6]!);
         await writeFile(files[3]!, '(version 1)\n(allow default)\n');
         await writeFile(files[4]!, 'reviewed fixture content\n');
         await chmod(root, 0o711);
@@ -76,21 +80,31 @@ describe.skipIf(process.platform !== 'darwin' || process.env.LOOM_TEST_PRIVILEGE
         const baseline = identitySchema.parse(JSON.parse((await launch(files[1]!)).stdout) as unknown);
         expect(baseline).toEqual({ realUid: uid, effectiveUid: uid });
         expect((await launch('/bin/cat', [files[4]!])).stdout).toBe('reviewed fixture content\n');
-        await expect(launch('/usr/bin/python3', [
-          '-c', "import sys;open(sys.argv[1],'w').write('replacement')", files[4]!,
-        ])).rejects.toMatchObject({ code: 1 });
+        expect(JSON.parse((await launch(files[7]!, [files[4]!])).stdout) as unknown)
+          .toEqual({ writeDenied: true, error: 13 });
         expect(await readFile(files[4]!, 'utf8')).toBe('reviewed fixture content\n');
         const privileged = identitySchema.parse(JSON.parse((await launch(files[2]!)).stdout) as unknown);
         expect(privileged).toEqual({ realUid: uid, effectiveUid: 0 });
         const sandboxed = identitySchema.parse(JSON.parse(
-          (await launch('/usr/bin/sandbox-exec', ['-f', files[3]!, files[2]!])).stdout,
+          (await launch('/usr/bin/sandbox-exec', ['-f', files[3]!, files[1]!])).stdout,
         ) as unknown);
-        expect(sandboxed.realUid).toBe(uid);
+        expect(sandboxed).toEqual({ realUid: uid, effectiveUid: uid });
+        for (const target of [files[2]!, files[6]!]) {
+          await expect(launch('/usr/bin/sandbox-exec', ['-f', files[3]!, target]))
+            .rejects.toMatchObject({ stderr: expect.stringContaining('Operation not permitted') });
+          const inherited = JSON.parse((await launch('/usr/bin/sandbox-exec', [
+            '-f', files[3]!, files[5]!, target,
+          ])).stdout) as unknown;
+          expect(inherited).toEqual({
+            forkAllowed: true, setsidAllowed: true, execDenied: true, error: 1,
+          });
+        }
         console.info(JSON.stringify({
           platform: 'darwin',
           candidate: 'distinct-uid-with-inherited-sandbox',
           rootOwnedContentWriteDenied: true,
-          setuidEscapesIdentity: sandboxed.effectiveUid !== uid,
+          forkAndSetsidAllowed: true,
+          directInheritedAndHardlinkedSetuidExecDenied: true,
         }));
       } catch (error) {
         operationError = error;

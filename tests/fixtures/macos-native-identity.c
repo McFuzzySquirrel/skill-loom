@@ -10,6 +10,38 @@ int main(void) {
          (unsigned)getuid(), (unsigned)geteuid());
   return 0;
 }
+#elif defined(TRY_WRITE)
+#include <fcntl.h>
+
+int main(int argc, char **argv) {
+  if (argc != 2) return 1;
+  errno = 0;
+  const int file = open(argv[1], O_WRONLY | O_TRUNC);
+  const int error = file < 0 ? errno : 0;
+  if (file >= 0) close(file);
+  printf("{\"writeDenied\":%s,\"error\":%d}\n", error == EACCES ? "true" : "false", error);
+  return error == EACCES ? 0 : 1;
+}
+#elif defined(EXEC_CHILD)
+#include <sys/wait.h>
+
+int main(int argc, char **argv) {
+  if (argc != 2) return 1;
+  const pid_t child = fork();
+  if (child < 0) return 1;
+  if (child == 0) {
+    if (setsid() < 0) _exit(1);
+    execv(argv[1], &argv[1]);
+    const int error = errno;
+    printf("{\"forkAllowed\":true,\"setsidAllowed\":true,\"execDenied\":%s,\"error\":%d}\n",
+           error == EPERM ? "true" : "false", error);
+    fflush(stdout);
+    _exit(error == EPERM ? 0 : 1);
+  }
+  int status;
+  if (waitpid(child, &status, 0) != child || !WIFEXITED(status)) return 1;
+  return WEXITSTATUS(status);
+}
 #else
 #include <grp.h>
 
