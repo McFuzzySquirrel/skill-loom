@@ -32,7 +32,8 @@ describe.skipIf(process.platform !== 'win32' || process.env.LOOM_TEST_PRIVILEGED
           originalConsoleHostsTerminated: true,
           conptyInputOutputResizeVerified: true, conptyBrokerDeathVerified: true,
           conptyInheritedStdioVerified: true,
-          modes: ['finish', 'abort', 'broker-death'],
+          ownerLeaseLossVerified: true,
+          modes: ['finish', 'abort', 'broker-death', 'owner-lease-loss'],
         });
         console.info(JSON.stringify(evidence));
       } finally {

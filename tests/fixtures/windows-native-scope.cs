@@ -455,9 +455,14 @@ public static class WindowsNativeScopeFixture {
             }
             Require(File.ReadAllText(Path.Combine(workspace, "checks")) == "read;write-denied;dacl-denied;dup-denied;breakaway-denied",
                 "Missing protection evidence.");
-            if (mode == "owner-death") {
-                File.WriteAllText(Path.Combine(root, prefix + "conhost.pid"), consolePid.ToString());
-                File.WriteAllText(Path.Combine(root, prefix + "broker-ready"), "verified");
+            if (mode == "owner-death" || mode == "owner-loss") {
+                string ownerPrefix = prefix + (mode == "owner-loss" ? "lease-" : "");
+                File.WriteAllText(Path.Combine(root, ownerPrefix + "conhost.pid"), consolePid.ToString());
+                File.WriteAllText(Path.Combine(root, ownerPrefix + "broker-ready"), "verified");
+                if (mode == "owner-loss") {
+                    Require(Console.OpenStandardInput().ReadByte() == -1, "Invalid owner lease command.");
+                    return;
+                }
                 Thread.Sleep(30000);
                 throw new InvalidOperationException("Broker death probe was not interrupted.");
             }
@@ -498,23 +503,28 @@ public static class WindowsNativeScopeFixture {
             });
         });
     }
-    static void OwnerDeath(string root, string executable, string profile, SecurityIdentifier sid, bool terminal = false) {
+    static void OwnerDeath(string root, string executable, string profile, SecurityIdentifier sid, bool terminal = false, bool lease = false) {
         string prefix = terminal ? "terminal-" : "";
-        string workspace = Path.Combine(root, prefix + "owner-death");
-        using (Process broker = Process.Start(StartInfo(executable,
-            Quote(terminal ? "terminal-broker" : "broker") + " " + Quote(root) + " " + Quote(profile), workspace))) {
+        string ownerPrefix = prefix + (lease ? "lease-" : "");
+        string workspace = Path.Combine(root, prefix + (lease ? "owner-loss" : "owner-death"));
+        var start = StartInfo(executable,
+            Quote(ownerPrefix + "broker") + " " + Quote(root) + " " + Quote(profile), workspace);
+        start.RedirectStandardInput = lease;
+        using (Process broker = Process.Start(start)) {
             WithCleanup(delegate {
-                WaitFile(Path.Combine(root, prefix + "broker-ready"));
-                Require(File.ReadAllText(Path.Combine(root, prefix + "broker-ready")) == "verified", "Invalid broker readiness.");
+                WaitFile(Path.Combine(root, ownerPrefix + "broker-ready"));
+                Require(File.ReadAllText(Path.Combine(root, ownerPrefix + "broker-ready")) == "verified", "Invalid broker readiness.");
                 Capture(workspace, "worker", sid, IntPtr.Zero);
                 Capture(workspace, "child", sid, IntPtr.Zero);
                 Capture(workspace, "grandchild", sid, IntPtr.Zero);
                 uint consolePid;
-                Require(uint.TryParse(File.ReadAllText(Path.Combine(root, prefix + "conhost.pid")), out consolePid),
+                Require(uint.TryParse(File.ReadAllText(Path.Combine(root, ownerPrefix + "conhost.pid")), out consolePid),
                     "Invalid console host identity.");
                 CaptureConsole(consolePid, IntPtr.Zero);
-                Check(TerminateProcess(broker.Handle, 1), "kill actual broker");
+                if (lease) broker.StandardInput.Close();
+                else Check(TerminateProcess(broker.Handle, 1), "kill actual broker");
                 Require(broker.WaitForExit(5000), "Original broker survived termination.");
+                if (lease) Require(broker.ExitCode == 0, "Owner lease cleanup failed.");
             }, delegate {
                 if (!broker.HasExited) {
                     Check(TerminateProcess(broker.Handle, 1), "cleanup broker");
@@ -546,7 +556,8 @@ public static class WindowsNativeScopeFixture {
             executableSecurity.AddAccessRule(new FileSystemAccessRule(app, FileSystemRights.ReadAndExecute, AccessControlType.Allow));
             File.SetAccessControl(executable, executableSecurity);
             File.WriteAllText(Path.Combine(root, "reviewed.txt"), "reviewed fixture content");
-            foreach (string mode in new string[] { "finish", "abort", "owner-death", "terminal-finish", "terminal-abort", "terminal-owner-death" }) {
+            foreach (string mode in new string[] { "finish", "abort", "owner-death", "owner-loss",
+                "terminal-finish", "terminal-abort", "terminal-owner-death", "terminal-owner-loss" }) {
                 string workspace = Path.Combine(root, mode);
                 Directory.CreateDirectory(workspace);
                 var writable = Directory.GetAccessControl(workspace);
@@ -557,11 +568,13 @@ public static class WindowsNativeScopeFixture {
             RunScope(root, executable, profile, "finish");
             RunScope(root, executable, profile, "abort");
             OwnerDeath(root, executable, profile, app);
+            OwnerDeath(root, executable, profile, app, false, true);
             RunScope(root, executable, profile, "finish", true);
             RunScope(root, executable, profile, "abort", true);
             OwnerDeath(root, executable, profile, app, true);
+            OwnerDeath(root, executable, profile, app, true, true);
             Require(File.ReadAllText(Path.Combine(root, "reviewed.txt")) == "reviewed fixture content", "Reviewed bytes changed.");
-            Console.WriteLine("{\"platform\":\"windows\",\"candidate\":\"appcontainer-job\",\"protectedWritesDenied\":true,\"breakawayDenied\":true,\"brokerHandleDuplicationDenied\":true,\"originalProcessesTerminated\":true,\"originalConsoleHostsTerminated\":true,\"conptyInputOutputResizeVerified\":true,\"conptyBrokerDeathVerified\":true,\"conptyInheritedStdioVerified\":true,\"modes\":[\"finish\",\"abort\",\"broker-death\"]}");
+            Console.WriteLine("{\"platform\":\"windows\",\"candidate\":\"appcontainer-job\",\"protectedWritesDenied\":true,\"breakawayDenied\":true,\"brokerHandleDuplicationDenied\":true,\"originalProcessesTerminated\":true,\"originalConsoleHostsTerminated\":true,\"conptyInputOutputResizeVerified\":true,\"conptyBrokerDeathVerified\":true,\"conptyInheritedStdioVerified\":true,\"ownerLeaseLossVerified\":true,\"modes\":[\"finish\",\"abort\",\"broker-death\",\"owner-lease-loss\"]}");
         }, delegate {
             FreeSid(sid);
             Marshal.ThrowExceptionForHR(DeleteAppContainerProfile(profile));
@@ -694,14 +707,18 @@ public static class WindowsNativeScopeFixture {
         try {
             if (args.Length == 1 && args[0] == "nop") return 0;
             if (args.Length == 2 && args[0] == "stdio-probe") return StandardConsoleProbe();
-            if (args.Length == 3 && (args[0] == "broker" || args[0] == "terminal-broker")) {
-                RunScope(args[1], typeof(WindowsNativeScopeFixture).Assembly.Location, args[2], "owner-death", args[0] == "terminal-broker");
+            if (args.Length == 3 && (args[0] == "broker" || args[0] == "terminal-broker" ||
+                args[0] == "lease-broker" || args[0] == "terminal-lease-broker")) {
+                RunScope(args[1], typeof(WindowsNativeScopeFixture).Assembly.Location, args[2],
+                    args[0].Contains("lease-") ? "owner-loss" : "owner-death", args[0].StartsWith("terminal-"));
                 return 0;
             }
             Require(args.Length >= 2 && (args[0] == "worker" || args[0] == "child" || args[0] == "grandchild"), "Invalid fixture role.");
             return Actor(args);
         } catch (Exception error) {
-            if (args.Length >= 2 && (args[0] == "worker" || args[0] == "child" || args[0] == "grandchild" || args[0] == "broker" || args[0] == "terminal-broker" || args[0] == "stdio-probe")) {
+            if (args.Length >= 2 && (args[0] == "worker" || args[0] == "child" || args[0] == "grandchild" ||
+                args[0] == "broker" || args[0] == "terminal-broker" || args[0] == "lease-broker" ||
+                args[0] == "terminal-lease-broker" || args[0] == "stdio-probe")) {
                 File.WriteAllText(Path.Combine(args[1], args[0] + ".error"), error.ToString());
             }
             Console.Error.WriteLine(error);
