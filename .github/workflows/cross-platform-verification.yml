@@ -12,7 +12,7 @@ on:
         description: Test scope
         type: choice
         default: full
-        options: [full, claims, portable, portable-no-follow, catalog, catalog-collision, profile-alias, snapshot-modes, macos-baseline, preflight, filesystem, harness-exe, cli, automatic, workspaces, library, package, mode-probe, containment-probe, terminal, terminal-macos-helper]
+        options: [full, claims, portable, portable-no-follow, catalog, catalog-collision, git-batch, profile-alias, snapshot-modes, macos-baseline, preflight, filesystem, harness-exe, cli, automatic, workspaces, library, package, mode-probe, containment-probe, terminal, terminal-macos-helper]
 
 permissions:
   contents: read
@@ -47,6 +47,8 @@ jobs:
         run: npx vitest run tests/unit/catalog-remote.test.ts tests/integration/discovery-routes.test.ts
       - if: inputs.suite == 'catalog-collision'
         run: npx vitest run tests/unit/catalog-remote.test.ts -t "reuses an existing snapshot"
+      - if: inputs.suite == 'git-batch'
+        run: npx vitest run tests/unit/git-batch.test.ts
       - if: inputs.suite == 'profile-alias'
         run: npx vitest run tests/unit/test-workspaces.test.ts tests/integration/test-workspace-routes.test.ts tests/integration/drafts-routes.test.ts tests/integration/global-chains-routes.test.ts -t "using a alias|symbolic link"
       - if: inputs.suite == 'profile-alias' && runner.os != 'Windows'

@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 export class GitBatchError extends Error {
   constructor(
@@ -27,8 +27,9 @@ export function createGitBlobReader(options: {
   maxStderrBytes: number;
   exceedsStagingLimits?: () => Promise<{ dimension: string; limit: number } | null>;
   signal?: AbortSignal;
+  spawnGit?: (repository: string, cwd: string) => ChildProcessWithoutNullStreams;
 }): GitBlobReader {
-  const child = spawn('git', ['-C', options.repository, 'cat-file', '--batch'], {
+  const child = options.spawnGit?.(options.repository, options.cwd) ?? spawn('git', ['-C', options.repository, 'cat-file', '--batch'], {
     cwd: options.cwd,
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
     detached: process.platform !== 'win32',

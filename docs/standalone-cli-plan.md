@@ -118,6 +118,12 @@ These are requirements to implement and verify, not current guarantees:
    PowerShell on Windows and POSIX shells elsewhere; a hosted Windows suite
    (`42645622987`) verified actual PowerShell argument handling and the trust
    route. This does not verify a live Copilot trust session.
+   The focused automatic-runner unit suite passed on hosted Windows
+   (`42646538485`). Portable bundle and run-record reads now reject linked
+   files and check file identity before and after reading, including on Windows
+   where `O_NOFOLLOW` is insufficient; hosted Linux, macOS and Windows
+   (`42647120313`) passed the focused tests, including both standalone helper
+   mirrors. These checks do not lock files against concurrent writers.
    A later full baseline after the profile-alias fixes passed Linux but failed
    12 of 65 macOS files and 25 of 65 Windows files (three Windows files
    skipped). This baseline predates the subsequent snapshot-mode changes.

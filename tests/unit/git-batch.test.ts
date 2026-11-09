@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -59,22 +59,23 @@ describe('batched Git blob reader', () => {
   it('times out a stalled Git process and reaps it', async () => {
     const root = await mkdtemp(join(tmpdir(), 'loom-git-stalled-'));
     roots.push(root);
-    const executable = join(root, 'git');
-    await writeFile(executable, `#!${process.execPath}\nsetInterval(() => {}, 1000);\n`);
-    await chmod(executable, 0o700);
-    const previousPath = process.env.PATH;
-    process.env.PATH = root;
+    let child: ChildProcessWithoutNullStreams | undefined;
+    const reader = createGitBlobReader({
+      repository: root, cwd: root, timeoutMs: 200, maxStderrBytes: 2_048,
+      spawnGit: () => {
+        child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+          cwd: root, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32',
+        });
+        return child;
+      },
+    });
     try {
-      const reader = createGitBlobReader({ repository: root, cwd: root, timeoutMs: 200, maxStderrBytes: 2_048 });
-      try {
-        await expect(reader.read('a'.repeat(40), 10)).rejects.toMatchObject({ code: 'TIMEOUT' });
-      } finally {
-        await reader.close(true);
-      }
+      await expect(reader.read('a'.repeat(40), 10)).rejects.toMatchObject({ code: 'TIMEOUT' });
     } finally {
-      if (previousPath === undefined) delete process.env.PATH;
-      else process.env.PATH = previousPath;
+      await reader.close(true);
     }
+    expect(child).toBeDefined();
+    expect(child!.exitCode !== null || child!.signalCode !== null).toBe(true);
   });
 
   it('escalates termination when the Git process ignores SIGTERM', async () => {
