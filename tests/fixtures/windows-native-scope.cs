@@ -14,6 +14,28 @@ public static class WindowsNativeScopeFixture {
     const uint SynchronizeQuery = 0x00101000, Timeout = 258;
     static readonly List<IntPtr> Handles = new List<IntPtr>();
     static readonly HashSet<uint> CapturedPids = new HashSet<uint>();
+    static readonly object OutputLock = new object();
+    static readonly StringBuilder TerminalOutput = new StringBuilder();
+    static Exception TerminalError;
+
+    [StructLayout(LayoutKind.Sequential)] struct Coord {
+        public short X, Y;
+        public Coord(short x, short y) { X = x; Y = y; }
+    }
+    [StructLayout(LayoutKind.Sequential)] struct ConsoleInfo {
+        public Coord Size, Cursor;
+        public ushort Attributes;
+        public short Left, Top, Right, Bottom;
+        public Coord Maximum;
+    }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct ProcessEntry {
+        public uint Size, Usage, ProcessId;
+        public UIntPtr Heap;
+        public uint Module, Threads, ParentId;
+        public int Priority;
+        public uint Flags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string Name;
+    }
 
     [StructLayout(LayoutKind.Sequential)] struct Startup {
         public uint Size;
@@ -93,6 +115,19 @@ public static class WindowsNativeScopeFixture {
     static extern bool CreateProcessW(string application, StringBuilder command, IntPtr processAttributes,
         IntPtr threadAttributes, bool inherit, uint flags, IntPtr environment, string cwd,
         ref StartupEx startup, out ProcessInfo process);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool CreatePipe(out IntPtr read, out IntPtr write, IntPtr attributes, uint size);
+    [DllImport("kernel32.dll")] static extern int CreatePseudoConsole(Coord size, IntPtr input, IntPtr output, uint flags, out IntPtr console);
+    [DllImport("kernel32.dll")] static extern int ResizePseudoConsole(IntPtr console, Coord size);
+    [DllImport("kernel32.dll")] static extern void ClosePseudoConsole(IntPtr console);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool ReadFile(IntPtr file, byte[] buffer, uint size, out uint read, IntPtr overlapped);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool WriteFile(IntPtr file, byte[] buffer, uint size, out uint written, IntPtr overlapped);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr GetStdHandle(int id);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetConsoleMode(IntPtr console, out uint mode);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool SetConsoleMode(IntPtr console, uint mode);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetConsoleScreenBufferInfo(IntPtr console, out ConsoleInfo info);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint pid);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool Process32FirstW(IntPtr snapshot, ref ProcessEntry entry);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool Process32NextW(IntPtr snapshot, ref ProcessEntry entry);
 
     static void Check(bool success, string operation) {
         if (!success) {
@@ -141,7 +176,7 @@ public static class WindowsNativeScopeFixture {
     static void WaitFile(string path) {
         var elapsed = Stopwatch.StartNew();
         string errorPath = Path.Combine(Path.GetDirectoryName(path),
-            Path.GetFileName(path) == "broker-ready" ? "broker.error" :
+            Path.GetFileName(path).EndsWith("broker-ready") ? Path.GetFileName(path).Replace("broker-ready", "broker.error") :
             Path.GetFileNameWithoutExtension(path) + ".error");
         while (!File.Exists(path)) {
             if (File.Exists(errorPath)) {
@@ -210,6 +245,50 @@ public static class WindowsNativeScopeFixture {
             Require(member, "Console host escaped its Job Object.");
         }
     }
+    static HashSet<uint> ChildPids() {
+        IntPtr snapshot = CreateToolhelp32Snapshot(2, 0);
+        Check(snapshot != new IntPtr(-1), "snapshot fixture children");
+        try {
+            var entry = new ProcessEntry();
+            entry.Size = (uint)Marshal.SizeOf(typeof(ProcessEntry));
+            Check(Process32FirstW(snapshot, ref entry), "first fixture process");
+            var result = new HashSet<uint>();
+            do {
+                if (entry.ParentId == (uint)Process.GetCurrentProcess().Id) result.Add(entry.ProcessId);
+            } while (Process32NextW(snapshot, ref entry));
+            Require(Marshal.GetLastWin32Error() == 18, "Incomplete fixture process snapshot.");
+            return result;
+        } finally { Close(snapshot); }
+    }
+    static void DrainTerminal(IntPtr output) {
+        try {
+            byte[] buffer = new byte[4096];
+            for (;;) {
+                uint read;
+                bool ok = ReadFile(output, buffer, (uint)buffer.Length, out read, IntPtr.Zero);
+                if (!ok) {
+                    if (Marshal.GetLastWin32Error() == 109) return;
+                    Check(false, "drain pseudoconsole");
+                }
+                if (read == 0) return;
+                lock (OutputLock) {
+                    Require(TerminalOutput.Length + read <= 65536, "Pseudoconsole output exceeded its bound.");
+                    TerminalOutput.Append(Encoding.ASCII.GetString(buffer, 0, (int)read));
+                }
+            }
+        } catch (Exception error) { lock (OutputLock) TerminalError = error; }
+    }
+    static void RequireTerminalOutput(string expected) {
+        var elapsed = Stopwatch.StartNew();
+        for (;;) {
+            lock (OutputLock) {
+                if (TerminalError != null) throw new InvalidOperationException("Pseudoconsole drain failed.", TerminalError);
+                if (TerminalOutput.ToString().Contains(expected)) return;
+            }
+            Require(elapsed.ElapsedMilliseconds < 5000, "Missing pseudoconsole output: " + expected);
+            Thread.Sleep(20);
+        }
+    }
     static void VerifyToken(IntPtr process, SecurityIdentifier expected) {
         IntPtr token;
         Check(OpenProcessToken(process, 8, out token), "open actor token");
@@ -267,11 +346,16 @@ public static class WindowsNativeScopeFixture {
         }
         if (failure != null) throw failure;
     }
-    static void RunScope(string root, string executable, string profile, string mode) {
-        string workspace = Path.Combine(root, mode);
+    static void RunScope(string root, string executable, string profile, string mode, bool terminal = false) {
+        string prefix = terminal ? "terminal-" : "";
+        string workspace = Path.Combine(root, prefix + mode);
         IntPtr sid;
         Marshal.ThrowExceptionForHR(DeriveAppContainerSidFromAppContainerName(profile, out sid));
         IntPtr job = IntPtr.Zero, attributes = IntPtr.Zero, capsBuffer = IntPtr.Zero, environment = IntPtr.Zero;
+        IntPtr console = IntPtr.Zero, inputRead = IntPtr.Zero, inputWrite = IntPtr.Zero;
+        IntPtr outputRead = IntPtr.Zero, outputWrite = IntPtr.Zero;
+        Thread drain = null;
+        uint consolePid = 0;
         bool initialized = false;
         WithCleanup(delegate {
             job = CreateJobObjectW(IntPtr.Zero, IntPtr.Zero);
@@ -280,11 +364,12 @@ public static class WindowsNativeScopeFixture {
             limits.Basic.Flags = 0x2000;
             Check(SetInformationJobObject(job, 9, ref limits, (uint)Marshal.SizeOf(typeof(ExtendedLimits))), "set kill-on-close");
             IntPtr size = IntPtr.Zero;
-            bool sized = InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
+            int attributeCount = terminal ? 2 : 1;
+            bool sized = InitializeProcThreadAttributeList(IntPtr.Zero, attributeCount, 0, ref size);
             Require(!sized && Marshal.GetLastWin32Error() == 122 && size.ToInt64() > 0 && size.ToInt64() <= 65536,
                 "Unexpected process attribute size.");
             attributes = Marshal.AllocHGlobal(size);
-            Check(InitializeProcThreadAttributeList(attributes, 1, 0, ref size), "initialize process attributes");
+            Check(InitializeProcThreadAttributeList(attributes, attributeCount, 0, ref size), "initialize process attributes");
             initialized = true;
             var caps = new Capabilities();
             caps.Sid = sid;
@@ -292,6 +377,26 @@ public static class WindowsNativeScopeFixture {
             Marshal.StructureToPtr(caps, capsBuffer, false);
             Check(UpdateProcThreadAttribute(attributes, 0, new IntPtr(0x20009), capsBuffer,
                 new IntPtr(Marshal.SizeOf(typeof(Capabilities))), IntPtr.Zero, IntPtr.Zero), "set AppContainer");
+            if (terminal) {
+                var before = ChildPids();
+                Check(CreatePipe(out inputRead, out inputWrite, IntPtr.Zero, 0), "create pseudoconsole input");
+                Check(CreatePipe(out outputRead, out outputWrite, IntPtr.Zero, 0), "create pseudoconsole output");
+                lock (OutputLock) { TerminalOutput.Clear(); TerminalError = null; }
+                drain = new Thread(delegate() { DrainTerminal(outputRead); });
+                drain.IsBackground = true;
+                drain.Start();
+                Marshal.ThrowExceptionForHR(CreatePseudoConsole(new Coord(80, 24), inputRead, outputWrite, 0, out console));
+                Close(inputRead); inputRead = IntPtr.Zero;
+                Close(outputWrite); outputWrite = IntPtr.Zero;
+                var added = ChildPids();
+                added.ExceptWith(before);
+                Require(added.Count == 1, "Pseudoconsole must create exactly one original host child.");
+                foreach (uint pid in added) consolePid = pid;
+                CaptureConsole(consolePid, IntPtr.Zero);
+                Marshal.ThrowExceptionForHR(ResizePseudoConsole(console, new Coord(100, 40)));
+                Check(UpdateProcThreadAttribute(attributes, 0, new IntPtr(0x20016), console,
+                    new IntPtr(IntPtr.Size), IntPtr.Zero, IntPtr.Zero), "attach pseudoconsole");
+            }
             var environmentText = new StringBuilder();
             foreach (var entry in MinimumEnvironment(workspace)) environmentText.Append(entry.Key + "=" + entry.Value + "\0");
             byte[] environmentBytes = Encoding.Unicode.GetBytes(environmentText.ToString() + "\0");
@@ -302,8 +407,8 @@ public static class WindowsNativeScopeFixture {
             startup.Attributes = attributes;
             ProcessInfo actor;
             Check(CreateProcessW(executable, new StringBuilder(Command(executable, "worker", workspace,
-                Path.Combine(root, "reviewed.txt"), Process.GetCurrentProcess().Id.ToString())),
-                IntPtr.Zero, IntPtr.Zero, false, Suspended | NoWindow | ExtendedStartup | 0x400,
+                Path.Combine(root, "reviewed.txt"), Process.GetCurrentProcess().Id.ToString(), terminal ? "terminal" : "ordinary")),
+                IntPtr.Zero, IntPtr.Zero, false, Suspended | (terminal ? 0u : NoWindow) | ExtendedStartup | 0x400,
                 environment, workspace, ref startup, out actor), "create suspended AppContainer actor");
             Handles.Add(actor.Process);
             try {
@@ -314,28 +419,40 @@ public static class WindowsNativeScopeFixture {
                 }
                 Require(ResumeThread(actor.Thread) != uint.MaxValue, "ResumeThread failed.");
             } finally { Close(actor.Thread); }
+            if (terminal) {
+                uint written;
+                byte[] input = Encoding.ASCII.GetBytes("L");
+                Check(WriteFile(inputWrite, input, (uint)input.Length, out written, IntPtr.Zero), "write pseudoconsole input");
+                Require(written == input.Length, "Incomplete pseudoconsole input.");
+            }
             var expected = new SecurityIdentifier(sid);
             IntPtr worker = Capture(workspace, "worker", expected, job);
             Require(GetProcessId(worker) == actor.ProcessId, "Worker is not the originally suspended process.");
             IntPtr child = Capture(workspace, "child", expected, job);
             IntPtr grandchild = Capture(workspace, "grandchild", expected, job);
             List<uint> members = JobPids(job);
-            Require(members.Count == 4 && Active(job) == 4, "Expected three actors and one console host.");
-            uint consolePid = 0;
-            foreach (uint pid in members) {
-                if (!CapturedPids.Contains(pid)) {
-                    Require(consolePid == 0, "Unexpected additional Job member.");
-                    consolePid = pid;
+            if (terminal) {
+                Require(members.Count == 3 && Active(job) == 3 && !members.Contains(consolePid),
+                    "Pseudoconsole host and actor job scopes were not distinct.");
+                foreach (uint pid in members) Require(CapturedPids.Contains(pid), "Untracked terminal Job member.");
+                RequireTerminalOutput("LOOM_TERMINAL_READY");
+            } else {
+                Require(members.Count == 4 && Active(job) == 4, "Expected three actors and one console host.");
+                foreach (uint pid in members) {
+                    if (!CapturedPids.Contains(pid)) {
+                        Require(consolePid == 0, "Unexpected additional Job member.");
+                        consolePid = pid;
+                    }
                 }
+                Require(consolePid != 0, "Missing console host.");
+                CaptureConsole(consolePid, job);
+                Require(CapturedPids.SetEquals(JobPids(job)), "Job census changed during handle capture.");
             }
-            Require(consolePid != 0, "Missing console host.");
-            CaptureConsole(consolePid, job);
-            Require(CapturedPids.SetEquals(JobPids(job)), "Job census changed during handle capture.");
             Require(File.ReadAllText(Path.Combine(workspace, "checks")) == "read;write-denied;dacl-denied;dup-denied;breakaway-denied",
                 "Missing protection evidence.");
             if (mode == "owner-death") {
-                File.WriteAllText(Path.Combine(root, "conhost.pid"), consolePid.ToString());
-                File.WriteAllText(Path.Combine(root, "broker-ready"), "verified");
+                File.WriteAllText(Path.Combine(root, prefix + "conhost.pid"), consolePid.ToString());
+                File.WriteAllText(Path.Combine(root, prefix + "broker-ready"), "verified");
                 Thread.Sleep(30000);
                 throw new InvalidOperationException("Broker death probe was not interrupted.");
             }
@@ -348,35 +465,47 @@ public static class WindowsNativeScopeFixture {
                     WaitForSingleObject(grandchild, 0) == Timeout,
                     "Direct completion did not retain both detached descendants.");
                 foreach (uint pid in JobPids(job)) Require(CapturedPids.Contains(pid), "Untracked actor after direct completion.");
+                if (terminal) RequireTerminalOutput("LOOM_TERMINAL_FINISHED");
             } else {
                 Check(TerminateJobObject(job, 1), "abort job");
-                foreach (IntPtr handle in Handles) Require(WaitForSingleObject(handle, 5000) == 0, "Abort left an actor alive.");
+                foreach (IntPtr handle in Handles) {
+                    if (!terminal || GetProcessId(handle) != consolePid)
+                        Require(WaitForSingleObject(handle, 5000) == 0, "Abort left an actor alive.");
+                }
                 Require(Active(job) == 0, "Aborted job is not empty.");
             }
         }, delegate {
             WithCleanup(delegate { Close(job); }, delegate {
-                WithCleanup(ReapHandles, delegate {
+                WithCleanup(delegate {
+                    if (console != IntPtr.Zero) ClosePseudoConsole(console);
+                    if (drain != null) Require(drain.Join(5000), "Pseudoconsole drain did not exit naturally.");
+                    lock (OutputLock) { if (TerminalError != null) throw TerminalError; }
+                }, delegate {
+                  WithCleanup(ReapHandles, delegate {
+                    Close(inputRead); Close(inputWrite); Close(outputRead); Close(outputWrite);
                     if (initialized) DeleteProcThreadAttributeList(attributes);
                     if (attributes != IntPtr.Zero) Marshal.FreeHGlobal(attributes);
                     if (capsBuffer != IntPtr.Zero) Marshal.FreeHGlobal(capsBuffer);
                     if (environment != IntPtr.Zero) Marshal.FreeHGlobal(environment);
                     FreeSid(sid);
+                  });
                 });
             });
         });
     }
-    static void OwnerDeath(string root, string executable, string profile, SecurityIdentifier sid) {
-        string workspace = Path.Combine(root, "owner-death");
+    static void OwnerDeath(string root, string executable, string profile, SecurityIdentifier sid, bool terminal = false) {
+        string prefix = terminal ? "terminal-" : "";
+        string workspace = Path.Combine(root, prefix + "owner-death");
         using (Process broker = Process.Start(StartInfo(executable,
-            Quote("broker") + " " + Quote(root) + " " + Quote(profile), workspace))) {
+            Quote(terminal ? "terminal-broker" : "broker") + " " + Quote(root) + " " + Quote(profile), workspace))) {
             WithCleanup(delegate {
-                WaitFile(Path.Combine(root, "broker-ready"));
-                Require(File.ReadAllText(Path.Combine(root, "broker-ready")) == "verified", "Invalid broker readiness.");
+                WaitFile(Path.Combine(root, prefix + "broker-ready"));
+                Require(File.ReadAllText(Path.Combine(root, prefix + "broker-ready")) == "verified", "Invalid broker readiness.");
                 Capture(workspace, "worker", sid, IntPtr.Zero);
                 Capture(workspace, "child", sid, IntPtr.Zero);
                 Capture(workspace, "grandchild", sid, IntPtr.Zero);
                 uint consolePid;
-                Require(uint.TryParse(File.ReadAllText(Path.Combine(root, "conhost.pid")), out consolePid),
+                Require(uint.TryParse(File.ReadAllText(Path.Combine(root, prefix + "conhost.pid")), out consolePid),
                     "Invalid console host identity.");
                 CaptureConsole(consolePid, IntPtr.Zero);
                 Check(TerminateProcess(broker.Handle, 1), "kill actual broker");
@@ -412,7 +541,7 @@ public static class WindowsNativeScopeFixture {
             executableSecurity.AddAccessRule(new FileSystemAccessRule(app, FileSystemRights.ReadAndExecute, AccessControlType.Allow));
             File.SetAccessControl(executable, executableSecurity);
             File.WriteAllText(Path.Combine(root, "reviewed.txt"), "reviewed fixture content");
-            foreach (string mode in new string[] { "finish", "abort", "owner-death" }) {
+            foreach (string mode in new string[] { "finish", "abort", "owner-death", "terminal-finish", "terminal-abort", "terminal-owner-death" }) {
                 string workspace = Path.Combine(root, mode);
                 Directory.CreateDirectory(workspace);
                 var writable = Directory.GetAccessControl(workspace);
@@ -423,8 +552,11 @@ public static class WindowsNativeScopeFixture {
             RunScope(root, executable, profile, "finish");
             RunScope(root, executable, profile, "abort");
             OwnerDeath(root, executable, profile, app);
+            RunScope(root, executable, profile, "finish", true);
+            RunScope(root, executable, profile, "abort", true);
+            OwnerDeath(root, executable, profile, app, true);
             Require(File.ReadAllText(Path.Combine(root, "reviewed.txt")) == "reviewed fixture content", "Reviewed bytes changed.");
-            Console.WriteLine("{\"platform\":\"windows\",\"candidate\":\"appcontainer-job\",\"protectedWritesDenied\":true,\"breakawayDenied\":true,\"brokerHandleDuplicationDenied\":true,\"originalProcessesTerminated\":true,\"originalConsoleHostsTerminated\":true,\"modes\":[\"finish\",\"abort\",\"broker-death\"]}");
+            Console.WriteLine("{\"platform\":\"windows\",\"candidate\":\"appcontainer-job\",\"protectedWritesDenied\":true,\"breakawayDenied\":true,\"brokerHandleDuplicationDenied\":true,\"originalProcessesTerminated\":true,\"originalConsoleHostsTerminated\":true,\"conptyInputOutputResizeVerified\":true,\"conptyBrokerDeathVerified\":true,\"modes\":[\"finish\",\"abort\",\"broker-death\"]}");
         }, delegate {
             FreeSid(sid);
             Marshal.ThrowExceptionForHR(DeleteAppContainerProfile(profile));
@@ -434,6 +566,21 @@ public static class WindowsNativeScopeFixture {
         string role = args[0], workspace = args[1];
         string executable = typeof(WindowsNativeScopeFixture).Assembly.Location;
         if (role == "worker") {
+            if (args.Length == 5 && args[4] == "terminal") {
+                IntPtr input = GetStdHandle(-10), output = GetStdHandle(-11);
+                uint mode;
+                Check(GetConsoleMode(input, out mode), "verify pseudoconsole input");
+                Check(SetConsoleMode(input, mode & ~7u), "set raw fixture console input");
+                ConsoleInfo info;
+                Check(GetConsoleScreenBufferInfo(output, out info), "query resized pseudoconsole");
+                Require(info.Size.X == 100 && info.Size.Y == 40, "Pseudoconsole resize did not reach worker.");
+                byte[] byteRead = new byte[1];
+                uint count;
+                Check(ReadFile(input, byteRead, 1, out count, IntPtr.Zero), "read pseudoconsole input");
+                Require(count == 1 && byteRead[0] == (byte)'L', "Wrong pseudoconsole input.");
+                Console.WriteLine("LOOM_TERMINAL_READY");
+                Console.Out.Flush();
+            }
             string reviewed = args[2];
             Require(File.ReadAllText(reviewed) == "reviewed fixture content", "Reviewed read failed.");
             bool writeDenied = false, aclDenied = false;
@@ -474,7 +621,14 @@ public static class WindowsNativeScopeFixture {
             Close(child.Thread);
             try {
                 Ready(workspace, role);
-                if (role == "worker") { WaitFile(Path.Combine(workspace, "finish")); return 0; }
+                if (role == "worker") {
+                    WaitFile(Path.Combine(workspace, "finish"));
+                    if (args.Length == 5 && args[4] == "terminal") {
+                        Console.WriteLine("LOOM_TERMINAL_FINISHED");
+                        Console.Out.Flush();
+                    }
+                    return 0;
+                }
                 Thread.Sleep(30000);
                 throw new InvalidOperationException("Descendant safety deadline reached.");
             } finally { Close(child.Process); }
@@ -486,14 +640,14 @@ public static class WindowsNativeScopeFixture {
     public static int Main(string[] args) {
         try {
             if (args.Length == 1 && args[0] == "nop") return 0;
-            if (args.Length == 3 && args[0] == "broker") {
-                RunScope(args[1], typeof(WindowsNativeScopeFixture).Assembly.Location, args[2], "owner-death");
+            if (args.Length == 3 && (args[0] == "broker" || args[0] == "terminal-broker")) {
+                RunScope(args[1], typeof(WindowsNativeScopeFixture).Assembly.Location, args[2], "owner-death", args[0] == "terminal-broker");
                 return 0;
             }
             Require(args.Length >= 2 && (args[0] == "worker" || args[0] == "child" || args[0] == "grandchild"), "Invalid fixture role.");
             return Actor(args);
         } catch (Exception error) {
-            if (args.Length >= 2 && (args[0] == "worker" || args[0] == "child" || args[0] == "grandchild" || args[0] == "broker")) {
+            if (args.Length >= 2 && (args[0] == "worker" || args[0] == "child" || args[0] == "grandchild" || args[0] == "broker" || args[0] == "terminal-broker")) {
                 File.WriteAllText(Path.Combine(args[1], args[0] + ".error"), error.ToString());
             }
             Console.Error.WriteLine(error);

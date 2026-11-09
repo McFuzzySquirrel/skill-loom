@@ -30,6 +30,7 @@ describe.skipIf(process.platform !== 'win32' || process.env.LOOM_TEST_PRIVILEGED
           protectedWritesDenied: true, breakawayDenied: true,
           brokerHandleDuplicationDenied: true, originalProcessesTerminated: true,
           originalConsoleHostsTerminated: true,
+          conptyInputOutputResizeVerified: true, conptyBrokerDeathVerified: true,
           modes: ['finish', 'abort', 'broker-death'],
         });
         console.info(JSON.stringify(evidence));
