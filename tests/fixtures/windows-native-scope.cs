@@ -13,6 +13,7 @@ public static class WindowsNativeScopeFixture {
     const uint Suspended = 4, NoWindow = 0x08000000, ExtendedStartup = 0x00080000;
     const uint SynchronizeQuery = 0x00101000, Timeout = 258;
     static readonly List<IntPtr> Handles = new List<IntPtr>();
+    static readonly HashSet<uint> CapturedPids = new HashSet<uint>();
 
     [StructLayout(LayoutKind.Sequential)] struct Startup {
         public uint Size;
@@ -78,6 +79,7 @@ public static class WindowsNativeScopeFixture {
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetExitCodeProcess(IntPtr process, out uint code);
     [DllImport("kernel32.dll", SetLastError = true)] static extern uint ResumeThread(IntPtr thread);
     [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern uint GetProcessId(IntPtr process);
     [DllImport("advapi32.dll", SetLastError = true)] static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
     [DllImport("advapi32.dll", SetLastError = true)] static extern bool GetTokenInformation(IntPtr token, int type, IntPtr buffer, uint size, out uint returned);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool InitializeProcThreadAttributeList(IntPtr list, int count, uint flags, ref IntPtr size);
@@ -89,7 +91,10 @@ public static class WindowsNativeScopeFixture {
         ref StartupEx startup, out ProcessInfo process);
 
     static void Check(bool success, string operation) {
-        if (!success) throw new Win32Exception(Marshal.GetLastWin32Error(), operation);
+        if (!success) {
+            int code = Marshal.GetLastWin32Error();
+            throw new Win32Exception(code, operation + " (Win32 " + code + "): " + new Win32Exception(code).Message);
+        }
     }
     static void Require(bool success, string message) {
         if (!success) throw new InvalidOperationException(message);
@@ -177,6 +182,7 @@ public static class WindowsNativeScopeFixture {
         WaitFile(path);
         uint pid;
         Require(uint.TryParse(File.ReadAllText(path), out pid) && pid > 0, "Invalid actor PID.");
+        Require(CapturedPids.Add(pid), "Actor roles must identify distinct original processes.");
         IntPtr handle = OpenProcess(SynchronizeQuery, false, pid);
         Check(handle != IntPtr.Zero, "retain actor process");
         Handles.Add(handle);
@@ -198,6 +204,7 @@ public static class WindowsNativeScopeFixture {
             catch (Exception error) { failures.Add(error); }
         }
         Handles.Clear();
+        CapturedPids.Clear();
         if (failures.Count > 0) throw new AggregateException("Actor cleanup failed.", failures);
     }
     static void WithCleanup(Action operation, Action cleanup) {
@@ -257,7 +264,8 @@ public static class WindowsNativeScopeFixture {
                 Require(ResumeThread(actor.Thread) != uint.MaxValue, "ResumeThread failed.");
             } finally { Close(actor.Thread); }
             var expected = new SecurityIdentifier(sid);
-            Capture(workspace, "worker", expected, job);
+            IntPtr worker = Capture(workspace, "worker", expected, job);
+            Require(GetProcessId(worker) == actor.ProcessId, "Worker is not the originally suspended process.");
             Capture(workspace, "child", expected, job);
             Capture(workspace, "grandchild", expected, job);
             Require(Active(job) == 3, "Unexpected active job membership.");

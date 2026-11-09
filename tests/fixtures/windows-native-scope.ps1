@@ -8,4 +8,5 @@ if ($env:LOOM_TEST_PRIVILEGED_NATIVE -ne '1' -or $env:GITHUB_ACTIONS -ne 'true' 
 $executable = Join-Path $Root 'actor.exe'
 Add-Type -Path (Join-Path $PSScriptRoot 'windows-native-scope.cs') -OutputAssembly $executable -OutputType ConsoleApplication
 [void][System.Reflection.Assembly]::LoadFrom($executable)
-[WindowsNativeScopeFixture]::Probe($Root, $executable)
+try { [WindowsNativeScopeFixture]::Probe($Root, $executable) }
+catch { throw $_.Exception.ToString() }
