@@ -55,7 +55,10 @@ try {
     $start.WorkingDirectory = [System.IO.Path]::GetDirectoryName($data.probe)
     $start.UserName = $name
     $start.Domain = '.'
-    $start.Password = ConvertTo-SecureString -String $password -AsPlainText -Force
+    $securePassword = [System.Security.SecureString]::new()
+    foreach ($character in $password.ToCharArray()) { $securePassword.AppendChar($character) }
+    $securePassword.MakeReadOnly()
+    $start.Password = $securePassword
     $start.UseShellExecute = $false
     $start.LoadUserProfile = $false
     $start.RedirectStandardOutput = $true
@@ -66,7 +69,7 @@ try {
         $output = $process.StandardOutput.ReadToEnd()
         if ($process.ExitCode -ne 0) { throw 'Foreign-user probe failed.' }
         [Console]::Out.WriteLine($output.Trim())
-    } finally { $process.Dispose() }
+    } finally { $process.Dispose(); $securePassword.Dispose() }
 } finally {
     if ($created) { $account.Delete() }
     $account.Dispose()

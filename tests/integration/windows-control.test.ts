@@ -88,6 +88,7 @@ describe.skipIf(process.platform !== 'win32')('Windows private control', () => {
     const service = await startControlServer(await config());
     try {
       const original = await tlsOptions();
+      const current = await metadata();
       const other = await createWindowsControlCertificates();
       for (const pfx of [undefined, Buffer.from(other.client.pfx, 'base64')]) {
         const options = { ...original };
@@ -96,12 +97,19 @@ describe.skipIf(process.platform !== 'win32')('Windows private control', () => {
         const socket = connectTls(options);
         let received = '';
         socket.on('data', (chunk: Buffer) => { received += chunk.toString(); });
-        const error = new Promise<Error>((done) => socket.once('error', done));
-        const timeout = setTimeout(() => socket.destroy(new Error('Authentication did not finish.')), 8_000);
+        socket.on('error', () => undefined);
+        socket.once('secureConnect', () => {
+          socket.write(`${JSON.stringify({ version: 1, token: current.token, operation: 'status', input: {} })}\n`);
+        });
+        let timeout: ReturnType<typeof setTimeout>;
+        const closed = new Promise<void>((done, reject) => {
+          socket.once('close', () => done());
+          timeout = setTimeout(() => reject(new Error('Authentication did not finish.')), 8_000);
+        });
         try {
-          expect((await error).message).not.toBe('Authentication did not finish.');
+          await closed;
           expect(received).toBe('');
-        } finally { clearTimeout(timeout); socket.destroy(); }
+        } finally { clearTimeout(timeout!); socket.destroy(); }
       }
     } finally { await service.close(); }
   }, 90_000);
@@ -244,7 +252,8 @@ describe.skipIf(process.platform !== 'win32')('Windows private control', () => {
         let received = false;
         const timeout = setTimeout(() => { socket.destroy(); process.exitCode = 1; }, 8000);
         socket.on('data', () => { received = true; });
-        socket.once('error', () => { clearTimeout(timeout); result.ipcDenied = !received; process.stdout.write(JSON.stringify(result)); });
+        socket.on('error', () => {});
+        socket.once('close', () => { clearTimeout(timeout); result.ipcDenied = !received; process.stdout.write(JSON.stringify(result)); });
       `);
       expect(await fixture({ operation: 'cross-user', node: process.execPath, probe })).toEqual({
         parentReadable: true, metadataDenied: true, writeDenied: true, ipcDenied: true,

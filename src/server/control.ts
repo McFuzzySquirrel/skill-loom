@@ -53,7 +53,7 @@ import { ProjectClaimError } from '../shared/project-claim.js';
 import { ProjectCoordinationError, reviewProjectCoordination } from '../shared/project-coordination.js';
 import { coordinationActionSchema, executeCoordinationAction, ProjectCoordinationActionError } from './projects/coordination.js';
 import { ProjectRunRecordsError, scanProjectRunRecords } from '../shared/project-run-records.js';
-import { createWindowsControlCertificates, readWindowsControlMetadata, verifyWindowsProfile } from './windows-control.js';
+import { createWindowsControlCertificates, readWindowsControlMetadata, verifyWindowsProfile, WindowsControlSecurityError } from './windows-control.js';
 import {
   TerminalTransportError,
   type TerminalAttachment,
@@ -116,7 +116,7 @@ function failure(error: unknown): ControlResponse {
       error instanceof TerminalTransportError || error instanceof DiscoveryWorkspaceError ||
       error instanceof DiscoveryHandoffError || error instanceof ReviewedStartError ||
       error instanceof ProjectClaimError || error instanceof ProjectCoordinationError || error instanceof ProjectCoordinationActionError ||
-      error instanceof ProjectRunRecordsError) {
+      error instanceof ProjectRunRecordsError || error instanceof WindowsControlSecurityError) {
     if (error instanceof BundleError) {
       return { protocolVersion: VERSION, ok: false, error: { code: error.code, message: error.message } };
     }
@@ -221,7 +221,9 @@ function connectControl(metadata: Metadata): Socket {
   if (metadata.tls === undefined) return createConnection(metadata.socket);
   const credentials = metadata.tls;
   const serverCertificate = new X509Certificate(Buffer.from(credentials.serverCertificate, 'base64'));
-  const socket = connectTls({
+  let socket: TLSSocket;
+  try {
+    socket = connectTls({
     host: '127.0.0.1',
     port: Number(metadata.socket.split(':').at(-1)),
     servername: 'localhost',
@@ -237,7 +239,10 @@ function connectControl(metadata: Metadata): Socket {
       }
       return undefined;
     },
-  });
+    });
+  } catch {
+    throw new ControlError('CONTROL_UNSAFE', 'The local control TLS credentials are invalid or unsupported.');
+  }
   socket.once('secureConnect', () => {
     if (socket.alpnProtocol !== 'loom-control-v1') {
       socket.destroy(new ControlError('CONTROL_VERSION_UNSUPPORTED', 'The local control TLS protocol is unsupported.'));
@@ -749,11 +754,12 @@ export async function startControlServer(
   } = {},
 ): Promise<{ close(): Promise<void> }> {
   requireControlPlatform();
-  const root = await realpath(configStore.getConfigDir());
+  const requestedRoot = resolve(configStore.getConfigDir());
+  const root = await realpath(requestedRoot);
   const services = options.services ?? createLoomServices({ configStore });
   const catalogPages = new ProjectCatalogPages(services.catalogService);
-  await assertPrivateDirectory(root, true);
-  const previous = await readMetadata(root);
+  if (process.platform !== 'win32') await assertPrivateDirectory(root, true);
+  const previous = await readMetadata(process.platform === 'win32' ? requestedRoot : root);
   if (previous !== null) await removeStaleEndpoint(previous);
   let runtime = process.platform === 'win32' ? undefined : await mkdtemp(join(await realpath(tmpdir()), 'loom-control-'));
   if (runtime !== undefined && Buffer.byteLength(join(runtime, 'control.sock')) > 100) {
@@ -1146,8 +1152,8 @@ async function controlMetadata(configDirectory: string): Promise<Metadata> {
     }
     throw error;
   }
-  await assertPrivateDirectory(root, true);
-  const metadata = await readMetadata(root);
+  if (process.platform !== 'win32') await assertPrivateDirectory(root, true);
+  const metadata = await readMetadata(process.platform === 'win32' ? resolve(configDirectory) : root);
   if (metadata === null) throw new ControlError('CONTROL_UNAVAILABLE', 'No Skill Loom service owns this profile. Start the service first.');
   if (metadata.applicationVersion !== packageManifest.version) {
     throw new ControlError('CONTROL_VERSION_UNSUPPORTED', 'The running Skill Loom service has a different application version.');

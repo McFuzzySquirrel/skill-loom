@@ -8,6 +8,7 @@ import packageManifest from '../../package.json' with { type: 'json' };
 import { runPortableCli } from '../portable/cli.js';
 import { runCatalogCli } from './catalog/cli.js';
 import { callControl, ControlError } from './control.js';
+import { WindowsControlSecurityError } from './windows-control.js';
 import { runControlCli } from './control-cli.js';
 import { createBundleCli } from './bundle-cli.js';
 import type { ServerSettings } from './app.js';
@@ -228,7 +229,7 @@ export async function runCli(
         : error instanceof ControlError ? error.code
           : typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
             ? error.code : 'SERVICE_START_FAILED';
-      const message = error instanceof CliUsageError || error instanceof ControlError
+      const message = error instanceof CliUsageError || error instanceof ControlError || error instanceof WindowsControlSecurityError
         ? error.message : 'The Skill Loom service could not be started.';
       stderr.write(`${JSON.stringify({ protocolVersion: 1, ok: false, error: { code, message } })}\n`);
       return error instanceof CliUsageError ? 2 : 1;

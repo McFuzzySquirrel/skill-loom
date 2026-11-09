@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { CliInputError, readJsonStdin } from './cli-input.js';
 import { resolveConfigDir } from './config/store.js';
 import { attachControlTerminal, callControl, ControlError, streamControlEvents } from './control.js';
+import { WindowsControlSecurityError } from './windows-control.js';
 
 const HELP = `Usage:
   skill-loom project list [--config-dir <path>]
@@ -163,9 +164,10 @@ export async function runControlCli(
     (response.ok ? options.stdout : options.stderr).write(`${JSON.stringify(response)}\n`);
     return response.ok ? 0 : 1;
   } catch (error) {
-    const known = error instanceof CliInputError || error instanceof ControlError;
+    const known = error instanceof CliInputError || error instanceof ControlError || error instanceof WindowsControlSecurityError;
     options.stderr.write(`${JSON.stringify({ protocolVersion: 1, ok: false, error: {
-      code: error instanceof CliInputError ? 'CLI_USAGE' : error instanceof ControlError ? error.code : 'CONTROL_FAILED',
+      code: error instanceof CliInputError ? 'CLI_USAGE'
+        : error instanceof ControlError || error instanceof WindowsControlSecurityError ? error.code : 'CONTROL_FAILED',
       message: known ? error.message : 'The local control request failed.',
     } })}\n`);
     return error instanceof CliInputError ? 2 : 1;

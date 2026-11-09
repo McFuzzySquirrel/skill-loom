@@ -19,6 +19,7 @@ const resultSchema = z.union([
 ]);
 
 export class WindowsControlSecurityError extends Error {
+  readonly details: Record<string, unknown> = {};
   constructor(readonly code: string) {
     super('Windows control security verification failed. Use a current-user-private local profile without reparse points; existing ACLs are never repaired automatically.');
     this.name = 'WindowsControlSecurityError';

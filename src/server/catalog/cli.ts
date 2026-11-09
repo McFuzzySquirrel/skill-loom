@@ -13,6 +13,7 @@ import {
   RemoteSourceError,
 } from './remote.js';
 import { callControl, ControlError } from '../control.js';
+import { WindowsControlSecurityError } from '../windows-control.js';
 import { CliInputError, readJsonStdin } from '../cli-input.js';
 
 class CatalogCliUsageError extends Error {}
@@ -185,7 +186,7 @@ export async function runCatalogCli(
       } })}\n`);
       return 2;
     }
-    if (error instanceof ConfigError || error instanceof RemoteSourceError || error instanceof ControlError) {
+    if (error instanceof ConfigError || error instanceof RemoteSourceError || error instanceof ControlError || error instanceof WindowsControlSecurityError) {
       options.stderr.write(`${JSON.stringify({ protocolVersion: 1, ok: false, error: {
         code: error.code, message: error.message, details: error.details,
       } })}\n`);
