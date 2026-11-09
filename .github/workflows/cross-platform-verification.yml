@@ -12,7 +12,7 @@ on:
         description: Test scope
         type: choice
         default: full
-        options: [full, claims, portable, catalog, workspaces, library, package, terminal, terminal-macos-helper]
+        options: [full, claims, portable, catalog, workspaces, library, package, mode-probe, terminal, terminal-macos-helper]
 
 permissions:
   contents: read
@@ -49,6 +49,9 @@ jobs:
         run: npx vitest run tests/unit/shared-library.test.ts tests/unit/shared-library-sync.test.ts
       - if: inputs.suite == 'package'
         run: npm run test:package
+      - if: inputs.suite == 'mode-probe'
+        run: |
+          node -e "const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path'); const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'loom-mode-probe-')); const file = path.join(dir, 'file'); try { fs.writeFileSync(file, 'fixture', {mode: 0o644}); const before = fs.statSync(file).mode & 0o777; fs.chmodSync(file, 0o755); const after = fs.statSync(file).mode & 0o777; console.log(JSON.stringify({platform: process.platform, before: before.toString(8), after: after.toString(8)})); } finally { fs.unlinkSync(file); fs.rmdirSync(dir); }"
       - if: (inputs.suite == 'terminal' || inputs.suite == 'terminal-macos-helper') && runner.os == 'macOS'
         run: |
           node -e "const fs = require('node:fs'); for (const p of ['node_modules/node-pty/build/Release/spawn-helper', 'node_modules/node-pty/prebuilds/darwin-' + process.arch + '/spawn-helper']) { if (fs.existsSync(p)) { const s = fs.statSync(p); let executable = true; try { fs.accessSync(p, fs.constants.X_OK); } catch { executable = false; } console.log(JSON.stringify({path: p, mode: (s.mode & 0o777).toString(8), executable})); } }"

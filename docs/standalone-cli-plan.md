@@ -106,8 +106,9 @@ These are requirements to implement and verify, not current guarantees:
    emits output and descendant containment remain unverified.
    Catalog refresh now canonicalizes the configured directory before creating
    and reading snapshots while rejecting a symlink as the configured directory
-   itself. The focused macOS catalog run still has three failures elsewhere;
-   Windows has ten failures, including snapshot content validation and
+   itself. The focused macOS catalog and discovery suite now passes with
+   canonical fixtures; Windows previously had ten failures, including snapshot
+   content validation and
    `EPERM` when publishing an already-existing snapshot directory. Git
    executable modes also need a verified Windows representation; do not
    bypass fingerprint checks.
