@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { exceedsStagingLimits } from '../../src/server/catalog/staging-limits.js';
 
@@ -16,7 +17,7 @@ describe('staging limit scan', () => {
   it('tolerates files and child directories removed by Git during the scan', async () => {
     const fs = {
       opendir: async (path: string) => {
-        if (path === '/stage/gone') throw failure('ENOENT');
+        if (path === join('/stage', 'gone')) throw failure('ENOENT');
         return entries(entry('gone', true), entry('shallow.lock', false), entry('pack', false));
       },
       lstat: async (path: string) => {

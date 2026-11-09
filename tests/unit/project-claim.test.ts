@@ -136,7 +136,7 @@ describe('project claim transaction', () => {
     await expect(second).rejects.toMatchObject({ code: 'PROJECT_CLAIM_CONFLICT' });
   });
 
-  it.skipIf(process.platform === 'win32')('fails busy against another process and retains its committed claim after a crash', async () => {
+  it('fails busy against another process and retains its committed claim after a crash', async () => {
     const root = await project();
     await withProjectClaimTransaction(root, async () => undefined);
     const child = spawn(process.execPath, [
@@ -166,7 +166,7 @@ describe('project claim transaction', () => {
     });
   });
 
-  it.skipIf(process.platform === 'win32').each([
+  it.each([
     { heldMs: 200, succeeds: true },
     { heldMs: 2000, succeeds: false },
   ])('bounds the post-claim lock wait when another process holds it for $heldMs ms', async ({ heldMs, succeeds }) => {
@@ -221,7 +221,7 @@ describe('project claim transaction', () => {
     expect(calls).toBe(1);
   });
 
-  it.skipIf(process.platform === 'win32').each(Array.from({ length: 10 }, (_, index) => index + 1))(
+  it.each(Array.from({ length: 10 }, (_, index) => index + 1))(
     'admits only one of two separate processes racing to claim a project (attempt %i)', async () => {
         const root = await project();
         await withProjectClaimTransaction(root, async (tx) => tx.enableProtocol('2026-01-01T00:00:00.000Z'));
