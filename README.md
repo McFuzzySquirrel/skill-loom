@@ -325,7 +325,6 @@ Skill Loom is released under the [MIT License](LICENSE). Contributions are accep
 There is no committed roadmap. These are known gaps and possible follow-up work, not shipped behavior:
 
 - Resolve the observed OpenCode `OSC 7501` `clear` ordering and rerun the live execution probe before claiming automatic OpenCode advancement; the parser now accepts the observed colon-separated form.
-- Wire live active-run state into `GET /api/health` (currently a placeholder in production) or remove the field in favor of `GET /api/runs/active`.
 - Expand live evidence beyond Linux ARM64 and the pinned OpenCode 2.2.5 / Copilot CLI 1.0.105 versions.
 - Decide whether to publish `skill-loom-cli`; add repository/release metadata and a published upgrade path.
 - Consider per-step model or harness selection only as a new product decision; it is not supported today.

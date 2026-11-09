@@ -379,6 +379,10 @@ Headless process errors after a successful spawn are now reported without
 treating them as an exit; cleanup still waits for an actual exit, escalates,
 and retains the process when termination cannot be confirmed. This protects
 direct-child lifecycle handling but does not establish descendant containment.
+The health endpoint now reports the last persisted active-run pointer rather
+than an inactive placeholder, without starting recovery. A corrupt pointer
+fails the endpoint instead of being silently treated as inactive. Pointer
+state is not proof of process liveness and may lag in-memory transitions.
 Test and discovery workspace removal now rejects retained claims and unresolved
 records, commits a retirement marker under the project transaction, and moves
 the workspace out of its registered path before deletion. It persists verified

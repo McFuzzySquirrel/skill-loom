@@ -169,6 +169,45 @@ describe('GET /api/health through the composition root', () => {
       code: 'ENOENT',
     });
   });
+
+  it('reports the persisted pointer without starting recovery or reading configuration', async () => {
+    const configStore = configStoreFor('persisted-health');
+    await mkdir(configStore.getConfigDir(), { recursive: true });
+    const pointerPath = join(configStore.getConfigDir(), 'active-run.json');
+    const pointer = {
+      version: 1,
+      runId: 'run_test',
+      projectId: 'project',
+      projectPath: join(root, 'missing-project'),
+      status: 'awaiting-user',
+      startedAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const original = JSON.stringify(pointer);
+    await writeFile(pointerPath, original);
+    const app = await makeApp({ configStore });
+
+    const response = await app.inject({ method: 'GET', url: '/api/health' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json<HealthResponse>().activeRun).toEqual({
+      active: true, runId: 'run_test', status: 'awaiting-user',
+    });
+    expect(await readFile(pointerPath, 'utf8')).toBe(original);
+    await expect(readFile(configStore.getConfigPath(), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('surfaces a corrupt pointer without changing it or claiming the run is inactive', async () => {
+    const configStore = configStoreFor('corrupt-health');
+    await mkdir(configStore.getConfigDir(), { recursive: true });
+    const pointerPath = join(configStore.getConfigDir(), 'active-run.json');
+    await writeFile(pointerPath, '{"version":');
+    const app = await makeApp({ configStore });
+
+    const response = await app.inject({ method: 'GET', url: '/api/health' });
+    expect(response.statusCode).toBe(500);
+    expectEnvelope(response.json<unknown>(), 'INTERNAL_ERROR');
+    expect(await readFile(pointerPath, 'utf8')).toBe('{"version":');
+  });
 });
 
 describe('shared API error envelope', () => {

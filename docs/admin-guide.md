@@ -520,7 +520,7 @@ It returns:
 }
 ```
 
-Use `/api/health` to confirm the process is listening, the version, the resolved config directory, and the port. The production composition currently reports the inactive placeholder in `activeRun`; use `GET /api/runs/active` or the UI's active-run banner for live run state.
+Use `/api/health` to confirm the process is listening, the version, the resolved config directory, and the port. `activeRun` reflects the last persisted active-run pointer, not proof that a process is alive; updates can lag a live transition or remain after a failure. The endpoint does not initiate run recovery or read the config file. A corrupt or unreadable pointer returns an error rather than an inactive result. Use `GET /api/runs/active` or the UI's active-run banner for the owner's current run state.
 
 `npm start` and the direct server entry log request/error output. The packaged CLI starts the server with the logger disabled and prints the config directory and URL. Skill Loom sends no telemetry, metrics, crash reports, or remote logs, so monitoring is local process supervision plus the health endpoint.
 
@@ -551,7 +551,6 @@ Config, chain, run, and active-run documents carry explicit versions. Unknown ve
 ## Known Limitations
 
 - **Automatic OpenCode advancement is not proven end-to-end.** The parser now accepts the observed colon-separated `OSC 7501` parameters, but OpenCode 2.2.5 also emitted `clear` between `working` and `idle`, resetting the product's observation. Supervised OpenCode runs are unaffected. Do not rely on automatic OpenCode chains until the signal contract is resolved and the live probe is rerun.
-- **`/api/health` activeRun is a placeholder in production.** Use `GET /api/runs/active` for live run state.
 - **One harness per chain; no per-step harness or model selection.**
 - **Native fork is available only on OpenCode's headless surface.** Supervised OpenCode and all Copilot forks use a deterministic handoff note, not a native session fork.
 - **One active run globally.** A second start is rejected while a run is starting, running, paused, or awaiting user input.

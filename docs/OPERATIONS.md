@@ -202,7 +202,6 @@ A handoff is not a byte-for-byte copy of the prior harness session. Treat it as 
 These are current gaps between the intended contract and what was observed with the verified CLIs. They are not shipped claims.
 
 - **Automatic OpenCode advancement:** `docs/evidence/live-execution.json` records the historical `OSC7501_PRODUCT_PARSER_MISMATCH` and `OSC7501_CLEAR_BEFORE_IDLE` observations. The product parser now accepts the observed colon-separated parameters, but `clear` still resets its working observation before `idle`. Supervised OpenCode runs are unaffected, but automatic OpenCode advancement is not proven end-to-end.
-- **Health active-run field:** `GET /api/health` reports an inactive `activeRun` placeholder in the production composition. Use `GET /api/runs/active` or the UI active-run banner for live run state.
 - **Platform coverage:** the recorded live probes ran on Linux ARM64 with OpenCode 2.2.5 and Copilot CLI 1.0.105. Other platforms and CLI versions are unverified.
 - **Package release:** version `0.1.0` is declared in `package.json`, but the package is private and has no Git release tag or npm publication.
 

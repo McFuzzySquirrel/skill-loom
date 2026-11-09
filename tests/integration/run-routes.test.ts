@@ -1602,6 +1602,10 @@ describe('GET /api/runs and POST /api/runs/:runId/actions', () => {
     const harness = await buildTestApp();
     const chain = await createChain(harness.app, harness.projectId);
     const run = await createRun(harness.app, harness.projectId, chain);
+    const healthDuring = await harness.app.inject({ method: 'GET', url: '/api/health' });
+    expect(healthDuring.json()).toMatchObject({
+      activeRun: { active: true, runId: run.id, status: 'awaiting-user' },
+    });
 
     const done = await postAction(harness.app, run.id, { action: 'done' });
     expect(done.statusCode).toBe(200);
@@ -1636,6 +1640,10 @@ describe('GET /api/runs and POST /api/runs/:runId/actions', () => {
     expect(terminal.sessions.has(terminalIdFor(run.id))).toBe(false);
     const active = (await getActiveRun(harness.app)).body as RunActiveState;
     expect(active.active).toBe(false);
+    const healthAfter = await harness.app.inject({ method: 'GET', url: '/api/health' });
+    expect(healthAfter.json()).toMatchObject({
+      activeRun: { active: false, runId: null, status: null },
+    });
 
     const stored = await getRunRecord(harness.app, run.id);
     expect((stored.body as { run: Run }).run.status).toBe('completed');

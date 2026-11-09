@@ -116,7 +116,7 @@ export interface BuildAppOptions {
   /** Overrides the resolved `dist/web` directory. Used by integration tests. */
   webRoot?: string;
   /** Run-state seam consumed by the health endpoint. */
-  getActiveRun?: () => ActiveRunSummary;
+  getActiveRun?: () => ActiveRunSummary | Promise<ActiveRunSummary>;
   /** Injected PTY registry. Defaults to a fresh manager owned by this app. */
   terminalManager?: TerminalManager;
   /** Git initializer seam used by the project registry. */
