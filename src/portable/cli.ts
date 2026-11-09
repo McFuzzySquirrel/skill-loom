@@ -4,6 +4,9 @@ import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BundleError } from './bundle.js';
 import { executePortableRequest, PortableRunError, type PortableRequest } from './runtime.js';
+import { ProjectClaimError } from '../shared/project-claim.js';
+import { ProjectCoordinationError } from '../shared/project-coordination.js';
+import { ProjectRunRecordsError } from '../shared/project-run-records.js';
 
 const COMMANDS = ['inspect', 'prepare', 'status', 'step', 'record', 'resume'] as const;
 type Command = (typeof COMMANDS)[number];
@@ -57,10 +60,13 @@ export async function runPortableCli(
     stdout.write(`${JSON.stringify(result)}\n`);
     return 0;
   } catch (error) {
-    const code = error instanceof PortableRunError || error instanceof BundleError
+    const known = error instanceof PortableRunError || error instanceof BundleError ||
+      error instanceof ProjectClaimError || error instanceof ProjectCoordinationError ||
+      error instanceof ProjectRunRecordsError;
+    const code = known
       ? error.code
       : error instanceof SyntaxError ? 'JSON_INVALID' : 'REQUEST_FAILED';
-    const message = error instanceof PortableRunError || error instanceof BundleError
+    const message = known
       ? error.message
       : error instanceof SyntaxError
         ? 'Structured helper input is not valid JSON.'

@@ -22,7 +22,7 @@ async function setup(onRunRecoveryWarning?: (warning: RunStoreWarning) => void) 
     createRun: vi.fn(),
     getRun: vi.fn(),
     getRunView: vi.fn(),
-    getActiveRun: vi.fn(),
+    getActiveRun: vi.fn(), hasLiveProject: vi.fn().mockReturnValue(false),
     applyAction: vi.fn(),
     subscribe: vi.fn(),
     recoverOnStartup: vi.fn().mockResolvedValue({ interrupted: [], clearedActiveRun: false, warnings: [], projects: [] }),
@@ -154,5 +154,30 @@ describe('shared run owner', () => {
     await mutation;
     await shutdown;
     expect(orchestrator.shutdown).toHaveBeenCalledTimes(1);
+  });
+
+  it('drains an exclusive reconciliation before shutting down and rejects competing mutations', async () => {
+    const { owner, orchestrator } = await setup();
+    await owner.get();
+    let release: () => void = () => undefined;
+    const reconciliation = owner.withExclusiveMutation(() => new Promise<void>((resolve) => { release = resolve; }));
+    await expect(owner.withMutation(async () => undefined)).rejects.toMatchObject({ code: 'RUN_OWNER_STOPPING' });
+    await expect(owner.withExclusiveMutation(async () => undefined)).rejects.toMatchObject({ code: 'RUN_OWNER_STOPPING' });
+    expect(owner.blockMutations()).toBe(false);
+    const shutdown = owner.shutdown();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(orchestrator.shutdown).not.toHaveBeenCalled();
+    release();
+    await reconciliation;
+    await shutdown;
+    expect(orchestrator.shutdown).toHaveBeenCalledTimes(1);
+    await expect(owner.withMutation(async () => undefined)).rejects.toMatchObject({ code: 'RUN_OWNER_STOPPING' });
+  });
+
+  it('releases the exclusive barrier when reconciliation fails', async () => {
+    const { owner } = await setup();
+    await expect(owner.withExclusiveMutation(async () => { throw new Error('failed'); })).rejects.toThrow('failed');
+    await expect(owner.withMutation(async () => 'ok')).resolves.toBe('ok');
+    await owner.shutdown();
   });
 });

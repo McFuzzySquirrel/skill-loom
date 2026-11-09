@@ -127,8 +127,9 @@ stale indexes and unusual Unicode use validated-manifest fallback. Project
 catalog paging uses bounded, expiring owner-side snapshots to keep later pages
 stable without rediscovery; oversized results explicitly fall back to uncached
 paging. The first page still loads and verifies the complete merged catalog.
-Windows control, full CLI authoring and execution,
-portable-run coordination, and remaining acceptance coverage are still required.
+Windows control, full CLI authoring and execution, and remaining acceptance
+coverage are still required. Project coordination has since been integrated as
+described below.
 Project-chain and draft create/update/remove are available through the owner.
 The UI, CLI, and project-chain/draft HTTP update and delete endpoints require
 content-bound revision preconditions and reject stale changes. Legacy HTTP
@@ -138,8 +139,7 @@ The OSC parser now recognizes the observed colon-separated format in tests,
 but prior live evidence also includes `clear` before `idle`; automatic OpenCode
 advancement remains unverified until the signal contract and live gate pass.
 The discovery skill documents the partial CLI catalog and draft workflow;
-skill-bearing CLI starts and recovery, and portable-run coordination
-are not yet integrated. Restricted instruction-only start supports supervised
+skill-bearing CLI starts and recovery are not yet integrated. Restricted instruction-only start supports supervised
 mode and automatic process-exit mode; automatic progression and reported broad
 permissions each need separate confirmation. OSC-based automatic CLI starts
 and execution actions remain blocked pending live verification. The start binds the chain,
@@ -177,8 +177,8 @@ Finalization also awaits runner shutdown and retains a failed terminal cleanup
 instead of allowing a new run to begin. Shutdown drains in-flight run mutations
 and automatic transitions and prevents a later step from spawning during that
 drain. This does not guarantee that detached
-descendants have exited. These changes do not yet establish cross-process project
-ownership or eliminate the need for the coordination work below.
+descendants have exited. Cross-process project ownership was subsequently
+added as described below, but it does not prove descendant cleanup.
 An opt-in `workspace evaluate` command checks explicitly named regular files,
 optional SHA-256 values, and case-sensitive UTF-8 substrings without executing
 workspace content. JSON Pointer checks can also compare a selected JSON value
@@ -210,9 +210,11 @@ Current portable helpers serialize mutations with their existing per-project
 lock and check bounded, validated portable run records before package
 installation or step dispatch. Another unfinished portable run blocks those
 operations; unsafe or corrupt records and scans exceeding 1,000 other records or
-64 MiB fail closed. Completion and explicit abort permit a later run. This does
-not coordinate with managed runs, earlier helper versions, external edits, or
-the gap between a crashed installation and the first run record.
+64 MiB fail closed. In legacy mode, completion and explicit abort permit a later
+run; in internally enabled protocol mode, the retained claim requires separate
+reviewed clearing. This does not coordinate with managed runs, earlier helper
+versions, external edits, or, in legacy mode, the gap between a crashed
+installation and the first run record.
 Portable setup now preserves the existing `.loom/.gitignore` as plain text and
 ensures both `runs/` and `portable-runs/` are ignored, including when it creates
 the file. Earlier helpers could have written a quoted JSON string; affected
@@ -280,24 +282,60 @@ unsupported locking or corrupt/unknown state must fail closed.
 
 A shared SQLite claim transaction primitive now exists with cross-process
 contention, validated claim records, fail-closed database checks, and Git ignore
-rules. **Managed and portable execution do not yet acquire or enforce claims**,
-so this does not provide project-coordination protection for starts or actions.
+rules. Portable mutations now participate in this transaction: when the
+internal protocol is enabled, preparation commits a claim before package
+installation, and step, record, and resume require the matching claim. Claims
+remain after failures and terminal outcomes until separately reviewed clearing.
+In legacy mode portable mutations serialize with protocol enablement but do not
+create a claim. Managed starts now claim before run creation or harness spawn
+when the internal protocol is enabled. Explicit actions, signal-driven
+automatic transitions, supervised exit updates, and shutdown verify the matching
+claim under the project transaction. A managed claim survives failed starts,
+completion, abort, and shutdown. An interrupted claimed run can be retried or
+continued after explicit recovery, but restarting it as a new run is blocked
+until the old claim is separately reconciled. Reviewed enablement and
+reconciliation are available through both clients. Reconciliation holds an
+exclusive owner mutation barrier, and service shutdown waits for an in-flight
+action to finish. Descendant cleanup remains
+unverified, so the operator must confirm prior work and older clients have
+stopped; cross-mode protection is not complete for older clients or unrelated
+processes.
 Startup recovery now holds the project transaction when handling its matching
 profile pointer and leaves that pointer and run unchanged when a claim exists or
 the protocol is enabled; it reports `RUN_RECOVERY_CLAIMED`. It creates the
-project-local claim database and ignore rule even for legacy recovery. Legacy scanning,
-claim lifecycle, explicit reconciliation, compatibility handling, and
-end-to-end failure and multi-process coverage remain required.
+project-local claim database and ignore rule even for legacy recovery. Legacy
+scanning, retained claims, and explicit reconciliation are implemented; broader
+compatibility and end-to-end failure and multi-process coverage remain required.
+The orchestrator's final stale-pointer cleanup also respects the claimed
+recovery result, including when the referenced run is already terminal; it
+rechecks project coordination under the transaction before clearing an
+otherwise stale pointer.
 Internal reviewed operations now cover protocol enablement, legacy adoption,
 and interruption of a claimed managed run after explicit confirmation that prior
 work and older clients have stopped. The interruption retains the claim and
 requires the caller to own the affected profile; an interrupted run remains
-unresolved. These operations are not yet exposed in the UI or CLI. If pointer
-cleanup fails after the run write, the error is surfaced and the claim remains.
+unresolved. A separate reviewed abandonment can record an interrupted managed
+run as aborted without replaying it; it retains the claim for another reviewed
+release and can retry pointer cleanup after a crash. These confirmations are
+operator assertions, not proof that descendants or older clients have stopped.
+These operations are exposed through reviewed CLI and project-page actions.
+The service blocks them while it owns a live project run. If pointer cleanup
+fails after the run write, the error is surfaced and the claim remains. The CLI
+can inspect bounded evidence with `project coordination-review` and apply a
+separately confirmed `project coordination-action`; the project page exposes
+the same review and actions. Review alone never enables or changes a run.
 An internal claimed-mutation callback keeps the SQLite transaction held while
-short mutations or dispatches occur, so reviewed clearing cannot race between
-checking a claim and initiating a change. It is not yet used by run paths and
-must not be held for the lifetime of a harness or host task.
+short run mutations or dispatches occur, so reviewed clearing cannot race
+between checking a claim and initiating a change. It is used by managed and
+portable paths and must not be held for the lifetime of a harness or host task.
+The portable helper's minimum Node 24.0 release emits an experimental SQLite
+warning on stderr without a runtime flag. The skill now specifies
+`--disable-warning=ExperimentalWarning` for machine-readable errors, which also
+suppresses other experimental warnings. Node 24.0 portable and claim tests have
+passed with that invocation; this is not live harness verification.
+One combined browser run timed out waiting for a duplicated chain to appear
+after choosing another harness; fourteen isolated reruns passed. The cause was not
+established, so the combined-journey failure remains an open verification issue.
 
 Create the claim before managed run creation or portable package installation.
 When the operation succeeds, its record identifies the same claim; when it fails,

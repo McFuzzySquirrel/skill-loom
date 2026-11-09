@@ -185,3 +185,55 @@ export async function withClaimedProjectRun<T>(
     return task(claim);
   });
 }
+
+/**
+ * Start a run under the project transaction. An enabled protocol commits its
+ * claim before any callback side effect; legacy mode holds the transaction
+ * during the callback so protocol enablement cannot race that start.
+ */
+export async function beginCoordinatedProjectRun<T>(
+  projectPath: string,
+  kind: ProjectClaim['kind'],
+  runId: string,
+  task: () => Promise<T>,
+  now: Date = new Date(),
+): Promise<T> {
+  const result = await withProjectClaimTransaction(projectPath, async (tx) => {
+    if (tx.read() !== null) {
+      throw new ProjectClaimError('PROJECT_CLAIM_CONFLICT', 'Another operation already claims this project.');
+    }
+    if (tx.protocol() === null) {
+      return { kind: 'legacy' as const, value: await task() };
+    }
+    const records = await scanProjectRunRecords(tx.identity.projectPath);
+    const unresolved = records.filter((record) => record.unresolved);
+    if (unresolved.length > 0) throw new ProjectCoordinationError('PROJECT_RECONCILIATION_REQUIRED', unresolved);
+    tx.acquire({ version: 1, ...tx.identity, kind, runId, createdAt: now.toISOString() });
+    return { kind: 'claimed' as const };
+  });
+  if (result.kind === 'legacy') return result.value;
+  return withClaimedProjectRun(projectPath, { kind, runId }, task);
+}
+
+/**
+ * Serialize a run mutation with protocol enablement and claim reconciliation.
+ * Legacy mutations are allowed only while no durable claim exists.
+ */
+export async function withCoordinatedProjectRun<T>(
+  projectPath: string,
+  expected: Pick<ProjectClaim, 'kind' | 'runId'>,
+  task: (claim: ProjectClaim | null) => Promise<T>,
+): Promise<T> {
+  return withProjectClaimTransaction(projectPath, async (tx) => {
+    const protocol = tx.protocol();
+    const claim = tx.read();
+    if (protocol !== null) {
+      if (claim === null || claim.kind !== expected.kind || claim.runId !== expected.runId) {
+        throw new ProjectClaimError('PROJECT_CLAIM_MISMATCH', 'The project claim does not match this run.');
+      }
+    } else if (claim !== null) {
+      throw new ProjectClaimError('PROJECT_CLAIM_CONFLICT', 'Another operation already claims this project.');
+    }
+    return task(claim);
+  });
+}

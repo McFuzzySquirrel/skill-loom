@@ -23,6 +23,66 @@ import { createRunStore } from '../../src/server/runs/store.js';
 import { createTerminalManager, TerminalSubscriberConflictError } from '../../src/server/terminal/pty.js';
 
 describe.skipIf(process.platform === 'win32')('local control transport', () => {
+  it('reviews project coordination through the CLI without modifying run records', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'loom-coordination-review-'));
+    const project = join(root, 'project');
+    const configDirectory = join(root, 'config');
+    await mkdir(project);
+    const config = createConfigStore({ env: { LOOM_CONFIG_DIR: configDirectory } });
+    await config.update({});
+    const server = await startControlServer(config);
+    try {
+      const opened = await callControl(configDirectory, 'project.open', { path: project });
+      if (!opened.ok) throw new Error('Project registration failed.');
+      const projectId = (opened.result as { project: { id: string } }).project.id;
+      const timestamp = '2026-01-01T00:00:00.000Z';
+      const chain = parseChain({
+        version: CHAIN_VERSION, id: 'chain-one', name: 'Test', harness: 'copilot', sessionMode: 'shared',
+        steps: [{ id: 'one', kind: 'instruction', instruction: 'Review.' }],
+        inputs: [], automaticPermissionOptIn: false, createdAt: timestamp, updatedAt: timestamp,
+      });
+      const run = createRunRecord({ id: 'run-test', projectId, chain, mode: 'supervised' });
+      await createRunStore({ projectPath: project, configDirectory }).create(run);
+      const runFile = join(project, '.loom', 'runs', 'run-test.json');
+      const pointer = join(configDirectory, 'active-run.json');
+      const originalRun = await readFile(runFile, 'utf8');
+      const originalPointer = await readFile(pointer, 'utf8');
+      let output = '';
+      let error = '';
+      expect(await runCli(['project', 'coordination-review', '--config-dir', configDirectory], {
+        env: {}, stdin: Readable.from([JSON.stringify({ projectId })]),
+        stdout: { write: (chunk) => { output += String(chunk); return true; }, isTTY: false },
+        stderr: { write: (chunk) => { error += String(chunk); return true; } },
+      })).toBe(0);
+      expect(error).toBe('');
+      expect(JSON.parse(output)).toMatchObject({
+        ok: true, result: {
+          executionCoordinated: false,
+          review: {
+            protocol: null, claim: null, reviewDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+            records: [{ kind: 'managed', runId: run.id, status: 'starting', unresolved: true }],
+          },
+        },
+      });
+      expect(await readFile(runFile, 'utf8')).toBe(originalRun);
+      expect(await readFile(pointer, 'utf8')).toBe(originalPointer);
+      expect(await callControl(configDirectory, 'project.coordination.review', { projectId: 'not-registered' }))
+        .toMatchObject({ ok: false, error: { code: 'PROJECT_NOT_FOUND' } });
+      expect(await callControl(configDirectory, 'project.coordination.review', { projectId, extra: true }))
+        .toMatchObject({ ok: false, error: { code: 'CONTROL_INVALID_REQUEST' } });
+      await writeFile(runFile, '{broken');
+      expect(await callControl(configDirectory, 'project.coordination.review', { projectId }))
+        .toMatchObject({ ok: false, error: { code: 'PROJECT_RUN_RECORDS_UNSAFE' } });
+      expect(await readFile(runFile, 'utf8')).toBe('{broken');
+      await rm(project, { recursive: true });
+      expect(await callControl(configDirectory, 'project.coordination.review', { projectId }))
+        .toMatchObject({ ok: false, error: { code: 'PROJECT_CLAIM_UNSAFE' } });
+    } finally {
+      await server.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('refuses startup without deleting a corrupt active-run pointer', async () => {
     const root = await mkdtemp(join(tmpdir(), 'loom-corrupt-active-pointer-'));
     try {
@@ -85,7 +145,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
     await new Promise<void>((done, reject) => reservation.close((error) => error ? reject(error) : done()));
     const orchestrator: RunOrchestrator = {
       createRun: vi.fn(), getRun: vi.fn(), getRunView: vi.fn(),
-      getActiveRun: vi.fn().mockResolvedValue({ active: false }),
+      getActiveRun: vi.fn().mockResolvedValue({ active: false }), hasLiveProject: vi.fn().mockReturnValue(false),
       applyAction: vi.fn(), subscribe: vi.fn(), recoverOnStartup: vi.fn(),
       shutdown: vi.fn().mockRejectedValueOnce(new Error('cleanup failed')).mockResolvedValue(undefined),
     };
@@ -129,7 +189,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
     const orchestrator: RunOrchestrator = {
       createRun: vi.fn(), getRun: vi.fn(),
       getRunView: vi.fn().mockResolvedValue({ terminalId: session.id }),
-      getActiveRun: vi.fn(), applyAction: vi.fn(), subscribe: vi.fn(),
+      getActiveRun: vi.fn(), hasLiveProject: vi.fn().mockReturnValue(false), applyAction: vi.fn(), subscribe: vi.fn(),
       recoverOnStartup: vi.fn(), shutdown: vi.fn(),
     };
     const owner = createRunOwner({
@@ -230,7 +290,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       return unsubscribe;
     };
     const orchestrator: RunOrchestrator = {
-      createRun: vi.fn(), getRun: vi.fn(), getRunView: vi.fn(), getActiveRun: vi.fn(),
+      createRun: vi.fn(), getRun: vi.fn(), getRunView: vi.fn(), getActiveRun: vi.fn(), hasLiveProject: vi.fn().mockReturnValue(false),
       applyAction: vi.fn(), subscribe, recoverOnStartup: vi.fn(), shutdown: vi.fn(),
     };
     const owner = createRunOwner({
@@ -307,7 +367,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
     await new Promise<void>((done, reject) => reservation.close((error) => error ? reject(error) : done()));
     const recovery = vi.fn().mockRejectedValue(new Error('recovery failed'));
     const orchestrator: RunOrchestrator = {
-      createRun: vi.fn(), getRun: vi.fn(), getRunView: vi.fn(), getActiveRun: vi.fn(),
+      createRun: vi.fn(), getRun: vi.fn(), getRunView: vi.fn(), getActiveRun: vi.fn(), hasLiveProject: vi.fn().mockReturnValue(false),
       applyAction: vi.fn(), subscribe: vi.fn(), recoverOnStartup: recovery, shutdown: vi.fn(),
     };
     try {
@@ -913,7 +973,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       createRun: vi.fn(),
       getRun: vi.fn(),
       getRunView: vi.fn().mockResolvedValue({ run: { id: 'run-test', status: 'aborted' }, terminalId: null, actions: {}, recovery: null }),
-      getActiveRun: vi.fn().mockResolvedValue({ active: true }),
+      getActiveRun: vi.fn().mockResolvedValue({ active: true }), hasLiveProject: vi.fn().mockReturnValue(false),
       applyAction: vi.fn().mockResolvedValue({ run: { id: 'run-test', status: 'aborted' }, restartedFrom: null }),
       subscribe: vi.fn(),
       recoverOnStartup: vi.fn(),

@@ -41,7 +41,7 @@ The CLI supports `--help`, `--version`, `--no-open`, `--port <number>`, and `--c
 
 Before publishing, flip `"private"` to `false`, add repository metadata, verify the package name is still available, run `npm run test:package`, and publish with `npm publish`. Once published, the invocation is `npx skill-loom-cli`.
 
-The build creates the versioned `dist/skills/loom-run-bundle/` and `dist/skills/scenario-discovery/` directories and their ZIP archives, synchronizing each canonical `.github/skills/` source into its checked-in `skill/` mirror. The export dialog downloads the runner ZIP; the discovery page downloads the discovery ZIP. To install manually from a checkout, run `npm run build:portable-skill`, then copy the relevant directory into the target project's `.agents/skills/<skill-name>/`. The helpers run on Node.js 24+ without the Skill Loom server, database, native PTY, or installed Loom npm package. The standalone ZIPs and files are included in the packed Skill Loom artifact. The development `npm run dev` lifecycle builds the skills before starting the server and UI.
+The build creates the versioned `dist/skills/loom-run-bundle/` and `dist/skills/scenario-discovery/` directories and their ZIP archives. It updates the generated runner helper in both checked-in skill locations and synchronizes the discovery skill mirror; runner instructions are maintained in both locations. The export dialog downloads the runner ZIP; the discovery page downloads the discovery ZIP. To install manually from a checkout, run `npm run build:portable-skill`, then copy the relevant directory into the target project's `.agents/skills/<skill-name>/`. The helpers run on Node.js 24+ without the Skill Loom server, native PTY, or installed Loom npm package. Portable runner mutations use a project-local SQLite database. The runner skill prescribes `--disable-warning=ExperimentalWarning` to keep early Node 24 SQLite warnings out of structured stderr; this also suppresses other experimental warnings. The standalone ZIPs and files are included in the packed Skill Loom artifact. The development `npm run dev` lifecycle builds the skills before starting the server and UI.
 
 The discovery skill's project-independent mode consumes a downloaded `*.loom-discovery.json` handoff, validates its schema, fingerprints, paths, and content offline, then proposes reviewed scenarios. It builds a standard v1 `.loom.json` bundle from only the approved packages. It does not import, install, run package code, or make network requests. Hosts must pass helper arguments as structured process arguments; do not substitute shell-concatenated commands.
 
@@ -71,21 +71,26 @@ proof that a person reviewed the content.
 Current portable helpers reject preparation or step execution if another
 unfinished portable run is recorded in the project. The scan is limited to
 1,000 other records and 64 MiB and fails closed on unsafe or corrupt records.
-Archive completed records only when no helper can access them. This does not
-coordinate with managed runs, other profiles, or older helpers. Operators must arrange exclusive project use
+Archive completed records only when no helper can access them. Without the
+opt-in protocol this does not coordinate with managed runs or other profiles,
+and older helpers never participate. Operators must arrange exclusive project use
 before installation or execution and maintain it through completion or explicit
 abort. Status checks do not lock the project; stop if exclusive use cannot be
 established.
-Do not start another profile that knows a project while a managed run is
+Before enabling coordination, do not start another profile that knows a project while a managed run is
 active. Recovery leaves active records not named by its own pointer unchanged
 and logs `RUN_RECOVERY_AMBIGUOUS`, but a matching stale pointer does not prove
-ownership, and profiles still do not coordinate starts.
+ownership.
 Matching-pointer recovery initializes a project-local `.loom/project-claim.sqlite`
 database and ignores it and its sidecars in `.loom/.gitignore`. Do not remove or
 replace it while a service is running. If a claim exists or project coordination
-is enabled, recovery retains the record and pointer and logs `RUN_RECOVERY_CLAIMED`;
-review controls are not yet exposed. Invalid coordination data blocks recovery.
-These safeguards do not coordinate run starts or actions.
+is enabled, recovery retains the record and pointer and logs `RUN_RECOVERY_CLAIMED`.
+Use project coordination review and separately confirmed actions to reconcile it.
+Invalid coordination data blocks recovery.
+Managed starts, actions, automatic transitions, and shutdown participate in the
+protocol when enabled, and retain claims until separately reviewed. Process-tree
+cleanup remains unverified; confirmations that descendants have stopped are
+operator assertions, not proof.
 If the active-run pointer is corrupt, startup fails with
 `RUN_ACTIVE_POINTER_CORRUPT` and leaves the file unchanged. Establish that
 earlier work and processes have stopped before inspecting it or restoring a

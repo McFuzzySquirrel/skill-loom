@@ -18,14 +18,15 @@ import { createChainStore } from '../../src/server/chains/store.js';
 import { scanProjectRunRecords } from '../../src/shared/project-run-records.js';
 import {
   acquireProjectRunClaim, adoptReviewedLegacyRun, clearReviewedProjectClaim,
-  enableReviewedProjectProtocol, requireProjectRunClaim, reviewProjectCoordination, withClaimedProjectRun,
+  beginCoordinatedProjectRun, enableReviewedProjectProtocol, requireProjectRunClaim,
+  reviewProjectCoordination, withClaimedProjectRun, withCoordinatedProjectRun,
 } from '../../src/shared/project-coordination.js';
 import {
   ACTIVE_RUN_STATUSES,
   createRunRecord,
   type Run,
 } from '../../src/server/runs/model.js';
-import { reconcileClaimedManagedRun } from '../../src/server/runs/project-reconciliation.js';
+import { abandonClaimedManagedRun, reconcileClaimedManagedRun } from '../../src/server/runs/project-reconciliation.js';
 import {
   ACTIVE_RUN_FILE_NAME,
   RUN_STORE_ERROR_CODES,
@@ -495,6 +496,77 @@ describe('startup recovery', () => {
     expect((await reviewProjectCoordination(projectPath)).claim).toEqual(claim);
   });
 
+  it('requires a separate reviewed abandonment before releasing an interrupted claim', async () => {
+    const store = storeFor();
+    const active = makeRun({ id: 'run-legacy', status: 'running' });
+    active.steps[0] = { ...active.steps[0]!, status: 'running', startedAt: CREATED_AT };
+    await store.create(active);
+    const originalPointer = await readFile(pointerFile(), 'utf8');
+    await enableCoordination();
+    const legacy = await reviewProjectCoordination(projectPath);
+    const claim = await adoptReviewedLegacyRun(projectPath, { kind: 'managed', runId: active.id }, legacy.reviewDigest, true, true);
+    const adopted = await reviewProjectCoordination(projectPath);
+    const options = {
+      projectPath, configDirectory, runId: active.id,
+      stoppedConfirmed: true, oldClientsStoppedConfirmed: true,
+      reviewDigest: adopted.reviewDigest, abandonConfirmed: true, now: new Date(LATER_AT),
+    };
+    await expect(abandonClaimedManagedRun(options))
+      .rejects.toMatchObject({ code: 'PROJECT_RECONCILIATION_REQUIRED' });
+    await reconcileClaimedManagedRun(options);
+    const interruptedReview = await reviewProjectCoordination(projectPath);
+    const before = await readFile(runFile(active.id), 'utf8');
+    await expect(abandonClaimedManagedRun({ ...options, reviewDigest: interruptedReview.reviewDigest, abandonConfirmed: false }))
+      .rejects.toMatchObject({ code: 'PROJECT_CONFIRMATION_REQUIRED' });
+    await expect(abandonClaimedManagedRun({ ...options, reviewDigest: interruptedReview.reviewDigest, stoppedConfirmed: false }))
+      .rejects.toMatchObject({ code: 'PROJECT_CONFIRMATION_REQUIRED' });
+    await expect(abandonClaimedManagedRun({ ...options, reviewDigest: interruptedReview.reviewDigest, oldClientsStoppedConfirmed: false }))
+      .rejects.toMatchObject({ code: 'PROJECT_CONFIRMATION_REQUIRED' });
+    await expect(abandonClaimedManagedRun(options))
+      .rejects.toMatchObject({ code: 'PROJECT_REVIEW_STALE' });
+    expect(await readFile(runFile(active.id), 'utf8')).toBe(before);
+    const abandoned = await abandonClaimedManagedRun({ ...options, reviewDigest: interruptedReview.reviewDigest });
+    expect(abandoned).toMatchObject({
+      status: 'aborted', reason: 'ABANDONED_AFTER_CONFIRMATION', finishedAt: LATER_AT,
+      steps: [expect.objectContaining({ status: 'interrupted' }), expect.objectContaining({ status: 'pending' })],
+    });
+    const finalReview = await reviewProjectCoordination(projectPath);
+    expect(finalReview.claim).toEqual(claim);
+    expect(finalReview.records).toEqual([expect.objectContaining({ runId: active.id, unresolved: false })]);
+    await writeFile(pointerFile(), originalPointer);
+    expect(await abandonClaimedManagedRun({ ...options, reviewDigest: finalReview.reviewDigest })).toEqual(abandoned);
+    expect(await store.getActiveRun()).toBeNull();
+    await expect(clearReviewedProjectClaim(projectPath, interruptedReview.reviewDigest, true, true))
+      .rejects.toMatchObject({ code: 'PROJECT_REVIEW_STALE' });
+    await clearReviewedProjectClaim(projectPath, finalReview.reviewDigest, true, true);
+    expect((await reviewProjectCoordination(projectPath)).claim).toBeNull();
+    expect((await store.read(active.id)).status).toBe('aborted');
+  });
+
+  it('does not abandon an interrupted run when the profile pointer is corrupt', async () => {
+    const store = storeFor();
+    const active = makeRun({ id: 'run-legacy', status: 'running' });
+    await store.create(active);
+    await enableCoordination();
+    const legacy = await reviewProjectCoordination(projectPath);
+    const claim = await adoptReviewedLegacyRun(projectPath, { kind: 'managed', runId: active.id }, legacy.reviewDigest, true, true);
+    const adopted = await reviewProjectCoordination(projectPath);
+    await reconcileClaimedManagedRun({
+      projectPath, configDirectory, runId: active.id, reviewDigest: adopted.reviewDigest,
+      stoppedConfirmed: true, oldClientsStoppedConfirmed: true,
+    });
+    const review = await reviewProjectCoordination(projectPath);
+    const original = await readFile(runFile(active.id), 'utf8');
+    await writeFile(pointerFile(), '{broken');
+    await expect(abandonClaimedManagedRun({
+      projectPath, configDirectory, runId: active.id, reviewDigest: review.reviewDigest,
+      stoppedConfirmed: true, oldClientsStoppedConfirmed: true, abandonConfirmed: true,
+    })).rejects.toMatchObject({ code: 'RUN_ACTIVE_POINTER_CORRUPT' });
+    expect(await readFile(runFile(active.id), 'utf8')).toBe(original);
+    expect(await readFile(pointerFile(), 'utf8')).toBe('{broken');
+    expect((await reviewProjectCoordination(projectPath)).claim).toEqual(claim);
+  });
+
   it('does not clear another project pointer for a run with the same id', async () => {
     const store = storeFor();
     const active = makeRun({ id: 'run-legacy', status: 'running' });
@@ -576,6 +648,43 @@ describe('startup recovery', () => {
     await expect(clearReviewedProjectClaim(projectPath, review.reviewDigest, true, true))
       .rejects.toMatchObject({ code: 'PROJECT_REVIEW_STALE' });
     expect(await requireProjectRunClaim(projectPath, claim)).toEqual(claim);
+  });
+
+  it('retains a committed claim when a coordinated start fails before writing a record', async () => {
+    await enableCoordination();
+    const failure = new Error('injected start failure');
+    await expect(beginCoordinatedProjectRun(projectPath, 'managed', 'run-claimed', async () => {
+      throw failure;
+    })).rejects.toBe(failure);
+    const claim = await requireProjectRunClaim(projectPath, { kind: 'managed', runId: 'run-claimed' });
+    expect(claim).toMatchObject({ kind: 'managed', runId: 'run-claimed' });
+    const callback = vi.fn(async () => 'unexpected');
+    await expect(withCoordinatedProjectRun(projectPath, { kind: 'managed', runId: 'other' }, callback))
+      .rejects.toMatchObject({ code: 'PROJECT_CLAIM_MISMATCH' });
+    expect(callback).not.toHaveBeenCalled();
+    expect(await withCoordinatedProjectRun(projectPath, claim, async () => 'matched')).toBe('matched');
+  });
+
+  it('serializes a legacy start with protocol enablement and invalidates stale review', async () => {
+    const review = await reviewProjectCoordination(projectPath);
+    let enter!: () => void;
+    let finish!: () => void;
+    const entered = new Promise<void>((resolve) => { enter = resolve; });
+    const gate = new Promise<void>((resolve) => { finish = resolve; });
+    const start = beginCoordinatedProjectRun(projectPath, 'managed', 'run-legacy', async () => {
+      enter();
+      await gate;
+      await storeFor().create(makeRun({ id: 'run-legacy', status: 'running' }));
+    });
+    await entered;
+    const enablement = enableReviewedProjectProtocol(projectPath, review.reviewDigest, true);
+    finish();
+    await start;
+    await expect(enablement).rejects.toMatchObject({ code: 'PROJECT_REVIEW_STALE' });
+    const after = await reviewProjectCoordination(projectPath);
+    expect(after.protocol).toBeNull();
+    expect(after.claim).toBeNull();
+    expect(after.records).toEqual([expect.objectContaining({ runId: 'run-legacy', unresolved: true })]);
   });
 
   it('refuses to create a project claim over unresolved legacy records', async () => {

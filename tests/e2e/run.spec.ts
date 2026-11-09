@@ -708,6 +708,60 @@ test.describe('Terminal-dominant run view', () => {
     expect(consoleErrors).toEqual([]);
   });
 
+  test('refuses live reconciliation and clears a claimed run only after abort and a fresh review', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(60_000);
+    const { project } = await openFixtureProject(request, 'claimed-reconciliation');
+    const reviewUrl = `/api/projects/${project.id}/coordination-review`;
+    const actionUrl = `/api/projects/${project.id}/coordination-action`;
+    const initial = await request.post(reviewUrl);
+    expect(initial.ok()).toBe(true);
+    const { review: initialReview } = await initial.json() as { review: { reviewDigest: string } };
+    const enabled = await request.post(actionUrl, {
+      data: { action: 'enable', reviewDigest: initialReview.reviewDigest, stoppedConfirmed: true, oldClientsStoppedConfirmed: true },
+    });
+    expect(enabled.ok()).toBe(true);
+    const chain = await createChain(request, project.id, `Claimed ${runSuffix}`, [{
+      id: 'claimed-step', skillName: 'deploy-helper', instruction: 'Hold until explicitly aborted.',
+    }]);
+    const run = await createRun(request, project.id, chain.id, 'supervised');
+
+    await page.goto(`/projects/${project.id}`);
+    const details = page.locator('.project-details');
+    if (!(await details.evaluate((element) => element instanceof HTMLDetailsElement && element.open))) {
+      await details.getByText('Project details').click();
+    }
+    const review = page.getByRole('button', { name: 'Review coordination' });
+    const confirmStopped = async () => {
+      await page.getByRole('checkbox', { name: 'I confirmed older Skill Loom services and helpers have stopped.' }).check();
+      await page.getByRole('checkbox', { name: 'I confirmed previous work and all its processes and descendants have stopped.' }).check();
+    };
+    await review.click();
+    await expect(page.getByText(`Claim: managed run ${run.id}`, { exact: false })).toBeVisible();
+    await confirmStopped();
+    await page.getByRole('button', { name: 'Mark claimed managed run interrupted' }).click();
+    await expect(page.getByText(/Coordination failed:.*PROJECT_COORDINATION_BUSY/)).toBeVisible();
+    await expect(review).toBeFocused();
+
+    const aborted = await request.post(`/api/runs/${run.id}/actions`, {
+      data: { action: 'abort', reason: 'Finish browser reconciliation test.' },
+    });
+    expect(aborted.ok(), await aborted.text()).toBe(true);
+    await review.click();
+    await expect(page.getByText(`Claim: managed run ${run.id}`, { exact: false })).toBeVisible();
+    await expect(page.getByText(/aborted — terminal/)).toBeVisible();
+    const clear = page.getByRole('button', { name: 'Clear reviewed claim' });
+    await expect(clear).toBeDisabled();
+    await confirmStopped();
+    await clear.click();
+    await expect(page.getByRole('status')).toHaveText('Coordination action applied. Review again before another action.');
+    await expect(review).toBeFocused();
+    await review.click();
+    await expect(page.getByText('Claim: None.')).toBeVisible();
+  });
+
   test('automatic mode advances only on the harness signal and exposes Pause, Resume, Run next, and Abort', async ({
     page,
     request,

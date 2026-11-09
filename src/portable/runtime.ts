@@ -17,6 +17,7 @@ import {
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { ChainBundle, BundleSkill } from '../shared/bundles.js';
 import { chainStepName } from '../shared/chain.js';
+import { beginCoordinatedProjectRun, withCoordinatedProjectRun } from '../shared/project-coordination.js';
 import { frontmatterString, parseSkillFrontmatter } from '../server/catalog/frontmatter.js';
 import {
   MAX_BUNDLE_REQUEST_BYTES,
@@ -746,7 +747,8 @@ export async function executePortableRequest(request: PortableRequest): Promise<
       fail('REVIEW_STALE', 'The bundle, project, or existing package state changed since inspection; review it again.');
     }
     const directory = await ensureRunDirectory(project);
-    return withRunLock(directory, async () => {
+    const id = randomUUID();
+    return beginCoordinatedProjectRun(project, 'portable', id, () => withRunLock(directory, async () => {
       await assertNoOtherPortableRun(directory, project);
       const current = await inspectBundle(bundle, project);
       if (current.reviewDigest !== input.reviewDigest) {
@@ -760,7 +762,6 @@ export async function executePortableRequest(request: PortableRequest): Promise<
         new Map(current.skills.map((skill) => [skill.name, skill.existingFingerprint])),
       );
       const timestamp = now();
-      const id = randomUUID();
       const run: PortableRun = {
         version: RUN_VERSION,
         id,
@@ -789,7 +790,7 @@ export async function executePortableRequest(request: PortableRequest): Promise<
         throw error;
       }
       return { ok: true, runId: id, revision: run.revision, status: run.status, installedSkills };
-    });
+    }));
   }
 
   const directory = await ensureRunDirectory(project);
@@ -820,7 +821,7 @@ export async function executePortableRequest(request: PortableRequest): Promise<
   }
 
   if (request.command === 'step') {
-    return withRunLock(directory, async () => {
+    return withCoordinatedProjectRun(project, { kind: 'portable', runId: run.id }, () => withRunLock(directory, async () => {
       const current = await readRun(path, project);
       if (input.revision !== current.revision) fail('REVISION_CONFLICT', 'Portable run state changed; refresh status before acting.');
       if (current.status !== 'ready' || current.resumeRequired) fail('RUN_NOT_READY', 'The run is not ready to start another step.');
@@ -885,11 +886,11 @@ export async function executePortableRequest(request: PortableRequest): Promise<
         progression: current.progression,
         sessionDecision: current.sessionDecision,
       };
-    });
+    }));
   }
 
   if (request.command === 'record') {
-    return withRunLock(directory, async () => {
+    return withCoordinatedProjectRun(project, { kind: 'portable', runId: run.id }, () => withRunLock(directory, async () => {
       const current = await readRun(path, project);
       if (input.revision !== current.revision) fail('REVISION_CONFLICT', 'Portable run state changed; refresh status before acting.');
       if (input.action === 'pause' || input.action === 'abort') {
@@ -969,11 +970,11 @@ export async function executePortableRequest(request: PortableRequest): Promise<
       current.updatedAt = now();
       await writeRun(directory, current);
       return { ok: true, runId: current.id, revision: current.revision, status: current.status, currentStepIndex: current.currentStepIndex };
-    });
+    }));
   }
 
   if (request.command === 'resume') {
-    return withRunLock(directory, async () => {
+    return withCoordinatedProjectRun(project, { kind: 'portable', runId: run.id }, () => withRunLock(directory, async () => {
       const current = await readRun(path, project);
       if (input.revision !== current.revision) fail('REVISION_CONFLICT', 'Portable run state changed; refresh status before acting.');
       if (current.status === 'paused' && !current.resumeRequired && input.decision === 'continue') {
@@ -1028,7 +1029,7 @@ export async function executePortableRequest(request: PortableRequest): Promise<
       current.updatedAt = now();
       await writeRun(directory, current);
       return { ok: true, runId: current.id, revision: current.revision, status: current.status };
-    });
+    }));
   }
 
   fail('COMMAND_INVALID', 'Unknown portable run command.');

@@ -151,11 +151,43 @@ describe('project claim transaction', () => {
     });
   });
 
+  it('publishes a fully initialized database to concurrent first-time processes', async () => {
+    const root = await project();
+    const script = `
+      import { withProjectClaimTransaction } from './src/shared/project-claim.ts';
+      try {
+        await withProjectClaimTransaction(process.argv[1], async tx => {
+          tx.acquire({version:1,...tx.identity,kind:'managed',runId:process.argv[2],createdAt:'2026-01-01T00:00:00.000Z'});
+        });
+        process.stdout.write('acquired');
+      } catch (error) {
+        process.stdout.write(error.code || 'unexpected');
+      }
+    `;
+    const run = (id: string) => execFileAsync(process.execPath, [
+      '--disable-warning=ExperimentalWarning', '--import', 'tsx', '--input-type=module',
+      '-e', script, root, id,
+    ], { cwd: process.cwd() });
+    const results = await Promise.all([run('process-one'), run('process-two')]);
+    const outcomes = results.map((result) => result.stdout);
+    expect(outcomes.filter((result) => result === 'acquired')).toHaveLength(1);
+    expect(outcomes.filter((result) => ['PROJECT_CLAIM_CONFLICT', 'PROJECT_CLAIM_BUSY'].includes(result))).toHaveLength(1);
+    await withProjectClaimTransaction(root, async (tx) => {
+      expect(['process-one', 'process-two']).toContain(tx.read()?.runId);
+    });
+  });
+
   it('rejects corrupt, unknown, symlinked and hard-linked databases', async () => {
     const corrupt = await project();
     await mkdir(join(corrupt, '.loom'));
     await writeFile(join(corrupt, '.loom', 'project-claim.sqlite'), 'not sqlite');
     await expect(withProjectClaimTransaction(corrupt, async () => undefined))
+      .rejects.toMatchObject({ code: 'PROJECT_CLAIM_UNSAFE' });
+
+    const incomplete = await project();
+    await mkdir(join(incomplete, '.loom'));
+    await writeFile(join(incomplete, '.loom', 'project-claim.sqlite'), '');
+    await expect(withProjectClaimTransaction(incomplete, async () => undefined))
       .rejects.toMatchObject({ code: 'PROJECT_CLAIM_UNSAFE' });
 
     const unknown = await project();

@@ -48,6 +48,10 @@ import { createDiscoveryWorkspaceService, DiscoveryWorkspaceError } from './runs
 import { DiscoveryHandoffError, prepareDiscoveryHandoff } from './catalog/discovery-handoff.js';
 import { ReviewedStartError, reviewedStartSchema, reviewRunStart } from './runs/reviewed-start.js';
 import { withWorkspaceLifecycleLock } from './runs/workspace-lock.js';
+import { ProjectClaimError } from '../shared/project-claim.js';
+import { ProjectCoordinationError, reviewProjectCoordination } from '../shared/project-coordination.js';
+import { coordinationActionSchema, executeCoordinationAction, ProjectCoordinationActionError } from './projects/coordination.js';
+import { ProjectRunRecordsError } from '../shared/project-run-records.js';
 import {
   TerminalTransportError,
   type TerminalAttachment,
@@ -103,7 +107,9 @@ function failure(error: unknown): ControlResponse {
       error instanceof RunError || error instanceof AutomaticRunnerError ||
       error instanceof SupervisedRunnerError || error instanceof RunPromptError ||
       error instanceof TerminalTransportError || error instanceof DiscoveryWorkspaceError ||
-      error instanceof DiscoveryHandoffError || error instanceof ReviewedStartError) {
+      error instanceof DiscoveryHandoffError || error instanceof ReviewedStartError ||
+      error instanceof ProjectClaimError || error instanceof ProjectCoordinationError || error instanceof ProjectCoordinationActionError ||
+      error instanceof ProjectRunRecordsError) {
     if (error instanceof BundleError) {
       return { protocolVersion: VERSION, ok: false, error: { code: error.code, message: error.message } };
     }
@@ -303,6 +309,18 @@ async function dispatch(
     case 'project.open': {
       const request = parse(z.strictObject({ path: z.string().min(1).max(4096) }));
       return { project: await services.projectRegistry.openProject(request.path) };
+    }
+    case 'project.coordination.review': {
+      const request = parse(z.strictObject({ projectId: z.string().max(255) }));
+      return {
+        review: await reviewProjectCoordination(await projectPath(request.projectId)),
+        executionCoordinated: false,
+      };
+    }
+    case 'project.coordination.action': {
+      const request = parse(z.strictObject({ projectId: z.string().max(255), request: coordinationActionSchema }));
+      if (runOwner === undefined) throw new ControlError('CONTROL_UNAVAILABLE', 'Run ownership is unavailable.');
+      return executeCoordinationAction(await projectPath(request.projectId), configStore.getConfigDir(), runOwner, request.request);
     }
     case 'draft.list':
       parse(z.strictObject({}));

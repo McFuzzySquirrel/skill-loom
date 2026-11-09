@@ -1,5 +1,6 @@
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, realpath, stat } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { link, lstat, mkdir, open, realpath, stat, unlink } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
@@ -62,7 +63,7 @@ function unsafe(message: string, cause?: unknown): ProjectClaimError {
 }
 
 async function ensureDatabase(projectPath: string): Promise<{
-  identity: ProjectClaimTransaction['identity']; path: string; created: boolean;
+  identity: ProjectClaimTransaction['identity']; path: string;
 }> {
   if (!isAbsolute(projectPath) || projectPath.includes('\0')) {
     throw unsafe('The project path must be absolute.');
@@ -82,20 +83,37 @@ async function ensureDatabase(projectPath: string): Promise<{
   }
   await ensureIgnored(loom);
   const path = join(loom, DATABASE_NAME);
-  let created = false;
   try {
-    const file = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+    await lstat(path);
+  } catch (error) {
+    if (!isErrno(error, 'ENOENT')) throw unsafe('The project claim database could not be inspected.', error);
+    const temporary = `${path}.${randomUUID()}.tmp`;
+    const file = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+    await file.close();
     try {
-      await file.sync();
+      const database = new DatabaseSync(temporary);
+      try {
+        database.exec(`PRAGMA synchronous = FULL; BEGIN EXCLUSIVE; ${CREATE_TABLE}; ${CREATE_PROTOCOL}; PRAGMA user_version = ${DATABASE_VERSION}; PRAGMA application_id = ${APPLICATION_ID}; COMMIT`);
+      } finally {
+        database.close();
+      }
+      try {
+        await link(temporary, path);
+        await syncDirectory(loom);
+      } catch (linkError) {
+        if (!isErrno(linkError, 'EEXIST')) throw linkError;
+      }
     } finally {
-      await file.close();
+      await unlink(temporary);
     }
     await syncDirectory(loom);
-    created = true;
-  } catch (error) {
-    if (!isErrno(error, 'EEXIST')) throw unsafe('The project claim database could not be created.', error);
   }
-  const info = await lstat(path);
+  let info = await lstat(path);
+  // Publication briefly creates a second link; never accept a persistent hard link.
+  for (let attempt = 0; info.nlink !== 1 && attempt < 10; attempt++) {
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
+    info = await lstat(path);
+  }
   if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.size > MAX_DATABASE_BYTES ||
       resolve(await realpath(path)) !== path) {
     throw unsafe('The project claim database is unsafe.');
@@ -114,7 +132,6 @@ async function ensureDatabase(projectPath: string): Promise<{
   return {
     identity: { projectPath: project, projectDevice: String(projectInfo.dev), projectInode: String(projectInfo.ino) },
     path,
-    created,
   };
 }
 
@@ -187,10 +204,22 @@ export async function withProjectClaimTransaction<T>(
   if (!isAbsolute(projectPath) || projectPath.includes('\0')) {
     throw unsafe('The project path must be absolute.');
   }
-  const canonical = await realpath(projectPath);
+  let canonical: string;
+  try {
+    canonical = await realpath(projectPath);
+  } catch (error) {
+    throw unsafe('The project coordination path could not be resolved.', error);
+  }
   const previous = queues.get(canonical) ?? Promise.resolve();
   const operation = previous.then(async () => {
-    const { identity, path, created } = await ensureDatabase(canonical);
+    let identity: ProjectClaimTransaction['identity'];
+    let path: string;
+    try {
+      ({ identity, path } = await ensureDatabase(canonical));
+    } catch (error) {
+      if (error instanceof ProjectClaimError) throw error;
+      throw unsafe('The project claim database could not be prepared.', error);
+    }
     let database: DatabaseSync | undefined;
     let begun = false;
     let active = true;
@@ -201,14 +230,7 @@ export async function withProjectClaimTransaction<T>(
       begun = true;
       const versionRow = database.prepare('PRAGMA user_version').get();
       const version = versionRow?.user_version;
-      if (created) {
-        if (version !== 0) throw unsafe('A new project claim database has an unexpected version.');
-        database.exec(`${CREATE_TABLE}; ${CREATE_PROTOCOL}; PRAGMA user_version = ${DATABASE_VERSION}; PRAGMA application_id = ${APPLICATION_ID}`);
-        database.exec('COMMIT');
-        begun = false;
-        database.exec('BEGIN EXCLUSIVE');
-        begun = true;
-      } else if (version !== DATABASE_VERSION) {
+      if (version !== DATABASE_VERSION) {
         throw unsafe('The project claim database has an unsupported or incomplete version.');
       }
       const application = database.prepare('PRAGMA application_id').get();

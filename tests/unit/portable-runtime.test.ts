@@ -1,12 +1,16 @@
 import { createHash } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
-import { chmod, mkdtemp, mkdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdtemp, mkdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { executePortableRequest, packageFingerprint, treeFingerprint, type PackageTreeEntry } from '../../src/portable/runtime.js';
 import type { ChainBundle } from '../../src/shared/bundles.js';
 import { scanProjectRunRecords } from '../../src/shared/project-run-records.js';
+import {
+  acquireProjectRunClaim, adoptReviewedLegacyRun, clearReviewedProjectClaim, enableReviewedProjectProtocol,
+  requireProjectRunClaim, reviewProjectCoordination,
+} from '../../src/shared/project-coordination.js';
 
 let root: string;
 let project: string;
@@ -94,6 +98,70 @@ function command(
 }
 
 describe('portable bundle execution', () => {
+  it('retains a portable claim through mutations and terminal status until separately cleared', async () => {
+    const initial = await reviewProjectCoordination(project);
+    await enableReviewedProjectProtocol(project, initial.reviewDigest, true);
+    const prepared = await prepare();
+    const claim = await requireProjectRunClaim(project, { kind: 'portable', runId: prepared.runId });
+    await expect(prepare({ reuseSkills: ['review'] }))
+      .rejects.toMatchObject({ code: 'PROJECT_CLAIM_CONFLICT' });
+    const started = await command('step', prepared.runId, prepared.revision, { confirmed: true }) as { revision: number };
+    const done = await command('record', prepared.runId, started.revision, { outcome: 'done', confirmed: true }) as { revision: number };
+    const aborted = await command('record', prepared.runId, done.revision, { action: 'abort' }) as { status: string };
+    expect(aborted.status).toBe('aborted');
+    const review = await reviewProjectCoordination(project);
+    expect(review.claim).toEqual(claim);
+    expect(review.records).toEqual([expect.objectContaining({ runId: prepared.runId, unresolved: false })]);
+    await expect(clearReviewedProjectClaim(project, review.reviewDigest, false, true))
+      .rejects.toMatchObject({ code: 'PROJECT_CONFIRMATION_REQUIRED' });
+    await clearReviewedProjectClaim(project, review.reviewDigest, true, true);
+    expect((await reviewProjectCoordination(project)).claim).toBeNull();
+  });
+
+  it('keeps a claim when preparation fails after claiming but before creating a run', async () => {
+    const existing = join(project, '.agents', 'skills', 'review');
+    await mkdir(existing, { recursive: true });
+    await writeFile(join(existing, 'SKILL.md'), skillText);
+    const initial = await reviewProjectCoordination(project);
+    await enableReviewedProjectProtocol(project, initial.reviewDigest, true);
+    await expect(prepare()).rejects.toMatchObject({ code: 'PACKAGE_CONFLICT' });
+    const review = await reviewProjectCoordination(project);
+    expect(review.claim).toMatchObject({ kind: 'portable' });
+    expect(review.records).toEqual([]);
+    expect(await readFile(join(existing, 'SKILL.md'), 'utf8')).toBe(skillText);
+    await clearReviewedProjectClaim(project, review.reviewDigest, true, true);
+  });
+
+  it('does not install packages when a managed run claims the project', async () => {
+    const initial = await reviewProjectCoordination(project);
+    await enableReviewedProjectProtocol(project, initial.reviewDigest, true);
+    const claim = await acquireProjectRunClaim(project, 'managed', 'managed-owner');
+    await expect(prepare()).rejects.toMatchObject({ code: 'PROJECT_CLAIM_CONFLICT' });
+    expect((await reviewProjectCoordination(project)).claim).toEqual(claim);
+    await expect(access(join(project, '.agents', 'skills', 'review'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('blocks unclaimed legacy mutations after enablement until explicitly adopted', async () => {
+    const prepared = await prepare();
+    const initial = await reviewProjectCoordination(project);
+    await enableReviewedProjectProtocol(project, initial.reviewDigest, true);
+    const file = join(project, '.loom', 'portable-runs', `${prepared.runId}.json`);
+    const original = await readFile(file, 'utf8');
+    for (const [operation, input] of [
+      ['step', { confirmed: true }],
+      ['record', { action: 'abort' }],
+      ['resume', { stoppedConfirmed: true }],
+    ] as const) {
+      await expect(command(operation, prepared.runId, prepared.revision, input))
+        .rejects.toMatchObject({ code: 'PROJECT_CLAIM_MISMATCH' });
+      expect(await readFile(file, 'utf8')).toBe(original);
+    }
+    const review = await reviewProjectCoordination(project);
+    await adoptReviewedLegacyRun(project, { kind: 'portable', runId: prepared.runId }, review.reviewDigest, true, true);
+    expect(await command('step', prepared.runId, prepared.revision, { confirmed: true }))
+      .toMatchObject({ ok: true, attempt: 1 });
+  });
+
   it('reports an unresolved portable run to the shared project record scanner', async () => {
     const result = await prepare();
     expect(await scanProjectRunRecords(project)).toEqual([expect.objectContaining({
@@ -119,8 +187,10 @@ describe('portable bundle execution', () => {
       await writeFile(join(project, '.loom', '.gitignore'), existing);
       const result = await prepare();
       expect(await readFile(join(project, '.loom', '.gitignore'), 'utf8'))
-        .toBe(expected);
-      for (const path of ['.loom/runs/example.json', `.loom/portable-runs/${result.runId}.json`]) {
+        .toBe(`${expected}project-claim.sqlite*\n`);
+      for (const path of ['.loom/runs/example.json', `.loom/portable-runs/${result.runId}.json`,
+        '.loom/project-claim.sqlite', '.loom/project-claim.sqlite-journal',
+        '.loom/project-claim.sqlite-wal', '.loom/project-claim.sqlite-shm']) {
         execFileSync('git', ['-C', project, 'check-ignore', '--quiet', path]);
       }
     },
@@ -130,8 +200,10 @@ describe('portable bundle execution', () => {
     execFileSync('git', ['init', '--quiet', project]);
     const result = await prepare();
     expect(await readFile(join(project, '.loom', '.gitignore'), 'utf8'))
-      .toBe('runs/\nportable-runs/\n');
-    for (const path of ['.loom/runs/example.json', `.loom/portable-runs/${result.runId}.json`]) {
+      .toBe('runs/\nportable-runs/\nproject-claim.sqlite*\n');
+    for (const path of ['.loom/runs/example.json', `.loom/portable-runs/${result.runId}.json`,
+      '.loom/project-claim.sqlite', '.loom/project-claim.sqlite-journal',
+      '.loom/project-claim.sqlite-wal', '.loom/project-claim.sqlite-shm']) {
       execFileSync('git', ['-C', project, 'check-ignore', '--quiet', path]);
     }
   });
@@ -406,7 +478,11 @@ describe('portable bundle execution', () => {
       .resolves.toMatchObject({ runId: first.runId });
   });
 
-  it('admits only one of two concurrent portable helper processes', async () => {
+  it.each(['legacy', 'enabled'] as const)('admits only one concurrent portable helper in %s mode', async (mode) => {
+    if (mode === 'enabled') {
+      const review = await reviewProjectCoordination(project);
+      await enableReviewedProjectProtocol(project, review.reviewDigest, true);
+    }
     const inspected = await executePortableRequest({ command: 'inspect', projectPath: project, bundlePath }) as {
       reviewDigest: string;
     };
@@ -422,7 +498,7 @@ describe('portable bundle execution', () => {
       process.exitCode = await runPortableCli(['prepare', '--project', process.argv[1], '--bundle', process.argv[2]]);
     `;
     const invoke = () => new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
-      const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script, project, bundlePath],
+      const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', '--import', 'tsx', '--input-type=module', '-e', script, project, bundlePath],
         { cwd: process.cwd(), stdio: 'pipe' });
       let stdout = '';
       let stderr = '';
@@ -434,10 +510,17 @@ describe('portable bundle execution', () => {
     });
     const results = await Promise.all([invoke(), invoke()]);
     expect(results.filter((result) => result.code === 0)).toHaveLength(1);
+    const success = JSON.parse(results.find((result) => result.code === 0)!.stdout) as { runId: string };
     const rejected = results.find((result) => result.code !== 0)!;
-    expect(['RUN_LOCKED', 'RUN_ACTIVE_CONFLICT', 'REVIEW_STALE'])
+    expect(['RUN_LOCKED', 'RUN_ACTIVE_CONFLICT', 'REVIEW_STALE', 'PROJECT_CLAIM_BUSY'])
       .toContain((JSON.parse(rejected.stderr) as { error: { code: string } }).error.code);
-    await expect(prepare({ reuseSkills: ['review'] })).rejects.toMatchObject({ code: 'RUN_ACTIVE_CONFLICT' });
+    const review = await reviewProjectCoordination(project);
+    expect(review.records).toEqual([expect.objectContaining({ kind: 'portable', runId: success.runId, unresolved: true })]);
+    if (mode === 'enabled') expect(review.claim).toMatchObject({ kind: 'portable', runId: success.runId });
+    else expect(review.claim).toBeNull();
+    await expect(prepare({ reuseSkills: ['review'] })).rejects.toMatchObject({
+      code: mode === 'enabled' ? 'PROJECT_CLAIM_CONFLICT' : 'RUN_ACTIVE_CONFLICT',
+    });
   });
 
   it('blocks a step when another unfinished legacy portable run exists', async () => {

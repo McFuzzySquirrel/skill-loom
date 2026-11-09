@@ -229,6 +229,8 @@ export interface SupervisedRunnerOptions {
   readonly maxTailBytes?: number | undefined;
   /** Optional atomic persistence callback owned by the orchestrator/store. */
   readonly persist?: ((run: Run) => void | Promise<void>) | undefined;
+  /** Serialize process-exit updates with project coordination. */
+  readonly coordinate?: (<T>(task: () => Promise<T>) => Promise<T>) | undefined;
   /** Event listener for the live terminal and step-state stream. */
   readonly onEvent?: ((event: SupervisedRunEvent) => void) | undefined;
 }
@@ -285,6 +287,7 @@ export class SupervisedRunner {
   private readonly maxTailLines: number;
   private readonly maxTailBytes: number;
   private readonly persistHook: ((run: Run) => void | Promise<void>) | undefined;
+  private readonly coordinate: <T>(task: () => Promise<T>) => Promise<T>;
   private readonly listeners = new Set<(event: SupervisedRunEvent) => void>();
 
   private pty: SupervisedPty | null = null;
@@ -366,6 +369,7 @@ export class SupervisedRunner {
       'maxTailBytes',
     );
     this.persistHook = options.persist;
+    this.coordinate = options.coordinate ?? (async (task) => task());
 
     if (options.onEvent !== undefined) {
       if (typeof options.onEvent !== 'function') {
@@ -1027,6 +1031,16 @@ export class SupervisedRunner {
     token: symbol | null,
     event: TerminalExit,
   ): void {
+    void this.coordinate(() => this.handleCoordinatedExit(stepIndex, token, event)).catch(() => {
+      console.error(`Skill Loom could not record the process exit for run ${this.runValue.id}; review project ownership and storage.`);
+    });
+  }
+
+  private async handleCoordinatedExit(
+    stepIndex: number,
+    token: symbol | null,
+    event: TerminalExit,
+  ): Promise<void> {
     if (this.disposedValue) {
       return;
     }
@@ -1063,7 +1077,7 @@ export class SupervisedRunner {
     if (step.status === 'running' && event.exitCode !== 0) {
       this.emit('run-paused', step, { reason: step.reason });
     }
-    void this.persistQuietly();
+    if (this.persistHook !== undefined) await this.persistHook(this.getRun());
   }
 
   private finishObservation(): void {
@@ -1162,18 +1176,6 @@ export class SupervisedRunner {
     this.runValue.reason = reason;
     this.runValue.updatedAt = timestamp;
     await this.emitAndPersist('step-failed', step, { reason });
-  }
-
-  private async persistQuietly(): Promise<void> {
-    if (this.persistHook === undefined) {
-      return;
-    }
-    try {
-      await this.persistHook(this.getRun());
-    } catch {
-      // Live output persistence is best-effort; transition actions surface
-      // persistence failures through emitAndPersist instead.
-    }
   }
 
   private async emitAndPersist(

@@ -46,7 +46,9 @@ investigating the reported error.
   test-workspace lifecycle, run status, and explicit abort. Draft editing,
   managed-run start and other actions, event streams, and terminal attachment
   remain unimplemented.
-- SQLite ownership and this transport do not coordinate the portable runner.
+- The profile ownership lock and this transport alone do not coordinate the
+  portable runner. A separate opt-in project claim protocol now coordinates
+  participating managed and portable runners; older clients remain outside it.
 
 ## Verify
 

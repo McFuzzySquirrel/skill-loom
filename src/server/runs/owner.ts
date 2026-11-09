@@ -47,6 +47,7 @@ export interface RunOwner {
   get(): Promise<RunOrchestrator>;
   recoverIfConfigured(): Promise<void>;
   withMutation<T>(task: () => Promise<T>): Promise<T>;
+  withExclusiveMutation<T>(task: () => Promise<T>): Promise<T>;
   blockMutations(): boolean;
   unblockMutations(): void;
   shutdown(): Promise<void>;
@@ -149,6 +150,21 @@ export function createRunOwner(options: RunOwnerOptions): RunOwner {
         return await task();
       } finally {
         mutations -= 1;
+        if (mutations === 0 && mutationsDrained !== null) {
+          mutationsDrained();
+          mutationsDrained = null;
+        }
+      }
+    },
+    async withExclusiveMutation<T>(task: () => Promise<T>): Promise<T> {
+      if (blocked || closing || mutations !== 0) throw new RunOwnerError();
+      blocked = true;
+      mutations += 1;
+      try {
+        return await task();
+      } finally {
+        mutations -= 1;
+        if (!closing) blocked = false;
         if (mutations === 0 && mutationsDrained !== null) {
           mutationsDrained();
           mutationsDrained = null;

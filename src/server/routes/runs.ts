@@ -1,5 +1,8 @@
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { z } from 'zod';
+import { ProjectClaimError } from '../../shared/project-claim.js';
+import { ProjectCoordinationError } from '../../shared/project-coordination.js';
+import { ProjectRunRecordsError } from '../../shared/project-run-records.js';
 import {
   API_ERROR_CODES,
   createApiErrorEnvelope,
@@ -224,6 +227,7 @@ const STATUS_BY_ORCHESTRATOR_CODE: Record<
   RUN_RECOVERY_STEP_INVALID: 409,
   RUN_RECOVERY_NO_PENDING: 409,
   RUN_START_FAILED: 500,
+  RUN_COORDINATION_REQUIRED: 409,
 };
 
 /** Chain storage failures can surface while resolving the saved chain. */
@@ -562,6 +566,13 @@ function sendSocket(socket: RunEventSocket, message: unknown): void {
 }
 
 function sendFailure(reply: FastifyReply, error: unknown): FastifyReply {
+  if (error instanceof ProjectClaimError) {
+    return reply.code(error.code === 'PROJECT_CLAIM_UNSAFE' ? 500 : 409)
+      .send(createApiErrorEnvelope(error.code, error.message));
+  }
+  if (error instanceof ProjectCoordinationError || error instanceof ProjectRunRecordsError) {
+    return reply.code(409).send(createApiErrorEnvelope(error.code, error.message));
+  }
   if (error instanceof RunOwnerError) {
     return reply.code(409).send(createApiErrorEnvelope(error.code, error.message));
   }

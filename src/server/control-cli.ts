@@ -8,6 +8,8 @@ import { attachControlTerminal, callControl, ControlError, streamControlEvents }
 const HELP = `Usage:
   skill-loom project list [--config-dir <path>]
   skill-loom project open [--config-dir <path>]                 # JSON on stdin
+  skill-loom project coordination-review [--config-dir <path>]  # JSON on stdin
+  skill-loom project coordination-action [--config-dir <path>]  # JSON on stdin
   skill-loom chain draft list [--config-dir <path>]
   skill-loom chain draft show --draft <id> [--config-dir <path>]
   skill-loom chain draft create|validate [--config-dir <path>]   # JSON on stdin
@@ -26,7 +28,12 @@ const HELP = `Usage:
   skill-loom workspace list [--config-dir <path>]
   skill-loom workspace create|inspect|evaluate|remove [--config-dir <path>]  # JSON on stdin
 
-Project open reads {"path":"/absolute/project"}. Chain project list reads
+Project open reads {"path":"/absolute/project"}. Coordination review reads
+{"projectId":"..."}, initializes project coordination files if needed, and does
+not coordinate execution.
+Coordination actions read {"projectId":"...","request":{...}} and require
+the current review digest and explicit confirmations for the selected action.
+Chain project list reads
 {"projectId":"..."}, and show also requires "chainId". Updates require a
 reviewed "expectedRevision" and "draft"; removes require "expectedRevision"
 and "confirmed":true. Draft create and validate
@@ -54,6 +61,8 @@ export async function runControlCli(
     const operations: Record<string, { operation: string; input: 'none' | 'json' | 'draft' | 'run' }> = {
       'project list': { operation: 'project.list', input: 'none' },
       'project open': { operation: 'project.open', input: 'json' },
+      'project coordination-review': { operation: 'project.coordination.review', input: 'json' },
+      'project coordination-action': { operation: 'project.coordination.action', input: 'json' },
       'chain draft list': { operation: 'draft.list', input: 'none' },
       'chain draft show': { operation: 'draft.get', input: 'draft' },
       'chain draft create': { operation: 'draft.create', input: 'json' },

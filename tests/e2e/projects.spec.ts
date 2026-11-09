@@ -130,6 +130,57 @@ async function openProjectViaApi(
 }
 
 test.describe('Project selection screen', () => {
+  test('reviews coordination with the keyboard and reports unsafe run records', async ({ page, request }) => {
+    const projectPath = join(fixtureRoot, 'coordination-review');
+    await mkdir(projectPath);
+    const project = await openProjectViaApi(request, projectPath);
+    await page.goto(`/projects/${project.id}`);
+    await expandProjectDetails(page);
+    const button = page.getByRole('button', { name: 'Review coordination' });
+    await tabToFocused(page, button, 'coordination review');
+    await page.keyboard.press('Enter');
+    await expect(page.getByText('Protocol: Not enabled.')).toBeVisible();
+    await expect(page.getByText('No run records found.')).toBeVisible();
+    await expect(page.getByText('Execution coordinated: No.', { exact: false })).toBeVisible();
+    await expect(page.getByRole('status')).toHaveText('Project coordination review is ready. Execution is not coordinated.');
+    await mkdir(join(projectPath, '.loom', 'runs'));
+    await writeFile(join(projectPath, '.loom', 'runs', 'run-broken.json'), '{broken');
+    await button.click();
+    await expect(page.getByText(/Coordination failed:.*PROJECT_RUN_RECORDS_UNSAFE/)).toBeVisible();
+    await expect(page.getByRole('status')).toContainText('Project coordination review failed:');
+  });
+
+  test('enables coordination only after separate keyboard confirmations', async ({ page, request }) => {
+    const projectPath = join(fixtureRoot, 'coordination-enable');
+    await mkdir(projectPath);
+    const project = await openProjectViaApi(request, projectPath);
+    await page.goto(`/projects/${project.id}`);
+    await expandProjectDetails(page);
+    const review = page.getByRole('button', { name: 'Review coordination' });
+    await review.click();
+    const enable = page.getByRole('button', { name: 'Enable coordination' });
+    await expect(enable).toBeDisabled();
+    const older = page.getByRole('checkbox', { name: 'I confirmed older Skill Loom services and helpers have stopped.' });
+    const stopped = page.getByRole('checkbox', { name: 'I confirmed previous work and all its processes and descendants have stopped.' });
+    await tabToFocused(page, older, 'older clients confirmation');
+    await page.keyboard.press('Space');
+    await expect(enable).toBeDisabled();
+    await tabToFocused(page, stopped, 'prior work confirmation');
+    await page.keyboard.press('Space');
+    await expect(enable).toBeEnabled();
+    await tabToFocused(page, enable, 'enable coordination');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#main-content').getByText('Coordination action applied. Review again before another action.')).toBeVisible();
+    await expect(page.getByRole('status')).toHaveText('Coordination action applied. Review again before another action.');
+    await expect(review).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByText(/^Protocol: Enabled at/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Enable coordination' })).toHaveCount(0);
+    const response = await request.post(`/api/projects/${project.id}/coordination-review`);
+    expect(response.ok()).toBe(true);
+    expect((await response.json()).review.protocol).not.toBeNull();
+  });
+
   test('browses directories with Up and opens an existing project', async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
 

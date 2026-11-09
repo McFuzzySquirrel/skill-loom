@@ -351,25 +351,61 @@ unfinished portable run is recorded in the project. The bounded conflict scan
 fails closed on unsafe or corrupt records and at more than 1,000 other records
 or 64 MiB of records. Archive completed records only while no helper can access
 them; do not overwrite or delete corrupt records to bypass the check.
-Portable runs, managed runs from different profiles, and older helpers do not
-coordinate project ownership. Arrange exclusive project use manually from
+Without the opt-in protocol, portable runs and managed runs from different
+profiles do not coordinate project ownership; older helpers never participate.
+Arrange exclusive project use manually from
 before installation or execution until completion or explicit abort; status
 checks do not lock the project. If exclusive use cannot be established, stop.
-Do not start a second profile that knows the project while a managed run is
-active. Recovery leaves records not named by its own profile pointer unchanged
+Portable mutations now initialize a project-local SQLite coordination database
+and its ignore rule. If the protocol is enabled, portable preparation
+claims the project before installation and later mutations require that claim;
+the claim persists after failures, completion, and abort. Managed starts also
+claim before run creation, and managed actions and automatic transitions check
+the claim. Process-tree cleanup remains unverified. Do not delete the database to
+bypass an error. Initial
+publication requires hard-link support on the project filesystem; an interrupted
+publication can leave an extra link that must be investigated, not ignored.
+Before enabling coordination, do not start a second profile that knows the
+project while a managed run is active. Recovery leaves records not named by its own profile pointer unchanged
 and logs `RUN_RECOVERY_AMBIGUOUS`, but a matching stale pointer is not proof of
-ownership, and profiles still do not coordinate starts.
+ownership.
 Recovery of a matching pointer initializes `<project>/.loom/project-claim.sqlite`
 and an ignore rule for it and its SQLite sidecars. Do not remove or replace this
 database while a service is running. If a claim exists or project coordination
 has been enabled, recovery instead preserves the run and pointer and logs
-`RUN_RECOVERY_CLAIMED`; reviewed reconciliation is not yet available in the
-UI or CLI. Corrupt or unsafe coordination data blocks recovery rather than
-being replaced. This partial safeguard does not coordinate run starts or actions.
-If this warning appears, stop and establish whether another service or host is
-still working in the project; do not treat the warning as proof that the run
-has stopped. There is not yet a coordinated reconciliation command for an
-ambiguous record.
+`RUN_RECOVERY_CLAIMED`. Corrupt or unsafe coordination data blocks recovery rather than
+being replaced. Managed starts, actions, automatic transitions, and shutdown
+use the claim protocol when enabled; claims are retained for separate
+review and release. Continue arranging manual separation from older clients
+and unrelated processes.
+With the service running, `skill-loom project coordination-review` accepts
+`{"projectId":"..."}` on stdin and returns the project identity, protocol and
+claim state, bounded run-record summaries, and a review digest. It initializes
+the database and ignore rule if needed but does not change run records or
+resolve ownership. Its `executionCoordinated: false` result means the review
+itself is not a lock or proof that all processes participate.
+In the project page, expand **Project details** and select **Review
+coordination** to inspect the same evidence. Nonparticipating run writers can
+change records during or after review; neither review is a lock, confirmation
+that work has stopped, or an authorization to start a run.
+
+After review, use **Enable coordination**, **Adopt reviewed run**, **Mark claimed
+managed run interrupted**, **Abandon interrupted managed run**, or **Clear
+reviewed claim** as applicable. Each action requires a fresh review digest and
+explicit confirmations that older clients and prior work, including descendants,
+have stopped. Abandonment requires an additional choice and never replays.
+Resolve an unfinished portable run with its helper before clearing. The service
+refuses actions while it owns a live run; stopped confirmations are operator
+assertions and do not prove process-tree cleanup.
+
+The equivalent `skill-loom project coordination-action` accepts structured stdin
+in the shape `{"projectId":"...","request":{...}}`. Every request includes
+`reviewDigest`, `stoppedConfirmed: true`, and
+`oldClientsStoppedConfirmed: true`. `action` is `enable`, `adopt`, `interrupt`,
+`abandon`, or `clear`; `adopt` also needs `kind` and `runId`, `interrupt` and
+`abandon` need `runId`, and `abandon` additionally needs
+`abandonConfirmed: true`. Review again between actions. If the response is lost,
+inspect current evidence before retrying instead of assuming rollback.
 If `RUN_ACTIVE_POINTER_CORRUPT` prevents startup, Skill Loom leaves the pointer
 and run files unchanged. Stop and establish that no earlier work or processes
 remain before inspecting the file or restoring a verified backup. Do not delete

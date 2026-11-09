@@ -259,6 +259,8 @@ export interface AutomaticRunnerOptions {
   readonly timers?: AutomaticTimers | undefined;
   /** Optional atomic persistence callback owned by the orchestrator/store. */
   readonly persist?: ((run: Run) => void | Promise<void>) | undefined;
+  /** Serialize signal transitions and dispatched actions with project coordination. */
+  readonly coordinate?: (<T>(task: () => Promise<T>) => Promise<T>) | undefined;
   /** Event listener for the live terminal and step-state stream. */
   readonly onEvent?: ((event: AutomaticRunEvent) => void) | undefined;
 }
@@ -324,6 +326,7 @@ export class AutomaticRunner {
   private readonly stepTimeoutMs: number;
   private readonly timers: AutomaticTimers;
   private readonly persistHook: ((run: Run) => void | Promise<void>) | undefined;
+  private readonly coordinate: <T>(task: () => Promise<T>) => Promise<T>;
   private readonly listeners = new Set<(event: AutomaticRunEvent) => void>();
 
   private sessionPlanValue: RunSessionPlan | null = null;
@@ -412,6 +415,7 @@ export class AutomaticRunner {
     this.stepTimeoutMs = positiveTimeout(options.stepTimeoutMs);
     this.timers = options.timers ?? DEFAULT_TIMERS;
     this.persistHook = options.persist;
+    this.coordinate = options.coordinate ?? (async (task) => task());
 
     if (options.onEvent !== undefined) {
       if (typeof options.onEvent !== 'function') {
@@ -645,10 +649,10 @@ export class AutomaticRunner {
    * Start the next pending step after a pause. This is the automatic-mode
    * "Run next" control and never changes the run mode.
    */
-  async runNext(): Promise<Run> {
+  async runNext(waitForTransitions = true): Promise<Run> {
     this.assertStarted();
     this.assertNotFinal();
-    await this.whenSettled();
+    if (waitForTransitions) await this.whenSettled();
     if (this.current?.process.isRunning() === true) {
       throw new AutomaticRunnerError(
         AUTOMATIC_RUNNER_ERROR_CODES.PROCESS_STILL_RUNNING,
@@ -708,10 +712,10 @@ export class AutomaticRunner {
    * pause flag is cleared so the current signal can advance normally. If the
    * step already finished, this behaves like Run next.
    */
-  async resume(): Promise<Run> {
+  async resume(waitForTransitions = true): Promise<Run> {
     this.assertStarted();
     this.assertNotFinal();
-    await this.whenSettled();
+    if (waitForTransitions) await this.whenSettled();
     if (this.runValue.status !== 'paused') {
       return this.getRun();
     }
@@ -723,7 +727,7 @@ export class AutomaticRunner {
       await this.emitAndPersist('run-resumed', this.currentStepOrNull());
       return this.getRun();
     }
-    return this.runNext();
+    return this.runNext(waitForTransitions);
   }
 
   /**
@@ -731,9 +735,9 @@ export class AutomaticRunner {
    * planned session id. Retry never reads the saved chain and never replays
    * another step.
    */
-  async retry(): Promise<Run> {
+  async retry(waitForTransitions = true): Promise<Run> {
     this.assertCanAct();
-    await this.whenSettled();
+    if (waitForTransitions) await this.whenSettled();
     if (!this.canRetry) {
       throw new AutomaticRunnerError(
         AUTOMATIC_RUNNER_ERROR_CODES.RETRY_NOT_AVAILABLE,
@@ -754,9 +758,9 @@ export class AutomaticRunner {
    * Record the current step as skipped and keep the run paused. The next step
    * starts only when the user explicitly chooses Run next.
    */
-  async skip(reason: string): Promise<Run> {
+  async skip(reason: string, waitForTransitions = true): Promise<Run> {
     this.assertCanAct();
-    await this.whenSettled();
+    if (waitForTransitions) await this.whenSettled();
     if (!this.canSkip) {
       throw new AutomaticRunnerError(
         AUTOMATIC_RUNNER_ERROR_CODES.STEP_NOT_ACTIVE,
@@ -783,9 +787,9 @@ export class AutomaticRunner {
   }
 
   /** Terminate the current process and end the run without replaying steps. */
-  async abort(reason?: string): Promise<Run> {
+  async abort(reason?: string, waitForTransitions = true): Promise<Run> {
     this.assertStarted();
-    await this.whenSettled();
+    if (waitForTransitions) await this.whenSettled();
     if (isFinalStatus(this.runValue.status)) {
       throw new AutomaticRunnerError(
         AUTOMATIC_RUNNER_ERROR_CODES.FINAL_RUN,
@@ -820,7 +824,7 @@ export class AutomaticRunner {
   }
 
   /** Dispatch one action from the API surface with mode-appropriate validation. */
-  async applyAction(request: AutomaticActionRequest): Promise<Run> {
+  async applyAction(request: AutomaticActionRequest, waitForTransitions = true): Promise<Run> {
     if (typeof request !== 'object' || request === null) {
       throw new AutomaticRunnerError(
         AUTOMATIC_RUNNER_ERROR_CODES.ACTION_INVALID,
@@ -832,16 +836,16 @@ export class AutomaticRunner {
       case 'pause':
         return this.pause(request.reason);
       case 'resume':
-        return this.resume();
+        return this.resume(waitForTransitions);
       case 'run-next':
       case 'next':
-        return this.runNext();
+        return this.runNext(waitForTransitions);
       case 'retry':
-        return this.retry();
+        return this.retry(waitForTransitions);
       case 'skip':
-        return this.skip(requireSkipReason(request.reason));
+        return this.skip(requireSkipReason(request.reason), waitForTransitions);
       case 'abort':
-        return this.abort(request.reason);
+        return this.abort(request.reason, waitForTransitions);
       default:
         throw new AutomaticRunnerError(
           AUTOMATIC_RUNNER_ERROR_CODES.ACTION_INVALID,
@@ -884,6 +888,13 @@ export class AutomaticRunner {
       observed = this.transitions;
       await observed;
     } while (observed !== this.transitions);
+  }
+
+  /** Queue an external action in signal order before entering project coordination. */
+  async withSerializedTransition<T>(task: () => Promise<T>): Promise<T> {
+    const result = this.transitions.then(() => this.coordinate(task));
+    this.transitions = result.then(() => undefined, () => undefined);
+    return result;
   }
 
   private async startCurrentStep(mode: 'start' | 'retry' | 'run-next'): Promise<void> {
@@ -1571,7 +1582,7 @@ export class AutomaticRunner {
    */
   private enqueue(task: () => Promise<void>): void {
     this.transitions = this.transitions.then(() => {
-      if (!this.shutdownRequested) return task();
+      if (!this.shutdownRequested) return this.coordinate(task);
     }).catch(async (error: unknown) => {
       if (error instanceof AutomaticRunnerError &&
           error.code !== AUTOMATIC_RUNNER_ERROR_CODES.PERSIST_FAILED &&
