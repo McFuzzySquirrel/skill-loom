@@ -23,6 +23,34 @@ export const workspaceEvaluationSchema = z.strictObject({
   })).min(1).max(20),
 });
 
+const UNSAFE_JSON_NUMBER = Symbol('unsafe JSON number');
+
+function normalizedDecimal(source: string): string | null {
+  const match = /^(-?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(source);
+  if (match === null) return null;
+  const fraction = match[3] ?? '';
+  const digits = `${match[2]}${fraction}`.replace(/^0+/, '');
+  if (digits === '') return '0';
+  const exponent = Number(match[4] ?? '0');
+  if (!Number.isSafeInteger(exponent)) return null;
+  const significant = digits.replace(/0+$/, '');
+  const scale = exponent - fraction.length + digits.length - significant.length;
+  if (!Number.isSafeInteger(scale)) return null;
+  return `${match[1]}${significant}e${String(scale)}`;
+}
+
+function parseEvaluationJson(text: string): unknown {
+  return JSON.parse(text, (_key: string, value: unknown, context?: { source?: string }) => {
+    if (typeof value !== 'number') return value;
+    if (!Number.isFinite(value) || (Number.isInteger(value) && !Number.isSafeInteger(value)) ||
+        context?.source === undefined ||
+        normalizedDecimal(context.source) !== normalizedDecimal(String(value))) {
+      return UNSAFE_JSON_NUMBER;
+    }
+    return value;
+  }) as unknown;
+}
+
 function resolveJsonPointer(value: unknown, pointer: string): { found: boolean; value?: unknown } {
   let current = value;
   for (const encoded of pointer === '' ? [] : pointer.slice(1).split('/')) {
@@ -83,7 +111,7 @@ export async function evaluateTestWorkspace(
     if (text !== undefined && check.json !== undefined) {
       let parsed: unknown;
       try {
-        parsed = JSON.parse(text) as unknown;
+        parsed = parseEvaluationJson(text);
       } catch (error) {
         if (!(error instanceof SyntaxError)) throw error;
         invalidJson = true;
@@ -91,9 +119,7 @@ export async function evaluateTestWorkspace(
       if (!invalidJson) {
         const selected = resolveJsonPointer(parsed, check.json.pointer);
         jsonMissing = !selected.found;
-        unsafeJsonNumber = selected.found && typeof selected.value === 'number' &&
-          (!Number.isFinite(selected.value) ||
-            (Number.isInteger(selected.value) && !Number.isSafeInteger(selected.value)));
+        unsafeJsonNumber = selected.found && selected.value === UNSAFE_JSON_NUMBER;
         jsonMatched = selected.found && !unsafeJsonNumber && selected.value === check.json.equals;
       }
     }

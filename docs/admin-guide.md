@@ -348,8 +348,11 @@ expected SHA-256, a case-sensitive UTF-8 substring, or a JSON scalar check.
 For example, `"json":{"pointer":"/tests/0/passed","equals":true}` selects a
 value using JSON Pointer and compares it with a string, finite number, boolean,
 or null; the empty pointer selects the root. Numbers use JavaScript's
-IEEE 754 comparison, and unsafe integers or non-finite observed values are
-rejected. Pointers and expected strings are limited to 4,096 characters. Omit all expectations to check file
+IEEE 754 comparison. Observed non-finite values, unsafe integers, and numeric
+tokens that change their decimal value when converted to JavaScript's shortest
+number representation fail as `json-number-unsafe`. Expected numeric values
+are also parsed as JavaScript numbers; use a hash check when exact numeric
+text matters. Pointers and expected strings are limited to 4,096 characters. Omit all expectations to check file
 presence only. Substrings must be nonempty and at most 4,096 characters.
 Invalid UTF-8 or JSON fails the applicable check, and all supplied expectations
 must match. Up to 20 files of at most 1 MiB each are read without running commands.

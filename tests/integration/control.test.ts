@@ -945,6 +945,40 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
         { passed: false, outcome: 'json-mismatch', jsonMatched: false },
         { passed: false, outcome: 'json-number-unsafe', jsonMatched: false },
       ] } });
+      await writeFile(join(workspace.path, 'numeric.json'),
+        '{"underflow":1e-4000,"rounded":9007199254740991.1,"precise":1.23456789012345678,' +
+        '"normalized":1.2000e1,"tiny":5e-324,"huge":1e4000,"zero":0e999999999999999999,' +
+        '"max":9007199254740991,"nested":[1e-4000]}');
+      await writeFile(join(workspace.path, 'underflow.json'), '1e-4000');
+      const numericChecks = await callControl(root, 'workspace.evaluate', {
+        workspaceId: workspace.id,
+        checks: [
+          { path: 'numeric.json', json: { pointer: '/underflow', equals: 0 } },
+          { path: 'numeric.json', json: { pointer: '/rounded', equals: 9007199254740991 } },
+          { path: 'numeric.json', json: { pointer: '/precise', equals: 1.2345678901234567 } },
+          { path: 'numeric.json', json: { pointer: '/normalized', equals: 12 } },
+          { path: 'numeric.json', json: { pointer: '/tiny', equals: 5e-324 } },
+          { path: 'numeric.json', json: { pointer: '/huge', equals: 0 } },
+          { path: 'numeric.json', json: { pointer: '/zero', equals: 0 } },
+          { path: 'numeric.json', json: { pointer: '/max', equals: 9007199254740991 } },
+          { path: 'numeric.json', json: { pointer: '/nested/0', equals: 0 } },
+          { path: 'underflow.json', json: { pointer: '', equals: 0 } },
+          { path: 'numeric.json', json: { pointer: '/underflow/value', equals: 0 } },
+        ],
+      });
+      expect(numericChecks).toMatchObject({ ok: true, result: { checks: [
+        { passed: false, outcome: 'json-number-unsafe' },
+        { passed: false, outcome: 'json-number-unsafe' },
+        { passed: false, outcome: 'json-number-unsafe' },
+        { passed: true, outcome: 'matched' },
+        { passed: true, outcome: 'matched' },
+        { passed: false, outcome: 'json-number-unsafe' },
+        { passed: true, outcome: 'matched' },
+        { passed: true, outcome: 'matched' },
+        { passed: false, outcome: 'json-number-unsafe' },
+        { passed: false, outcome: 'json-number-unsafe' },
+        { passed: false, outcome: 'json-pointer-missing' },
+      ] } });
       for (const json of [
         { pointer: '/invalid~2escape', equals: null },
         { pointer: 'relative', equals: null },

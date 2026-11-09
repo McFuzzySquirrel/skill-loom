@@ -194,7 +194,10 @@ An opt-in `workspace evaluate` command checks explicitly named regular files,
 optional SHA-256 values, and case-sensitive UTF-8 substrings without executing
 workspace content. JSON Pointer checks can also compare a selected JSON value
 with an explicitly supplied scalar. Checks are bounded and report observations,
-not semantic correctness. Broader evaluation and
+not semantic correctness. Numeric observations fail closed when conversion
+loses the original JSON token's decimal value; expected numbers are still
+parsed as JavaScript numbers, so hash checks are needed for exact numeric text.
+Broader evaluation and
 end-to-end acceptance remain open.
 CLI discovery handoff preparation now uses the same pinned-candidate validation
 as the UI; it returns complete content to the caller but does not approve
