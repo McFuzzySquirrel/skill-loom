@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -79,19 +79,26 @@ describe('large remote catalog', () => {
   it('enforces mixed skill and native-agent budgets with the real Git blob reader', async () => {
     const root = await mkdtemp(join(tmpdir(), 'loom-git-agent-budget-'));
     roots.push(root);
-    const repository = join(root, 'repository');
-    await mkdir(join(repository, 'skills', 'demo'), { recursive: true });
-    await mkdir(join(repository, '.opencode', 'agents'), { recursive: true });
+    const repository = join(root, 'source.git');
+    execFileSync('git', ['init', '--bare', '--quiet', repository]);
+    const git = (args: string[], input?: string): string => execFileSync(
+      'git', [`--git-dir=${repository}`, ...args], { input, encoding: 'utf8' },
+    ).trim();
     const skill = '---\nname: demo\ndescription: Fixture.\n---\nReview.\n';
     const agent = '---\nmode: primary\ndescription: A reviewer fixture with extra content.\n---\nReview carefully.\n';
-    await writeFile(join(repository, 'skills', 'demo', 'SKILL.md'), skill);
-    await writeFile(join(repository, '.opencode', 'agents', 'reviewer.md'), agent);
-    execFileSync('git', ['init', '--quiet', repository]);
-    execFileSync('git', ['-C', repository, 'add', '.']);
-    execFileSync('git', [
-      '-C', repository, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
-      'commit', '--quiet', '-m', 'Fixture',
-    ]);
+    const skillBlob = git(['hash-object', '-w', '--stdin'], skill);
+    const agentBlob = git(['hash-object', '-w', '--stdin'], agent);
+    const packageTree = git(['mktree'], `100644 blob ${skillBlob}\tSKILL.md\n`);
+    const skillsTree = git(['mktree'], `040000 tree ${packageTree}\tdemo\n`);
+    const agentTree = git(['mktree'], `100644 blob ${agentBlob}\treviewer.md\n`);
+    const openCodeTree = git(['mktree'], `040000 tree ${agentTree}\tagents\n`);
+    const tree = git(['mktree'], `040000 tree ${openCodeTree}\t.opencode\n040000 tree ${skillsTree}\tskills\n`);
+    const commit = git(
+      ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit-tree', tree],
+      'Fixture\n',
+    );
+    git(['update-ref', 'refs/heads/main', commit]);
+    git(['symbolic-ref', 'HEAD', 'refs/heads/main']);
     const config = join(root, 'gitconfig');
     const remote = 'https://example.invalid/agent-budget.git';
     execFileSync('git', ['config', '--file', config, `url.file://${repository}.insteadOf`, remote]);
