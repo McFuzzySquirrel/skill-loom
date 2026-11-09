@@ -8822,44 +8822,44 @@ function em(e, t) {
 	if (!r.success || r.data.projectPath !== t.projectPath || r.data.projectDevice !== t.projectDevice || r.data.projectInode !== t.projectInode) throw X("The project claim is invalid or belongs to another project.");
 	return r.data;
 }
-async function tm(e, t) {
-	return nm(e, t, !1);
+async function tm(e, t, n = !1) {
+	return nm(e, t, !1, n);
 }
-async function nm(e, t, n) {
+async function nm(e, t, n, r) {
 	if (!i(e) || e.includes("\0")) throw X("The project path must be absolute.");
-	let r;
+	let a;
 	try {
-		r = await y(e);
+		a = await y(e);
 	} catch (e) {
 		throw X("The project coordination path could not be resolved.", e);
 	}
-	let a = (Yp.get(r) ?? Promise.resolve()).then(async () => {
+	let o = (Yp.get(a) ?? Promise.resolve()).then(async () => {
 		let e, i;
 		try {
-			({identity: e, path: i} = await Zp(r));
+			({identity: e, path: i} = await Zp(a));
 		} catch (e) {
 			throw e instanceof Y ? e : X("The project claim database could not be prepared.", e);
 		}
-		let a, o = !1, s = !0, c = !1;
+		let o, s = !1, c = !0, l = !1;
 		try {
-			a = new ne(i), a.exec("PRAGMA busy_timeout = 0; PRAGMA synchronous = FULL; BEGIN EXCLUSIVE"), o = !0;
-			let r = a.prepare("PRAGMA user_version").get()?.user_version;
-			if (r !== 1 && r !== zp) throw X("The project claim database has an unsupported or incomplete version.");
-			if (a.prepare("PRAGMA application_id").get()?.application_id !== Bp) throw X("The project claim database identity is invalid.");
-			if (a.prepare("PRAGMA journal_mode").get()?.journal_mode !== "delete") throw X("The project claim database journal mode is unsupported.");
-			let l = a.prepare("SELECT type, name, sql FROM sqlite_master").all();
-			if (l.length !== (r === 1 ? 2 : 3) || !l.some((e) => e.type === "table" && e.name === "claim" && e.sql === Up) || !l.some((e) => e.type === "table" && e.name === "protocol" && e.sql === Wp) || r === zp && !l.some((e) => e.type === "table" && e.name === "lifecycle" && e.sql === Gp)) throw X("The project claim database schema is invalid.");
-			if (a.prepare("PRAGMA quick_check").get()?.quick_check !== "ok") throw X("The project claim database is corrupt.");
-			r === 1 && a.exec(`${Gp}; PRAGMA user_version = ${zp}`);
-			let u = a, d = () => {
-				if (!s) throw X("The project claim transaction is no longer active.");
-				let t = u.prepare("SELECT id, document FROM claim").all();
+			o = new ne(i), o.exec(`PRAGMA busy_timeout = ${r ? 1e3 : 0}; PRAGMA synchronous = FULL; BEGIN EXCLUSIVE`), s = !0;
+			let a = o.prepare("PRAGMA user_version").get()?.user_version;
+			if (a !== 1 && a !== zp) throw X("The project claim database has an unsupported or incomplete version.");
+			if (o.prepare("PRAGMA application_id").get()?.application_id !== Bp) throw X("The project claim database identity is invalid.");
+			if (o.prepare("PRAGMA journal_mode").get()?.journal_mode !== "delete") throw X("The project claim database journal mode is unsupported.");
+			let u = o.prepare("SELECT type, name, sql FROM sqlite_master").all();
+			if (u.length !== (a === 1 ? 2 : 3) || !u.some((e) => e.type === "table" && e.name === "claim" && e.sql === Up) || !u.some((e) => e.type === "table" && e.name === "protocol" && e.sql === Wp) || a === zp && !u.some((e) => e.type === "table" && e.name === "lifecycle" && e.sql === Gp)) throw X("The project claim database schema is invalid.");
+			if (o.prepare("PRAGMA quick_check").get()?.quick_check !== "ok") throw X("The project claim database is corrupt.");
+			a === 1 && o.exec(`${Gp}; PRAGMA user_version = ${zp}`);
+			let d = o, f = () => {
+				if (!c) throw X("The project claim transaction is no longer active.");
+				let t = d.prepare("SELECT id, document FROM claim").all();
 				if (t.length === 0) return null;
 				if (t.length !== 1 || t[0]?.id !== 1) throw X("The project claim database contains invalid rows.");
 				return em(t[0].document, e);
-			}, f = () => {
-				if (!s) throw X("The project claim transaction is no longer active.");
-				let t = u.prepare("SELECT id, document FROM protocol").all();
+			}, p = () => {
+				if (!c) throw X("The project claim transaction is no longer active.");
+				let t = d.prepare("SELECT id, document FROM protocol").all();
 				if (t.length === 0) return null;
 				if (t.length !== 1 || t[0]?.id !== 1 || typeof t[0].document != "string" || Buffer.byteLength(t[0].document, "utf8") > 4096) throw X("The project protocol record is invalid.");
 				let n;
@@ -8871,9 +8871,9 @@ async function nm(e, t, n) {
 				let r = Kp.safeParse(n);
 				if (!r.success || r.data.projectPath !== e.projectPath || r.data.projectDevice !== e.projectDevice || r.data.projectInode !== e.projectInode) throw X("The project protocol record is invalid or belongs to another project.");
 				return r.data;
-			}, p = () => {
-				if (!s) throw X("The project claim transaction is no longer active.");
-				let t = u.prepare("SELECT id, document FROM lifecycle").all();
+			}, m = () => {
+				if (!c) throw X("The project claim transaction is no longer active.");
+				let t = d.prepare("SELECT id, document FROM lifecycle").all();
 				if (t.length === 0) return !1;
 				if (t.length !== 1 || t[0]?.id !== 1 || typeof t[0].document != "string" || Buffer.byteLength(t[0].document, "utf8") > 4096) throw X("The project retirement record is invalid.");
 				let n;
@@ -8885,70 +8885,70 @@ async function nm(e, t, n) {
 				let r = qp.safeParse(n);
 				if (!r.success || r.data.projectPath !== e.projectPath || r.data.projectDevice !== e.projectDevice || r.data.projectInode !== e.projectInode) throw X("The project retirement record is invalid or belongs to another project.");
 				return !0;
-			}, m = () => {
-				if (p()) throw new Y("PROJECT_CLAIM_RETIRED", "This workspace is being removed and cannot start or change runs.");
-			}, h = {
+			}, h = () => {
+				if (m()) throw new Y("PROJECT_CLAIM_RETIRED", "This workspace is being removed and cannot start or change runs.");
+			}, g = {
 				identity: e,
-				protocol: f,
+				protocol: p,
 				enableProtocol(t) {
-					if (m(), f() !== null) return;
+					if (h(), p() !== null) return;
 					let n = Kp.safeParse({
 						version: 1,
 						...e,
 						enabledAt: t
 					});
 					if (!n.success) throw X("The project protocol record is invalid.");
-					u.prepare("INSERT INTO protocol (id, document) VALUES (1, ?)").run(JSON.stringify(n.data));
+					d.prepare("INSERT INTO protocol (id, document) VALUES (1, ?)").run(JSON.stringify(n.data));
 				},
-				read: d,
+				read: f,
 				acquire(t) {
-					m();
+					h();
 					let n = Jp.safeParse(t);
 					if (!n.success || n.data.projectPath !== e.projectPath || n.data.projectDevice !== e.projectDevice || n.data.projectInode !== e.projectInode) throw X("The new project claim is invalid.");
-					if (d() !== null) throw new Y("PROJECT_CLAIM_CONFLICT", "Another operation already claims this project.");
-					u.prepare("INSERT INTO claim (id, document) VALUES (1, ?)").run(JSON.stringify(n.data));
+					if (f() !== null) throw new Y("PROJECT_CLAIM_CONFLICT", "Another operation already claims this project.");
+					d.prepare("INSERT INTO claim (id, document) VALUES (1, ?)").run(JSON.stringify(n.data));
 				},
 				release(e) {
-					m();
-					let t = d();
+					h();
+					let t = f();
 					if (t === null || t.kind !== e.kind || t.runId !== e.runId) throw new Y("PROJECT_CLAIM_MISMATCH", "The project claim does not match this run.");
-					u.prepare("DELETE FROM claim WHERE id = 1").run();
+					d.prepare("DELETE FROM claim WHERE id = 1").run();
 				},
-				retired: p,
+				retired: m,
 				retire(t) {
-					if (p()) return;
-					if (d() !== null) throw new Y("PROJECT_CLAIM_CONFLICT", "A claimed project cannot be retired.");
+					if (m()) return;
+					if (f() !== null) throw new Y("PROJECT_CLAIM_CONFLICT", "A claimed project cannot be retired.");
 					let n = qp.safeParse({
 						version: 1,
 						...e,
 						retiredAt: t
 					});
 					if (!n.success) throw X("The project retirement record is invalid.");
-					u.prepare("INSERT INTO lifecycle (id, document) VALUES (1, ?)").run(JSON.stringify(n.data));
+					d.prepare("INSERT INTO lifecycle (id, document) VALUES (1, ?)").run(JSON.stringify(n.data));
 				}
 			};
-			d(), f(), n || m();
-			let g;
+			f(), p(), n || h();
+			let _;
 			try {
-				g = await t(h);
+				_ = await t(g);
 			} catch (e) {
-				throw c = !0, e;
+				throw l = !0, e;
 			}
-			return s = !1, a.exec("COMMIT"), o = !1, g;
+			return c = !1, o.exec("COMMIT"), s = !1, _;
 		} catch (e) {
-			if (s = !1, o) try {
-				a?.exec("ROLLBACK");
+			if (c = !1, s) try {
+				o?.exec("ROLLBACK");
 			} catch (t) {
 				throw AggregateError([e, t], "The project claim transaction and rollback failed.");
 			}
-			throw c || e instanceof Y ? e : typeof e == "object" && e && "errcode" in e && typeof e.errcode == "number" && (e.errcode & 255) == 5 ? new Y("PROJECT_CLAIM_BUSY", "Another process is updating the project claim.", { cause: e }) : X("The project claim transaction failed.", e);
+			throw l || e instanceof Y ? e : typeof e == "object" && e && "errcode" in e && typeof e.errcode == "number" && (e.errcode & 255) == 5 ? new Y("PROJECT_CLAIM_BUSY", "Another process is updating the project claim.", { cause: e }) : X("The project claim transaction failed.", e);
 		} finally {
-			a?.close();
+			o?.close();
 		}
-	}), o = a.then(() => void 0, () => void 0);
-	return Yp.set(r, o), o.then(() => {
-		Yp.get(r) === o && Yp.delete(r);
-	}), a;
+	}), s = o.then(() => void 0, () => void 0);
+	return Yp.set(a, s), s.then(() => {
+		Yp.get(a) === s && Yp.delete(a);
+	}), o;
 }
 var rm = 8192, im = 1e3, am = /^[a-f0-9-]{36}$/, om = oc(N().regex(/^[A-Za-z][A-Za-z0-9_]*$/), N().max(16384)), sm = I({
 	number: Hs().int().positive(),
@@ -9314,13 +9314,13 @@ var Gm = class extends Error {
 		super(e === "PROJECT_PROTOCOL_NOT_ENABLED" ? "Review and enable coordinated project execution before starting a run." : e === "PROJECT_REVIEW_STALE" ? "Project coordination evidence changed; review it again." : e === "PROJECT_CONFIRMATION_REQUIRED" ? "Confirm that prior work, processes, and older clients have stopped." : "Existing project runs have unresolved ownership and require explicit reconciliation."), this.code = e, this.records = t, this.name = "ProjectCoordinationError";
 	}
 };
-async function Km(e, t, n) {
+async function Km(e, t, n, r = !1) {
 	return tm(e, async (e) => {
 		if (e.protocol() === null) throw new Gm("PROJECT_PROTOCOL_NOT_ENABLED");
 		let r = e.read();
 		if (r === null || r.kind !== t.kind || r.runId !== t.runId) throw new Y("PROJECT_CLAIM_MISMATCH", "The project claim does not match this run.");
 		return n(r);
-	});
+	}, r);
 }
 async function qm(e, t, n, r, i = /* @__PURE__ */ new Date()) {
 	let a = await tm(e, async (e) => {
@@ -9342,7 +9342,7 @@ async function qm(e, t, n, r, i = /* @__PURE__ */ new Date()) {
 	return a.kind === "legacy" ? a.value : Km(e, {
 		kind: t,
 		runId: n
-	}, r);
+	}, r, !0);
 }
 async function Jm(e, t, n) {
 	return tm(e, async (e) => {

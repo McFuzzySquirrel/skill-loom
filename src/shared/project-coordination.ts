@@ -175,6 +175,7 @@ export async function withClaimedProjectRun<T>(
   projectPath: string,
   expected: Pick<ProjectClaim, 'kind' | 'runId'>,
   task: (claim: ProjectClaim) => Promise<T>,
+  waitForLock = false,
 ): Promise<T> {
   return withProjectClaimTransaction(projectPath, async (tx) => {
     if (tx.protocol() === null) throw new ProjectCoordinationError('PROJECT_PROTOCOL_NOT_ENABLED');
@@ -183,7 +184,7 @@ export async function withClaimedProjectRun<T>(
       throw new ProjectClaimError('PROJECT_CLAIM_MISMATCH', 'The project claim does not match this run.');
     }
     return task(claim);
-  });
+  }, waitForLock);
 }
 
 /**
@@ -212,7 +213,7 @@ export async function beginCoordinatedProjectRun<T>(
     return { kind: 'claimed' as const };
   });
   if (result.kind === 'legacy') return result.value;
-  return withClaimedProjectRun(projectPath, { kind, runId }, task);
+  return withClaimedProjectRun(projectPath, { kind, runId }, task, true);
 }
 
 /**

@@ -294,6 +294,50 @@ describe('discovery handoff route', () => {
         '--handoff', handoffPath, '--manifest', manifestPath, '--out', bundlePath,
       ], { encoding: 'utf8' });
       expect(build.status, build.stderr).toBe(0);
+
+      const draft = await cli(['chain', 'draft', 'create'], {
+        name: 'Workspace review', harness: 'opencode', sessionMode: 'shared',
+        steps: [{
+          id: 'review', kind: 'skill', skillName: 'handoff-skill', instruction: 'Review {{scope}}.',
+          skillBinding: {
+            sourceId: identity.sourceId, revision: identity.revision, repositoryPath: identity.repositoryPath,
+          },
+        }],
+        inputs: [{ name: 'scope', required: true }],
+      }) as { chain: { id: string } };
+      const createdWorkspace = await cli(['workspace', 'create'], { sourceDraftId: draft.chain.id }) as {
+        workspace: { id: string; path: string; projectId: string };
+      };
+      const testWorkspace = createdWorkspace.workspace;
+      expect(await readFile(join(testWorkspace.path, '.agents', 'skills', 'handoff-skill', 'SKILL.md'), 'utf8')).toBe(skillContent);
+      await expect(stat(join(projectPath, '.agents', 'skills', 'handoff-skill'))).rejects.toMatchObject({ code: 'ENOENT' });
+      const testInspect = portable(['inspect', '--bundle', bundlePath, '--project', testWorkspace.path]);
+      const testRun = portable(['prepare', '--bundle', bundlePath, '--project', testWorkspace.path], {
+        reviewDigest: testInspect.reviewDigest, installConfirmed: true, reuseSkills: ['handoff-skill'],
+        actualHost: 'opencode', progression: 'supervised', inputs: { scope: 'the temporary fixture' },
+        sessionDecision: {
+          requested: 'shared', mechanism: 'current-conversation', description: 'Current conversation.', confirmed: true,
+        },
+      });
+      const testRunId = testRun.runId as string;
+      const testStep = portable(['step', '--project', testWorkspace.path, '--run-id', testRunId], {
+        revision: testRun.revision, confirmed: true,
+      });
+      expect(testStep).toMatchObject({
+        step: { instruction: 'Skill: handoff-skill\n\nInstruction:\nReview the temporary fixture.' },
+      });
+      await writeFile(join(testWorkspace.path, 'result.txt'), 'Fixture review complete.\n');
+      const testFinished = portable(['record', '--project', testWorkspace.path, '--run-id', testRunId], {
+        revision: testStep.revision, outcome: 'done', confirmed: true, summary: 'Fixture review reported complete.',
+      });
+      expect(testFinished).toMatchObject({ status: 'completed' });
+      const evaluation = await cli(['workspace', 'evaluate'], {
+        workspaceId: testWorkspace.id, checks: [{ path: 'result.txt', contains: 'Fixture review complete.' }],
+      });
+      expect(evaluation).toMatchObject({ passed: true });
+      await cli(['workspace', 'remove'], { workspaceId: testWorkspace.id, confirmed: true });
+      await expect(stat(testWorkspace.path)).rejects.toMatchObject({ code: 'ENOENT' });
+
       const review = await cli(['bundle', 'review'], { projectId, bundlePath }) as { reviewDigest: string };
       const imported = await cli(['bundle', 'import'], {
         projectId, bundlePath, reviewDigest: review.reviewDigest, confirmed: true,

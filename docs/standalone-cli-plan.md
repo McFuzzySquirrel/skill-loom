@@ -224,11 +224,14 @@ and UI, then inspects, prepares, steps, explicitly recovers an interrupted
 attempt, and records its outcome in a separate project using a simulated
 portable host. This does not constitute live harness evidence.
 An integrated fixture now carries a pinned catalog selection through the CLI
-handoff, standalone discovery bundle builder, reviewed CLI import, UI chain
-inspection, and the standalone portable helper's supervised step and
-agent-reported completion. It enables project coordination and separately
-reviews and clears the retained claim. The fixture uses simulated approval and
-does not execute a real agent, package script, or live model.
+handoff and standalone discovery bundle builder through a disposable workspace
+test and artifact check before reviewed CLI import, UI chain inspection, and
+the standalone portable helper's supervised step and agent-reported completion.
+Remote exports use the safe skill name rather than the internal snapshot hash
+as the package directory, matching the discovery bundle for reuse. The fixture
+enables project coordination and separately reviews and clears the retained
+claim. It uses simulated approval and does not execute a real agent, package
+script, or live model.
 After retrying an interrupted run, the UI now reconnects its run event stream
 and observes subsequent actions from other clients. One earlier Playwright run
 under concurrent test load showed a blank recovered terminal; isolated repeats
@@ -296,6 +299,10 @@ rules. Portable mutations now participate in this transaction: when the
 internal protocol is enabled, preparation commits a claim before package
 installation, and step, record, and resume require the matching claim. Claims
 remain after failures and terminal outcomes until separately reviewed clearing.
+After committing a new claim, the initial mutation waits up to one second to
+reacquire the transaction if a competing process briefly holds it. If that
+wait expires, no mutation is dispatched and the retained claim still requires
+review and reconciliation.
 In legacy mode portable mutations serialize with protocol enablement but do not
 create a claim. Managed starts now claim before run creation or harness spawn
 when the internal protocol is enabled. Explicit actions, signal-driven

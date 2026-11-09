@@ -152,6 +152,43 @@ describe('project claim transaction', () => {
     });
   });
 
+  it.skipIf(process.platform === 'win32').each([
+    { heldMs: 200, succeeds: true },
+    { heldMs: 2000, succeeds: false },
+  ])('bounds the post-claim lock wait when another process holds it for $heldMs ms', async ({ heldMs, succeeds }) => {
+    const root = await project();
+    await withProjectClaimTransaction(root, async () => undefined);
+    const child = spawn(process.execPath, [
+      '--disable-warning=ExperimentalWarning', '--import', 'tsx', '--input-type=module', '-e',
+      `
+        import { withProjectClaimTransaction } from './src/shared/project-claim.ts';
+        await withProjectClaimTransaction(process.argv[1], async () => {
+          process.stdout.write('locked');
+          await new Promise(resolve => process.stdin.once('data', resolve));
+          await new Promise(resolve => setTimeout(resolve, Number(process.argv[2])));
+        });
+        setInterval(() => {}, 1000);
+      `,
+      root, String(heldMs),
+    ], { cwd: process.cwd(), stdio: ['pipe', 'pipe', 'pipe'] });
+    try {
+      expect((await once(child.stdout, 'data'))[0].toString()).toBe('locked');
+      child.stdin.write('release');
+      let calls = 0;
+      const operation = withProjectClaimTransaction(root, async () => { calls += 1; }, true);
+      if (succeeds) {
+        await expect(operation).resolves.toBeUndefined();
+        expect(calls).toBe(1);
+      } else {
+        await expect(operation).rejects.toMatchObject({ code: 'PROJECT_CLAIM_BUSY' });
+        expect(calls).toBe(0);
+      }
+    } finally {
+      child.kill('SIGKILL');
+      await once(child, 'exit');
+    }
+  });
+
   it.skipIf(process.platform === 'win32')('admits only one of two separate processes racing to claim a project', async () => {
     const root = await project();
     await withProjectClaimTransaction(root, async (tx) => tx.enableProtocol('2026-01-01T00:00:00.000Z'));

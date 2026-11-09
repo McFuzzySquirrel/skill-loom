@@ -213,8 +213,9 @@ function parseClaim(value: unknown, identity: ProjectClaimTransaction['identity'
 export async function withProjectClaimTransaction<T>(
   projectPath: string,
   task: (transaction: ProjectClaimTransaction) => Promise<T>,
+  waitForLock = false,
 ): Promise<T> {
-  return runProjectClaimTransaction(projectPath, task, false);
+  return runProjectClaimTransaction(projectPath, task, false, waitForLock);
 }
 
 /** Permit a removal retry to inspect an already retired workspace. */
@@ -222,13 +223,14 @@ export async function withProjectRetirementTransaction<T>(
   projectPath: string,
   task: (transaction: ProjectClaimTransaction) => Promise<T>,
 ): Promise<T> {
-  return runProjectClaimTransaction(projectPath, task, true);
+  return runProjectClaimTransaction(projectPath, task, true, false);
 }
 
 async function runProjectClaimTransaction<T>(
   projectPath: string,
   task: (transaction: ProjectClaimTransaction) => Promise<T>,
   allowRetired: boolean,
+  waitForLock: boolean,
 ): Promise<T> {
   if (!isAbsolute(projectPath) || projectPath.includes('\0')) {
     throw unsafe('The project path must be absolute.');
@@ -255,7 +257,7 @@ async function runProjectClaimTransaction<T>(
     let taskFailed = false;
     try {
       database = new DatabaseSync(path);
-      database.exec('PRAGMA busy_timeout = 0; PRAGMA synchronous = FULL; BEGIN EXCLUSIVE');
+      database.exec(`PRAGMA busy_timeout = ${waitForLock ? 1000 : 0}; PRAGMA synchronous = FULL; BEGIN EXCLUSIVE`);
       begun = true;
       const versionRow = database.prepare('PRAGMA user_version').get();
       const version = versionRow?.user_version;

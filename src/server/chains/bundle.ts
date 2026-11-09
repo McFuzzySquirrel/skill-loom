@@ -115,7 +115,16 @@ export async function exportBundle(
       );
     }
     const source = selected.packagePath;
-    const skill: BundleSkill = { name, directory: basename(source), files: [] };
+    let directory = basename(source);
+    if (selected.source === 'remote' && !/[\\/]/.test(name)) {
+      try {
+        validatePackagePath(name);
+        directory = name;
+      } catch (error) {
+        if (!(error instanceof BundleError)) throw error;
+      }
+    }
+    const skill: BundleSkill = { name, directory, files: [] };
     async function collect(directory: string, prefix: string, depth: number): Promise<void> {
       if (depth > 32) invalid('The skill package exceeds the directory depth limit.');
       for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {

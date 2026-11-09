@@ -478,7 +478,7 @@ describe('portable bundle execution', () => {
       .resolves.toMatchObject({ runId: first.runId });
   });
 
-  it.each(['legacy', 'enabled'] as const)('admits only one concurrent portable helper in %s mode', async (mode) => {
+  it.each(['legacy', 'enabled'] as const)('admits at most one concurrent portable helper in %s mode', async (mode) => {
     if (mode === 'enabled') {
       const review = await reviewProjectCoordination(project);
       await enableReviewedProjectProtocol(project, review.reviewDigest, true);
@@ -509,7 +509,17 @@ describe('portable bundle execution', () => {
       child.stdin.end(payload);
     });
     const results = await Promise.all([invoke(), invoke()]);
-    expect(results.filter((result) => result.code === 0)).toHaveLength(1);
+    const successful = results.filter((result) => result.code === 0);
+    expect(successful.length, JSON.stringify(results)).toBeLessThanOrEqual(1);
+    if (successful.length === 0) {
+      expect(mode).toBe('enabled');
+      expect(results.map((result) => (JSON.parse(result.stderr) as { error: { code: string } }).error.code).sort())
+        .toEqual(['PROJECT_CLAIM_BUSY', 'PROJECT_CLAIM_CONFLICT']);
+      const review = await reviewProjectCoordination(project);
+      expect(review.claim).toMatchObject({ kind: 'portable' });
+      expect(review.records).toEqual([]);
+      return;
+    }
     const success = JSON.parse(results.find((result) => result.code === 0)!.stdout) as { runId: string };
     const rejected = results.find((result) => result.code !== 0)!;
     expect([
