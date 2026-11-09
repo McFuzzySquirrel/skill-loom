@@ -441,6 +441,7 @@ public static class WindowsNativeScopeFixture {
                 foreach (uint pid in members) Require(CapturedPids.Contains(pid), "Untracked terminal Job member.");
                 RequireTerminalOutput("LOOM_TERMINAL_READY");
                 RequireTerminalOutput("LOOM_STDIO_VERIFIED");
+                RequireTerminalOutput("LOOM_STDERR_VERIFIED");
             } else {
                 Require(members.Count == 4 && Active(job) == 4, "Expected three actors and one console host.");
                 foreach (uint pid in members) {
@@ -594,6 +595,8 @@ public static class WindowsNativeScopeFixture {
         Require(Console.Read() == 'S', "Inherited standard input did not receive expected byte.");
         Console.WriteLine("LOOM_STDIO_VERIFIED");
         Console.Out.Flush();
+        Console.Error.WriteLine("LOOM_STDERR_VERIFIED");
+        Console.Error.Flush();
         return 0;
     }
     static void ProbeInheritedStdio(string executable, string workspace, IntPtr input, IntPtr output) {
