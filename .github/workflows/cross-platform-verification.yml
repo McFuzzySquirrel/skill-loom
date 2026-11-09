@@ -12,7 +12,7 @@ on:
         description: Test scope
         type: choice
         default: full
-        options: [full, claims, portable, portable-no-follow, portable-claim-race, chain-bundles, windows-baseline, remote-copy, catalog, catalog-collision, git-batch, profile-alias, snapshot-modes, macos-baseline, preflight, filesystem, harness-exe, cli, automatic, run-routes, workspaces, library, package, mode-probe, containment-probe, descendant-cleanup, terminal, terminal-macos-helper]
+        options: [full, claims, portable, portable-no-follow, portable-claim-race, chain-bundles, windows-baseline, remote-copy, catalog, catalog-collision, git-batch, profile-alias, snapshot-modes, macos-baseline, preflight, filesystem, harness-exe, cli, automatic, run-routes, run-routes-stress, workspaces, library, package, mode-probe, containment-probe, descendant-cleanup, terminal, terminal-macos-helper]
 
 permissions:
   contents: read
@@ -77,6 +77,14 @@ jobs:
         run: npx vitest run tests/unit/automatic-runner.test.ts
       - if: inputs.suite == 'run-routes'
         run: npx vitest run tests/unit/automatic-runner.test.ts tests/integration/run-routes.test.ts
+      - if: inputs.suite == 'run-routes-stress'
+        shell: pwsh
+        run: |
+          for ($i = 1; $i -le 20; $i++) {
+            Write-Host "Managed claim completion iteration $i"
+            npx vitest run tests/integration/run-routes.test.ts -t "retains a managed claim across automatic transitions and completion"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - if: inputs.suite == 'descendant-cleanup'
         run: npx vitest run tests/unit/headless-process.test.ts
       - if: inputs.suite == 'workspaces'
