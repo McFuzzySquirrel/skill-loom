@@ -41,6 +41,7 @@ export const RunSchema = z.strictObject({
     confirmed: z.boolean(),
   }),
   resolvedInputs: SafeInputSchema,
+  skillFingerprintVersion: z.literal(2).optional(),
   installedSkills: z.array(z.strictObject({
     name: z.string(),
     directory: z.string(),

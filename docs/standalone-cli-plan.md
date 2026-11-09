@@ -202,6 +202,10 @@ These are requirements to implement and verify, not current guarantees:
    and copy suites passed on Linux, macOS and Windows (`42657583229`). The digest and its
    writable index are not an isolation boundary against an actor who can replace
    both, and must not be used to lift managed-execution safeguards.
+   Installed-package review fingerprints also use a framed representation;
+   older portable runs with skills can be inspected and reconciled but cannot
+   start another step without a new review and run. Older helpers reject new
+   run records. These checks likewise do not freeze packages for execution.
    The hosted Linux runner's read-only probe found cgroup v2 but no write
    access to its root or current cgroup. `/dev/kvm` was not accessible to
    the runner user and QEMU was not installed. This does not rule out a

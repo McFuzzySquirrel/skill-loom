@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { executePortableRequest, packageFingerprint, treeFingerprint, type PackageTreeEntry } from '../../src/portable/runtime.js';
+import { RunSchema } from '../../src/portable/run-schema.js';
 import { runPortableCli } from '../../src/portable/cli.js';
 import type { ChainBundle } from '../../src/shared/bundles.js';
 import { scanProjectRunRecords } from '../../src/shared/project-run-records.js';
@@ -281,6 +282,71 @@ describe('portable bundle execution', () => {
       await expect(treeFingerprint(directory, [], { ...exact, [dimension]: exact[dimension] - 1 }))
         .rejects.toMatchObject({ code: 'PACKAGE_TOO_LARGE' });
     }
+  });
+
+  it('distinguishes package trees that collide under the old unframed fingerprint', async () => {
+    const first = [
+      { path: 'a', content: Buffer.from('one'), executable: false },
+      { path: 'b', content: Buffer.from('prefix\x00c\x00f\x000\x00suffix'), executable: false },
+    ];
+    const second = [
+      { path: 'a', content: Buffer.from('one\x00b\x00f\x000\x00prefix'), executable: false },
+      { path: 'c', content: Buffer.from('suffix'), executable: false },
+    ];
+    const legacy = (files: typeof first) => {
+      const hash = createHash('sha256');
+      for (const file of files) {
+        hash.update(file.path).update('\0f\0').update('0').update('\0').update(file.content).update('\0');
+      }
+      return hash.digest('hex');
+    };
+    const encoded = (files: typeof first) => files.map((file) => ({
+      ...file, content: file.content.toString('base64'),
+    }));
+    expect(legacy(first)).toBe(legacy(second));
+    expect(packageFingerprint(encoded(first))).not.toBe(packageFingerprint(encoded(second)));
+    const directory = join(project, 'package');
+    await mkdir(directory);
+    for (const file of first) await writeFile(join(directory, file.path), file.content);
+    expect(await treeFingerprint(directory)).toBe(packageFingerprint(encoded(first)));
+    await rm(join(directory, 'b'));
+    for (const file of second) await writeFile(join(directory, file.path), file.content);
+    expect(await treeFingerprint(directory)).toBe(packageFingerprint(encoded(second)));
+  });
+
+  it('keeps legacy runs readable and abortable but requires a fresh package review before another step', async () => {
+    const prepared = await prepare();
+    const path = join(project, '.loom', 'portable-runs', `${prepared.runId}.json`);
+    const run = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
+    expect(run.skillFingerprintVersion).toBe(2);
+    expect(RunSchema.omit({ skillFingerprintVersion: true }).safeParse(run).success).toBe(false);
+    delete run.skillFingerprintVersion;
+    await writeFile(path, JSON.stringify(run));
+    await expect(command('status', prepared.runId, prepared.revision)).resolves.toMatchObject({
+      run: { status: 'ready' },
+    });
+    await expect(command('step', prepared.runId, prepared.revision, { confirmed: true }))
+      .rejects.toMatchObject({ code: 'PACKAGE_REVIEW_REQUIRED' });
+    await expect(command('record', prepared.runId, prepared.revision, { action: 'abort' }))
+      .resolves.toMatchObject({ status: 'aborted' });
+  });
+
+  it('rejects a stale reuse review when installed content changes across legacy fingerprint boundaries', async () => {
+    const directory = join(project, '.agents', 'skills', 'review');
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, 'SKILL.md'), skillText);
+    await writeFile(join(directory, 'x'), Buffer.from('prefix\x00y\x00f\x000\x00suffix'));
+    const inspected = await executePortableRequest({ command: 'inspect', projectPath: project, bundlePath }) as {
+      reviewDigest: string;
+    };
+    await writeFile(join(directory, 'SKILL.md'), Buffer.concat([
+      Buffer.from(skillText), Buffer.from('\x00x\x00f\x000\x00prefix'),
+    ]));
+    await rm(join(directory, 'x'));
+    await writeFile(join(directory, 'y'), 'suffix');
+    await expect(prepare({
+      reviewDigest: inspected.reviewDigest, reuseSkills: ['review'], differingReuseConfirmed: true,
+    })).rejects.toMatchObject({ code: 'REVIEW_STALE' });
   });
 
   it('inspects v2 agents but refuses to silently run with a different current agent', async () => {

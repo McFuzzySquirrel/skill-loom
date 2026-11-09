@@ -68,8 +68,30 @@ function fingerprint(data: Uint8Array | string): string {
   return createHash('sha256').update(data).digest('hex');
 }
 
+function treeHash() {
+  return createHash('sha256').update('skill-loom-installed-tree-v2\0');
+}
+
+function hashTreeEntry(
+  hash: ReturnType<typeof createHash>,
+  path: string,
+  file?: { executable: boolean; content: Uint8Array },
+): void {
+  const pathBytes = Buffer.from(path, 'utf8');
+  const length = (value: number): Buffer => {
+    const bytes = Buffer.alloc(8);
+    bytes.writeBigUInt64BE(BigInt(value));
+    return bytes;
+  };
+  hash.update(file === undefined ? 'd' : 'f').update(length(pathBytes.length)).update(pathBytes);
+  if (file !== undefined) {
+    hash.update(file.executable ? '\x01' : '\x00')
+      .update(length(file.content.byteLength)).update(file.content);
+  }
+}
+
 export function packageFingerprint(files: BundleSkill['files']): string {
-  const hash = createHash('sha256');
+  const hash = treeHash();
   const directories = new Set<string>();
   const fileMap = new Map(files.map((file) => [file.path, file]));
   for (const file of files) {
@@ -90,12 +112,11 @@ export function packageFingerprint(files: BundleSkill['files']): string {
     }
     for (const path of [...children].sort((a, b) => basename(a).localeCompare(basename(b)))) {
       if (directories.has(path)) {
-        hash.update(path).update('\0d\0');
+        hashTreeEntry(hash, path);
         visit(path);
       } else {
         const file = fileMap.get(path)!;
-        hash.update(path).update('\0f\0').update(file.executable ? '1' : '0').update('\0');
-        hash.update(decodeBundleFile(file.content)).update('\0');
+        hashTreeEntry(hash, path, { executable: file.executable, content: decodeBundleFile(file.content) });
       }
     }
   }
@@ -259,7 +280,7 @@ export async function treeFingerprint(
   inventory?: PackageTreeEntry[],
   limits: { files: number; bytes: number; entries?: number; inventoryBytes?: number } = { files: MAX_BUNDLE_FILES, bytes: MAX_BUNDLE_BYTES },
 ): Promise<string> {
-  const hash = createHash('sha256');
+  const hash = treeHash();
   let bytes = 0;
   let files = 0;
   let entryCount = 0;
@@ -291,7 +312,7 @@ export async function treeFingerprint(
       const info = await lstat(path);
       if (info.isSymbolicLink()) fail('PACKAGE_UNSAFE', 'An installed skill contains a symbolic link.');
       if (info.isDirectory()) {
-        hash.update(relativePath).update('\0d\0');
+        hashTreeEntry(hash, relativePath);
         record({ path: relativePath, kind: 'directory' });
         await visit(path, relativePath, depth + 1);
       } else if (info.isFile()) {
@@ -299,8 +320,7 @@ export async function treeFingerprint(
         if (files > limits.files) fail('PACKAGE_TOO_LARGE', 'The existing package exceeds the portable review file limit.');
         const file = await readBoundedFile(path, limits.bytes - bytes);
         bytes += file.content.length;
-        hash.update(relativePath).update('\0f\0').update(file.executable ? '1' : '0').update('\0');
-        hash.update(file.content).update('\0');
+        hashTreeEntry(hash, relativePath, file);
         if (inventory !== undefined) {
           record({
             path: relativePath, kind: 'file', bytes: file.content.length, executable: file.executable,
@@ -596,6 +616,9 @@ async function assertNoOtherPortableRun(directory: string, project: string, curr
 }
 
 async function verifyInstalledSkills(run: PortableRun, project: string): Promise<void> {
+  if (run.installedSkills.length > 0 && run.skillFingerprintVersion !== 2) {
+    fail('PACKAGE_REVIEW_REQUIRED', 'This run uses an older package fingerprint. Abort it and inspect and prepare a new run.');
+  }
   for (const skill of run.installedSkills) {
     const directory = join(project, '.agents', 'skills', skill.directory);
     const info = await lstat(directory);
@@ -845,6 +868,7 @@ export async function executePortableRequest(request: PortableRequest): Promise<
         progressionConfirmed: input.progressionConfirmed === true,
         sessionDecision: sessionParsed.data,
         resolvedInputs: inputs,
+        skillFingerprintVersion: 2,
         installedSkills,
         status: 'ready',
         currentStepIndex: 0,
