@@ -195,7 +195,8 @@ These are requirements to implement and verify, not current guarantees:
    reviewed mode metadata can also be preserved and validated after install.
    Windows export of other filesystem packages reads executable intent from
    stage-zero Git index entries, and refuses untracked or conflicted files
-   instead of deriving modes from Windows filesystem stat results.
+   instead of deriving modes from Windows filesystem stat results. The Git
+   index and bundle suites passed on Linux, macOS and Windows (`42661183535`).
    Focused hosted Linux, macOS and Windows tests passed for migration,
    tamper rejection, handoff, bundle export and the standalone handoff builder;
    the Windows test also verified that executable installation is blocked.
