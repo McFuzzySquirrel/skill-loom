@@ -1625,10 +1625,11 @@ export class AutomaticRunner {
       this.runValue.reason = reason;
       this.runValue.updatedAt = failedAt;
       if (!alreadyReported) this.emit('run-paused', step, { reason });
-      const systemCode = persistenceSystemCode(error);
+      const diagnostic = persistenceSystemDiagnostic(error);
       console.error(
         `Skill Loom paused automatic run ${this.runValue.id}: ${reason}` +
-        `${systemCode === undefined ? '' : ` (system code: ${systemCode})`}.`,
+        `${diagnostic === undefined ? '' : ` (system code: ${diagnostic.code}` +
+          `${diagnostic.operation === undefined ? '' : `, operation: ${diagnostic.operation}`})`}.`,
       );
     });
   }
@@ -1850,15 +1851,21 @@ function toRunnerError(
 
 const SYSTEM_ERROR_CODES = new Set([...getSystemErrorMap().values()].map(([code]) => code));
 SYSTEM_ERROR_CODES.add('ERR_SQLITE_ERROR');
+const SYSTEM_OPERATIONS = new Set([
+  'open', 'read', 'write', 'fsync', 'close', 'rename', 'unlink', 'stat', 'lstat', 'mkdir', 'rmdir', 'link',
+]);
 
-function persistenceSystemCode(error: unknown): string | undefined {
+function persistenceSystemDiagnostic(error: unknown): { code: string; operation?: string } | undefined {
   if (!(error instanceof AutomaticRunnerError) || error.code !== AUTOMATIC_RUNNER_ERROR_CODES.PERSIST_FAILED) {
     return undefined;
   }
   let cause: unknown = error.cause;
   for (let depth = 0; depth < 8 && cause instanceof Error; depth += 1) {
     if ('code' in cause && typeof cause.code === 'string' && SYSTEM_ERROR_CODES.has(cause.code)) {
-      return cause.code;
+      const operation = 'syscall' in cause && typeof cause.syscall === 'string' && SYSTEM_OPERATIONS.has(cause.syscall)
+        ? cause.syscall
+        : undefined;
+      return { code: cause.code, ...(operation === undefined ? {} : { operation }) };
     }
     cause = cause.cause;
   }

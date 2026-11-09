@@ -509,7 +509,7 @@ describe('automatic OpenCode advancement', () => {
 
   it('logs only a recognized system code from a nested persistence failure', async () => {
     const secret = 'private-persistence-details';
-    const systemError = Object.assign(new Error(secret), { code: 'EPERM' });
+    const systemError = Object.assign(new Error(secret), { code: 'EPERM', syscall: 'rename' });
     const harness = makeHarness({
       persist: (run) => {
         if (run.steps[0]?.status === 'done') {
@@ -522,7 +522,7 @@ describe('automatic OpenCode advancement', () => {
       await harness.runner.start();
       await advanceOscStep(harness, harness.spawner.lastProcess);
       expect(harness.runner.getRun()).toMatchObject({ status: 'paused', reason: 'PERSIST_FAILED' });
-      expect(log).toHaveBeenCalledWith(expect.stringContaining('(system code: EPERM)'));
+      expect(log).toHaveBeenCalledWith(expect.stringContaining('(system code: EPERM, operation: rename)'));
       expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
     } finally {
       log.mockRestore();
