@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { access, lstat, mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { access, lstat, mkdir, mkdtemp, readFile, readdir, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -106,15 +106,25 @@ describe('large remote catalog', () => {
     const config = join(root, 'gitconfig');
     const remote = 'https://example.invalid/untrusted.git';
     execFileSync('git', ['config', '--file', config, `url.file://${repository}.insteadOf`, remote]);
+    const hooks = join(root, 'hooks');
+    const hookMarker = join(root, 'hook-executed');
+    await mkdir(hooks);
+    await writeFile(join(hooks, 'reference-transaction'),
+      `#!/bin/sh\nprintf executed > '${hookMarker.replaceAll("'", "'\\''")}'\n`, { mode: 0o755 });
+    execFileSync('git', ['config', '--file', config, 'core.hooksPath', hooks]);
     const previousGlobal = process.env.GIT_CONFIG_GLOBAL;
     const previousSystem = process.env.GIT_CONFIG_NOSYSTEM;
     process.env.GIT_CONFIG_GLOBAL = config;
     process.env.GIT_CONFIG_NOSYSTEM = '1';
     try {
+      execFileSync('git', ['clone', '--no-checkout', remote, join(root, 'control')], { stdio: 'ignore' });
+      expect(await readFile(hookMarker, 'utf8')).toBe('executed');
+      await unlink(hookMarker);
       const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
-      await store.update({ remoteSkillSources: [{ id: 'untrusted', repository: remote }] });
+      await store.update({ remoteSkillSources: [{ id: 'untrusted', repository: remote, ref: commit }] });
       const snapshot = await refreshRemoteSkillSource(store, 'untrusted', { temporaryDirectory: root });
       await expect(access(marker)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(access(hookMarker)).rejects.toMatchObject({ code: 'ENOENT' });
       expect(snapshot.packages).toHaveLength(1);
       const item = snapshot.packages[0]!;
       const handoff = await prepareDiscoveryHandoff(store, {

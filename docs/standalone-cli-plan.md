@@ -222,8 +222,12 @@ a real Git fixture confirms that valid replacement characters remain supported
 and that rejection preserves the preceding snapshot.
 A real Git fixture also checks that refresh and handoff preserve adversarial
 instructions, an executable script, and a package postinstall declaration as
-data without running the script. This does not establish how an agent will
-interpret untrusted instructions after receiving them.
+data without running the script. Refresh overrides Git hooks using an absent
+path inside its private temporary root; the fixture verifies a configured
+reference-transaction hook runs during an ordinary clone but not refresh.
+Git may still invoke configured credential helpers or SSH transport programs.
+This does not establish how an agent will interpret untrusted instructions
+after receiving them.
 The 1,000-package/20,000-file local Git fixture measures the test process's RSS
 high-water mark and samples the temporary clone staging tree every 100 ms.
 On Linux it also samples RSS for Git and other descendants. One isolated run

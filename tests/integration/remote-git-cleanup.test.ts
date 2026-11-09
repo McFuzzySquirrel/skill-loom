@@ -174,7 +174,7 @@ setInterval(() => {}, 1000);
         await writeFile(executable, `#!${process.execPath}
 const args = process.argv.slice(2);
 const stage = process.env.LOOM_TEST_CANCEL_STAGE;
-const isClone = args[0] === 'clone';
+const isClone = args.includes('clone');
 const isBatch = args.includes('cat-file');
 if ((stage === 'clone' && isClone) || (stage === 'cat-file' && isBatch)) {
   const { spawn } = require('node:child_process');
@@ -253,7 +253,7 @@ if ((stage === 'clone' && isClone) || (stage === 'cat-file' && isBatch)) {
     try {
       await writeFile(executable, `#!${process.execPath}
 const args = process.argv.slice(2);
-if (args[0] === 'clone') {
+if (args.includes('clone')) {
   process.env.LOOM_TEST_OUTPUT_STREAM === 'stderr'
     ? process.stderr.write('x'.repeat(Number(process.env.LOOM_TEST_OUTPUT_BYTES)))
     : process.stdout.write('x'.repeat(Number(process.env.LOOM_TEST_OUTPUT_BYTES)));
@@ -366,7 +366,7 @@ if (args.includes('rev-parse')) {
 const { mkdirSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 const args = process.argv.slice(2);
-if (args[0] === 'clone') {
+if (args.includes('clone')) {
   const repository = args.at(-1);
   mkdirSync(repository);
   writeFileSync(join(repository, 'first'), 'ab');

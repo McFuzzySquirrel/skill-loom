@@ -121,7 +121,9 @@ not a hard filesystem quota. Existing snapshots remain readable when budgets
 are lowered. Discovery handoffs and bundles retain their independent limits.
 Git tree paths must be valid UTF-8; a source containing a non-UTF-8 path is
 rejected rather than silently changing its identity, and existing snapshots
-remain available.
+remain available. Catalog Git commands override configured Git hooks, including
+hooks triggered by reference updates; Git can still invoke configured
+credential helpers or SSH transport programs to access a remote.
 Disconnecting a refresh client requests cancellation: Git processes are
 terminated and unpublished staging is removed; a request waiting behind
 another refresh stops waiting without starting Git. Cancellation is best effort

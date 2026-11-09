@@ -1150,7 +1150,9 @@ async function runGit(
 
     let processError: unknown;
     const stdout: Buffer[] = [];
-    const child = spawn('git', args, {
+    // Override inherited hooks even for clone/fetch ref updates. This path is
+    // deliberately absent inside the private temporary work root.
+    const child = spawn('git', ['-c', `core.hooksPath=${join(cwd, '.skill-loom-disabled-hooks')}`, ...args], {
       cwd,
       detached: process.platform !== 'win32',
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
