@@ -114,6 +114,10 @@ These are requirements to implement and verify, not current guarantees:
    and launched a native executable from a path containing spaces.
    The focused CLI unit suite also passed on hosted Windows after its expected
    paths were made platform-native (`42644457911`).
+   Copilot trust fallback text is now rendered consistently by the server for
+   PowerShell on Windows and POSIX shells elsewhere; a hosted Windows suite
+   (`42645622987`) verified actual PowerShell argument handling and the trust
+   route. This does not verify a live Copilot trust session.
    A later full baseline after the profile-alias fixes passed Linux but failed
    12 of 65 macOS files and 25 of 65 Windows files (three Windows files
    skipped). This baseline predates the subsequent snapshot-mode changes.

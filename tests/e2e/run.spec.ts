@@ -100,14 +100,23 @@ if (automatic) {
     process.exit(1);
   }
 
-  // A real OSC working then idle sequence is the only automatic completion
-  // signal. The delay keeps Pause usable in the browser test.
+  // A real OSC working then idle sequence is the only automatic completion signal.
   process.stdout.write('\\x1b]7501;state=working\\x07');
-  setTimeout(() => {
+  const sendIdle = () => {
     process.stdout.write('FAKE_AUTOMATIC_IDLE_' + projectName + '\\r\\n');
     process.stdout.write('\\x1b]7501;state=idle\\x07');
     setTimeout(() => process.exit(0), 100);
-  }, 2000);
+  };
+  if (projectName.startsWith('automatic-') && launch === 1) {
+    const timer = setInterval(() => {
+      if (fs.existsSync(path.join(cwd, '.fake-release-first'))) {
+        clearInterval(timer);
+        sendIdle();
+      }
+    }, 50);
+  } else {
+    setTimeout(sendIdle, 2000);
+  }
 } else {
   process.stdout.write('FAKE_SUPERVISED_HOLDING\\r\\n');
   if (args.join(' ').includes('Run the second supervised step.')) {
@@ -957,7 +966,7 @@ test.describe('Terminal-dominant run view', () => {
   }) => {
     test.setTimeout(90_000);
     const consoleErrors = collectConsoleErrors(page);
-    const { project } = await openFixtureProject(request, 'automatic');
+    const { project, projectPath } = await openFixtureProject(request, 'automatic');
     const chain = await createChain(request, project.id, `Automatic ${runSuffix}`, [
       {
         id: 'automatic-step-one',
@@ -987,6 +996,9 @@ test.describe('Terminal-dominant run view', () => {
 
     await page.getByTestId('run-control-pause').click();
     await expect(page.getByTestId('run-status')).toContainText('Paused');
+    await expect(page.getByTestId('step-status-0')).toContainText('Running');
+    await expect(page.getByTestId('step-status-1')).toContainText('Pending');
+    await writeFile(join(projectPath, '.fake-release-first'), '');
 
     // The in-flight step still finishes on the signal, but the chain pauses
     // before the next step.
