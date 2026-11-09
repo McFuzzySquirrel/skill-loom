@@ -112,6 +112,8 @@ These are requirements to implement and verify, not current guarantees:
    through a shell. This lookup alone does not establish Windows harness or
    managed-run support. A focused hosted Windows test (`42643548246`) found
    and launched a native executable from a path containing spaces.
+   The focused CLI unit suite also passed on hosted Windows after its expected
+   paths were made platform-native (`42644457911`).
    A later full baseline after the profile-alias fixes passed Linux but failed
    12 of 65 macOS files and 25 of 65 Windows files (three Windows files
    skipped). This baseline predates the subsequent snapshot-mode changes.
