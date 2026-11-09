@@ -142,7 +142,11 @@ These are requirements to implement and verify, not current guarantees:
    the later full-suite load (`42649899302`), before the fix above.
    The focused Git blob-reader suite also passed on all three hosted platforms
    (`42647505376`), including timeout and direct-child reaping; this does not
-   verify descendant containment.
+   verify descendant containment. A real detached-child fixture on Linux,
+   macOS and Windows (`42660419070`) confirms that the descendant remains
+   alive after direct-child cleanup. The fixture explicitly terminates that
+   descendant afterward; it is evidence of the limitation, not a cleanup
+   solution.
    A later full baseline after the profile-alias fixes passed Linux but failed
    12 of 65 macOS files and 25 of 65 Windows files (three Windows files
    skipped). This baseline predates the subsequent snapshot-mode changes.
