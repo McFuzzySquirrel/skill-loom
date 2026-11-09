@@ -102,6 +102,9 @@ These are requirements to implement and verify, not current guarantees:
    `chmod(000)` permission tests do not test Windows ACLs and are skipped there;
    simulated browser permission failures remain covered, but real Windows ACL
    denial and catalog permission-warning behavior still need verification.
+   The POSIX mode requested for config files is not proof of private Windows
+   ACLs; administrators must verify inherited access until ACL handling is
+   implemented and verified.
    The remaining focused filesystem suite passed on hosted Windows
    (`42643035508`) with those POSIX permission tests skipped.
    Shell-free harness PATH lookup also tries an `.exe` suffix on Windows for

@@ -467,7 +467,7 @@ If you need multi-user or remote access, this project does not provide it. Treat
 
 | Path | Contents | Notes |
 |---|---|---|
-| `~/.config/loom/config.json` | Global config, executable overrides, extra skill directories, remote sources, recent projects, managed-workspace ownership, and UI preferences. | Override the directory with `LOOM_CONFIG_DIR`. Created with restrictive permissions. |
+| `~/.config/loom/config.json` | Global config, executable overrides, extra skill directories, remote sources, recent projects, managed-workspace ownership, and UI preferences. | Override the directory with `LOOM_CONFIG_DIR`. POSIX creation requests owner-only permissions; Windows ACL privacy is not verified and must be configured separately. |
 | `~/.config/loom/drafts/*.json` | Project-independent chain drafts. | Separate from templates and project chains; back up with the config directory. |
 | Browser download location (`*.loom-discovery.json`) | A user-prepared discovery handoff containing the goal and exact selected candidate packages. | Not retained by the server. It can contain private or redistribution-restricted content; protect or remove it according to your local policy. |
 | `~/.config/loom/test-workspaces/<uuid>/` | Managed disposable projects created by **Test in disposable workspace**. | Retained until explicit cleanup from **Test workspaces**. Cleanup refuses the workspace holding the global active run. |
@@ -621,7 +621,7 @@ For the full troubleshooting contract, including the dirty Git tree, node-pty, m
 ## Security and Privacy Checklist
 
 - [ ] `LOOM_HOST` is loopback (or unset) and the process is not published through a proxy, tunnel, or container port.
-- [ ] `~/.config/loom` is readable only by the intended local user; config writes use restrictive permissions.
+- [ ] `~/.config/loom` is readable only by the intended local user. POSIX config writes request restrictive permissions; on Windows, verify the directory's inherited ACL separately.
 - [ ] No credential, token, API key, or secret is pasted into `config.json`, a chain, a run, or a support report.
 - [ ] Harness CLIs are authenticated in their own stores; Skill Loom reports presence only.
 - [ ] Copilot folder trust is persisted through Copilot's **Yes, and remember this folder for future sessions** dialog choice; `~/.copilot/config.json` is not edited by hand unless you are repairing Copilot itself.
