@@ -1,4 +1,5 @@
 import { ChildProcess } from 'node:child_process';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   CHAIN_VERSION,
@@ -30,10 +31,10 @@ import { createTerminalSession, type TerminalExit, type TerminalSession } from '
 import { adaptChildProcess } from '../../src/server/runs/headless-process.js';
 
 const CREATED_AT = '2026-11-04T10:00:00.000Z';
-const PROJECT_PATH = '/tmp/loom-automatic-project';
+const PROJECT_PATH = resolve('/tmp/loom-automatic-project');
 
-const OPENCODE_EXECUTABLE = '/opt/loom/bin/opencode';
-const COPILOT_EXECUTABLE = '/opt/loom/bin/copilot';
+const OPENCODE_EXECUTABLE = resolve('/opt/loom/bin/opencode');
+const COPILOT_EXECUTABLE = resolve('/opt/loom/bin/copilot');
 
 const OSC_WORKING = '\x1b]7501;state=working\x07';
 const OSC_IDLE = '\x1b]7501;state=idle\x07';
