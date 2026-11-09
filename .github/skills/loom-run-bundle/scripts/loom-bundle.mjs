@@ -9371,22 +9371,22 @@ async function Jm(e, t, n) {
 	});
 }
 // src/portable/runtime.ts
-var Ym = 65536, Xm = 1e3, Zm = 67108864, Qm = class extends Error {
+var Ym = 65536, Xm = 1048576, Zm = 1e3, Qm = 67108864, $m = class extends Error {
 	code;
 	constructor(e, t) {
 		super(t), this.code = e, this.name = "PortableRunError";
 	}
 };
 function Q(e, t) {
-	throw new Qm(e, t);
+	throw new $m(e, t);
 }
 function $() {
 	return (/* @__PURE__ */ new Date()).toISOString();
 }
-function $m(e) {
+function eh(e) {
 	return d("sha256").update(e).digest("hex");
 }
-function eh(e) {
+function th(e) {
 	let t = d("sha256"), r = /* @__PURE__ */ new Set(), i = new Map(e.map((e) => [e.path, e]));
 	for (let t of e) {
 		let e = t.path.split("/");
@@ -9394,8 +9394,8 @@ function eh(e) {
 	}
 	function a(e) {
 		let o = /* @__PURE__ */ new Set();
-		for (let t of r) th(t) === e && o.add(t);
-		for (let t of i.keys()) th(t) === e && o.add(t);
+		for (let t of r) nh(t) === e && o.add(t);
+		for (let t of i.keys()) nh(t) === e && o.add(t);
 		for (let e of [...o].sort((e, t) => n(e).localeCompare(n(t)))) if (r.has(e)) t.update(e).update("\0d\0"), a(e);
 		else {
 			let n = i.get(e);
@@ -9404,11 +9404,11 @@ function eh(e) {
 	}
 	return a(""), t.digest("hex");
 }
-function th(e) {
+function nh(e) {
 	let t = e.lastIndexOf("/");
 	return t < 0 ? "" : e.slice(0, t);
 }
-function nh(e, t) {
+function rh(e, t) {
 	let n = sm.safeParse(t ?? {});
 	n.success || Q("INPUT_INVALID", "Input values must be named strings no longer than 16 KiB.");
 	let r = new Set(e.chain.inputs.map((e) => e.name));
@@ -9421,7 +9421,7 @@ function nh(e, t) {
 	}
 	return i;
 }
-function rh(e, t, n) {
+function ih(e, t, n) {
 	let r = e.chain.steps[t];
 	r || Q("STEP_NOT_FOUND", "No active chain step exists.");
 	let i = r.instruction.replace(/\{\{([^{}]*)\}\}/g, (e, t) => {
@@ -9430,42 +9430,42 @@ function rh(e, t, n) {
 	});
 	return r.kind === "instruction" ? `Instruction:\n${i}` : `Skill: ${r.skillName}\n\nInstruction:\n${i}`;
 }
-async function ih(e) {
+async function ah(e) {
 	try {
 		await g(e, { mode: 448 });
 	} catch (e) {
-		if (!ah(e, "EEXIST")) throw e;
+		if (!oh(e, "EEXIST")) throw e;
 	}
 	let t = await h(e);
 	(!t.isDirectory() || t.isSymbolicLink() || await y(e) !== e) && Q("PATH_UNSAFE", "A required directory is not a real directory.");
 }
-function ah(e, t) {
+function oh(e, t) {
 	return e instanceof Error && "code" in e && e.code === t;
 }
-async function oh(e) {
+async function sh(e) {
 	i(e) || Q("PROJECT_INVALID", "The project path must be absolute.");
 	let t = await y(e);
 	return (await x(t)).isDirectory() || Q("PROJECT_INVALID", "The project path is not a directory."), t;
 }
-async function sh(e) {
+async function ch(e) {
 	let t = a(e, ".agents"), n = a(t, "skills");
-	return await ih(t), await ih(n), n;
+	return await ah(t), await ah(n), n;
 }
-async function ch(t, n, r) {
+async function lh(t, n, r) {
 	let i = await h(t, { bigint: !0 });
 	(!i.isFile() || i.isSymbolicLink() || i.ino === 0n) && Q(n, "The file must be a regular file with a verifiable identity, not a symbolic link.");
 	let a;
 	try {
 		a = await _(t, e.O_RDONLY | e.O_NOFOLLOW | e.O_NONBLOCK);
 	} catch (e) {
-		throw ah(e, "ELOOP") && Q(n, "The file must not be a symbolic link."), e;
+		throw oh(e, "ELOOP") && Q(n, "The file must not be a symbolic link."), e;
 	}
 	let o = (e) => e.dev === i.dev && e.ino === i.ino, s = async () => {
 		let e;
 		try {
 			e = await h(t, { bigint: !0 });
 		} catch (e) {
-			throw ah(e, "ENOENT") && Q(r, "The file changed while it was inspected. Review it again."), e;
+			throw oh(e, "ENOENT") && Q(r, "The file changed while it was inspected. Review it again."), e;
 		}
 		e.isFile() && !e.isSymbolicLink() && o(e) || Q(r, "The file changed while it was inspected. Review it again.");
 	};
@@ -9479,8 +9479,8 @@ async function ch(t, n, r) {
 		throw await a.close(), e;
 	}
 }
-async function lh(e, t) {
-	let { handle: n, verifyPath: r } = await ch(e, "PACKAGE_UNSAFE", "PACKAGE_CHANGED");
+async function uh(e, t) {
+	let { handle: n, verifyPath: r } = await lh(e, "PACKAGE_UNSAFE", "PACKAGE_CHANGED");
 	try {
 		let e = await n.stat();
 		(!e.isFile() || e.size > t) && Q("PACKAGE_TOO_LARGE", "An existing package file is unsafe or exceeds the portable review limit.");
@@ -9499,7 +9499,7 @@ async function lh(e, t) {
 		await n.close();
 	}
 }
-async function uh(e, t, n = {
+async function dh(e, t, n = {
 	files: Cp,
 	bytes: Sp
 }) {
@@ -9520,21 +9520,21 @@ async function uh(e, t, n = {
 			}), await u(f, p, d + 1);
 			else if (m.isFile()) {
 				o += 1, o > n.files && Q("PACKAGE_TOO_LARGE", "The existing package exceeds the portable review file limit.");
-				let e = await lh(f, n.bytes - i);
+				let e = await uh(f, n.bytes - i);
 				i += e.content.length, r.update(p).update("\0f\0").update(e.executable ? "1" : "0").update("\0"), r.update(e.content).update("\0"), t !== void 0 && l({
 					path: p,
 					kind: "file",
 					bytes: e.content.length,
 					executable: e.executable,
-					fingerprint: $m(e.content)
+					fingerprint: eh(e.content)
 				});
 			} else Q("PACKAGE_UNSAFE", "An installed skill contains a special file.");
 		}
 	}
 	return await u(e, "", 0), r.digest("hex");
 }
-async function dh(t, n, i, s, l) {
-	let u = await sh(n), d = new Set(i);
+async function fh(t, n, i, s, l) {
+	let u = await ch(n), d = new Set(i);
 	(d.size !== i.length || [...d].some((e) => !t.skills.some((t) => t.name === e))) && Q("REUSE_INVALID", "Reuse choices must name distinct skills included in the bundle.");
 	let f = [], m = [];
 	try {
@@ -9545,15 +9545,15 @@ async function dh(t, n, i, s, l) {
 			try {
 				await h(t), i = !0;
 			} catch (e) {
-				if (!ah(e, "ENOENT")) throw e;
+				if (!oh(e, "ENOENT")) throw e;
 			}
 			if (i) {
 				let e = await h(t);
 				e.isDirectory() && !e.isSymbolicLink() && d.has(n.name) || Q("PACKAGE_CONFLICT", `Skill "${n.name}" already exists. Review it and explicitly choose reuse or cancel.`);
 				let r = a(t, "SKILL.md"), i = await h(r);
-				(!i.isFile() || i.isSymbolicLink()) && Q("PACKAGE_CONFLICT", `Existing "${n.name}" is not a valid skill package.`), (wf(Cf((await lh(r, Sp)).content.toString("utf8")).data, "name") ?? n.directory) !== n.name && Q("PACKAGE_CONFLICT", `Existing skill directory does not contain "${n.name}".`);
-				let o = await uh(t);
-				o !== l.get(n.name) && Q("REVIEW_STALE", `Existing "${n.name}" changed since inspection; inspect and review it again.`), o !== eh(n.files) && !s && Q("REUSE_CONTENT_CONFIRMATION_REQUIRED", `Existing "${n.name}" differs from the bundle; explicitly confirm reuse of its installed contents.`), f.push({
+				(!i.isFile() || i.isSymbolicLink()) && Q("PACKAGE_CONFLICT", `Existing "${n.name}" is not a valid skill package.`), (wf(Cf((await uh(r, Sp)).content.toString("utf8")).data, "name") ?? n.directory) !== n.name && Q("PACKAGE_CONFLICT", `Existing skill directory does not contain "${n.name}".`);
+				let o = await dh(t);
+				o !== l.get(n.name) && Q("REVIEW_STALE", `Existing "${n.name}" changed since inspection; inspect and review it again.`), o !== th(n.files) && !s && Q("REUSE_CONTENT_CONFIRMATION_REQUIRED", `Existing "${n.name}" differs from the bundle; explicitly confirm reuse of its installed contents.`), f.push({
 					name: n.name,
 					directory: n.directory,
 					fingerprint: o,
@@ -9563,7 +9563,7 @@ async function dh(t, n, i, s, l) {
 				l.get(n.name) !== null && Q("REVIEW_STALE", `Existing "${n.name}" changed since inspection; inspect and review it again.`), d.has(n.name) && Q("REUSE_MISSING", `Skill "${n.name}" selected for reuse is missing.`), await g(t, { mode: 493 }), m.push(t);
 				for (let i of n.files) {
 					let n = a(t, ...i.path.split("/")), s = r(n), l = o(t, s).split(c).filter(Boolean), u = t;
-					for (let e of l) u = a(u, e), await ih(u);
+					for (let e of l) u = a(u, e), await ah(u);
 					let d = await _(n, e.O_WRONLY | e.O_CREAT | e.O_EXCL | e.O_NOFOLLOW, i.executable ? 493 : 420);
 					try {
 						await d.writeFile(Mp(i.content)), await d.sync();
@@ -9575,7 +9575,7 @@ async function dh(t, n, i, s, l) {
 				f.push({
 					name: n.name,
 					directory: n.directory,
-					fingerprint: await uh(t),
+					fingerprint: await dh(t),
 					reused: !1
 				});
 			}
@@ -9588,12 +9588,12 @@ async function dh(t, n, i, s, l) {
 		throw await Promise.all(m.map((e) => b(e, {
 			recursive: !0,
 			force: !0
-		}))), e instanceof Qm || e instanceof Tp ? e : new Qm("INSTALL_FAILED", "Skill installation failed; newly created package directories were rolled back.");
+		}))), e instanceof $m || e instanceof Tp ? e : new $m("INSTALL_FAILED", "Skill installation failed; newly created package directories were rolled back.");
 	}
 }
-async function fh(t) {
+async function ph(t) {
 	let n = a(t, ".loom"), r = a(n, "portable-runs");
-	await ih(n), await ih(r);
+	await ah(n), await ah(r);
 	let i = a(n, ".gitignore");
 	try {
 		let t = await _(i, e.O_WRONLY | e.O_CREAT | e.O_EXCL | e.O_APPEND | e.O_NOFOLLOW, 384);
@@ -9603,19 +9603,26 @@ async function fh(t) {
 			await t.close();
 		}
 	} catch (t) {
-		if (!ah(t, "EEXIST")) throw t;
+		if (!oh(t, "EEXIST")) throw t;
 		let n = await h(i, { bigint: !0 });
 		(!n.isFile() || n.isSymbolicLink() || n.ino === 0n) && Q("PATH_UNSAFE", "The Loom ignore file is not a regular file.");
 		let r = await _(i, e.O_RDWR | e.O_APPEND | e.O_NOFOLLOW);
 		try {
 			let e = await r.stat({ bigint: !0 });
-			(!e.isFile() || e.dev !== n.dev || e.ino !== n.ino || e.nlink !== 1n || e.size > 1024n * 1024n) && Q("PATH_UNSAFE", "The Loom ignore file is unsafe or too large.");
-			let t = await r.readFile("utf8"), a = await h(i, { bigint: !0 });
-			(!a.isFile() || a.isSymbolicLink() || a.dev !== e.dev || a.ino !== e.ino) && Q("PATH_UNSAFE", "The Loom ignore file changed during inspection.");
-			let o = t.split(/\r?\n/).filter((e) => e !== "" && !e.startsWith("#")), s = o.at(-1) === "portable-runs/" && o.at(-2) === "runs/" ? [] : o.at(-1) === "runs/" ? ["portable-runs/"] : ["runs/", "portable-runs/"];
-			if (s.length > 0) {
-				let n = `${t.endsWith("\n") || t === "" ? "" : "\n"}${s.join("\n")}\n`;
-				e.size + BigInt(Buffer.byteLength(n)) > 1024n * 1024n && Q("PATH_UNSAFE", "The Loom ignore file is unsafe or too large."), await r.writeFile(n, "utf8"), await r.sync();
+			(!e.isFile() || e.dev !== n.dev || e.ino !== n.ino || e.nlink !== 1n || e.size > BigInt(Xm)) && Q("PATH_UNSAFE", "The Loom ignore file is unsafe or too large.");
+			let t = Buffer.alloc(1048577), a = 0;
+			for (; a < t.length;) {
+				let e = await r.read(t, a, t.length - a, a);
+				if (e.bytesRead === 0) break;
+				a += e.bytesRead;
+			}
+			a > Xm && Q("PATH_UNSAFE", "The Loom ignore file is unsafe or too large.");
+			let o = t.subarray(0, a).toString("utf8"), s = await h(i, { bigint: !0 });
+			(!s.isFile() || s.isSymbolicLink() || s.dev !== e.dev || s.ino !== e.ino) && Q("PATH_UNSAFE", "The Loom ignore file changed during inspection.");
+			let c = o.split(/\r?\n/).filter((e) => e !== "" && !e.startsWith("#")), l = c.at(-1) === "portable-runs/" && c.at(-2) === "runs/" ? [] : c.at(-1) === "runs/" ? ["portable-runs/"] : ["runs/", "portable-runs/"];
+			if (l.length > 0) {
+				let e = `${o.endsWith("\n") || o === "" ? "" : "\n"}${l.join("\n")}\n`;
+				(await r.stat({ bigint: !0 })).size + BigInt(Buffer.byteLength(e)) > BigInt(Xm) && Q("PATH_UNSAFE", "The Loom ignore file is unsafe or too large."), await r.writeFile(e, "utf8"), await r.sync();
 			}
 		} finally {
 			await r.close();
@@ -9623,10 +9630,10 @@ async function fh(t) {
 	}
 	return r;
 }
-async function ph(e, t, n = !1) {
-	return mh(e, `${JSON.stringify(t, null, 2)}\n`, n);
+async function mh(e, t, n = !1) {
+	return hh(e, `${JSON.stringify(t, null, 2)}\n`, n);
 }
-async function mh(t, n, i = !1) {
+async function hh(t, n, i = !1) {
 	let o = a(r(t), `.${f()}.tmp`);
 	try {
 		let a = await _(o, e.O_WRONLY | e.O_CREAT | e.O_EXCL | e.O_NOFOLLOW, 384);
@@ -9635,29 +9642,29 @@ async function mh(t, n, i = !1) {
 		} finally {
 			await a.close();
 		}
-		i ? (await m(o, t), await te(o)) : await ee(o, t), await hh(r(t));
+		i ? (await m(o, t), await te(o)) : await ee(o, t), await gh(r(t));
 	} catch (e) {
 		throw await b(o, { force: !0 }), e;
 	}
 }
-async function hh(t) {
+async function gh(t) {
 	let n = await _(t, e.O_RDONLY);
 	try {
 		try {
 			await n.sync();
 		} catch (e) {
-			if (!ah(e, "EINVAL") && !ah(e, "EISDIR") && !ah(e, "EPERM") && !ah(e, "ENOTSUP")) throw e;
+			if (!oh(e, "EINVAL") && !oh(e, "EISDIR") && !oh(e, "EPERM") && !oh(e, "ENOTSUP")) throw e;
 		}
 	} finally {
 		await n.close();
 	}
 }
-async function gh(t, n) {
+async function _h(t, n) {
 	let r = a(t, ".lock"), i;
 	try {
 		i = await _(r, e.O_WRONLY | e.O_CREAT | e.O_EXCL | e.O_NOFOLLOW, 384);
 	} catch (e) {
-		throw ah(e, "EEXIST") && Q("RUN_LOCKED", "Another helper process is mutating portable run state; retry after it exits."), e;
+		throw oh(e, "EEXIST") && Q("RUN_LOCKED", "Another helper process is mutating portable run state; retry after it exits."), e;
 	}
 	try {
 		return await i.writeFile(`${process.pid}\n`, "utf8"), await i.sync(), await n();
@@ -9665,12 +9672,12 @@ async function gh(t, n) {
 		await i.close(), await b(r, { force: !0 });
 	}
 }
-async function _h(e, t, r = wp) {
+async function vh(e, t, r = wp) {
 	let i;
 	try {
-		({content: i} = await lh(e, r));
+		({content: i} = await uh(e, r));
 	} catch (e) {
-		if (!(e instanceof Qm)) throw e;
+		if (!(e instanceof $m)) throw e;
 		e.code === "PACKAGE_TOO_LARGE" && r < 31457280 && Q("RUN_SCAN_TOO_LARGE", "Portable run records exceed the conflict scan budget; archive completed records before retrying."), Q("RUN_FILE_INVALID", "The portable run record is unsafe, changed during inspection, or exceeds its size limit.");
 	}
 	let a;
@@ -9686,41 +9693,41 @@ async function _h(e, t, r = wp) {
 		bytes: i.length
 	};
 }
-async function vh(e, t) {
-	return (await _h(e, t)).run;
+async function yh(e, t) {
+	return (await vh(e, t)).run;
 }
-async function yh(e, t, n) {
+async function bh(e, t, n) {
 	let r = 0, i = 0, a = await v(e);
 	for await (let o of a) {
 		if (!o.name.endsWith(".json")) continue;
 		let a = o.name.slice(0, -5);
 		if (om.test(a) || Q("RUN_FILE_INVALID", "The portable run directory contains an invalid run record name."), a === n) continue;
-		r += 1, r > Xm && Q("RUN_SCAN_TOO_LARGE", "Too many portable run records to check for conflicts; archive completed records before retrying.");
-		let s = await _h(xh(e, a), t, Math.min(wp, Zm - i));
+		r += 1, r > Zm && Q("RUN_SCAN_TOO_LARGE", "Too many portable run records to check for conflicts; archive completed records before retrying.");
+		let s = await vh(Sh(e, a), t, Math.min(wp, Qm - i));
 		i += s.bytes;
 		let { run: c } = s, l = c.status === "completed" || c.status === "aborted" || c.status === "failed";
 		l && (c.resumeRequired || c.steps.some((e) => e.attempts.some((e) => e.status === "running"))) && Q("RUN_FILE_INVALID", "A finished portable run contains an unresolved attempt."), l || Q("RUN_ACTIVE_CONFLICT", "Another portable run is unfinished; finish or explicitly abort it before continuing.");
 	}
 }
-async function bh(e, t) {
+async function xh(e, t) {
 	for (let n of e.installedSkills) {
 		let e = a(t, ".agents", "skills", n.directory), r = await h(e);
-		(!r.isDirectory() || r.isSymbolicLink() || await uh(e) !== n.fingerprint) && Q("PACKAGE_CHANGED", `Installed skill "${n.name}" changed since this run was prepared; review it and prepare a new run.`);
+		(!r.isDirectory() || r.isSymbolicLink() || await dh(e) !== n.fingerprint) && Q("PACKAGE_CHANGED", `Installed skill "${n.name}" changed since this run was prepared; review it and prepare a new run.`);
 	}
 }
-function xh(e, t) {
+function Sh(e, t) {
 	return om.test(t) || Q("RUN_ID_INVALID", "The run id is not safe."), a(e, `${t}.json`);
 }
-async function Sh(e) {
+async function Ch(e) {
 	return e === void 0 ? {} : ((typeof e != "object" || !e || Array.isArray(e)) && Q("REQUEST_INVALID", "The request must be a JSON object."), e);
 }
-async function Ch(e, t, n = !1) {
+async function wh(e, t, n = !1) {
 	let r = lm.safeParse(t);
-	r.success || Q("RUN_STATE_INVALID", "The portable run transition would produce invalid state."), Buffer.byteLength(JSON.stringify(r.data), "utf8") > 31457280 && Q("RUN_TOO_LARGE", "The portable run record exceeds the 30 MiB safety limit."), await ph(xh(e, t.id), r.data, n);
+	r.success || Q("RUN_STATE_INVALID", "The portable run transition would produce invalid state."), Buffer.byteLength(JSON.stringify(r.data), "utf8") > 31457280 && Q("RUN_TOO_LARGE", "The portable run record exceeds the 30 MiB safety limit."), await mh(Sh(e, t.id), r.data, n);
 }
-async function wh(e) {
+async function Th(e) {
 	e && i(e) || Q("BUNDLE_PATH_INVALID", "Provide an absolute bundle file path.");
-	let { handle: t, verifyPath: n } = await ch(e, "BUNDLE_INVALID", "BUNDLE_INVALID");
+	let { handle: t, verifyPath: n } = await lh(e, "BUNDLE_INVALID", "BUNDLE_INVALID");
 	try {
 		let e = await t.stat();
 		(!e.isFile() || e.size > 31457280) && Q("BUNDLE_INVALID", "The bundle is not a regular file or exceeds the size limit.");
@@ -9738,7 +9745,7 @@ async function wh(e) {
 		await t.close();
 	}
 }
-async function Th(e, t) {
+async function Eh(e, t) {
 	let n = [];
 	for (let r of e.skills) {
 		let e = null;
@@ -9746,9 +9753,9 @@ async function Th(e, t) {
 			let n = a(t, ".agents", "skills", r.directory);
 			try {
 				let t = await h(n);
-				e = t.isDirectory() && !t.isSymbolicLink() && await y(n) === n ? await uh(n) : "unsafe";
+				e = t.isDirectory() && !t.isSymbolicLink() && await y(n) === n ? await dh(n) : "unsafe";
 			} catch (e) {
-				if (!ah(e, "ENOENT")) throw e;
+				if (!oh(e, "ENOENT")) throw e;
 			}
 		}
 		n.push({
@@ -9761,7 +9768,7 @@ async function Th(e, t) {
 			})),
 			skillMarkdown: Buffer.from(r.files.find((e) => e.path === "SKILL.md").content, "base64").toString("utf8"),
 			existingFingerprint: e,
-			bundledFingerprint: eh(r.files)
+			bundledFingerprint: th(r.files)
 		});
 	}
 	let r = e.version === 2 ? await Promise.all(e.agents.map(async (e) => {
@@ -9770,9 +9777,9 @@ async function Th(e, t) {
 			let r = e.harness === "opencode" ? ".opencode/agents" : ".github/agents", i = a(t, r, e.agentPath);
 			try {
 				let e = await h(i);
-				n = e.isFile() && !e.isSymbolicLink() && await y(i) === i ? $m((await lh(i, Sp)).content) : "unsafe";
+				n = e.isFile() && !e.isSymbolicLink() && await y(i) === i ? eh((await uh(i, Sp)).content) : "unsafe";
 			} catch (e) {
-				if (!ah(e, "ENOENT")) throw e;
+				if (!oh(e, "ENOENT")) throw e;
 			}
 		}
 		return {
@@ -9783,10 +9790,10 @@ async function Th(e, t) {
 			content: Mp(e.content).toString("utf8"),
 			existingFingerprint: n
 		};
-	})) : [], i = $m(JSON.stringify(e)), o = null;
+	})) : [], i = eh(JSON.stringify(e)), o = null;
 	if (t !== null) {
 		let e = await x(t, { bigint: !0 });
-		e.isDirectory() && await y(t) === t || Q("PROJECT_INVALID", "The inspected project is no longer a canonical directory."), o = $m(JSON.stringify({
+		e.isDirectory() && await y(t) === t || Q("PROJECT_INVALID", "The inspected project is no longer a canonical directory."), o = eh(JSON.stringify({
 			version: 1,
 			project: t,
 			projectDevice: String(e.dev),
@@ -9813,16 +9820,16 @@ async function Th(e, t) {
 		reviewDigest: o
 	};
 }
-async function Eh(e) {
-	if (e.command === "inspect") return Th(await wh(e.bundlePath), e.projectPath ? await oh(e.projectPath) : null);
+async function Dh(e) {
+	if (e.command === "inspect") return Eh(await Th(e.bundlePath), e.projectPath ? await sh(e.projectPath) : null);
 	e.projectPath && i(e.projectPath) || Q("PROJECT_INVALID", "Provide an absolute project path.");
-	let t = await oh(e.projectPath), n = await Sh(e.input);
+	let t = await sh(e.projectPath), n = await Ch(e.input);
 	if (e.command === "prepare") {
 		e.bundlePath && i(e.bundlePath) || Q("BUNDLE_PATH_INVALID", "Provide an absolute bundle file path."), n.installConfirmed !== !0 && Q("INSTALL_CONFIRMATION_REQUIRED", "Review and explicitly confirm package installation first."), typeof n.reviewDigest == "string" && /^[a-f0-9]{64}$/.test(n.reviewDigest) || Q("REVIEW_REQUIRED", "Inspect the bundle and project, then provide the review digest with installation approval.");
-		let r = await wh(e.bundlePath), a = Pp(r);
+		let r = await Th(e.bundlePath), a = Pp(r);
 		a.agent !== void 0 && Q("NATIVE_AGENT_REQUIRES_LOOM", "This bundle selects a harness-native agent. The portable current-conversation runner cannot switch agents; import the bundle into Skill Loom to run it with the selected agent.");
-		let o = nh(r, n.inputs);
-		for (let e = 0; e < r.chain.steps.length; e += 1) Buffer.byteLength(rh(r, e, o), "utf8") > Ym && Q("INSTRUCTION_TOO_LARGE", "Resolved step instructions are limited to 64 KiB.");
+		let o = rh(r, n.inputs);
+		for (let e = 0; e < r.chain.steps.length; e += 1) Buffer.byteLength(ih(r, e, o), "utf8") > Ym && Q("INSTRUCTION_TOO_LARGE", "Resolved step instructions are limited to 64 KiB.");
 		let s = n.progression === "agent" ? "agent" : n.progression === "supervised" ? "supervised" : null;
 		s === null && Q("PROGRESSION_INVALID", "Choose supervised or agent progression."), s === "agent" && n.progressionConfirmed !== !0 && Q("PROGRESSION_CONFIRMATION_REQUIRED", "Agent-driven progression needs explicit consent.");
 		let c = n.actualHost === "copilot" || n.actualHost === "opencode" || n.actualHost === "other" ? n.actualHost : null;
@@ -9834,18 +9841,18 @@ async function Eh(e) {
 		let d = u, p = lm.shape.sessionDecision.safeParse(d);
 		p.success && p.data.requested === r.chain.sessionMode || Q("SESSION_DECISION_INVALID", "The session decision must match the bundle and name an actual host mechanism."), (r.chain.sessionMode === "fresh" && p.data.mechanism === "current-conversation" || r.chain.sessionMode === "fork" && p.data.mechanism === "handoff") && p.data.confirmed !== !0 && Q("SESSION_CONFIRMATION_REQUIRED", "A non-native session approximation requires explicit consent."), r.chain.sessionMode === "shared" && p.data.mechanism !== "current-conversation" && Q("SESSION_DECISION_INVALID", "A shared chain must use the current host conversation."), r.chain.sessionMode === "fresh" && !["isolated-worker", "current-conversation"].includes(p.data.mechanism) && Q("SESSION_DECISION_INVALID", "Fresh mode needs a verified isolated worker or an explicitly accepted shared approximation."), r.chain.sessionMode === "fork" && !["native-fork", "handoff"].includes(p.data.mechanism) && Q("SESSION_DECISION_INVALID", "Fork mode needs a verified native fork or an explicitly accepted handoff."), n.installConfirmed !== !0 && Q("INSTALL_CONFIRMATION_REQUIRED", "Review and explicitly confirm package installation first.");
 		let m = n.reuseSkills === void 0 ? [] : n.reuseSkills;
-		(!Array.isArray(m) || m.some((e) => typeof e != "string")) && Q("REUSE_INVALID", "Reuse choices must be a list of skill names."), (await Th(r, t)).reviewDigest !== n.reviewDigest && Q("REVIEW_STALE", "The bundle, project, or existing package state changed since inspection; review it again."), process.platform === "win32" && r.skills.some((e) => e.files.some((e) => e.executable)) && Q("EXECUTABLE_MODES_UNSUPPORTED", "Windows cannot yet preserve executable modes when installing or reusing bundle skills.");
-		let h = await fh(t), g = f();
-		return qm(t, "portable", g, () => gh(h, async () => {
-			await yh(h, t);
-			let e = await Th(r, t);
+		(!Array.isArray(m) || m.some((e) => typeof e != "string")) && Q("REUSE_INVALID", "Reuse choices must be a list of skill names."), (await Eh(r, t)).reviewDigest !== n.reviewDigest && Q("REVIEW_STALE", "The bundle, project, or existing package state changed since inspection; review it again."), process.platform === "win32" && r.skills.some((e) => e.files.some((e) => e.executable)) && Q("EXECUTABLE_MODES_UNSUPPORTED", "Windows cannot yet preserve executable modes when installing or reusing bundle skills.");
+		let h = await ph(t), g = f();
+		return qm(t, "portable", g, () => _h(h, async () => {
+			await bh(h, t);
+			let e = await Eh(r, t);
 			e.reviewDigest !== n.reviewDigest && Q("REVIEW_STALE", "The bundle, project, or existing package state changed since inspection; review it again.");
-			let { installedSkills: i, createdDirectories: u } = await dh(r, t, m, n.differingReuseConfirmed === !0, new Map(e.skills.map((e) => [e.name, e.existingFingerprint]))), d = $(), f = {
+			let { installedSkills: i, createdDirectories: u } = await fh(r, t, m, n.differingReuseConfirmed === !0, new Map(e.skills.map((e) => [e.name, e.existingFingerprint]))), d = $(), f = {
 				version: 1,
 				id: g,
 				revision: 1,
 				projectPath: t,
-				bundleFingerprint: $m(JSON.stringify(r)),
+				bundleFingerprint: eh(JSON.stringify(r)),
 				bundle: r,
 				actualHost: c,
 				hostSwitchConfirmed: l,
@@ -9866,7 +9873,7 @@ async function Eh(e) {
 				updatedAt: d
 			};
 			try {
-				await Ch(h, f, !0);
+				await wh(h, f, !0);
 			} catch (e) {
 				throw await Promise.all(u.map((e) => b(e, {
 					recursive: !0,
@@ -9882,9 +9889,9 @@ async function Eh(e) {
 			};
 		}));
 	}
-	let r = await fh(t);
+	let r = await ph(t);
 	e.runId || Q("RUN_ID_INVALID", "Provide a run id.");
-	let o = xh(r, e.runId), s = await vh(o, t);
+	let o = Sh(r, e.runId), s = await yh(o, t);
 	if (e.command === "status") return {
 		ok: !0,
 		run: {
@@ -9908,9 +9915,9 @@ async function Eh(e) {
 	if (e.command === "step") return Jm(t, {
 		kind: "portable",
 		runId: s.id
-	}, () => gh(r, async () => {
-		let e = await vh(o, t);
-		n.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), (e.status !== "ready" || e.resumeRequired) && Q("RUN_NOT_READY", "The run is not ready to start another step."), await yh(r, t, e.id), await bh(e, t), e.progression === "supervised" && n.confirmed !== !0 && Q("STEP_CONFIRMATION_REQUIRED", "Confirm this step before execution.");
+	}, () => _h(r, async () => {
+		let e = await yh(o, t);
+		n.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), (e.status !== "ready" || e.resumeRequired) && Q("RUN_NOT_READY", "The run is not ready to start another step."), await bh(r, t, e.id), await xh(e, t), e.progression === "supervised" && n.confirmed !== !0 && Q("STEP_CONFIRMATION_REQUIRED", "Confirm this step before execution.");
 		let i = e.bundle.chain.steps[e.currentStepIndex], s = e.steps[e.currentStepIndex];
 		i && s || Q("RUN_STATE_INVALID", "The current step is missing."), s.attempts.length >= 50 && Q("ATTEMPTS_EXHAUSTED", "A step can have at most 50 attempts."), s.attempts.at(-1)?.status === "running" && Q("STEP_ALREADY_RUNNING", "The current step already has an unresolved attempt.");
 		let c = {
@@ -9921,10 +9928,10 @@ async function Eh(e) {
 			summary: null,
 			reason: null
 		};
-		s.attempts.push(c), e.status = "running", e.revision += 1, e.updatedAt = $(), await Ch(r, e);
-		let l = rh(e.bundle, e.currentStepIndex, e.resolvedInputs), u = null;
+		s.attempts.push(c), e.status = "running", e.revision += 1, e.updatedAt = $(), await wh(r, e);
+		let l = ih(e.bundle, e.currentStepIndex, e.resolvedInputs), u = null;
 		if (e.bundle.chain.sessionMode === "fork" && e.sessionDecision.mechanism === "handoff" && e.currentStepIndex > 0) {
-			let t = e.bundle.chain.steps[e.currentStepIndex - 1], n = e.steps[e.currentStepIndex - 1]?.attempts.at(-1), r = rh(e.bundle, e.currentStepIndex - 1, e.resolvedInputs);
+			let t = e.bundle.chain.steps[e.currentStepIndex - 1], n = e.steps[e.currentStepIndex - 1]?.attempts.at(-1), r = ih(e.bundle, e.currentStepIndex - 1, e.resolvedInputs);
 			u = [
 				"Portable handoff (not a native session fork):",
 				`Previous step: ${String(e.currentStepIndex)} "${Df(t)}"`,
@@ -9957,9 +9964,9 @@ async function Eh(e) {
 	if (e.command === "record") return Jm(t, {
 		kind: "portable",
 		runId: s.id
-	}, () => gh(r, async () => {
-		let e = await vh(o, t);
-		if (n.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), n.action === "pause" || n.action === "abort") return e.status !== "ready" && e.status !== "paused" && Q("RUN_ACTION_INVALID", "Pause or abort is only available between steps."), e.status = n.action === "pause" ? "paused" : "aborted", e.revision += 1, e.updatedAt = $(), await Ch(r, e), {
+	}, () => _h(r, async () => {
+		let e = await yh(o, t);
+		if (n.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), n.action === "pause" || n.action === "abort") return e.status !== "ready" && e.status !== "paused" && Q("RUN_ACTION_INVALID", "Pause or abort is only available between steps."), e.status = n.action === "pause" ? "paused" : "aborted", e.revision += 1, e.updatedAt = $(), await wh(r, e), {
 			ok: !0,
 			runId: e.id,
 			revision: e.revision,
@@ -9967,7 +9974,7 @@ async function Eh(e) {
 		};
 		if (n.action === "retry") {
 			let t = e.steps[e.currentStepIndex]?.attempts.at(-1);
-			return (e.status !== "paused" || t?.status !== "failed") && Q("RETRY_NOT_AVAILABLE", "Retry is available only for the current failed step."), e.status = "ready", e.revision += 1, e.updatedAt = $(), await Ch(r, e), {
+			return (e.status !== "paused" || t?.status !== "failed") && Q("RETRY_NOT_AVAILABLE", "Retry is available only for the current failed step."), e.status = "ready", e.revision += 1, e.updatedAt = $(), await wh(r, e), {
 				ok: !0,
 				runId: e.id,
 				revision: e.revision,
@@ -9983,7 +9990,7 @@ async function Eh(e) {
 				finishedAt: $(),
 				summary: null,
 				reason: n.reason.slice(0, 2e3)
-			}), e.currentStepIndex += 1, e.status = e.currentStepIndex >= e.steps.length ? "completed" : "ready", e.revision += 1, e.updatedAt = $(), await Ch(r, e), {
+			}), e.currentStepIndex += 1, e.status = e.currentStepIndex >= e.steps.length ? "completed" : "ready", e.revision += 1, e.updatedAt = $(), await wh(r, e), {
 				ok: !0,
 				runId: e.id,
 				revision: e.revision,
@@ -9995,7 +10002,7 @@ async function Eh(e) {
 		let s = n.outcome;
 		s !== "done" && s !== "failed" && s !== "skipped" && Q("OUTCOME_INVALID", "Record done, failed, or skipped."), s === "skipped" && (typeof n.reason != "string" || n.reason.trim() === "") && Q("SKIP_REASON_REQUIRED", "Skipping a step requires a reason."), s === "done" && e.progression === "supervised" && n.confirmed !== !0 && Q("COMPLETION_CONFIRMATION_REQUIRED", "Confirm the step outcome before marking it done.");
 		let c = typeof n.summary == "string" ? n.summary : "";
-		return Buffer.byteLength(c, "utf8") > 8192 && Q("SUMMARY_TOO_LARGE", "Step summaries are limited to 8 KiB; do not store a transcript."), a.status = s, a.finishedAt = $(), a.summary = c || null, a.reason = s === "skipped" ? n.reason.slice(0, 2e3) : null, s === "failed" ? e.status = "paused" : (e.currentStepIndex += 1, e.status = e.currentStepIndex >= e.steps.length ? "completed" : "ready"), e.revision += 1, e.updatedAt = $(), await Ch(r, e), {
+		return Buffer.byteLength(c, "utf8") > 8192 && Q("SUMMARY_TOO_LARGE", "Step summaries are limited to 8 KiB; do not store a transcript."), a.status = s, a.finishedAt = $(), a.summary = c || null, a.reason = s === "skipped" ? n.reason.slice(0, 2e3) : null, s === "failed" ? e.status = "paused" : (e.currentStepIndex += 1, e.status = e.currentStepIndex >= e.steps.length ? "completed" : "ready"), e.revision += 1, e.updatedAt = $(), await wh(r, e), {
 			ok: !0,
 			runId: e.id,
 			revision: e.revision,
@@ -10006,9 +10013,9 @@ async function Eh(e) {
 	if (e.command === "resume") return Jm(t, {
 		kind: "portable",
 		runId: s.id
-	}, () => gh(r, async () => {
-		let e = await vh(o, t);
-		if (n.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), e.status === "paused" && !e.resumeRequired && n.decision === "continue") return e.status = "ready", e.revision += 1, e.updatedAt = $(), await Ch(r, e), {
+	}, () => _h(r, async () => {
+		let e = await yh(o, t);
+		if (n.revision !== e.revision && Q("REVISION_CONFLICT", "Portable run state changed; refresh status before acting."), e.status === "paused" && !e.resumeRequired && n.decision === "continue") return e.status = "ready", e.revision += 1, e.updatedAt = $(), await wh(r, e), {
 			ok: !0,
 			runId: e.id,
 			revision: e.revision,
@@ -10017,7 +10024,7 @@ async function Eh(e) {
 		if (e.status === "running") {
 			n.stoppedConfirmed !== !0 && Q("STOP_CONFIRMATION_REQUIRED", "Confirm that the earlier host work has stopped before marking this attempt interrupted.");
 			let t = e.steps[e.currentStepIndex]?.attempts.at(-1);
-			return t?.status !== "running" && Q("RUN_STATE_INVALID", "The active run has no in-flight attempt."), t.status = "interrupted", t.finishedAt = $(), e.status = "interrupted", e.resumeRequired = !0, e.revision += 1, e.updatedAt = $(), await Ch(r, e), {
+			return t?.status !== "running" && Q("RUN_STATE_INVALID", "The active run has no in-flight attempt."), t.status = "interrupted", t.finishedAt = $(), e.status = "interrupted", e.resumeRequired = !0, e.revision += 1, e.updatedAt = $(), await wh(r, e), {
 				ok: !0,
 				runId: e.id,
 				revision: e.revision,
@@ -10033,7 +10040,7 @@ async function Eh(e) {
 			let t = typeof n.summary == "string" ? n.summary : "";
 			Buffer.byteLength(t, "utf8") > 8192 && Q("SUMMARY_TOO_LARGE", "Step summaries are limited to 8 KiB."), a.status = "done", a.summary = t || null, e.currentStepIndex += 1;
 		} else i === "failed" ? a.status = "failed" : Q("RESUME_DECISION_REQUIRED", "Choose retry, done, or failed for the interrupted attempt.");
-		return e.resumeRequired = !1, e.status = i === "failed" ? "paused" : e.currentStepIndex >= e.steps.length ? "completed" : "ready", e.revision += 1, e.updatedAt = $(), await Ch(r, e), {
+		return e.resumeRequired = !1, e.status = i === "failed" ? "paused" : e.currentStepIndex >= e.steps.length ? "completed" : "ready", e.revision += 1, e.updatedAt = $(), await wh(r, e), {
 			ok: !0,
 			runId: e.id,
 			revision: e.revision,
@@ -10043,44 +10050,44 @@ async function Eh(e) {
 	Q("COMMAND_INVALID", "Unknown portable run command.");
 }
 // src/portable/cli.ts
-var Dh = [
+var Oh = [
 	"inspect",
 	"prepare",
 	"status",
 	"step",
 	"record",
 	"resume"
-], Oh = new Set([...l().values()].map(([e]) => e));
-Oh.add("ERR_SQLITE_ERROR");
-function kh(e) {
+], kh = new Set([...l().values()].map(([e]) => e));
+kh.add("ERR_SQLITE_ERROR");
+function Ah(e) {
 	let t = e[0];
-	if (!Dh.includes(t)) throw new Qm("USAGE", `Usage: loom-bundle <${Dh.join("|")}> [--bundle PATH] [--project PATH] [--run-id ID]`);
+	if (!Oh.includes(t)) throw new $m("USAGE", `Usage: loom-bundle <${Oh.join("|")}> [--bundle PATH] [--project PATH] [--run-id ID]`);
 	let n = { command: t };
 	for (let t = 1; t < e.length; t += 1) {
 		let r = e[t];
-		if (r !== "--bundle" && r !== "--project" && r !== "--run-id") throw new Qm("USAGE", `Unknown option "${r}".`);
+		if (r !== "--bundle" && r !== "--project" && r !== "--run-id") throw new $m("USAGE", `Unknown option "${r}".`);
 		let i = e[t + 1];
-		if (i === void 0 || i === "" || i.startsWith("--")) throw new Qm("USAGE", `Option "${r}" needs a value.`);
+		if (i === void 0 || i === "" || i.startsWith("--")) throw new $m("USAGE", `Option "${r}" needs a value.`);
 		t += 1, r === "--bundle" && (n.bundlePath = i), r === "--project" && (n.projectPath = i), r === "--run-id" && (n.runId = i);
 	}
-	if (n.command !== "inspect" && n.projectPath === void 0) throw new Qm("USAGE", "This command needs --project PATH.");
+	if (n.command !== "inspect" && n.projectPath === void 0) throw new $m("USAGE", "This command needs --project PATH.");
 	if ([
 		"status",
 		"step",
 		"record",
 		"resume"
-	].includes(n.command) && n.runId === void 0) throw new Qm("USAGE", "This command needs --run-id ID.");
+	].includes(n.command) && n.runId === void 0) throw new $m("USAGE", "This command needs --run-id ID.");
 	return n;
 }
-async function Ah(e = process.argv.slice(2), t = {}) {
+async function jh(e = process.argv.slice(2), t = {}) {
 	let n = t.stdout ?? process.stdout, r = t.stderr ?? process.stderr;
 	try {
-		let r = kh(e), i = r.command === "inspect" ? "" : await jh(t.stdin ?? process.stdin);
+		let r = Ah(e), i = r.command === "inspect" ? "" : await Mh(t.stdin ?? process.stdin);
 		i.trim() !== "" && (r.input = JSON.parse(i));
-		let a = await Eh(r);
+		let a = await Dh(r);
 		return n.write(`${JSON.stringify(a)}\n`), 0;
 	} catch (e) {
-		let t = e instanceof Qm || e instanceof Tp || e instanceof Y || e instanceof Gm || e instanceof Z, n = t ? e.code : e instanceof SyntaxError ? "JSON_INVALID" : "REQUEST_FAILED", i = t ? e.message : e instanceof SyntaxError ? "Structured helper input is not valid JSON." : "The portable helper could not complete the request. Check file permissions and retry.", a = e instanceof Error && "code" in e ? e.code : void 0, o = !t && typeof a == "string" && Oh.has(a) ? a : void 0;
+		let t = e instanceof $m || e instanceof Tp || e instanceof Y || e instanceof Gm || e instanceof Z, n = t ? e.code : e instanceof SyntaxError ? "JSON_INVALID" : "REQUEST_FAILED", i = t ? e.message : e instanceof SyntaxError ? "Structured helper input is not valid JSON." : "The portable helper could not complete the request. Check file permissions and retry.", a = e instanceof Error && "code" in e ? e.code : void 0, o = !t && typeof a == "string" && kh.has(a) ? a : void 0;
 		return r.write(`${JSON.stringify({
 			ok: !1,
 			error: {
@@ -10091,17 +10098,17 @@ async function Ah(e = process.argv.slice(2), t = {}) {
 		})}\n`), 1;
 	}
 }
-async function jh(e) {
+async function Mh(e) {
 	if (e === void 0 || "isTTY" in e && e.isTTY === !0) return "";
 	let t = [], n = 0;
 	for await (let r of e) {
 		let e = Buffer.isBuffer(r) ? r : Buffer.from(String(r));
-		if (n += e.length, n > 8388608) throw new Qm("REQUEST_TOO_LARGE", "Structured helper input is limited to 8 MiB.");
+		if (n += e.length, n > 8388608) throw new $m("REQUEST_TOO_LARGE", "Structured helper input is limited to 8 MiB.");
 		t.push(e);
 	}
 	return Buffer.concat(t).toString("utf8");
 }
-function Mh() {
+function Nh() {
 	let e = process.argv[1];
 	if (e === void 0 || !["loom-bundle.mjs", "cli.js"].includes(n(e))) return !1;
 	try {
@@ -10110,7 +10117,7 @@ function Mh() {
 		return !1;
 	}
 }
-Mh() && Ah().then((e) => {
+Nh() && jh().then((e) => {
 	e !== 0 && (process.exitCode = e);
 });
-export { kh as parsePortableArgs, Ah as runPortableCli };
+export { Ah as parsePortableArgs, jh as runPortableCli };

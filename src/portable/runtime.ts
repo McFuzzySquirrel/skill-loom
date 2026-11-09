@@ -42,6 +42,7 @@ import {
 } from './run-schema.js';
 
 const MAX_STEP_INSTRUCTION_BYTES = 64 * 1024;
+const MAX_LOOM_IGNORE_BYTES = 1024 * 1024;
 const MAX_RUN_CONFLICT_SCAN_RECORDS = 1_000;
 const MAX_RUN_CONFLICT_SCAN_BYTES = 64 * 1024 * 1024;
 
@@ -435,10 +436,18 @@ async function ensureRunDirectory(project: string): Promise<string> {
     try {
       const opened = await handle.stat({ bigint: true });
       if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino || opened.nlink !== 1n ||
-          opened.size > 1024n * 1024n) {
+          opened.size > BigInt(MAX_LOOM_IGNORE_BYTES)) {
         fail('PATH_UNSAFE', 'The Loom ignore file is unsafe or too large.');
       }
-      const text = await handle.readFile('utf8');
+      const buffer = Buffer.alloc(MAX_LOOM_IGNORE_BYTES + 1);
+      let bytes = 0;
+      while (bytes < buffer.length) {
+        const result = await handle.read(buffer, bytes, buffer.length - bytes, bytes);
+        if (result.bytesRead === 0) break;
+        bytes += result.bytesRead;
+      }
+      if (bytes > MAX_LOOM_IGNORE_BYTES) fail('PATH_UNSAFE', 'The Loom ignore file is unsafe or too large.');
+      const text = buffer.subarray(0, bytes).toString('utf8');
       const current = await lstat(ignore, { bigint: true });
       if (!current.isFile() || current.isSymbolicLink() ||
           current.dev !== opened.dev || current.ino !== opened.ino) {
@@ -450,7 +459,8 @@ async function ensureRunDirectory(project: string): Promise<string> {
         : rules.at(-1) === 'runs/' ? ['portable-runs/'] : ['runs/', 'portable-runs/'];
       if (missing.length > 0) {
         const addition = `${text.endsWith('\n') || text === '' ? '' : '\n'}${missing.join('\n')}\n`;
-        if (opened.size + BigInt(Buffer.byteLength(addition)) > 1024n * 1024n) {
+        const latest = await handle.stat({ bigint: true });
+        if (latest.size + BigInt(Buffer.byteLength(addition)) > BigInt(MAX_LOOM_IGNORE_BYTES)) {
           fail('PATH_UNSAFE', 'The Loom ignore file is unsafe or too large.');
         }
         await handle.writeFile(addition, 'utf8');

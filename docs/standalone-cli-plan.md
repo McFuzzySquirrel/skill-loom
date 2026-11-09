@@ -92,13 +92,11 @@ These are requirements to implement and verify, not current guarantees:
    1.1.0's prebuilt `spawn-helper` mode `0644`. The package postinstall now
    grants owner execute permission to a private regular helper, and a clean
    macOS runner passed the focused terminal suite without a manual repair.
-   The latest full hosted Windows run (`42649899302`) failed 2 of 66 test
-   files (2 tests failed, 883 passed, 62 skipped); three files were skipped.
-   Remaining failures include platform-specific fixtures and executable mode
-   handling, and still need diagnosis before Windows suite coverage can be
-   claimed. A repeated cross-process test identified an `EPERM` replacing
-   `.loom/.gitignore` during concurrent portable setup; the current fix appends
-   ignore rules instead and needs hosted verification. A managed-claim test
+   The full hosted Windows suite passed (`42651250191`) after a preceding run
+   (`42649899302`) failed 2 tests. A repeated cross-process test identified an
+   `EPERM` replacing `.loom/.gitignore` during concurrent portable setup; the
+   fix appends ignore rules instead and a focused race passed on Linux, macOS,
+   and Windows (`42651272147`). A managed-claim test
    also observed the completed in-memory state before its record was persisted;
    the test now waits for the durable record without clearing the claim. Neither
    result is evidence of safe descendant cleanup.
@@ -138,7 +136,7 @@ These are requirements to implement and verify, not current guarantees:
    passed (`42648789532`), with those platform-specific checks skipped.
    A separate twelve-iteration cross-process portable claim race passed on
    Windows (`42649239259`), but reproduced the ignore-file collision under
-   the later full-suite load (`42649899302`).
+   the later full-suite load (`42649899302`), before the fix above.
    The focused Git blob-reader suite also passed on all three hosted platforms
    (`42647505376`), including timeout and direct-child reaping; this does not
    verify descendant containment.
