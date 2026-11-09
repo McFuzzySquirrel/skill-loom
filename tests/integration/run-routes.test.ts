@@ -2093,7 +2093,10 @@ describe('interrupted run recovery', () => {
     second.emitData(OSC_IDLE);
     const completed = await waitForRunStatus(harness.app, run.id, 'completed');
     expect(completed.steps.map((step) => step.status)).toEqual(['done', 'done']);
-    const after = await reviewProjectCoordination(project);
+    const after = await waitFor(async () => {
+      const state = await reviewProjectCoordination(project);
+      return state.records.length === 1 && state.records[0]?.unresolved === false ? state : null;
+    }, 'the completed managed run to be persisted');
     expect(after.claim).toEqual(claimed);
     expect(after.records).toEqual([expect.objectContaining({ runId: run.id, unresolved: false })]);
   });

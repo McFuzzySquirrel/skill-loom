@@ -92,13 +92,15 @@ These are requirements to implement and verify, not current guarantees:
    1.1.0's prebuilt `spawn-helper` mode `0644`. The package postinstall now
    grants owner execute permission to a private regular helper, and a clean
    macOS runner passed the focused terminal suite without a manual repair.
-   The latest full hosted Windows run (`42649010391`) failed 1 of 66 test
-   files (1 test failed, 882 passed, 62 skipped); three files were skipped.
+   The latest full hosted Windows run (`42649899302`) failed 2 of 66 test
+   files (2 tests failed, 883 passed, 62 skipped); three files were skipped.
    Remaining failures include platform-specific fixtures and executable mode
    handling, and still need diagnosis before Windows suite coverage can be
-   claimed. A concurrent portable request returned a generic error in both
-   that run and the preceding full run; its cause remains under investigation.
-   An earlier run also exposed intermittent managed-claim timing. Neither
+   claimed. A repeated cross-process test identified an `EPERM` replacing
+   `.loom/.gitignore` during concurrent portable setup; the current fix appends
+   ignore rules instead and needs hosted verification. A managed-claim test
+   also observed the completed in-memory state before its record was persisted;
+   the test now waits for the durable record without clearing the claim. Neither
    result is evidence of safe descendant cleanup.
    The preflight unit suite subsequently passed on hosted Windows after its
    synthetic paths were made platform-absolute (`42642647286`). POSIX
@@ -135,7 +137,8 @@ These are requirements to implement and verify, not current guarantees:
    ACL privacy or graceful Windows process shutdown. A focused Windows baseline
    passed (`42648789532`), with those platform-specific checks skipped.
    A separate twelve-iteration cross-process portable claim race passed on
-   Windows (`42649239259`), but did not reproduce the full-suite failure.
+   Windows (`42649239259`), but reproduced the ignore-file collision under
+   the later full-suite load (`42649899302`).
    The focused Git blob-reader suite also passed on all three hosted platforms
    (`42647505376`), including timeout and direct-child reaping; this does not
    verify descendant containment.

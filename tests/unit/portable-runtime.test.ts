@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { access, chmod, mkdtemp, mkdir, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { access, chmod, link, mkdtemp, mkdir, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -218,7 +218,10 @@ describe('portable bundle execution', () => {
       execFileSync('git', ['init', '--quiet', project]);
       await mkdir(join(project, '.loom'));
       await writeFile(join(project, '.loom', '.gitignore'), existing);
+      const before = await stat(join(project, '.loom', '.gitignore'), { bigint: true });
       const result = await prepare();
+      const after = await stat(join(project, '.loom', '.gitignore'), { bigint: true });
+      expect({ dev: after.dev, ino: after.ino }).toEqual({ dev: before.dev, ino: before.ino });
       expect(await readFile(join(project, '.loom', '.gitignore'), 'utf8'))
         .toBe(`${expected}project-claim.sqlite*\n`);
       for (const path of ['.loom/runs/example.json', `.loom/portable-runs/${result.runId}.json`,
@@ -240,6 +243,21 @@ describe('portable bundle execution', () => {
       execFileSync('git', ['-C', project, 'check-ignore', '--quiet', path]);
     }
   });
+
+  it('refuses to modify a hard-linked or oversized Loom ignore file', async () => {
+    await mkdir(join(project, '.loom'));
+    const ignore = join(project, '.loom', '.gitignore');
+    const outside = join(root, 'outside-ignore');
+    await writeFile(outside, 'original\n');
+    await link(outside, ignore);
+    await expect(prepare()).rejects.toMatchObject({ code: 'PATH_UNSAFE' });
+    expect(await readFile(outside, 'utf8')).toBe('original\n');
+    await rm(ignore);
+    await writeFile(ignore, 'x'.repeat(1024 * 1024));
+    await expect(prepare()).rejects.toMatchObject({ code: 'PATH_UNSAFE' });
+    expect((await stat(ignore)).size).toBe(1024 * 1024);
+  });
+
   it('bounds installed-package review by exact file, byte, entry, and inventory thresholds', async () => {
     const directory = join(project, 'package');
     await mkdir(join(directory, 'scripts'), { recursive: true });
@@ -627,6 +645,9 @@ describe('portable bundle execution', () => {
       await mkdir(raceProject);
       const initial = await reviewProjectCoordination(raceProject);
       await enableReviewedProjectProtocol(raceProject, initial.reviewDigest, true);
+      execFileSync('git', ['init', '--quiet', raceProject]);
+      await writeFile(join(raceProject, '.loom', '.gitignore'),
+        'runs/\nportable-runs/\n!runs/\n!portable-runs/\n!project-claim.sqlite\n');
       const inspected = await executePortableRequest({
         command: 'inspect', projectPath: raceProject, bundlePath,
       }) as { reviewDigest: string };
@@ -647,6 +668,9 @@ describe('portable bundle execution', () => {
           'RUN_LOCKED', 'RUN_ACTIVE_CONFLICT', 'REVIEW_STALE',
           'PROJECT_CLAIM_BUSY', 'PROJECT_CLAIM_CONFLICT',
         ], JSON.stringify(results)).toContain(result.code);
+      }
+      for (const path of ['.loom/runs/example.json', '.loom/portable-runs/example.json', '.loom/project-claim.sqlite']) {
+        execFileSync('git', ['-C', raceProject, 'check-ignore', '--quiet', path]);
       }
     }
   }, 120_000);

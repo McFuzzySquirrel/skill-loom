@@ -417,7 +417,8 @@ async function ensureRunDirectory(project: string): Promise<string> {
   await ensureDirectory(directory);
   const ignore = join(loom, '.gitignore');
   try {
-    const handle = await open(ignore, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+    const handle = await open(ignore, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL |
+      constants.O_APPEND | constants.O_NOFOLLOW, 0o600);
     try {
         await handle.writeFile('runs/\nportable-runs/\n', 'utf8');
         await handle.sync();
@@ -426,15 +427,37 @@ async function ensureRunDirectory(project: string): Promise<string> {
     }
   } catch (error) {
     if (!isErrno(error, 'EEXIST')) throw error;
-    const info = await lstat(ignore);
-    if (!info.isFile() || info.isSymbolicLink()) fail('PATH_UNSAFE', 'The Loom ignore file is not a regular file.');
-    const text = await readFile(ignore, 'utf8');
-    const rules = text.split(/\r?\n/).filter((line) => line !== '' && !line.startsWith('#'));
-    const missing = rules.at(-1) === 'portable-runs/' && rules.at(-2) === 'runs/'
-      ? []
-      : rules.at(-1) === 'runs/' ? ['portable-runs/'] : ['runs/', 'portable-runs/'];
-    if (missing.length > 0) {
-      await atomicWriteText(ignore, `${text}${text.endsWith('\n') || text === '' ? '' : '\n'}${missing.join('\n')}\n`);
+    const before = await lstat(ignore, { bigint: true });
+    if (!before.isFile() || before.isSymbolicLink() || before.ino === 0n) {
+      fail('PATH_UNSAFE', 'The Loom ignore file is not a regular file.');
+    }
+    const handle = await open(ignore, constants.O_RDWR | constants.O_APPEND | constants.O_NOFOLLOW);
+    try {
+      const opened = await handle.stat({ bigint: true });
+      if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino || opened.nlink !== 1n ||
+          opened.size > 1024n * 1024n) {
+        fail('PATH_UNSAFE', 'The Loom ignore file is unsafe or too large.');
+      }
+      const text = await handle.readFile('utf8');
+      const current = await lstat(ignore, { bigint: true });
+      if (!current.isFile() || current.isSymbolicLink() ||
+          current.dev !== opened.dev || current.ino !== opened.ino) {
+        fail('PATH_UNSAFE', 'The Loom ignore file changed during inspection.');
+      }
+      const rules = text.split(/\r?\n/).filter((line) => line !== '' && !line.startsWith('#'));
+      const missing = rules.at(-1) === 'portable-runs/' && rules.at(-2) === 'runs/'
+        ? []
+        : rules.at(-1) === 'runs/' ? ['portable-runs/'] : ['runs/', 'portable-runs/'];
+      if (missing.length > 0) {
+        const addition = `${text.endsWith('\n') || text === '' ? '' : '\n'}${missing.join('\n')}\n`;
+        if (opened.size + BigInt(Buffer.byteLength(addition)) > 1024n * 1024n) {
+          fail('PATH_UNSAFE', 'The Loom ignore file is unsafe or too large.');
+        }
+        await handle.writeFile(addition, 'utf8');
+        await handle.sync();
+      }
+    } finally {
+      await handle.close();
     }
   }
   return directory;
