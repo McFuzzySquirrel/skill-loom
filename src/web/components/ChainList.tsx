@@ -195,7 +195,9 @@ export function ChainList({ projectId, api = chainsApi }: ChainListProps) {
     setMutationFailure(null);
     setBusy({ chainId: chain.id, action: 'delete' });
     try {
-      await api.deleteChain(projectId, chain.id);
+      await api.deleteChain(projectId, chain.id, {
+        ...(chain.revision === undefined ? {} : { expectedRevision: chain.revision }),
+      });
       await reload();
       focusLibraryHeading.current = true;
       setConfirmingId(null);

@@ -8,6 +8,7 @@ import {
   TerminalInvalidSpecError,
   TerminalOutputBuffer,
   createTerminalSession,
+  createTerminalManager,
   trimTerminalOutput,
   type TerminalExit,
   type TerminalSession,
@@ -111,6 +112,43 @@ const LONG_OUTPUT_SCRIPT = `
 `;
 
 describe('PTY session transport', () => {
+  it('rejects a duplicate session id before validating or spawning a replacement', async () => {
+    const manager = createTerminalManager();
+    const directory = await mkdtemp(join(tmpdir(), 'loom-duplicate-pty-'));
+    temporaryDirectories.push(directory);
+    try {
+      const original = manager.createSession({
+        executable: process.execPath,
+        args: ['-e', 'setInterval(() => {}, 1000)'],
+      }, { id: 'terminal-existing' });
+      expect(() => manager.createSession({
+        executable: process.execPath,
+        args: [],
+        cwd: join(directory, 'missing'),
+      }, { id: 'terminal-existing' })).toThrow('Terminal session id is already in use.');
+      expect(manager.getSession('terminal-existing')).toBe(original);
+      expect(original.isRunning()).toBe(true);
+    } finally {
+      await manager.shutdown();
+    }
+  });
+
+  it('does not terminate a replacement session when an old attachment closes late', async () => {
+    const manager = createTerminalManager();
+    try {
+      const spec = { executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'] };
+      manager.createSession(spec, { id: 'terminal-reused' });
+      const old = manager.attach('terminal-reused', { send() {}, close() {} });
+      manager.closeSession('terminal-reused');
+      const replacement = manager.createSession(spec, { id: 'terminal-reused' });
+      old.detach({ terminate: true });
+      expect(manager.getSession('terminal-reused')).toBe(replacement);
+      expect(replacement.isRunning()).toBe(true);
+    } finally {
+      await manager.shutdown();
+    }
+  });
+
   it('spawns a node process with an executable and args and observes stdout', async () => {
     const session = start("process.stdout.write('hello from pty\\r\\n'); setInterval(()=>{}, 1000);");
     const output = outputOf(session);

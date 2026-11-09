@@ -70,6 +70,16 @@ describe('OSC 7501 parameter parsing', () => {
     });
   });
 
+  it('accepts observed colon-separated parameters and rejects conflicting state fields', () => {
+    expect(parseOsc7501Params('state=working:app=opencode:title=Working')).toMatchObject({
+      state: 'working', sessionId: null,
+    });
+    expect(parseOsc7501Params('id=ses_one:part:state=idle:app=opencode')).toMatchObject({
+      state: 'idle', sessionId: 'ses_one:part',
+    });
+    expect(parseOsc7501Params('state=working:state=idle')).toBeNull();
+  });
+
   it('exposes exactly the documented state vocabulary', () => {
     expect(OSC7501_STATES).toEqual(['working', 'idle', 'clear']);
   });
@@ -113,6 +123,14 @@ describe('streaming OSC 7501 parsing', () => {
 
       expect(states(events), `split at ${String(split)}`).toEqual(['idle']);
       expect(events[0]?.sessionId, `split at ${String(split)}`).toBe('ses_split_st');
+    }
+  });
+
+  it('parses the live colon-delimited format across every chunk boundary', () => {
+    const text = `${OSC7501_PREFIX}state=working:app=opencode:title=Working${BEL}`;
+    for (let split = 0; split <= text.length; split += 1) {
+      const parser = new Osc7501Parser();
+      expect(states([...parser.push(text.slice(0, split)), ...parser.push(text.slice(split))])).toEqual(['working']);
     }
   });
 
@@ -184,6 +202,12 @@ describe('streaming OSC 7501 parsing', () => {
 
     const events = parser.push(sequence('idle'));
     expect(states(events)).toEqual(['idle']);
+  });
+
+  it('enforces its buffer cap in UTF-8 bytes', () => {
+    const parser = new Osc7501Parser({ maxBufferBytes: 32 });
+    expect(parser.push(`${OSC7501_PREFIX}state=working${'é'.repeat(10)}`)).toEqual([]);
+    expect(parser.remainder).toBe('');
   });
 
   it('uses a 64 KiB default buffer cap', () => {

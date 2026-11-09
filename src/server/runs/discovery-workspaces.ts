@@ -111,28 +111,8 @@ export function createDiscoveryWorkspaceService(
 }
 
 const importQueues = new Map<string, Promise<{ draftId: string; imported: true }>>();
-const workspaceLifecycleLocks = new Map<string, Promise<void>>();
-
-export async function withDiscoveryWorkspaceLock<T>(
-  projectId: string,
-  operation: () => Promise<T>,
-): Promise<T> {
-  const previous = workspaceLifecycleLocks.get(projectId) ?? Promise.resolve();
-  let release!: () => void;
-  const current = new Promise<void>((resolveLock) => {
-    release = resolveLock;
-  });
-  workspaceLifecycleLocks.set(projectId, current);
-  await previous;
-  try {
-    return await operation();
-  } finally {
-    release();
-    if (workspaceLifecycleLocks.get(projectId) === current) {
-      workspaceLifecycleLocks.delete(projectId);
-    }
-  }
-}
+export { withWorkspaceLifecycleLock as withDiscoveryWorkspaceLock } from './workspace-lock.js';
+import { withWorkspaceLifecycleLock as withDiscoveryWorkspaceLock } from './workspace-lock.js';
 
 async function createWorkspace(
   input: Parameters<DiscoveryWorkspaceService['create']>[0],

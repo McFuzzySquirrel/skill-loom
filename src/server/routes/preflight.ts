@@ -15,17 +15,15 @@ import {
 import { HARNESS_IDS } from '../config/schema.js';
 import { ConfigError } from '../config/store.js';
 import type { ConfigStore } from '../config/store.js';
-import { createHarnessRegistry, type HarnessRegistry } from '../harness/registry.js';
+import type { HarnessRegistry } from '../harness/registry.js';
 import { HarnessError } from '../harness/types.js';
 import type {
   HarnessAuthStrategy,
   LocalCommandRunner,
 } from '../preflight/auth.js';
-import {
-  createPreflightEngine,
-  PREFLIGHT_RUN_MODES,
-  type PreflightEngine,
-} from '../preflight/engine.js';
+import type { PreflightEngine } from '../preflight/engine.js';
+import { createPreflightProvider, type PreflightProvider } from '../preflight/provider.js';
+import { preflightRequestBodySchema } from '../preflight/request.js';
 import {
   createTrustSessionService,
   TRUST_SESSION_ERROR_CODES,
@@ -52,23 +50,6 @@ import type { TerminalManager } from '../terminal/pty.js';
  * No handler spawns a harness prompt. Authentication, trust, and git evidence
  * come from the engine's injected, non-prompt seams.
  */
-
-const MAX_CHAIN_ID_LENGTH = 64;
-
-const inputValuesSchema = z.record(z.string(), z.string().nullable());
-
-const acknowledgementSchema = z.union([
-  z.array(z.string().min(1)),
-  z.record(z.string(), z.boolean()),
-]);
-
-const preflightRequestBodySchema = z.strictObject({
-  chainId: z.string().min(1).max(MAX_CHAIN_ID_LENGTH),
-  harness: z.enum(HARNESS_IDS).optional(),
-  mode: z.enum(PREFLIGHT_RUN_MODES).optional(),
-  inputs: inputValuesSchema.optional(),
-  acknowledgements: acknowledgementSchema.optional(),
-});
 
 const trustRequestBodySchema = z.discriminatedUnion('action', [
   z.strictObject({
@@ -107,6 +88,7 @@ export interface PreflightRoutesOptions {
   preflightAuthStrategies?: readonly HarnessAuthStrategy[];
   /** Pre-built engine seam. The default composes the live adapters. */
   preflightEngine?: PreflightEngine;
+  preflightProvider?: PreflightProvider;
   /** Pre-built trust-session service seam. */
   trustSessionService?: TrustSessionService;
 }
@@ -184,16 +166,8 @@ export const preflightRoutes: FastifyPluginAsync<PreflightRoutesOptions> = async
   const catalogService =
     options.catalogService ?? createCatalogService({ configStore: options.configStore });
 
-  const harnessRegistry = async (): Promise<HarnessRegistry> => {
-    if (options.harnessRegistry !== undefined) {
-      return options.harnessRegistry;
-    }
-    const config = await options.configStore.get();
-    return createHarnessRegistry({
-      commands: config.harnessCommands,
-      ...(options.preflightEnv === undefined ? {} : { env: options.preflightEnv }),
-    });
-  };
+  const provider = options.preflightProvider ?? createPreflightProvider({ ...options, catalogService });
+  const harnessRegistry = provider.harnessRegistry;
 
   const trustService =
     options.trustSessionService ??
@@ -228,9 +202,7 @@ export const preflightRoutes: FastifyPluginAsync<PreflightRoutesOptions> = async
       try {
         const projectPath = await resolveProjectPath(projectRegistry, request.params.projectId);
         const chain = await chainService.get(projectPath, parsed.data.chainId);
-        const engine =
-          options.preflightEngine ??
-          buildEngine(await harnessRegistry(), catalogService, options);
+        const engine = await provider.preflightEngine();
 
         const report = await engine.run({
           chain,
@@ -286,30 +258,6 @@ export const preflightRoutes: FastifyPluginAsync<PreflightRoutesOptions> = async
     },
   );
 };
-
-function buildEngine(
-  registry: HarnessRegistry,
-  catalogService: CatalogService,
-  options: PreflightRoutesOptions,
-): PreflightEngine {
-  return createPreflightEngine({
-    catalogService,
-    harnessRegistry: registry,
-    ...(options.preflightCommandRunner === undefined
-      ? {}
-      : { commandRunner: options.preflightCommandRunner }),
-    ...(options.preflightReadFileText === undefined
-      ? {}
-      : { readFileText: options.preflightReadFileText }),
-    ...(options.preflightHomeDirectory === undefined
-      ? {}
-      : { homeDirectory: options.preflightHomeDirectory }),
-    ...(options.preflightAuthStrategies === undefined
-      ? {}
-      : { authStrategies: options.preflightAuthStrategies }),
-    env: options.preflightEnv ?? process.env,
-  });
-}
 
 /**
  * Resolve a project id to its canonical directory. The id must be registered;

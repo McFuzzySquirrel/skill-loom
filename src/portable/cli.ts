@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import { basename } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { basename, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { BundleError } from './bundle.js';
 import { executePortableRequest, PortableRunError, type PortableRequest } from './runtime.js';
 
@@ -82,7 +84,19 @@ async function readStdin(input: NodeJS.ReadableStream | undefined): Promise<stri
   return Buffer.concat(chunks).toString('utf8');
 }
 
-if (process.argv[1] !== undefined && ['loom-bundle.mjs', 'cli.js'].includes(basename(process.argv[1]))) {
+function isMainModule(): boolean {
+  const entry = process.argv[1];
+  if (entry === undefined || !['loom-bundle.mjs', 'cli.js'].includes(basename(entry))) {
+    return false;
+  }
+  try {
+    return realpathSync(resolve(entry)) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isMainModule()) {
   void runPortableCli().then((code) => {
     if (code !== 0) process.exitCode = code;
   });

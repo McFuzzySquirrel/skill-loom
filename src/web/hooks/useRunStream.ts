@@ -344,7 +344,7 @@ export function useRunStream({
       });
     };
 
-    void loadSnapshot(true).then((loaded) => {
+    void loadSnapshot(viewRef.current?.run.id !== runId).then((loaded) => {
       if (disposed || !loaded) {
         return;
       }
@@ -383,7 +383,12 @@ export function useRunStream({
       try {
         const result = await api.applyAction(runId, action, reason);
         if (mountedRef.current) {
+          const wasFinal = viewRef.current !== null &&
+            FINAL_RUN_STATUSES.has(viewRef.current.run.status);
           commitView(viewFromActionResult(result, viewRef.current));
+          if (wasFinal && result.run.id === runId && !FINAL_RUN_STATUSES.has(result.run.status)) {
+            setReloadKey((current) => current + 1);
+          }
         }
         return result;
       } catch (caught) {

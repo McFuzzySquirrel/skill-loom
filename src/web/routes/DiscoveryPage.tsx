@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { catalogApi, type CatalogHarness, type RemoteSkillSource } from '../api/catalog';
 import { discoveryApi, discoveryWorkspaceApi, discoveryCandidateFromPackage, discoveryCandidateKey, type DiscoveryCandidate, type DiscoveryCandidateIdentity, type DiscoveryWorkspace } from '../api/discovery';
-import type { DiscoveryHandoff } from '../../shared/discovery-handoff';
+import { MAX_HANDOFF_PACKAGES, type DiscoveryHandoff } from '../../shared/discovery-handoff';
 import { ApiClientError } from '../api/client';
 import { toApiClientError } from '../api/projects';
 import { InlineError } from '../components/InlineError';
@@ -50,6 +50,7 @@ export function DiscoveryPage() {
   const [loading, setLoading] = useState(true);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [shownCandidates, setShownCandidates] = useState(50);
   const [selection, setSelection] = useState<Map<string, DiscoveryCandidateIdentity>>(
     () => new Map(),
   );
@@ -166,6 +167,7 @@ export function DiscoveryPage() {
     () => candidates.filter((candidate) => candidateFilter(candidate, query)),
     [candidates, query],
   );
+  useEffect(() => setShownCandidates(50), [query]);
   const hasIncompleteSources = sources.some((entry) => entry.error !== undefined);
   const missingSelection = [...selection.keys()].filter((key) => !candidateMap.has(key));
 
@@ -185,6 +187,10 @@ export function DiscoveryPage() {
   const toggleCandidate = (candidate: DiscoveryCandidate, checked: boolean) => {
     const key = discoveryCandidateKey(candidate);
     const next = new Map(selection);
+    if (checked && next.size >= MAX_HANDOFF_PACKAGES && !next.has(key)) {
+      announce(`A discovery handoff can include at most ${String(MAX_HANDOFF_PACKAGES)} candidates.`, 'assertive');
+      return;
+    }
     if (checked) next.set(key, candidate);
     else next.delete(key);
     updateSelection(next);
@@ -439,7 +445,7 @@ export function DiscoveryPage() {
               for (const candidate of candidates) next.set(discoveryCandidateKey(candidate), candidate);
               updateSelection(next);
             }}
-            disabled={loading || hasIncompleteSources || candidates.length === 0}
+            disabled={loading || hasIncompleteSources || missingSelection.length > 0 || candidates.length === 0 || candidates.length > MAX_HANDOFF_PACKAGES}
           >
             Select all available skills
           </button>
@@ -447,6 +453,11 @@ export function DiscoveryPage() {
             Clear selection
           </button>
         </div>
+        {candidates.length > MAX_HANDOFF_PACKAGES ? (
+          <p className="field__hint">
+            A handoff can include at most {String(MAX_HANDOFF_PACKAGES)} candidates. Search and select a smaller set; no candidates are omitted automatically.
+          </p>
+        ) : null}
         {hasIncompleteSources ? (
           <p className="field__error" role="status">Some source snapshots could not be loaded. Bulk selection and handoff preparation are disabled until the complete catalog is current.</p>
         ) : null}
@@ -456,7 +467,7 @@ export function DiscoveryPage() {
           </p>
         ) : null}
         <ul className="discovery-candidate-list" aria-label="Available skill candidates">
-          {visibleCandidates.map((candidate) => {
+          {visibleCandidates.slice(0, shownCandidates).map((candidate) => {
             const key = discoveryCandidateKey(candidate);
             const details = inspected.get(key);
             const inspectionError = inspectionErrors.get(key);
@@ -503,6 +514,11 @@ export function DiscoveryPage() {
             );
           })}
         </ul>
+        {visibleCandidates.length > shownCandidates ? (
+          <button type="button" className="button button--secondary" onClick={() => setShownCandidates((count) => count + 50)}>
+            Show more candidates ({String(Math.min(shownCandidates, visibleCandidates.length))} of {String(visibleCandidates.length)} shown)
+          </button>
+        ) : null}
         {visibleCandidates.length === 0 && candidates.length > 0 ? <p className="state-note">No candidates match this search. Existing selections are kept.</p> : null}
         {missingSelection.length > 0 ? (
           <div className="field__error" role="alert">

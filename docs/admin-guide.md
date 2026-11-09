@@ -84,7 +84,7 @@ The config document is versioned and strict:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "harnessCommands": {
     "opencode": "/absolute/path/to/opencode",
     "copilot": "/absolute/path/to/copilot"
@@ -99,11 +99,33 @@ The config document is versioned and strict:
 - `harnessCommands` optionally overrides the executable name or absolute path. A missing entry resolves from `PATH`. A broken override is a block; Skill Loom does not silently fall back to the default name.
 - `extraSkillDirectories` is the global extra-skill search list managed from the catalog settings dialog.
 - `remoteSkillSources` stores validated HTTPS/SSH Git URLs and optional refs for skill packages and supported native agents. Pinned snapshots live under `<LOOM_CONFIG_DIR>/catalog-sources/`; credentials are never stored.
+- `remoteCatalogLimits` controls finite Git staging, output, timeout, snapshot,
+  and per-package budgets. The **Remote skill repositories** page edits global
+  defaults and optional per-source overrides. Older version 1 configs are read
+  with the original default budgets and are written as version 2 on the next
+  update; older Skill Loom versions cannot read version 2 configs.
 - `recentProjects` stores the canonical path, display name, derived id, and last-opened time.
 - `uiPreferences` is opaque to the server; the web client owns its meaning.
 - Credential-like fields such as `apiKey`, `token`, or `secret` are structurally invalid and are never stored. Do not add them.
 
 Configuration writes use an atomic same-directory temporary-file replacement. A corrupt or unsupported-version config is reported, not silently rewritten or reset.
+
+The original default budgets remain 100 skill packages, 100 native agents,
+2,000 files, 20 MiB per package and per snapshot, 128 MiB / 10,000 entries
+of Git staging, and 2 MiB of Git command output. To refresh a larger catalog,
+raise the appropriate budgets together on **Remote skill repositories**; for
+example, a 1,000-package, 20,000-file source also needs sufficient Git output,
+staging, total snapshot bytes, and timeouts. Each setting has a finite maximum.
+Staging is polled during Git operations and checked again afterward, so it is
+not a hard filesystem quota. Existing snapshots remain readable when budgets
+are lowered. Discovery handoffs and bundles retain their independent limits.
+Disconnecting a refresh client requests cancellation: Git processes are
+terminated and unpublished staging is removed; a request waiting behind
+another refresh stops waiting without starting Git. Cancellation is best effort
+around the atomic publication rename; a snapshot whose publication has already
+begun may still be retained. Disconnecting does not remove existing snapshots.
+Process-group cleanup is verified on Linux; Windows process-tree cleanup remains
+unverified.
 
 ### CLI flags
 
@@ -117,9 +139,258 @@ Configuration writes use an atomic same-directory temporary-file replacement. A 
 
 Environment variables remain authoritative when a flag is omitted.
 
+`skill-loom bundle inspect --bundle /absolute/path/to/chain.loom.json` reads
+and reports a bundle as JSON without starting the server. An optional
+`--project /absolute/path` includes installed-package conflict information.
+
+`skill-loom catalog source list`, `catalog limits show`, and `catalog snapshot
+list`/`page` read configured Git sources and pinned snapshot metadata without
+starting the server or changing the profile. Run `skill-loom catalog --help`
+for flags. Results use a JSON envelope with `protocolVersion: 1`; failures are
+JSON on stderr with a nonzero exit status. New snapshots include a bounded
+local page index; old snapshots and unusual Unicode search data use the
+validated manifest instead. If a manifest changes after its index was created,
+the response warns that it fell back to the manifest. Malformed or
+structurally inconsistent indexes fail explicitly rather than omitting
+candidates. Verify selected candidate content before use; index files, like
+other local state, are not protected from a process running as the same user.
+`catalog snapshot inspect --source <id> --revision <commit> --kind skill|agent
+--path <repository-path>` verifies the selected candidate against its pinned
+fingerprint and returns its local path and metadata for manual content review.
+It does not execute content or freeze files against later changes; inspect all
+selected files as untrusted data and revalidate before a later action.
+With the owner running, `catalog project page` accepts a registered `projectId`,
+`harness`, optional `query`, `offset`, `limit` (up to 100), and `warningsOffset`
+as JSON on stdin. Pass the returned `snapshotId` with the same project, harness,
+and query for subsequent entry and warning pages. The owner retains at most
+four snapshots, with a combined 64 MiB serialized-data budget and a two-minute
+expiry. An expired or evicted snapshot returns `CATALOG_PAGE_EXPIRED`; start
+again. Discovery still loads and verifies the complete merged catalog for the
+first page. If a result exceeds the cache budget, `snapshotId` is null and
+`CATALOG_PAGE_NOT_CACHED` warns that later pages rediscover and may change;
+narrow the query for stable paging. Snapshot results are observations, not
+locks on project files; revalidate selections before later actions.
+`discovery handoff` accepts JSON on stdin containing `goal`, `harness`, and
+`candidates` with exact `sourceId`, `revision`, `repositoryPath`, and
+`fingerprint` values. It returns the same handoff as the UI inside the JSON
+envelope's `result` and does not write a file or run any candidate. The
+response contains complete candidate content: protect stdout and any saved
+artifact, review the content and redistribution rights separately, and extract
+`result` rather than saving the envelope as the handoff. The handoff has its
+own 100-package, 2,000-file, 20 MiB decoded, and 30 MiB JSON limits; stdin and
+control requests are limited to 64 KiB.
+
+On Unix-like systems, `skill-loom service start` starts the same profile-owning
+server without opening a browser; it still binds the normal loopback HTTP
+listener. A UI-started server also exposes the local control endpoint. Use
+`service status` and `service stop` against the same `--config-dir`; normal
+stop refuses an active managed run or an in-progress run operation. Finish or
+abort the run in the UI first. Catalog source add/remove/refresh and limit
+updates use the shared owner and require the service to be running. Their JSON
+payloads are supplied on stdin; use `skill-loom catalog --help` for shapes.
+`skill-loom project --help` and `skill-loom chain --help` describe
+registered project and draft commands. Draft validation checks the model only,
+not source availability, conflicts, permissions, or harness readiness.
+`chain project list` reads `{"projectId":"..."}` from stdin and returns the
+registered project's chains and any corrupt-file warnings. `chain project show`
+also requires `"chainId"` and reads the same saved chain as the UI. These and
+the draft commands require the running owner. Each show/create/update result
+includes a `revision`; list results include a `revisions` map keyed by chain
+ID. `chain project create` accepts `{"projectId":"...","draft":{...}}`.
+Project and draft `update` accept their IDs, a `draft`, and the last observed
+`expectedRevision`. Their `remove` commands accept the IDs, `expectedRevision`,
+and `confirmed: true`. A changed chain returns `CHAIN_STALE`; reload and review
+it rather than retrying with a new revision blindly.
+
+The UI supplies revision preconditions for its edits and deletions. Project
+chain and draft HTTP update/delete requests must include the last observed
+revision in `x-loom-chain-revision`; callers that previously omitted it must
+load the resource first. Missing headers return `CHAIN_REVISION_REQUIRED`
+(HTTP 428), and stale revisions return `CHAIN_STALE` (HTTP 409). External
+filesystem writes are not coordinated by the owner.
+`skill-loom bundle create --draft <id> --output /absolute/file` exports a
+draft bundle without replacing an existing file. To export a saved project
+chain using the same service as the UI, use `bundle create --project <id>
+--chain <id> --output /absolute/file` instead.
+
+To review an import, send `{"projectId":"...","bundlePath":"/absolute/file"}`
+on stdin to `skill-loom bundle review`. Use `bundle inspect` for the chain,
+inventories, `SKILL.md`, and agent definitions; separately decode and review
+the other bundled files without executing them. The review result includes a
+bundle fingerprint, destination identity, conflict and inventory information,
+and a `reviewDigest`. To approve installation, send the same project and path,
+plus `"reviewDigest":"..."` and `"confirmed":true`, on stdin to `skill-loom
+bundle import`. The owner rechecks the digest and destination before import.
+The digest records the caller's approval of that state; it does not prove a
+human reviewed it. For a unique installed project package, review reports its
+path, complete bounded inventory, file fingerprints, executable bits, and
+whether it differs from the bundled contents. Inspect the installed file
+contents separately before choosing `"reuseSkills":["name"]`. Differing
+contents additionally require `"differingReuseConfirmed":true`. The owner
+rechecks the selected package fingerprints immediately before saving the
+chain. Multiple project copies, unsafe files, incomplete discovery, and
+existing native-agent destinations block the corresponding import. Review of
+all existing packages is bounded to 2,000 files, 20 MiB, 66,000 entries and
+4 MiB of serialized inventory; larger selections must be resolved separately.
+These checks do not lock external filesystem edits. Import does not launch a
+harness or approve execution.
+
+`skill-loom run preflight` accepts the same preflight fields as the UI,
+including `projectId` and `chainId`, as JSON on stdin. It returns the shared
+preflight report; it does not start a run. Preflight can invoke local harness
+authentication/version and Git checks without sending a model prompt.
+`run active` reports the shared active run, and `run show` reads a `runId`
+from JSON on stdin to inspect a run. `run abort` accepts a `runId`,
+`confirmed: true`, and an optional `reason` in JSON on stdin; it aborts the
+shared managed run rather than creating a second runner.
+Before advancing or recording an abort, the runner waits for the current
+process to exit and escalates termination if necessary. A termination failure
+blocks the action; an automatic signal-driven step pauses with
+`PROCESS_TERMINATION_FAILED`. Inspect and resolve the still-running process
+before retrying or stopping the service. This does not establish that unrelated
+or detached descendants have exited.
+
+If a run pauses with `PERSIST_FAILED`, no new step is spawned after the failed
+write. Restore storage before an explicit retry or continuation. The pause is
+reported by the live service but may not have been written to disk; inspect the
+record and reconcile the interrupted work before restarting or replaying.
+
+If service shutdown fails while cleaning up an owned run, `service status`
+reports `failed` and the local control endpoint remains available. Resolve the
+process or storage failure, then run `service stop` again to retry cleanup. The
+service rejects new run operations during this state. Failures after the control
+endpoint itself closes may require manual intervention instead.
+`run review-start` accepts `{"projectId":"...","chainId":"...","mode":"supervised",
+"inputs":{...},"acknowledgements":{...}}` on stdin and returns the chain,
+destination identity, preflight report, and `reviewDigest`. Supply the same
+request plus `"reviewDigest":"..."` and `"confirmed":true` to `run start`
+to approve execution. A retained test workspace additionally requires
+`"liveTestConfirmed":true`. The owner rechecks the reviewed chain, destination,
+and preflight evidence; the running chain and inputs are frozen. CLI starts
+are limited to instruction-only chains without a selected native agent and
+exclude discovery workspaces. Automatic starts additionally require
+`"automaticConfirmed":true` and, when preflight reports broad permissions,
+`"broadPermissionsConfirmed":true`; the chain's own permission opt-in remains
+mandatory. Only adapters with process-exit advancement currently qualify;
+OpenCode automatic CLI starts remain blocked pending live signal verification.
+Skill-bearing starts are not yet available through the CLI. This is not a
+sandbox or a lock against external filesystem changes. Review output and run
+records can contain sensitive inputs. Confirmation records caller intent, not
+proof that a human reviewed it.
+To review a non-spawning action, send `{"runId":"...","action":"done"}` to
+`skill-loom run review-action`. The response contains the run view, the exact
+action evidence and a `reviewDigest`. To apply it, send the same fields plus
+`"reviewDigest":"..."` and `"confirmed":true` to `skill-loom run action`.
+Available non-spawning actions include supervised `done`, `failed`, and `skip`,
+and automatic `pause` and `skip`; `skip` requires a nonempty `reason` and
+`failed` may include one. For instruction-only runs outside discovery
+workspaces, `next` and `retry` are available; automatic process-exit runs also
+offer `resume` and `run-next` when eligible. Interrupted runs offer `continue`
+and `restart` as well as `retry`.
+Each execution action requires `"executionConfirmed":true`; retry and restart additionally
+require `"replayConfirmed":true`. For a retained test workspace, these actions
+also require `"liveTestConfirmed":true`. Automatic execution actions also
+require `"automaticConfirmed":true` and, when preflight reports broad
+permissions, `"broadPermissionsConfirmed":true`. Optional preflight
+`acknowledgements` must be supplied identically during review and action.
+Review binds run state, project identity and a freshly checked preflight.
+Continue leaves the interrupted step interrupted and starts the next pending
+step; retry replays the interrupted step, while restart creates a new run from
+the frozen snapshot. No action approval proves a human review, and external
+filesystem changes are not locked.
+The owner rejects changed run state or action evidence. A digest records caller
+intent, not proof of human review; discovery-workspace Done also requires the
+separate result review. The non-spawning actions do not launch the next step.
+CLI skill-bearing recovery actions and OSC-based automatic execution actions
+are not yet available.
+`run events` accepts `{"runId":"..."}` on stdin and streams versioned JSON
+Lines until interrupted or disconnected. It starts with a snapshot and then
+state events, omitting raw terminal-output events. Run records can still contain
+resolved inputs and bounded output tails, so treat the stream as sensitive.
+The stream does not attach to the terminal. If a reader cannot keep up, it
+fails explicitly; reconnect to obtain a new snapshot. Interrupting the client
+only unsubscribes and does not stop or retry the run.
+`run attach --run <id>` requires interactive TTYs for stdin and stdout and
+attaches to the existing live run terminal. Press Ctrl-] to detach without
+stopping the run; Ctrl-C is forwarded to the harness. Only one browser or CLI
+terminal subscriber is allowed at a time. Terminal output is untrusted and may
+contain terminal control sequences.
+
+`skill-loom workspace list` lists retained test workspaces. `workspace create`
+accepts either `{"sourceDraftId":"..."}` or
+`{"sourceProjectId":"...","sourceChainId":"..."}` on stdin and materializes
+an isolated working directory without running a harness. `workspace remove`
+requires `{"workspaceId":"...","confirmed":true}` on stdin and refuses to
+remove a workspace with an active run. These directories are not OS sandboxes.
+`workspace inspect` accepts `{"workspaceId":"...","path":"relative/path"}`
+on stdin, pages directory entries, and returns regular files up to 1 MiB as
+base64. It refuses symbolic links and special files; output is untrusted data.
+`workspace evaluate` accepts `{"workspaceId":"...","checks":[{"path":"output.txt",
+"sha256":"<64 lowercase hex characters>","contains":"expected text"}]}` on
+stdin. Each explicitly selected check requires a regular file and may specify an
+expected SHA-256, a case-sensitive UTF-8 substring, or a JSON scalar check.
+For example, `"json":{"pointer":"/tests/0/passed","equals":true}` selects a
+value using JSON Pointer and compares it with a string, finite number, boolean,
+or null; the empty pointer selects the root. Numbers use JavaScript's
+IEEE 754 comparison, and unsafe integers or non-finite observed values are
+rejected. Pointers and expected strings are limited to 4,096 characters. Omit all expectations to check file
+presence only. Substrings must be nonempty and at most 4,096 characters.
+Invalid UTF-8 or JSON fails the applicable check, and all supplied expectations
+must match. Up to 20 files of at most 1 MiB each are read without running commands.
+Results include per-file outcomes, observed hashes, and match status;
+missing files and mismatches fail their checks, while unsafe paths and unreadable
+files return errors. Checks are sequential observations, not an atomic snapshot,
+and do not establish semantic correctness or prove a skill was invoked.
+
+The current control transport is not available on Windows; the existing UI
+launcher and read-only catalog commands remain available there. Unix control
+supports draft editing, terminal attachment, and restricted reviewed managed
+starts and actions as described above; skill-bearing CLI starts remain blocked.
+Current portable helpers block preparation and step execution if another
+unfinished portable run is recorded in the project. The bounded conflict scan
+fails closed on unsafe or corrupt records and at more than 1,000 other records
+or 64 MiB of records. Archive completed records only while no helper can access
+them; do not overwrite or delete corrupt records to bypass the check.
+Portable runs, managed runs from different profiles, and older helpers do not
+coordinate project ownership. Arrange exclusive project use manually from
+before installation or execution until completion or explicit abort; status
+checks do not lock the project. If exclusive use cannot be established, stop.
+Do not start a second profile that knows the project while a managed run is
+active. Recovery leaves records not named by its own profile pointer unchanged
+and logs `RUN_RECOVERY_AMBIGUOUS`, but a matching stale pointer is not proof of
+ownership, and profiles still do not coordinate starts.
+Recovery of a matching pointer initializes `<project>/.loom/project-claim.sqlite`
+and an ignore rule for it and its SQLite sidecars. Do not remove or replace this
+database while a service is running. If a claim exists or project coordination
+has been enabled, recovery instead preserves the run and pointer and logs
+`RUN_RECOVERY_CLAIMED`; reviewed reconciliation is not yet available in the
+UI or CLI. Corrupt or unsafe coordination data blocks recovery rather than
+being replaced. This partial safeguard does not coordinate run starts or actions.
+If this warning appears, stop and establish whether another service or host is
+still working in the project; do not treat the warning as proof that the run
+has stopped. There is not yet a coordinated reconciliation command for an
+ambiguous record.
+If `RUN_ACTIVE_POINTER_CORRUPT` prevents startup, Skill Loom leaves the pointer
+and run files unchanged. Stop and establish that no earlier work or processes
+remain before inspecting the file or restoring a verified backup. Do not delete
+the pointer merely to bypass the error.
+The same precaution applies when the pointer references a corrupt, unreadable,
+or unsupported run record: startup reports the storage error and retains the
+pointer rather than treating the run as inactive.
+If the pointer becomes corrupt while a run is being saved, the run record may
+already have been written before pointer synchronization reports the failure;
+inspect both files and the live process state rather than assuming rollback.
+
 ## Identity, Secrets, and TLS
 
-Skill Loom has **no application identity, authentication, or authorization**. It is **loopback-only** by design and refuses a non-loopback host. There is no TLS listener and no supported reverse-proxy deployment. Do not expose the port through a proxy, tunnel, container publish, or remote host.
+The browser HTTP interface has **no application identity, authentication, or authorization**. It is **loopback-only** by design and refuses a non-loopback host. There is no TLS listener and no supported reverse-proxy deployment. Do not expose the port through a proxy, tunnel, container publish, or remote host.
+
+The Unix local control endpoint uses an owner-only runtime directory and a
+per-instance bearer capability in `control.json`, readable only by the profile
+owner. Treat that file as a secret: do not share, commit, or back it up. It is
+removed on clean shutdown and replaced after a safely checked stale endpoint.
+This mechanism does not isolate processes running as the same operating-system
+user and does not add authentication to the browser HTTP interface.
 
 Harness credentials belong to OpenCode or Copilot and stay in their own stores or environment. Skill Loom may inspect command output, credential-file presence, or environment-variable presence as authentication evidence, but it never reads credential values into its config, logs, or API responses. Preflight reports presence only.
 
@@ -135,6 +406,8 @@ If you need multi-user or remote access, this project does not provide it. Treat
 | `~/.config/loom/test-workspaces/<uuid>/` | Managed disposable projects created by **Test in disposable workspace**. | Retained until explicit cleanup from **Test workspaces**. Cleanup refuses the workspace holding the global active run. |
 | `~/.config/loom/discovery-workspaces/<uuid>/` | Reviewed handoff, bundled `scenario-discovery` package, managed project, result file, and run state for interactive scenario discovery. | Retained until explicit cleanup from **Discover workflows**. Cleanup refuses the workspace holding the global active run. |
 | `~/.config/loom/active-run.json` | Single global active-run pointer. | Holds the active run's project path, run id, and status. Do not edit while a run is live. |
+| `~/.config/loom/profile-owner.sqlite` | Profile ownership lock. | One server may own a profile at a time. Do not remove or replace this file while the server is running; the operating system releases the lock on process exit. Store the profile on a filesystem that supports SQLite locking. |
+| `~/.config/loom/control.json` | Temporary local control endpoint and bearer capability on Unix. | Owner-only; do not share, back up, or remove while the server is running. |
 | `~/.config/loom/chains/*.json` | Global chain templates. | Independent snapshots; importing copies one into a project with a new id. |
 | `<project>/.loom/chains/*.json` | Saved project chains. | Versioned JSON, atomic writes. Back up or version these recipes. |
 | `<project>/.loom/runs/*.json` | Run snapshots, statuses, actions, and bounded tails. | At most 200 lines or 32 KiB per step. Never a full transcript. This repository git-ignores `.loom/runs/`. |
@@ -144,7 +417,8 @@ If you need multi-user or remote access, this project does not provide it. Treat
 | Configured shared bundle directory | Immutable published `.loom.json` files. | Must be an existing absolute directory visible to the server and support same-directory hard links. Publication never replaces an existing file; the directory is local or mounted storage, not a hosted service. |
 | `~/.copilot/config.json` | Copilot's own folder-trust configuration. | Skill Loom only reads `trustedFolders`; it never writes this file. |
 
-Back up the configuration and recipes:
+Stop the service before backing up the configuration and recipes, so the
+temporary control capability is not included:
 
 ```bash
 cp -a ~/.config/loom ~/loom-config-backup
@@ -170,7 +444,7 @@ The **Discover workflows** page prepares a separate `skill-loom-discovery-handof
 
 `npm run build:portable-skill` synchronizes the canonical `.github/skills/` definitions into the checked-in `skill/` mirror and generates both versioned downloadable skill archives under `dist/skills/`. Review the generated output after changing either skill and run the package smoke test before distributing a packed application.
 
-The same-origin API exposes `GET /api/projects/:projectId/chains/:chainId/bundle`, `POST /api/projects/:projectId/chain-bundles/preview`, and `POST /api/projects/:projectId/chain-bundles/import`. POST bodies contain `bundle`; import additionally requires `confirmed: true` and an optional `reuseSkills` array of installed skill names. Preview is read-only. Import revalidates the bundle and conflicts and rolls back newly installed packages and agent definitions if chain persistence fails. A bundle does not install harness CLIs or external skill dependencies.
+The same-origin API exposes `GET /api/projects/:projectId/chains/:chainId/bundle`, `POST /api/projects/:projectId/chain-bundles/preview`, and `POST /api/projects/:projectId/chain-bundles/import`. POST bodies contain `bundle`; preview is read-only and returns a `reviewDigest`. Import requires `confirmed: true` and that digest, plus optional `reuseSkills` and `differingReuseConfirmed` fields. Existing HTTP import callers must preview again and send the returned digest. Import rechecks review evidence and rolls back newly installed packages and agent definitions if chain persistence fails. A bundle does not install harness CLIs or external skill dependencies.
 
 Standalone instruction steps use `kind: "instruction"` and contain `id`, `instruction`, and an optional `label`, with no `skillName`. Existing skill steps remain valid without a `kind`; explicit `kind: "skill"` is also supported. Both persist under versioned chain format 3. Older application builds that do not understand instruction steps or chain version 3 will reject such chains; use a compatible build on the receiving installation.
 
@@ -220,11 +494,11 @@ Rollback:
 4. Restore the configuration and chain backups if the newer version wrote data you do not want to keep.
 5. Start the server and verify `/api/health`.
 
-Config, chain, run, and active-run documents carry explicit versions. An unknown version is rejected rather than reinterpreted. Version 1 is the current persisted format; there is no general migration tool.
+Config, chain, run, and active-run documents carry explicit versions. Unknown versions are rejected rather than reinterpreted. Config and chain documents currently use version 2 and accept supported version 1 documents through their readers; there is no general migration tool.
 
 ## Known Limitations
 
-- **Automatic OpenCode advancement is not proven end-to-end.** The live execution evidence records `OSC7501_PRODUCT_PARSER_MISMATCH`: OpenCode 2.2.5 emitted colon-separated `OSC 7501` parameters while the product parser splits on `;`. The probe's own parser recognized the signal; the product parser did not. Supervised OpenCode runs are unaffected by this specific mismatch. Do not rely on automatic OpenCode chains until the parser is fixed and the live probe is rerun.
+- **Automatic OpenCode advancement is not proven end-to-end.** The parser now accepts the observed colon-separated `OSC 7501` parameters, but OpenCode 2.2.5 also emitted `clear` between `working` and `idle`, resetting the product's observation. Supervised OpenCode runs are unaffected. Do not rely on automatic OpenCode chains until the signal contract is resolved and the live probe is rerun.
 - **`/api/health` activeRun is a placeholder in production.** Use `GET /api/runs/active` for live run state.
 - **One harness per chain; no per-step harness or model selection.**
 - **Native fork is available only on OpenCode's headless surface.** Supervised OpenCode and all Copilot forks use a deterministic handoff note, not a native session fork.

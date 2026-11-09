@@ -17,7 +17,7 @@ status: Accepted
 ## Agent Rules
 
 - **MUST:** Enforce one active run across all projects through `active-run.json` and reject a second start while a run is starting, running, paused, or awaiting user input.
-- **MUST:** On startup, mark records that were active as `interrupted`, clear a stale active-run pointer, and require the user to choose retry, continue, or restart.
+- **MUST:** On startup, mark the active record named by this profile's pointer as `interrupted`, clear the stale pointer, and require the user to choose retry, continue, or restart, unless project coordination requires explicit review. Leave claimed records and other active records unchanged and report their ambiguous ownership.
 - **MUST NOT:** Resume, advance, or replay a step automatically because the server restarted or the run page loaded.
 - **MUST NOT:** Treat `failed`, `completed`, `aborted`, or `interrupted` as blocking a new run.
 

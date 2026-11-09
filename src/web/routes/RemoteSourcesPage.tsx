@@ -8,8 +8,63 @@ import {
 } from '../api/catalog';
 import type { ApiClientError } from '../api/client';
 import { InlineError } from '../components/InlineError';
+import { RemoteCatalogLimits } from '../components/RemoteCatalogLimits';
 import { useStatusAnnouncer } from '../components/StatusRegion';
 import { Link } from '../router';
+
+function SnapshotContents({ snapshot }: { snapshot: RemoteSkillSnapshot }) {
+  const [shown, setShown] = useState(50);
+  const [shownAgents, setShownAgents] = useState(50);
+  return (
+    <section aria-label={`Snapshot ${snapshot.revision}`}>
+      <h4>Commit <code>{snapshot.revision}</code></h4>
+      {snapshot.packages.length === 0 ? (
+        <p>No skill packages were found at this commit.</p>
+      ) : (
+        <>
+          <ul>
+            {snapshot.packages.slice(0, shown).map((item) => (
+              <li key={`${item.repositoryPath}-${item.fingerprint}`}>
+                <strong>{item.name}</strong>
+                {' — '}{item.description || 'No description'}
+                {' '}<code>{item.repositoryPath}</code>
+                {' '}({item.files} files, {item.bytes} bytes)
+              </li>
+            ))}
+          </ul>
+          {shown < snapshot.packages.length ? (
+            <button type="button" className="button button--secondary" onClick={() => setShown((count) => count + 50)}>
+              Show more packages ({String(shown)} of {String(snapshot.packages.length)} shown)
+            </button>
+          ) : null}
+        </>
+      )}
+      {snapshot.agents.length === 0 ? (
+        <p>No native agent definitions were found at this commit.</p>
+      ) : (
+        <>
+          <h4>Native agent definitions</h4>
+          <ul>
+            {snapshot.agents.slice(0, shownAgents).map((agent) => (
+              <li key={`${agent.harness}-${agent.repositoryPath}-${agent.fingerprint}`}>
+                <strong>{agent.name}</strong>
+                {' — '}{agent.description || 'No description'}
+                {' '}({agent.harness}; {agent.status})
+                {' '}<code>{agent.repositoryPath}</code>
+                {agent.statusReason === null ? null : ` — ${agent.statusReason}`}
+              </li>
+            ))}
+          </ul>
+          {shownAgents < snapshot.agents.length ? (
+            <button type="button" className="button button--secondary" onClick={() => setShownAgents((count) => count + 50)}>
+              Show more agents ({String(shownAgents)} of {String(snapshot.agents.length)} shown)
+            </button>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
 
 export function RemoteSourcesPage({ api = catalogApi }: { api?: CatalogApi }) {
   const repositoryId = useId();
@@ -17,6 +72,7 @@ export function RemoteSourcesPage({ api = catalogApi }: { api?: CatalogApi }) {
   const heading = useRef<HTMLHeadingElement>(null);
   const { announce } = useStatusAnnouncer();
   const [sources, setSources] = useState<RemoteSkillSource[]>([]);
+  const [limitsDirty, setLimitsDirty] = useState(false);
   const [snapshots, setSnapshots] = useState<Record<string, RemoteSkillSnapshot[]>>({});
   const [repository, setRepository] = useState('');
   const [ref, setRef] = useState('');
@@ -137,6 +193,14 @@ export function RemoteSourcesPage({ api = catalogApi }: { api?: CatalogApi }) {
         />
       ) : null}
 
+      <RemoteCatalogLimits
+        api={api}
+        sources={sources}
+        onSourceUpdated={(updated) => setSources((current) =>
+          current.map((source) => source.id === updated.id ? updated : source))}
+        onDirtyChange={setLimitsDirty}
+      />
+
       <section className="panel" aria-labelledby="add-remote-source-title">
         <h2 className="section-title" id="add-remote-source-title">Add a repository</h2>
         <form className="catalog-settings__form" onSubmit={(event) => void addSource(event)}>
@@ -177,6 +241,7 @@ export function RemoteSourcesPage({ api = catalogApi }: { api?: CatalogApi }) {
 
       <section className="panel" aria-labelledby="registered-sources-title">
         <h2 className="section-title" id="registered-sources-title">Registered repositories</h2>
+        {limitsDirty ? <p className="field__hint">Save or discard catalog limit changes before unregistering a repository.</p> : null}
         {loading ? <p role="status">Loading remote repositories…</p> : null}
         {!loading && sources.length === 0 ? (
           <p>No remote repositories are registered.</p>
@@ -199,48 +264,13 @@ export function RemoteSourcesPage({ api = catalogApi }: { api?: CatalogApi }) {
                   type="button"
                   className="button button--secondary"
                   onClick={() => void unregisterSource(source)}
-                  disabled={busyId !== null}
+                  disabled={busyId !== null || limitsDirty}
                 >
                   Unregister
                 </button>
               </div>
-              {(snapshots[source.id] ?? []).map((snapshot) => (
-                <section key={snapshot.revision} aria-label={`Snapshot ${snapshot.revision}`}>
-                  <h4>Commit <code>{snapshot.revision}</code></h4>
-                  {snapshot.packages.length === 0 ? (
-                    <p>No skill packages were found at this commit.</p>
-                  ) : (
-                    <ul>
-                      {snapshot.packages.map((item) => (
-                        <li key={`${item.repositoryPath}-${item.fingerprint}`}>
-                          <strong>{item.name}</strong>
-                          {' — '}{item.description || 'No description'}
-                          {' '}<code>{item.repositoryPath}</code>
-                          {' '}({item.files} files, {item.bytes} bytes)
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {snapshot.agents.length === 0 ? (
-                    <p>No native agent definitions were found at this commit.</p>
-                  ) : (
-                    <>
-                      <h4>Native agent definitions</h4>
-                      <ul>
-                        {snapshot.agents.map((agent) => (
-                          <li key={`${agent.harness}-${agent.repositoryPath}-${agent.fingerprint}`}>
-                            <strong>{agent.name}</strong>
-                            {' — '}{agent.description || 'No description'}
-                            {' '}({agent.harness}; {agent.status})
-                            {' '}<code>{agent.repositoryPath}</code>
-                            {agent.statusReason === null ? null : ` — ${agent.statusReason}`}
-                          </li>
-                        ))}
-                      </ul>
-                    </>
-                  )}
-                </section>
-              ))}
+              {(snapshots[source.id] ?? []).map((snapshot) =>
+                <SnapshotContents key={snapshot.revision} snapshot={snapshot} />)}
             </article>
           ))}
         </div>

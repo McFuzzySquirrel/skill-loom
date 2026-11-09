@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import {
@@ -7,7 +6,6 @@ import {
   type ApiValidationIssue,
 } from '../../shared/api.js';
 import type { CatalogService } from '../catalog/merge.js';
-import { createCatalogService } from '../catalog/merge.js';
 import { ChainValidationError } from '../chains/model.js';
 import { createChainService, type ChainService } from '../chains/service.js';
 import {
@@ -17,13 +15,13 @@ import {
 import { HARNESS_IDS } from '../config/schema.js';
 import { ConfigError } from '../config/store.js';
 import type { ConfigStore } from '../config/store.js';
-import { createHarnessRegistry, type HarnessRegistry } from '../harness/registry.js';
+import type { HarnessRegistry } from '../harness/registry.js';
 import { HarnessError } from '../harness/types.js';
 import type {
   HarnessAuthStrategy,
   LocalCommandRunner,
 } from '../preflight/auth.js';
-import { createPreflightEngine, type PreflightEngine } from '../preflight/engine.js';
+import type { PreflightEngine } from '../preflight/engine.js';
 import {
   createProjectRegistry,
   type ProjectRegistry,
@@ -31,7 +29,6 @@ import {
 import {
   RUN_ORCHESTRATOR_ERROR_CODES,
   RunOrchestratorError,
-  createRunOrchestrator,
   type CreateRunRequest,
   type RunActionResult,
   type RunActionRequest,
@@ -44,6 +41,7 @@ import {
   type RunSupervisedPtyContext,
   type RunView,
 } from '../runs/orchestrator.js';
+import { createRunOwner, reportRunRecoveryWarning, RunOwnerError, type RunOwner } from '../runs/owner.js';
 import { AutomaticRunnerError, type AutomaticSpawner } from '../runs/automatic.js';
 import { RunError, type Run } from '../runs/model.js';
 import { RunPromptError } from '../runs/prompts.js';
@@ -58,8 +56,8 @@ import {
   createDiscoveryWorkspaceService,
   DISCOVERY_WORKSPACE_ERROR_CODES,
   DiscoveryWorkspaceError,
-  withDiscoveryWorkspaceLock,
 } from '../runs/discovery-workspaces.js';
+import { withWorkspaceLifecycleLock } from '../runs/workspace-lock.js';
 
 /**
  * Run orchestration HTTP and WebSocket surface.
@@ -141,6 +139,8 @@ export interface RunRoutesOptions {
   runCreateAutomaticSpawner?: (context: RunAutomaticSpawnerContext) => AutomaticSpawner;
   /** Automatic step timeout forwarded to a default orchestrator. */
   runStepTimeoutMs?: number;
+  /** Shared application-owned lifecycle for all managed-run transports. */
+  runOwner?: RunOwner;
 }
 
 /** The minimal WebSocket surface the event route needs, kept structural. */
@@ -217,6 +217,7 @@ const STATUS_BY_ORCHESTRATOR_CODE: Record<
   RUN_ACTION_INVALID: 422,
   RUN_ACTION_MODE_MISMATCH: 409,
   RUN_ACTION_NOT_ALLOWED: 409,
+  RUN_STALE: 409,
   RUN_NOT_LIVE: 409,
   RUN_RECOVERY_REQUIRED: 409,
   RUN_RECOVERY_NOT_AVAILABLE: 409,
@@ -260,102 +261,24 @@ export const runRoutes: FastifyPluginAsync<RunRoutesOptions> = async (
     options.projectRegistry ??
     createProjectRegistry({ configStore: options.configStore });
   const chainService = options.chainService ?? createChainService();
-  const catalogService =
-    options.catalogService ?? createCatalogService({ configStore: options.configStore });
   const discoveryWorkspaces = createDiscoveryWorkspaceService({
     configStore: options.configStore,
     projectRegistry,
     chainService,
   });
 
-  const harnessRegistry = async (): Promise<HarnessRegistry> => {
-    if (options.harnessRegistry !== undefined) {
-      return options.harnessRegistry;
-    }
-    const config = await options.configStore.get();
-    return createHarnessRegistry({
-      commands: config.harnessCommands,
-      ...(options.preflightEnv === undefined ? {} : { env: options.preflightEnv }),
-    });
-  };
-
-  const preflightEngine = async (): Promise<PreflightEngine> => {
-    if (options.preflightEngine !== undefined) {
-      return options.preflightEngine;
-    }
-    return buildPreflightEngine(await harnessRegistry(), catalogService, options);
-  };
-
-  // Building the orchestrator and running startup recovery both read the
-  // global config. That must stay lazy: merely starting the server, or serving
-  // health, must not create a config file or touch the user's projects.
-  let orchestratorPromise: Promise<RunOrchestrator> | null = null;
-  const getOrchestrator = (): Promise<RunOrchestrator> => {
-    if (orchestratorPromise !== null) {
-      return orchestratorPromise;
-    }
-
-    const created = (async (): Promise<RunOrchestrator> => {
-      const orchestrator =
-        options.runOrchestrator ??
-        createRunOrchestrator({
-          configDirectory: options.configStore.getConfigDir(),
-          projectRegistry,
-          chainService,
-          harnessRegistry,
-          preflightEngine,
-          terminalManager: options.terminalManager,
-          ...(options.runNow === undefined ? {} : { now: options.runNow }),
-          ...(options.runCreateSessionId === undefined
-            ? {}
-            : { createSessionId: options.runCreateSessionId }),
-          ...(options.runCreateRunId === undefined
-            ? {}
-            : { createRunId: options.runCreateRunId }),
-          ...(options.runCreateSupervisedPty === undefined
-            ? {}
-            : { createSupervisedPty: options.runCreateSupervisedPty }),
-          ...(options.runCreateAutomaticSpawner === undefined
-            ? {}
-            : { createAutomaticSpawner: options.runCreateAutomaticSpawner }),
-          ...(options.runStepTimeoutMs === undefined
-            ? {}
-            : { stepTimeoutMs: options.runStepTimeoutMs }),
-        });
-
-      if (options.runRecoverOnStartup ?? true) {
-        await orchestrator.recoverOnStartup();
-      }
-      return orchestrator;
-    })();
-
-    const guarded = created.catch((error: unknown) => {
-      if (orchestratorPromise === guarded) {
-        orchestratorPromise = null;
-      }
-      throw error;
-    });
-    orchestratorPromise = guarded;
-    return guarded;
-  };
-
-  app.addHook('onClose', async () => {
-    const pending = orchestratorPromise;
-    if (pending === null) {
-      return;
-    }
-    const orchestrator = await pending.catch(() => null);
-    if (orchestrator !== null) {
-      await orchestrator.shutdown();
-    }
+  const owner = options.runOwner ?? createRunOwner({
+    ...options,
+    projectRegistry,
+    chainService,
+    onRunRecoveryWarning: reportRunRecoveryWarning,
   });
-
-  // Run startup recovery eagerly when a configuration already exists, so a real
-  // restart marks stale records before the first run request. An untouched
-  // install has no config file yet: recovery stays lazy so merely starting the
-  // server never creates one.
-  if ((options.runRecoverOnStartup ?? true) && configFileExists(options.configStore)) {
-    await getOrchestrator().catch(() => undefined);
+  const getOrchestrator = owner.get;
+  if (options.runOwner === undefined) {
+    app.addHook('onClose', () => owner.shutdown());
+    await owner.recoverIfConfigured().catch((error: unknown) => {
+      app.log.error({ err: error }, 'Run startup recovery failed.');
+    });
   }
 
   app.post<{ Params: { projectId: string }; Body: unknown }>(
@@ -429,9 +352,7 @@ export const runRoutes: FastifyPluginAsync<RunRoutesOptions> = async (
           }
           return orchestrator.getRunView(run.id);
         };
-        const view = discoveryWorkspace === undefined
-          ? await startRun()
-          : await withDiscoveryWorkspaceLock(discoveryWorkspace.projectId, startRun);
+        const view = await owner.withMutation(() => withWorkspaceLifecycleLock(request.params.projectId, startRun));
         return reply.code(201).send({
           run: view.run,
           terminalId: view.terminalId,
@@ -509,45 +430,47 @@ export const runRoutes: FastifyPluginAsync<RunRoutesOptions> = async (
       };
 
       try {
-        const orchestrator = await getOrchestrator();
-        const before = await orchestrator.getRunView(params.data.runId);
-        const workspace = (await options.configStore.get()).discoveryWorkspaces.find(
-          (candidate) =>
-            candidate.projectId === before.run.projectId &&
-            candidate.chainId === before.run.chainId,
-        );
-        if (workspace !== undefined && actionRequest.action === 'done') {
-          await discoveryWorkspaces.assertResultReviewed(workspace.id);
-        }
-        const result: RunActionResult = await orchestrator.applyAction(
-          params.data.runId,
-          actionRequest,
-        );
-        let discoveryDraftId: string | undefined;
-        let discoveryImportError: { code: string; message: string } | undefined;
-        if (
-          workspace?.autoImport === true &&
-          actionRequest.action === 'next' &&
-          result.run.status === 'completed'
-        ) {
-          try {
-            discoveryDraftId = (await discoveryWorkspaces.importResult(workspace.id)).draftId;
-          } catch (error) {
-            if (!(error instanceof DiscoveryWorkspaceError)) throw error;
-            discoveryImportError = { code: error.code, message: error.message };
-            request.log.error({ err: error, workspaceId: workspace.id }, 'Automatic discovery result import failed.');
+        return await owner.withMutation(async () => {
+          const orchestrator = await getOrchestrator();
+          const before = await orchestrator.getRunView(params.data.runId);
+          const workspace = (await options.configStore.get()).discoveryWorkspaces.find(
+            (candidate) =>
+              candidate.projectId === before.run.projectId &&
+              candidate.chainId === before.run.chainId,
+          );
+          if (workspace !== undefined && actionRequest.action === 'done') {
+            await discoveryWorkspaces.assertResultReviewed(workspace.id);
           }
-        }
-        const view = await orchestrator.getRunView(result.run.id);
-        return reply.code(200).send({
-          run: view.run,
-          terminalId: view.terminalId,
-          actions: view.actions,
-          recovery: view.recovery,
-          restartedFrom: result.restartedFrom,
-          ...(discoveryDraftId === undefined ? {} : { discoveryDraftId }),
-          ...(discoveryImportError === undefined ? {} : { discoveryImportError }),
-        } satisfies ActionResultResponse);
+          const result: RunActionResult = await orchestrator.applyAction(
+            params.data.runId,
+            actionRequest,
+          );
+          let discoveryDraftId: string | undefined;
+          let discoveryImportError: { code: string; message: string } | undefined;
+          if (
+            workspace?.autoImport === true &&
+            actionRequest.action === 'next' &&
+            result.run.status === 'completed'
+          ) {
+            try {
+              discoveryDraftId = (await discoveryWorkspaces.importResult(workspace.id)).draftId;
+            } catch (error) {
+              if (!(error instanceof DiscoveryWorkspaceError)) throw error;
+              discoveryImportError = { code: error.code, message: error.message };
+              request.log.error({ err: error, workspaceId: workspace.id }, 'Automatic discovery result import failed.');
+            }
+          }
+          const view = await orchestrator.getRunView(result.run.id);
+          return reply.code(200).send({
+            run: view.run,
+            terminalId: view.terminalId,
+            actions: view.actions,
+            recovery: view.recovery,
+            restartedFrom: result.restartedFrom,
+            ...(discoveryDraftId === undefined ? {} : { discoveryDraftId }),
+            ...(discoveryImportError === undefined ? {} : { discoveryImportError }),
+          } satisfies ActionResultResponse);
+        });
       } catch (error) {
         if (error instanceof DiscoveryWorkspaceError) {
           const status = error.code === DISCOVERY_WORKSPACE_ERROR_CODES.NOT_FOUND
@@ -638,39 +561,10 @@ function sendSocket(socket: RunEventSocket, message: unknown): void {
   }
 }
 
-function configFileExists(configStore: ConfigStore): boolean {
-  try {
-    return existsSync(configStore.getConfigPath());
-  } catch {
-    return false;
-  }
-}
-
-function buildPreflightEngine(
-  registry: HarnessRegistry,
-  catalogService: CatalogService,
-  options: RunRoutesOptions,
-): PreflightEngine {
-  return createPreflightEngine({
-    catalogService,
-    harnessRegistry: registry,
-    ...(options.preflightCommandRunner === undefined
-      ? {}
-      : { commandRunner: options.preflightCommandRunner }),
-    ...(options.preflightReadFileText === undefined
-      ? {}
-      : { readFileText: options.preflightReadFileText }),
-    ...(options.preflightHomeDirectory === undefined
-      ? {}
-      : { homeDirectory: options.preflightHomeDirectory }),
-    ...(options.preflightAuthStrategies === undefined
-      ? {}
-      : { authStrategies: options.preflightAuthStrategies }),
-    env: options.preflightEnv ?? process.env,
-  });
-}
-
 function sendFailure(reply: FastifyReply, error: unknown): FastifyReply {
+  if (error instanceof RunOwnerError) {
+    return reply.code(409).send(createApiErrorEnvelope(error.code, error.message));
+  }
   if (error instanceof RunOrchestratorError) {
     return reply
       .code(STATUS_BY_ORCHESTRATOR_CODE[error.code] ?? 500)
@@ -750,6 +644,8 @@ const RUNNER_STATE_CODES: ReadonlySet<string> = new Set([
   'AUTOMATIC_FINAL_RUN',
   'AUTOMATIC_RUN_NEXT_NOT_READY',
   'AUTOMATIC_PROCESS_STILL_RUNNING',
+  'AUTOMATIC_PROCESS_TERMINATION_FAILED',
+  'SUPERVISED_PROCESS_TERMINATION_FAILED',
   'AUTOMATIC_RETRY_NOT_AVAILABLE',
   'AUTOMATIC_ADVANCEMENT_UNSUPPORTED',
 ]);

@@ -15,11 +15,17 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CHAIN_VERSION, type Chain } from '../../src/server/chains/model.js';
 import { createChainStore } from '../../src/server/chains/store.js';
+import { scanProjectRunRecords } from '../../src/shared/project-run-records.js';
+import {
+  acquireProjectRunClaim, adoptReviewedLegacyRun, clearReviewedProjectClaim,
+  enableReviewedProjectProtocol, requireProjectRunClaim, reviewProjectCoordination, withClaimedProjectRun,
+} from '../../src/shared/project-coordination.js';
 import {
   ACTIVE_RUN_STATUSES,
   createRunRecord,
   type Run,
 } from '../../src/server/runs/model.js';
+import { reconcileClaimedManagedRun } from '../../src/server/runs/project-reconciliation.js';
 import {
   ACTIVE_RUN_FILE_NAME,
   RUN_STORE_ERROR_CODES,
@@ -325,6 +331,364 @@ describe('one active run globally', () => {
 });
 
 describe('startup recovery', () => {
+  async function enableCoordination(): Promise<void> {
+    const review = await reviewProjectCoordination(projectPath);
+    await enableReviewedProjectProtocol(projectPath, review.reviewDigest, true);
+  }
+
+  it('requires a current review and separate consent to enable coordination', async () => {
+    const review = await reviewProjectCoordination(projectPath);
+    expect(review.protocol).toBeNull();
+    await expect(acquireProjectRunClaim(projectPath, 'managed', 'run-one'))
+      .rejects.toMatchObject({ code: 'PROJECT_PROTOCOL_NOT_ENABLED' });
+    await expect(enableReviewedProjectProtocol(projectPath, review.reviewDigest, false))
+      .rejects.toMatchObject({ code: 'PROJECT_CONFIRMATION_REQUIRED' });
+    await expect(enableReviewedProjectProtocol(projectPath, 'stale', true))
+      .rejects.toMatchObject({ code: 'PROJECT_REVIEW_STALE' });
+    await enableReviewedProjectProtocol(projectPath, review.reviewDigest, true);
+    expect((await reviewProjectCoordination(projectPath)).protocol).toMatchObject({ version: 1 });
+  });
+
+  it('adopts exactly one reviewed legacy run without changing or replaying it', async () => {
+    const store = storeFor();
+    const active = makeRun({ id: 'run-legacy', status: 'running' });
+    await store.create(active);
+    await enableCoordination();
+    const original = await readFile(runFile(active.id), 'utf8');
+    const review = await reviewProjectCoordination(projectPath);
+    await expect(adoptReviewedLegacyRun(projectPath, { kind: 'managed', runId: active.id }, review.reviewDigest, true, false))
+      .rejects.toMatchObject({ code: 'PROJECT_CONFIRMATION_REQUIRED' });
+    await expect(adoptReviewedLegacyRun(projectPath, { kind: 'managed', runId: 'other' }, review.reviewDigest, true, true))
+      .rejects.toMatchObject({ code: 'PROJECT_RECONCILIATION_REQUIRED' });
+    const adopted = await adoptReviewedLegacyRun(projectPath, { kind: 'managed', runId: active.id }, review.reviewDigest, true, true);
+    expect(await requireProjectRunClaim(projectPath, adopted)).toEqual(adopted);
+    expect(await readFile(runFile(active.id), 'utf8')).toBe(original);
+    expect((await store.getActiveRun())?.runId).toBe(active.id);
+  });
+
+  it('does not automatically recover a claimed run or clear its pointer', async () => {
+    const store = storeFor();
+    const active = makeRun({ id: 'run-legacy', status: 'running' });
+    await store.create(active);
+    await enableCoordination();
+    const legacy = await reviewProjectCoordination(projectPath);
+    const claim = await adoptReviewedLegacyRun(projectPath, { kind: 'managed', runId: active.id }, legacy.reviewDigest, true, true);
+    const original = await readFile(runFile(active.id), 'utf8');
+    const pointer = await readFile(pointerFile(), 'utf8');
+    const recovery = await store.recoverInterruptedRuns();
+    expect(recovery).toMatchObject({
+      interrupted: [], clearedActiveRun: false,
+      warnings: [expect.objectContaining({ code: 'RUN_RECOVERY_CLAIMED', runId: active.id })],
+    });
+    expect(await readFile(runFile(active.id), 'utf8')).toBe(original);
+    expect(await readFile(pointerFile(), 'utf8')).toBe(pointer);
+    expect(await requireProjectRunClaim(projectPath, claim)).toEqual(claim);
+  });
+
+  it('preserves an unclaimed pointer after project coordination is enabled', async () => {
+    const store = storeFor();
+    const active = makeRun({ id: 'run-legacy', status: 'running' });
+    await store.create(active);
+    await store.create(makeRun({ id: 'run-other', status: 'running' }), { activate: false });
+    await enableCoordination();
+    const recovery = await store.recoverInterruptedRuns();
+    expect(recovery.warnings).toContainEqual(expect.objectContaining({ code: 'RUN_RECOVERY_CLAIMED' }));
+    expect(recovery.warnings).toContainEqual(expect.objectContaining({
+      code: 'RUN_RECOVERY_AMBIGUOUS', runId: 'run-other',
+    }));
+    expect(await store.read(active.id)).toEqual(active);
+    expect((await store.getActiveRun())?.runId).toBe(active.id);
+  });
+
+  it('serializes legacy startup recovery against protocol enablement', async () => {
+    const active = makeRun({ id: 'run-legacy', status: 'running' });
+    await storeFor().create(active);
+    const review = await reviewProjectCoordination(projectPath);
+    let enter!: () => void;
+    let finish!: () => void;
+    const entered = new Promise<void>((resolve) => { enter = resolve; });
+    const gate = new Promise<void>((resolve) => { finish = resolve; });
+    const store = storeFor({
+      atomicWrite: async (target, run) => {
+        enter();
+        await gate;
+        await atomicWriteRunJson(target, run);
+      },
+    });
+    const recovery = store.recoverInterruptedRuns();
+    await entered;
+    const enablement = enableReviewedProjectProtocol(projectPath, review.reviewDigest, true);
+    finish();
+    expect((await recovery).interrupted).toHaveLength(1);
+    await expect(enablement).rejects.toMatchObject({ code: 'PROJECT_REVIEW_STALE' });
+    expect((await reviewProjectCoordination(projectPath)).protocol).toBeNull();
+  });
+
+  it('fails closed without changing the pointer or record if coordination data is corrupt', async () => {
+    const store = storeFor();
+    const active = makeRun({ id: 'run-legacy', status: 'running' });
+    await store.create(active);
+    await reviewProjectCoordination(projectPath);
+    const original = await readFile(runFile(active.id), 'utf8');
+    const pointer = await readFile(pointerFile(), 'utf8');
+    await writeFile(join(projectPath, '.loom', 'project-claim.sqlite'), 'corrupt');
+    await expect(store.recoverInterruptedRuns()).rejects.toMatchObject({ code: 'PROJECT_CLAIM_UNSAFE' });
+    expect(await readFile(runFile(active.id), 'utf8')).toBe(original);
+    expect(await readFile(pointerFile(), 'utf8')).toBe(pointer);
+  });
+
+  it('reconciles an adopted managed run only after current review and separate confirmations', async () => {
+    const store = storeFor();
+    const active = makeRun({ id: 'run-legacy', status: 'running' });
+    active.steps[0] = { ...active.steps[0]!, status: 'running', startedAt: CREATED_AT };
+    await store.create(active);
+    await enableCoordination();
+    const legacy = await reviewProjectCoordination(projectPath);
+    const claim = await adoptReviewedLegacyRun(projectPath, { kind: 'managed', runId: active.id }, legacy.reviewDigest, true, true);
+    const review = await reviewProjectCoordination(projectPath);
+    const options = {
+      projectPath, configDirectory, runId: active.id, reviewDigest: review.reviewDigest,
+      stoppedConfirmed: true, oldClientsStoppedConfirmed: true, now: new Date(LATER_AT),
+    };
+    const original = await readFile(runFile(active.id), 'utf8');
+    await expect(reconcileClaimedManagedRun({ ...options, stoppedConfirmed: false }))
+      .rejects.toMatchObject({ code: 'PROJECT_CONFIRMATION_REQUIRED' });
+    await expect(reconcileClaimedManagedRun({ ...options, oldClientsStoppedConfirmed: false }))
+      .rejects.toMatchObject({ code: 'PROJECT_CONFIRMATION_REQUIRED' });
+    await expect(reconcileClaimedManagedRun({ ...options, reviewDigest: legacy.reviewDigest }))
+      .rejects.toMatchObject({ code: 'PROJECT_REVIEW_STALE' });
+    await expect(reconcileClaimedManagedRun({ ...options, runId: 'other' }))
+      .rejects.toMatchObject({ code: 'PROJECT_CLAIM_MISMATCH' });
+    expect(await readFile(runFile(active.id), 'utf8')).toBe(original);
+    expect((await store.getActiveRun())?.runId).toBe(active.id);
+
+    const interrupted = await reconcileClaimedManagedRun(options);
+    expect(interrupted).toMatchObject({
+      status: 'interrupted', reason: 'RECONCILED_AFTER_CONFIRMATION', updatedAt: LATER_AT,
+      steps: [expect.objectContaining({ status: 'interrupted', finishedAt: LATER_AT }), expect.anything()],
+    });
+    expect(await store.read(active.id)).toEqual(interrupted);
+    expect(await store.getActiveRun()).toBeNull();
+    const after = await reviewProjectCoordination(projectPath);
+    expect(after.claim).toEqual(claim);
+    expect(after.records).toEqual([expect.objectContaining({ runId: active.id, unresolved: true })]);
+    await expect(clearReviewedProjectClaim(projectPath, after.reviewDigest, true, true))
+      .rejects.toMatchObject({ code: 'PROJECT_RECONCILIATION_REQUIRED' });
+    expect(await reconcileClaimedManagedRun({ ...options, reviewDigest: after.reviewDigest })).toEqual(interrupted);
+  });
+
+  it('retains the claim and reports a corrupt profile pointer after writing interruption', async () => {
+    const store = storeFor();
+    const active = makeRun({ id: 'run-legacy', status: 'running' });
+    await store.create(active);
+    await enableCoordination();
+    const legacy = await reviewProjectCoordination(projectPath);
+    const claim = await adoptReviewedLegacyRun(projectPath, { kind: 'managed', runId: active.id }, legacy.reviewDigest, true, true);
+    const review = await reviewProjectCoordination(projectPath);
+    await writeFile(pointerFile(), '{broken');
+    await expect(reconcileClaimedManagedRun({
+      projectPath, configDirectory, runId: active.id, reviewDigest: review.reviewDigest,
+      stoppedConfirmed: true, oldClientsStoppedConfirmed: true,
+    })).rejects.toMatchObject({ code: 'RUN_ACTIVE_POINTER_CORRUPT' });
+    expect((await store.read(active.id)).status).toBe('interrupted');
+    expect(await readFile(pointerFile(), 'utf8')).toBe('{broken');
+    expect((await reviewProjectCoordination(projectPath)).claim).toEqual(claim);
+  });
+
+  it('does not clear another project pointer for a run with the same id', async () => {
+    const store = storeFor();
+    const active = makeRun({ id: 'run-legacy', status: 'running' });
+    await store.create(active);
+    await enableCoordination();
+    const legacy = await reviewProjectCoordination(projectPath);
+    await adoptReviewedLegacyRun(projectPath, { kind: 'managed', runId: active.id }, legacy.reviewDigest, true, true);
+    const review = await reviewProjectCoordination(projectPath);
+    const otherProject = join(root, 'other');
+    await mkdir(otherProject);
+    const pointer = JSON.parse(await readFile(pointerFile(), 'utf8')) as Record<string, unknown>;
+    pointer.projectPath = await realpath(otherProject);
+    await writeFile(pointerFile(), JSON.stringify(pointer));
+    await reconcileClaimedManagedRun({
+      projectPath, configDirectory, runId: active.id, reviewDigest: review.reviewDigest,
+      stoppedConfirmed: true, oldClientsStoppedConfirmed: true,
+    });
+    expect(await store.getActiveRun()).toMatchObject({ runId: active.id, projectPath: pointer.projectPath });
+  });
+
+  it('only clears a reviewed claim with explicit confirmation and no unresolved records', async () => {
+    await enableCoordination();
+    const claim = await acquireProjectRunClaim(projectPath, 'managed', 'run-claimed');
+    const before = await reviewProjectCoordination(projectPath);
+    expect(before.claim).toEqual(claim);
+    await expect(clearReviewedProjectClaim(projectPath, before.reviewDigest, false, true))
+      .rejects.toMatchObject({ code: 'PROJECT_CONFIRMATION_REQUIRED' });
+
+    const store = storeFor();
+    const active = makeRun({ id: 'run-claimed', status: 'running' });
+    await store.create(active);
+    await expect(clearReviewedProjectClaim(projectPath, before.reviewDigest, true, true))
+      .rejects.toMatchObject({ code: 'PROJECT_REVIEW_STALE' });
+    const activeReview = await reviewProjectCoordination(projectPath);
+    await expect(clearReviewedProjectClaim(projectPath, activeReview.reviewDigest, true, true))
+      .rejects.toMatchObject({ code: 'PROJECT_RECONCILIATION_REQUIRED' });
+    await store.update({ ...active, status: 'aborted', finishedAt: CREATED_AT });
+    const terminalReview = await reviewProjectCoordination(projectPath);
+    await clearReviewedProjectClaim(projectPath, terminalReview.reviewDigest, true, true);
+    expect((await reviewProjectCoordination(projectPath)).claim).toBeNull();
+  });
+
+  it('serializes a claimed mutation against reviewed claim clearing', async () => {
+    await enableCoordination();
+    const claim = await acquireProjectRunClaim(projectPath, 'managed', 'run-claimed');
+    const review = await reviewProjectCoordination(projectPath);
+    let enter!: () => void;
+    let finish!: () => void;
+    const entered = new Promise<void>((resolve) => { enter = resolve; });
+    const gate = new Promise<void>((resolve) => { finish = resolve; });
+    const mutation = withClaimedProjectRun(projectPath, claim, async (current) => {
+      expect(current).toEqual(claim);
+      enter();
+      await gate;
+    });
+    await entered;
+    let cleared = false;
+    const clearing = clearReviewedProjectClaim(projectPath, review.reviewDigest, true, true)
+      .then(() => { cleared = true; });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(cleared).toBe(false);
+    finish();
+    await mutation;
+    await clearing;
+    expect((await reviewProjectCoordination(projectPath)).claim).toBeNull();
+    const callback = vi.fn();
+    await expect(withClaimedProjectRun(projectPath, claim, callback))
+      .rejects.toMatchObject({ code: 'PROJECT_CLAIM_MISMATCH' });
+    expect(callback).not.toHaveBeenCalled();
+  });
+
+  it('rejects a clearing review made stale by a serialized claimed mutation', async () => {
+    await enableCoordination();
+    const claim = await acquireProjectRunClaim(projectPath, 'managed', 'run-claimed');
+    const review = await reviewProjectCoordination(projectPath);
+    await withClaimedProjectRun(projectPath, claim, async () => {
+      await storeFor().create(makeRun({ id: claim.runId, status: 'running' }));
+    });
+    await expect(clearReviewedProjectClaim(projectPath, review.reviewDigest, true, true))
+      .rejects.toMatchObject({ code: 'PROJECT_REVIEW_STALE' });
+    expect(await requireProjectRunClaim(projectPath, claim)).toEqual(claim);
+  });
+
+  it('refuses to create a project claim over unresolved legacy records', async () => {
+    const store = storeFor();
+    const active = makeRun({ id: 'run-legacy', status: 'running' });
+    const portableId = '12345678-1234-1234-1234-123456789abc';
+    await store.create(active);
+    await enableCoordination();
+    await expect(acquireProjectRunClaim(projectPath, 'portable', portableId))
+      .rejects.toMatchObject({
+        code: 'PROJECT_RECONCILIATION_REQUIRED',
+        records: [expect.objectContaining({ kind: 'managed', runId: active.id, status: 'running', unresolved: true })],
+      });
+    await store.update({ ...active, status: 'aborted', finishedAt: CREATED_AT });
+    const claimed = await acquireProjectRunClaim(projectPath, 'portable', portableId);
+    expect(await requireProjectRunClaim(projectPath, { kind: 'portable', runId: portableId })).toEqual(claimed);
+    await expect(acquireProjectRunClaim(projectPath, 'managed', 'second-run'))
+      .rejects.toMatchObject({ code: 'PROJECT_CLAIM_CONFLICT' });
+    await expect(requireProjectRunClaim(projectPath, { kind: 'managed', runId: portableId }))
+      .rejects.toMatchObject({ code: 'PROJECT_CLAIM_MISMATCH' });
+  });
+
+  it('classifies unresolved managed records for project claim reconciliation', async () => {
+    const store = storeFor();
+    await store.create(makeRun({ id: 'run-live', status: 'running' }));
+    await store.create(makeRun({ id: 'run-done', status: 'completed', finishedAt: CREATED_AT }));
+    const records = await scanProjectRunRecords(await realpath(projectPath));
+    expect(records).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'managed', runId: 'run-live', status: 'running', unresolved: true }),
+      expect.objectContaining({ kind: 'managed', runId: 'run-done', status: 'completed', unresolved: false }),
+    ]));
+    await writeFile(runFile('run-live'), '{"version":1', 'utf8');
+    await expect(scanProjectRunRecords(await realpath(projectPath)))
+      .rejects.toMatchObject({ code: 'PROJECT_RUN_RECORDS_UNSAFE' });
+  });
+
+  it('rejects symlinked run records and directories during project claim scanning', async () => {
+    const store = storeFor();
+    await store.create(makeRun({ id: 'run-valid', status: 'completed', finishedAt: CREATED_AT }));
+    await symlink(runFile('run-valid'), runFile('run-link'));
+    await expect(scanProjectRunRecords(await realpath(projectPath)))
+      .rejects.toMatchObject({ code: 'PROJECT_RUN_RECORDS_UNSAFE' });
+    await rm(runFile('run-link'));
+    await symlink(runsDirectory(), join(projectPath, '.loom', 'portable-runs'));
+    await expect(scanProjectRunRecords(await realpath(projectPath)))
+      .rejects.toMatchObject({ code: 'PROJECT_RUN_RECORDS_UNSAFE' });
+  });
+
+  it('does not interrupt a different profile run from a separate process', async () => {
+    const first = storeFor();
+    const foreign = makeRun({ id: 'run-other-process', status: 'running' });
+    await first.create(foreign);
+    const original = await readFile(runFile(foreign.id), 'utf8');
+    const secondConfig = join(root, 'second-process-config');
+    await mkdir(secondConfig);
+    const script = `
+      import { recoverActiveRunOnStartup } from './src/server/runs/store.ts';
+      const result = await recoverActiveRunOnStartup({
+        configDirectory: process.argv[1],
+        knownProjectPaths: [process.argv[2]],
+      });
+      process.stdout.write(JSON.stringify(result));
+    `;
+    const output = execFileSync(process.execPath, [
+      '--import', 'tsx', '--input-type=module', '-e', script, secondConfig, projectPath,
+    ], { cwd: process.cwd(), encoding: 'utf8' });
+    const result = JSON.parse(output) as { interrupted: Run[]; warnings: Array<{ code: string; runId?: string }> };
+    expect(result.interrupted).toEqual([]);
+    expect(result.warnings).toContainEqual(expect.objectContaining({
+      code: RUN_STORE_WARNING_CODES.RECOVERY_AMBIGUOUS,
+      runId: foreign.id,
+    }));
+    expect(await readFile(runFile(foreign.id), 'utf8')).toBe(original);
+    expect((await first.getActiveRun())?.runId).toBe(foreign.id);
+  });
+
+  it('leaves another profile active records unchanged, including when this profile has a different pointer', async () => {
+    const first = storeFor();
+    const secondConfig = join(root, 'second-config');
+    await mkdir(secondConfig);
+    const second = storeFor({ configDirectory: secondConfig });
+    const foreign = makeRun({ id: 'run-foreign', status: 'running' });
+    await first.create(foreign);
+    const original = await readFile(runFile(foreign.id), 'utf8');
+
+    const noPointer = await recoverActiveRunOnStartup({
+      configDirectory: secondConfig,
+      knownProjectPaths: [projectPath],
+    });
+    expect(noPointer.interrupted).toEqual([]);
+    expect(noPointer.warnings).toContainEqual(expect.objectContaining({
+      code: RUN_STORE_WARNING_CODES.RECOVERY_AMBIGUOUS,
+      runId: foreign.id,
+    }));
+    expect(await readFile(runFile(foreign.id), 'utf8')).toBe(original);
+    expect((await first.getActiveRun())?.runId).toBe(foreign.id);
+
+    const own = makeRun({ id: 'run-second', status: 'running' });
+    await second.create(own);
+    const withPointer = await recoverActiveRunOnStartup({
+      configDirectory: secondConfig,
+      knownProjectPaths: [projectPath],
+    });
+    expect(withPointer.interrupted.map((run) => run.id)).toEqual([own.id]);
+    expect(withPointer.warnings).toContainEqual(expect.objectContaining({
+      code: RUN_STORE_WARNING_CODES.RECOVERY_AMBIGUOUS,
+      runId: foreign.id,
+    }));
+    expect(await readFile(runFile(foreign.id), 'utf8')).toBe(original);
+    expect((await first.getActiveRun())?.runId).toBe(foreign.id);
+    expect(await second.getActiveRun()).toBeNull();
+  });
+
   it('marks stale active records interrupted and clears the pointer', async () => {
     const store = storeFor();
     const live = makeRun({
@@ -394,20 +758,48 @@ describe('startup recovery', () => {
     expect(await fileExists(pointerFile())).toBe(false);
   });
 
-  it('removes a corrupt pointer and reports a warning', async () => {
+  it('preserves a corrupt pointer and active record and fails recovery explicitly', async () => {
     const store = storeFor();
+    const active = makeRun({ id: 'run-corrupt-pointer', status: 'running' });
+    await store.create(active);
+    const original = await readFile(runFile(active.id), 'utf8');
     await writeFile(pointerFile(), '{"version":1', 'utf8');
 
-    const result = await store.recoverInterruptedRuns();
+    await expectRunStoreError(store.recoverInterruptedRuns(), RUN_STORE_ERROR_CODES.ACTIVE_POINTER_CORRUPT);
+    await expectRunStoreError(
+      recoverActiveRunOnStartup({ configDirectory, knownProjectPaths: [projectPath] }),
+      RUN_STORE_ERROR_CODES.ACTIVE_POINTER_CORRUPT,
+    );
+    expect(await readFile(runFile(active.id), 'utf8')).toBe(original);
+    await expectRunStoreError(store.releaseActiveRun(active.id), RUN_STORE_ERROR_CODES.ACTIVE_POINTER_CORRUPT);
+    await expectRunStoreError(
+      store.update({ ...active, updatedAt: LATER_AT }),
+      RUN_STORE_ERROR_CODES.ACTIVE_POINTER_CORRUPT,
+    );
+    expect(await readFile(pointerFile(), 'utf8')).toBe('{"version":1');
+    expect(await readFile(runFile(active.id), 'utf8')).not.toBe(original);
+    expect((await store.read(active.id)).updatedAt).toBe(LATER_AT);
+  });
 
-    expect(result.clearedActiveRun).toBe(true);
-    expect(result.warnings).toEqual([
-      expect.objectContaining({
-        code: RUN_STORE_WARNING_CODES.ACTIVE_POINTER_CORRUPT,
-        reason: 'CORRUPT',
-      }),
-    ]);
-    expect(await fileExists(pointerFile())).toBe(false);
+  it('does not clear or replace an active pointer when its run record is corrupt', async () => {
+    const store = storeFor();
+    const active = makeRun({ id: 'run-corrupt-target', status: 'running' });
+    await store.create(active);
+    const pointer = await readFile(pointerFile(), 'utf8');
+    await writeFile(runFile(active.id), '{"version":1', 'utf8');
+
+    await expectRunStoreError(store.recoverInterruptedRuns(), RUN_STORE_ERROR_CODES.FILE_CORRUPT);
+    await expectRunStoreError(
+      recoverActiveRunOnStartup({ configDirectory }),
+      RUN_STORE_ERROR_CODES.FILE_CORRUPT,
+    );
+    await expectRunStoreError(
+      store.create(makeRun({ id: 'run-new', status: 'running' })),
+      RUN_STORE_ERROR_CODES.FILE_CORRUPT,
+    );
+    expect(await readFile(pointerFile(), 'utf8')).toBe(pointer);
+    expect(await readFile(runFile(active.id), 'utf8')).toBe('{"version":1');
+    expect(await fileExists(runFile('run-new'))).toBe(false);
   });
 
   it('follows the global pointer from another directory on startup', async () => {
@@ -746,3 +1138,4 @@ describe('pointer helpers', () => {
     expect(await fileExists(join(configDirectory, ACTIVE_RUN_FILE_NAME))).toBe(true);
   });
 });
+import { execFileSync } from 'node:child_process';

@@ -321,6 +321,53 @@ function terminalScreen(page: Page) {
   return page.getByTestId('run-terminal-screen');
 }
 
+function collectTerminalFrames(page: Page): string[] {
+  const events: string[] = [];
+  const marker = 'FAKE_SUPERVISED_HOLDING';
+  page.on('websocket', (socket) => {
+    if (!new URL(socket.url()).pathname.startsWith('/api/terminal/')) {
+      return;
+    }
+    let tail = '';
+    events.push('socket opened');
+    socket.on('framereceived', ({ payload }) => {
+      if (typeof payload !== 'string') {
+        events.push('binary frame');
+        return;
+      }
+      try {
+        const message = JSON.parse(payload) as { type?: string; data?: string; code?: string };
+        if (message.type === 'output') {
+          const text = tail + (message.data ?? '');
+          events.push(`output: holding marker ${text.includes(marker) ? 'present' : 'absent'}`);
+          tail = text.slice(-(marker.length - 1));
+        } else {
+          events.push(`message: ${message.type ?? 'unknown'}${message.code === undefined ? '' : ` (${message.code})`}`);
+        }
+      } catch {
+        events.push('invalid JSON frame');
+      }
+    });
+    socket.on('close', () => events.push('socket closed'));
+    socket.on('socketerror', () => events.push('socket error'));
+  });
+  return events;
+}
+
+async function expectHoldingTerminal(page: Page, frames: string[]): Promise<void> {
+  try {
+    await expect(terminalScreen(page)).toContainText('FAKE_SUPERVISED_HOLDING', {
+      timeout: 15_000,
+    });
+  } catch (error) {
+    await test.info().attach('terminal-frames', {
+      body: frames.join('\n'),
+      contentType: 'text/plain',
+    });
+    throw error;
+  }
+}
+
 test.describe('Terminal-dominant run view', () => {
   test('shows and gates managed discovery review before terminal controls', async ({ page, request }) => {
     const { project } = await openFixtureProject(request, 'discovery-review');
@@ -766,6 +813,7 @@ test.describe('Terminal-dominant run view', () => {
   }) => {
     test.setTimeout(60_000);
     const consoleErrors = collectConsoleErrors(page);
+    const terminalFrames = collectTerminalFrames(page);
     const { project, projectPath } = await openFixtureProject(request, 'reconnect');
     const chain = await createChain(request, project.id, `Reconnect ${runSuffix}`, [
       {
@@ -785,9 +833,7 @@ test.describe('Terminal-dominant run view', () => {
 
     await gotoRun(page, run.id);
     await expect(page.getByTestId('run-status')).toContainText('Awaiting user');
-    await expect(terminalScreen(page)).toContainText('FAKE_SUPERVISED_HOLDING', {
-      timeout: 15_000,
-    });
+    await expectHoldingTerminal(page, terminalFrames);
 
     const logPath = join(projectPath, '.fake-harness.log');
     const launchesBefore = (await readFile(logPath, 'utf8')).split('\n').filter(Boolean).length;
@@ -799,9 +845,11 @@ test.describe('Terminal-dominant run view', () => {
     await expect(page.getByTestId('step-status-0')).toContainText('Awaiting user');
     await expect(page.getByTestId('step-status-1')).toContainText('Pending');
     // The buffered terminal output is replayed by the server to the new xterm.
-    await expect(terminalScreen(page)).toContainText('FAKE_SUPERVISED_HOLDING', {
-      timeout: 15_000,
-    });
+    await expectHoldingTerminal(page, terminalFrames);
+    expect(terminalFrames.filter((event) => event === 'message: ready').length).toBeGreaterThanOrEqual(2);
+    expect(
+      terminalFrames.filter((event) => event === 'output: holding marker present').length,
+    ).toBeGreaterThanOrEqual(2);
 
     // The reload must not spawn the step again or advance it.
     await page.waitForTimeout(1_000);
@@ -893,6 +941,15 @@ test.describe('Terminal-dominant run view', () => {
     await expect(page.getByTestId('run-recovery-restart')).toBeEnabled();
     await expect(page.getByTestId('run-terminal-empty')).toBeVisible();
 
+    let receivedSnapshot = false;
+    page.on('websocket', (socket) => {
+      if (!socket.url().includes(`/api/runs/${runId}/events`)) return;
+      socket.on('framereceived', ({ payload }) => {
+        if (typeof payload === 'string' && JSON.parse(payload).type === 'snapshot') {
+          receivedSnapshot = true;
+        }
+      });
+    });
     await page.getByTestId('run-recovery-retry').click();
     await expect(page.getByTestId('run-status')).toContainText('Awaiting user', {
       timeout: 20_000,
@@ -903,6 +960,13 @@ test.describe('Terminal-dominant run view', () => {
       timeout: 15_000,
     });
 
+    await expect.poll(() => receivedSnapshot).toBe(true);
+    const externalFailure = await request.post(`/api/runs/${runId}/actions`, {
+      data: { action: 'failed', reason: 'External supervised decision' },
+    });
+    expect(externalFailure.status()).toBe(200);
+    await expect(page.getByTestId('run-status')).toContainText('Paused');
+    await expect(page.getByTestId('step-status-0')).toContainText('Failed');
     await page.getByTestId('run-control-abort').click();
     await expect(page.getByTestId('run-status')).toContainText('Aborted');
 

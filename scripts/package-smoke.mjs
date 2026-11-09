@@ -161,6 +161,61 @@ async function smokePortableSkill(temporaryRoot) {
   if (result.ok !== true || result.chain.name !== 'Package smoke') {
     throw new Error('The standalone helper could not inspect a bundle outside the repository.');
   }
+  if (result.reviewDigest !== null) throw new Error('Project-free inspection must not authorize preparation.');
+  const project = join(temporaryRoot, 'portable-project');
+  await mkdir(project);
+  const invoke = async (command, args, input, expectedError) => {
+    const child = spawn(process.execPath, [helperPath, command, ...args], {
+      cwd: temporaryRoot, stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    const closed = once(child, 'close');
+    child.stdin.end(input === undefined ? '' : JSON.stringify(input));
+    const [code] = await closed;
+    if (code !== 0) {
+      if (expectedError !== undefined && JSON.parse(stderr).error?.code === expectedError) return;
+      throw new Error(`Portable ${command} failed: ${stderr}`);
+    }
+    if (expectedError !== undefined) throw new Error(`Portable ${command} unexpectedly succeeded.`);
+    return JSON.parse(stdout);
+  };
+  const review = await invoke('inspect', ['--bundle', bundlePath, '--project', project]);
+  if (!/^[a-f0-9]{64}$/.test(review.reviewDigest)) throw new Error('Portable review digest is missing.');
+  const prepareInput = {
+    installConfirmed: true,
+    reviewDigest: review.reviewDigest,
+    actualHost: 'copilot',
+    progression: 'supervised',
+    sessionDecision: {
+      requested: 'shared',
+      mechanism: 'current-conversation',
+      description: 'Package smoke test in a simulated host.',
+      confirmed: true,
+    },
+    inputs: {},
+  };
+  const prepareArgs = ['--bundle', bundlePath, '--project', project];
+  const prepared = await invoke('prepare', prepareArgs, prepareInput);
+  await invoke('prepare', prepareArgs, prepareInput, 'RUN_ACTIVE_CONFLICT');
+  const runArgs = ['--project', project, '--run-id', prepared.runId];
+  const step = await invoke('step', runArgs, { revision: prepared.revision, confirmed: true });
+  if (step.step.instruction !== 'Instruction:\nVerify the packaged helper.') {
+    throw new Error('The packaged helper did not return the reviewed instruction.');
+  }
+  const recorded = await invoke('record', runArgs, {
+    revision: step.revision, outcome: 'done', confirmed: true, summary: 'Simulated host outcome.',
+  });
+  const status = await invoke('status', runArgs);
+  if (recorded.status !== 'completed' || status.run.status !== 'completed') {
+    throw new Error('The packaged helper did not persist its simulated run outcome.');
+  }
+  const next = await invoke('prepare', prepareArgs, prepareInput);
+  await invoke('record', ['--project', project, '--run-id', next.runId], { revision: next.revision, action: 'abort' });
 }
 
 async function smokeScenarioDiscoverySkill() {

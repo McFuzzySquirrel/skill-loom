@@ -10,8 +10,7 @@ import { createChainService } from '../chains/service.js';
 import { createGlobalDraftService } from '../chains/drafts.js';
 import { createCatalogService } from '../catalog/merge.js';
 import { ConfigError } from '../config/store.js';
-import { createProjectRegistry, isProjectId } from '../projects/registry.js';
-import { isSafeChainId } from '../chains/store.js';
+import { createProjectRegistry } from '../projects/registry.js';
 import { sendChainFailure } from './chains.js';
 import type { ChainRoutesOptions } from './chains.js';
 import type { CatalogRoutesOptions } from './catalog.js';
@@ -19,17 +18,13 @@ import {
   createTestWorkspaceService,
   TEST_WORKSPACE_ERROR_CODES,
   TestWorkspaceError,
+  type TestWorkspaceService,
 } from '../runs/test-workspaces.js';
+import { testWorkspaceCreateSchema } from '../runs/test-workspace-request.js';
 
-const createBodySchema = z.union([
-  z.strictObject({
-    sourceProjectId: z.string().min(1).max(128).refine(isProjectId),
-    sourceChainId: z.string().min(1).max(64).refine(isSafeChainId),
-  }),
-  z.strictObject({
-    sourceDraftId: z.string().min(1).max(64).refine(isSafeChainId),
-  }),
-]);
+export type TestWorkspaceRoutesOptions = ChainRoutesOptions & CatalogRoutesOptions & {
+  testWorkspaceService?: TestWorkspaceService;
+};
 
 const workspaceIdSchema = z.uuid();
 
@@ -41,15 +36,13 @@ interface WorkspaceParams {
  * Materialize a saved chain in Loom-owned disposable projects. Client requests
  * identify registered projects/chains only; they never provide filesystem paths.
  */
-export const testWorkspaceRoutes: FastifyPluginAsync<
-  ChainRoutesOptions & CatalogRoutesOptions
-> = async (app, options) => {
+export const testWorkspaceRoutes: FastifyPluginAsync<TestWorkspaceRoutesOptions> = async (app, options) => {
   const projectRegistry =
     options.projectRegistry ?? createProjectRegistry({ configStore: options.configStore });
   const chainService = options.chainService ?? createChainService();
   const catalogService =
     options.catalogService ?? createCatalogService({ configStore: options.configStore });
-  const service = createTestWorkspaceService({
+  const service = options.testWorkspaceService ?? createTestWorkspaceService({
     configStore: options.configStore,
     projectRegistry,
     chainService,
@@ -67,7 +60,7 @@ export const testWorkspaceRoutes: FastifyPluginAsync<
   });
 
   app.post('/api/test-workspaces', async (request, reply) => {
-    const parsed = createBodySchema.safeParse(request.body);
+    const parsed = testWorkspaceCreateSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(422).send(
         createApiErrorEnvelope(

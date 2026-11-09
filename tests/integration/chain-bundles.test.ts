@@ -1,15 +1,17 @@
 import { createHash } from 'node:crypto';
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
+import { importReviewedBundle, reviewBundleImport } from '../../src/server/bundles/reviewed-import.js';
 import { createCatalogService } from '../../src/server/catalog/merge.js';
 import { scanOpenCodeSkills } from '../../src/server/catalog/opencode.js';
 import { MAX_BUNDLE_BYTES, MAX_BUNDLE_REQUEST_BYTES, parseBundle } from '../../src/server/chains/bundle.js';
 import { createChainService, type ChainService } from '../../src/server/chains/service.js';
 import { createConfigStore } from '../../src/server/config/store.js';
+import { callControl, startControlServer } from '../../src/server/control.js';
 import type { SkillEntry, SkillDiscoveryResult } from '../../src/server/catalog/types.js';
 import type { Chain } from '../../src/server/chains/model.js';
 import type { BundlePreview, ChainBundle } from '../../src/shared/bundles.js';
@@ -89,7 +91,13 @@ async function exported(): Promise<ChainBundle> {
   return response.json<{ bundle: ChainBundle }>().bundle;
 }
 
-function request(action: 'preview' | 'import', bundle: unknown, extra: Record<string, unknown> = {}) {
+async function request(action: 'preview' | 'import', bundle: unknown, extra: Record<string, unknown> = {}) {
+  if (action === 'import' && extra.confirmed === true && !('reviewDigest' in extra)) {
+    const preview = await request('preview', bundle);
+    if (preview.statusCode === 200) {
+      extra = { ...extra, reviewDigest: preview.json<{ reviewDigest: string }>().reviewDigest };
+    }
+  }
   return app.inject({
     method: 'POST',
     url: `/api/projects/${targetId}/chain-bundles/${action}`,
@@ -113,6 +121,198 @@ function catalogEntry(overrides: Partial<SkillEntry> = {}): SkillEntry {
 }
 
 describe('portable chain bundles', () => {
+  it('binds headless approval to the bundle, destination, and conflict state without reusing skills', async () => {
+    const bundle = await exported();
+    const bundlePath = join(root, 'review.loom.json');
+    await writeFile(bundlePath, JSON.stringify(bundle));
+    const review = await reviewBundleImport(app.loomServices, targetId, bundlePath);
+    expect(review.evidence.skills[0]).toMatchObject({
+      name: 'review', conflict: false, directoryExists: false,
+      inventory: expect.arrayContaining([expect.objectContaining({ path: 'SKILL.md', fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/) })]),
+    });
+    const request = { projectId: targetId, bundlePath, reviewDigest: review.reviewDigest, confirmed: true as const };
+    await expect(importReviewedBundle(app.loomServices, { ...request, projectId: sourceId }))
+      .rejects.toMatchObject({ code: 'BUNDLE_CONFLICT' });
+    await mkdir(join(target, '.agents', 'skills', 'review'), { recursive: true });
+    await expect(importReviewedBundle(app.loomServices, request)).rejects.toMatchObject({ code: 'BUNDLE_CONFLICT' });
+    const conflicted = await reviewBundleImport(app.loomServices, targetId, bundlePath);
+    await expect(importReviewedBundle(app.loomServices, { ...request, reviewDigest: conflicted.reviewDigest }))
+      .rejects.toMatchObject({ code: 'BUNDLE_CONFLICT' });
+    await rm(join(target, '.agents', 'skills', 'review'), { recursive: true });
+    const imported = await importReviewedBundle(app.loomServices, request);
+    expect(imported.name).toBe('Portable review copy');
+    expect(await readFile(join(target, '.agents', 'skills', 'review', 'SKILL.md'), 'utf8')).toBe(skillText);
+  });
+
+  it('reviews matching and differing installed packages for headless reuse', async () => {
+    const bundlePath = join(root, 'reuse.loom.json');
+    await writeFile(bundlePath, JSON.stringify(await exported()));
+    const first = await reviewBundleImport(app.loomServices, targetId, bundlePath);
+    await importReviewedBundle(app.loomServices, {
+      projectId: targetId, bundlePath, reviewDigest: first.reviewDigest, confirmed: true,
+    });
+    const matching = await reviewBundleImport(app.loomServices, targetId, bundlePath);
+    expect(matching.evidence.reuseEvidence[0]).toMatchObject({
+      name: 'review', differs: false, path: join(target, '.agents', 'skills', 'review'),
+      inventory: expect.arrayContaining([
+        expect.objectContaining({ path: 'SKILL.md', kind: 'file', bytes: Buffer.byteLength(skillText) }),
+        expect.objectContaining({ path: 'scripts', kind: 'directory' }),
+      ]),
+    });
+    await importReviewedBundle(app.loomServices, {
+      projectId: targetId, bundlePath, reviewDigest: matching.reviewDigest, confirmed: true, reuseSkills: ['review'],
+    });
+    const installed = join(target, '.agents', 'skills', 'review', 'SKILL.md');
+    await writeFile(installed, `${skillText}Local changes\n`);
+    const changed = await reviewBundleImport(app.loomServices, targetId, bundlePath);
+    expect(changed.evidence.reuseEvidence[0]?.differs).toBe(true);
+    const request = {
+      projectId: targetId, bundlePath, reviewDigest: changed.reviewDigest, confirmed: true as const, reuseSkills: ['review'],
+    };
+    await expect(importReviewedBundle(app.loomServices, request)).rejects.toMatchObject({ code: 'BUNDLE_CONFLICT' });
+    await writeFile(installed, `${skillText}Changed again\n`);
+    await expect(importReviewedBundle(app.loomServices, { ...request, differingReuseConfirmed: true }))
+      .rejects.toMatchObject({ code: 'BUNDLE_CONFLICT' });
+    const latest = await reviewBundleImport(app.loomServices, targetId, bundlePath);
+    await importReviewedBundle(app.loomServices, {
+      ...request, reviewDigest: latest.reviewDigest, differingReuseConfirmed: true,
+    });
+    expect(await readFile(installed, 'utf8')).toBe(`${skillText}Changed again\n`);
+  });
+
+  it.skipIf(process.platform === 'win32')('accepts reviewed differing reuse through the local CLI control protocol', async () => {
+    const bundle = await exported();
+    const bundlePath = join(root, 'control-reuse.loom.json');
+    await writeFile(bundlePath, JSON.stringify(bundle));
+    expect((await request('import', bundle, { confirmed: true })).statusCode).toBe(201);
+    await writeFile(join(target, '.agents', 'skills', 'review', 'SKILL.md'), `${skillText}Local version\n`);
+    const control = await startControlServer(app.loomServices.configStore, { services: app.loomServices });
+    try {
+      const input = { projectId: targetId, bundlePath };
+      const review = await callControl(app.loomServices.configStore.getConfigDir(), 'bundle.review', input);
+      expect(review).toMatchObject({ ok: true, result: { evidence: {
+        reuseEvidence: [expect.objectContaining({ name: 'review', differs: true })],
+      } } });
+      if (!review.ok) throw new Error('Review failed.');
+      const request = {
+        ...input, reviewDigest: (review.result as { reviewDigest: string }).reviewDigest,
+        confirmed: true, reuseSkills: ['review'],
+      };
+      expect(await callControl(app.loomServices.configStore.getConfigDir(), 'bundle.import', request))
+        .toMatchObject({ ok: false, error: { code: 'BUNDLE_CONFLICT' } });
+      expect(await callControl(app.loomServices.configStore.getConfigDir(), 'bundle.import', {
+        ...request, differingReuseConfirmed: true,
+      })).toMatchObject({ ok: true });
+    } finally {
+      await control.close();
+    }
+  });
+
+  it('refuses ambiguous or unsafe installed packages during reuse review', async () => {
+    const bundle = await exported();
+    expect((await request('import', bundle, { confirmed: true })).statusCode).toBe(201);
+    const second = join(target, '.opencode', 'skills', 'review');
+    await mkdir(second, { recursive: true });
+    await writeFile(join(second, 'SKILL.md'), skillText);
+    expect((await request('preview', bundle)).json()).toMatchObject({ error: { code: 'BUNDLE_CONFLICT' } });
+    await rm(second, { recursive: true });
+    const installed = join(target, '.agents', 'skills', 'review');
+    await symlink(join(root, 'outside'), join(installed, 'unsafe'));
+    expect((await request('preview', bundle)).json()).toMatchObject({ error: { code: 'BUNDLE_SOURCE_UNAVAILABLE' } });
+  });
+
+  it('rechecks approved reused package contents immediately before saving the chain', async () => {
+    const bundlePath = join(root, 'race.loom.json');
+    await writeFile(bundlePath, JSON.stringify(await exported()));
+    const initial = await reviewBundleImport(app.loomServices, targetId, bundlePath);
+    await importReviewedBundle(app.loomServices, {
+      projectId: targetId, bundlePath, reviewDigest: initial.reviewDigest, confirmed: true,
+    });
+    const review = await reviewBundleImport(app.loomServices, targetId, bundlePath);
+    const installed = join(target, '.agents', 'skills', 'review', 'SKILL.md');
+    const catalog = app.loomServices.catalogService;
+    const getCatalog = catalog.getCatalog.bind(catalog);
+    let calls = 0;
+    vi.spyOn(catalog, 'getCatalog').mockImplementation(async (input) => {
+      calls += 1;
+      if (calls === 3) await writeFile(installed, `${skillText}Changed during import\n`);
+      return getCatalog(input);
+    });
+    await expect(importReviewedBundle(app.loomServices, {
+      projectId: targetId, bundlePath, reviewDigest: review.reviewDigest, confirmed: true, reuseSkills: ['review'],
+    })).rejects.toMatchObject({ code: 'BUNDLE_CONFLICT' });
+    expect(calls).toBe(3);
+    expect((await chains.list(target)).chains).toHaveLength(1);
+  });
+
+  it('rolls back newly installed packages if reused contents change during import', async () => {
+    const newSource = join(source, '.opencode', 'skills', 'new-skill');
+    await mkdir(newSource, { recursive: true });
+    await writeFile(join(newSource, 'SKILL.md'), '---\nname: new-skill\ndescription: New fixture\n---\nInspect the result.\n');
+    const multi = await chains.create(source, {
+      name: 'Two packages', harness: 'opencode', sessionMode: 'shared',
+      steps: [
+        { id: 'one', skillName: 'review', instruction: 'Review.' },
+        { id: 'two', skillName: 'new-skill', instruction: 'Inspect.' },
+      ],
+      inputs: [], automaticPermissionOptIn: false,
+    });
+    const exportedResponse = await app.inject({ method: 'GET', url: `/api/projects/${sourceId}/chains/${multi.id}/bundle` });
+    expect(exportedResponse.statusCode, exportedResponse.body).toBe(200);
+    const bundle = exportedResponse.json<{ bundle: ChainBundle }>().bundle;
+    expect((await request('import', bundle, { confirmed: true })).statusCode).toBe(201);
+    const newTarget = join(target, '.agents', 'skills', 'new-skill');
+    await rm(newTarget, { recursive: true });
+    const bundlePath = join(root, 'rollback-race.loom.json');
+    await writeFile(bundlePath, JSON.stringify(bundle));
+    const review = await reviewBundleImport(app.loomServices, targetId, bundlePath);
+    const installed = join(target, '.agents', 'skills', 'review', 'SKILL.md');
+    const catalog = app.loomServices.catalogService;
+    const getCatalog = catalog.getCatalog.bind(catalog);
+    let calls = 0;
+    vi.spyOn(catalog, 'getCatalog').mockImplementation(async (input) => {
+      calls += 1;
+      if (calls === 3) await writeFile(installed, `${skillText}Changed during import\n`);
+      return getCatalog(input);
+    });
+    await expect(importReviewedBundle(app.loomServices, {
+      projectId: targetId, bundlePath, reviewDigest: review.reviewDigest, confirmed: true, reuseSkills: ['review'],
+    })).rejects.toMatchObject({ code: 'BUNDLE_CONFLICT' });
+    expect(await readFile(installed, 'utf8')).toBe(`${skillText}Changed during import\n`);
+    await expect(lstat(newTarget)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect((await chains.list(target)).chains).toHaveLength(1);
+  });
+
+  it('refuses headless review when project discovery is incomplete', async () => {
+    const bundle = await exported();
+    const bundlePath = join(root, 'review.loom.json');
+    await writeFile(bundlePath, JSON.stringify(bundle));
+    discoveryOverride = {
+      entries: [],
+      warnings: [{
+        code: 'SKILL_DIRECTORY_UNREADABLE', message: 'Cannot read project skills.',
+        harness: 'opencode', source: 'project',
+      }],
+    };
+    await expect(reviewBundleImport(app.loomServices, targetId, bundlePath))
+      .rejects.toMatchObject({ code: 'BUNDLE_SOURCE_UNAVAILABLE' });
+  });
+
+  it('rejects a replaced destination and symbolic-link bundle paths', async () => {
+    const bundlePath = join(root, 'review.loom.json');
+    await writeFile(bundlePath, JSON.stringify(await exported()));
+    const review = await reviewBundleImport(app.loomServices, targetId, bundlePath);
+    await symlink(bundlePath, join(root, 'linked.loom.json'));
+    await expect(reviewBundleImport(app.loomServices, targetId, join(root, 'linked.loom.json')))
+      .rejects.toMatchObject({ code: 'BUNDLE_INVALID' });
+    await rename(target, join(root, 'original-target'));
+    await mkdir(target);
+    await expect(importReviewedBundle(app.loomServices, {
+      projectId: targetId, bundlePath, reviewDigest: review.reviewDigest, confirmed: true,
+    })).rejects.toMatchObject({ code: 'BUNDLE_CONFLICT' });
+    expect(await readdir(target)).toEqual([]);
+  });
+
   it('round-trips the selected native agent in a version 2 bundle', async () => {
     const agentText = '---\nname: team/reviewer\ndescription: Review changes\n---\nReview the task.\n';
     const agentPath = 'team/reviewer.md';
@@ -206,6 +406,22 @@ describe('portable chain bundles', () => {
     expect(await readdir(target)).toEqual(['.loom']);
   });
 
+  it('requires the exact reviewed bundle and destination for HTTP import', async () => {
+    const bundle = await exported();
+    const url = `/api/projects/${targetId}/chain-bundles/import`;
+    const missing = await app.inject({ method: 'POST', url, payload: { bundle, confirmed: true } });
+    expect(missing.statusCode).toBe(409);
+    const preview = await request('preview', bundle);
+    const changed = structuredClone(bundle);
+    changed.chain.name = 'Changed after review';
+    const stale = await app.inject({
+      method: 'POST', url,
+      payload: { bundle: changed, confirmed: true, reviewDigest: preview.json<{ reviewDigest: string }>().reviewDigest },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(await readdir(target)).toEqual(['.loom']);
+  });
+
   it('installs Copilot bundles in the shared project skill location', async () => {
     const bundle = await exported();
     bundle.chain.harness = 'copilot';
@@ -215,7 +431,7 @@ describe('portable chain bundles', () => {
     expect(response.json<{ chain: Chain }>().chain.harness).toBe('copilot');
   });
 
-  it('requires explicit reuse of conflicting skills and never overwrites', async () => {
+  it('binds explicit reuse to installed contents and never overwrites', async () => {
     const bundle = await exported();
     expect((await request('import', bundle, { confirmed: true })).statusCode).toBe(201);
     const path = join(target, '.agents', 'skills', 'review', 'SKILL.md');
@@ -223,9 +439,16 @@ describe('portable chain bundles', () => {
     const preview = await request('preview', bundle);
     expect(preview.json<BundlePreview>().skills[0]).toMatchObject({ conflict: true, directoryExists: true });
     expect((await request('import', bundle, { confirmed: true })).statusCode).toBe(409);
-    const response = await request('import', bundle, { confirmed: true, reuseSkills: ['review'] });
+    const reviewDigest = preview.json<{ reviewDigest: string }>().reviewDigest;
+    const selection = { confirmed: true, reuseSkills: ['review'], reviewDigest };
+    expect((await request('import', bundle, selection)).statusCode).toBe(409);
+    await writeFile(path, skillText + 'Changed again\n');
+    expect((await request('import', bundle, { ...selection, differingReuseConfirmed: true })).statusCode).toBe(409);
+    const response = await request('import', bundle, {
+      confirmed: true, reuseSkills: ['review'], differingReuseConfirmed: true,
+    });
     expect(response.statusCode, response.body).toBe(201);
-    expect(await readFile(path, 'utf8')).toBe(skillText + 'Local changes\n');
+    expect(await readFile(path, 'utf8')).toBe(skillText + 'Changed again\n');
     expect((await chains.list(target)).chains).toHaveLength(2);
   });
 

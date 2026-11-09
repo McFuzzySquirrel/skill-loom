@@ -6,6 +6,8 @@ import {
 } from './client';
 import {
   decodeChain,
+  decodeRevision,
+  revisionHeader,
   type Chain,
   type ChainDraft,
   type ChainListResult,
@@ -33,7 +35,7 @@ function decodeChainResponse(value: unknown, what: string): Chain {
   if (!isRecord(value) || value.chain === undefined) {
     throw invalidResponse(what);
   }
-  return decodeChain(value.chain);
+  return { ...decodeChain(value.chain), revision: decodeRevision(value.revision) };
 }
 
 function chainPath(draftId: string): string {
@@ -60,11 +62,15 @@ export function createGlobalDraftChainsApi(fetchImpl: FetchLike = fetch): Chains
         optionsFor(options.signal),
         fetchImpl,
       );
-      if (!isRecord(value) || !Array.isArray(value.chains) || !Array.isArray(value.warnings)) {
+      if (!isRecord(value) || !Array.isArray(value.chains) || !Array.isArray(value.warnings) || !isRecord(value.revisions)) {
         throw invalidResponse('global drafts');
       }
+      const revisions = value.revisions;
       return {
-        chains: value.chains.map(decodeChain),
+        chains: value.chains.map((entry) => {
+          const chain = decodeChain(entry);
+          return { ...chain, revision: decodeRevision(revisions[chain.id]) };
+        }),
         warnings: value.warnings as ChainListResult['warnings'],
       };
     },
@@ -97,6 +103,7 @@ export function createGlobalDraftChainsApi(fetchImpl: FetchLike = fetch): Chains
         {
           method: 'PUT',
           body: draftBody(draft),
+          headers: revisionHeader(options.expectedRevision),
           ...optionsFor(options.signal),
         },
         fetchImpl,
@@ -120,6 +127,7 @@ export function createGlobalDraftChainsApi(fetchImpl: FetchLike = fetch): Chains
         chainPath(draftId),
         {
           method: 'DELETE',
+          headers: revisionHeader(options.expectedRevision),
           ...optionsFor(options.signal),
         },
         fetchImpl,
@@ -136,7 +144,7 @@ export const globalDraftChainsApi = createGlobalDraftChainsApi();
 
 export interface GlobalDraftsApi {
   list: (options?: { signal?: AbortSignal }) => Promise<ChainListResult>;
-  remove: (draftId: string, options?: { signal?: AbortSignal }) => Promise<void>;
+  remove: (draftId: string, options?: { signal?: AbortSignal; expectedRevision?: string }) => Promise<void>;
 }
 
 export function createGlobalDraftsApi(fetchImpl: FetchLike = fetch): GlobalDraftsApi {

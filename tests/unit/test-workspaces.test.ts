@@ -16,6 +16,7 @@ import {
   createTestWorkspaceService,
   TEST_WORKSPACE_ERROR_CODES,
 } from '../../src/server/runs/test-workspaces.js';
+import { withWorkspaceLifecycleLock } from '../../src/server/runs/workspace-lock.js';
 
 let root: string;
 
@@ -213,6 +214,30 @@ describe('managed test workspaces', () => {
       code: TEST_WORKSPACE_ERROR_CODES.ACTIVE,
     });
     expect((await service.list()).some(({ id }) => id === workspace.id)).toBe(true);
+  });
+
+  it('waits for a concurrent run claim before checking whether cleanup is safe', async () => {
+    const { configDirectory, source, chain, service } = await setup();
+    const workspace = await service.create({ sourceProjectId: source.id, sourceChainId: chain.id });
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const locked = new Promise<void>((resolve) => { entered = resolve; });
+    const claim = withWorkspaceLifecycleLock(workspace.projectId, async () => {
+      entered();
+      await gate;
+      await writeFile(activeRunPathFor(configDirectory), `${JSON.stringify({
+        version: ACTIVE_RUN_POINTER_VERSION, runId: 'run-test', projectId: workspace.projectId,
+        projectPath: workspace.path, status: 'running',
+        startedAt: '2026-01-02T03:04:05.000Z', updatedAt: '2026-01-02T03:04:05.000Z',
+      })}\n`);
+    });
+    await locked;
+    const removal = service.remove(workspace.id);
+    release();
+    await claim;
+    await expect(removal).rejects.toMatchObject({ code: TEST_WORKSPACE_ERROR_CODES.ACTIVE });
+    expect(await service.list()).toContainEqual(workspace);
   });
 
   it('rejects a managed workspace as the source for another workspace', async () => {

@@ -456,6 +456,48 @@ describe('extra skill directory settings', () => {
 });
 
 describe('remote skill source settings and catalog snapshots', () => {
+  it('updates global and per-source budgets without affecting other sources', async () => {
+    const app = await buildTestApp();
+    const add = await app.inject({
+      method: 'POST',
+      url: '/api/settings/remote-skill-sources',
+      payload: { repository: 'https://example.com/acme/skills.git' },
+    });
+    const source = add.json<{ source: { id: string } }>().source;
+    const global = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/remote-catalog-limits',
+      payload: { limits: { maxPackages: 1_000, maxFiles: 20_000 } },
+    });
+    expect(global.statusCode).toBe(200);
+    expect(global.json()).toMatchObject({
+      global: { maxPackages: 1_000, maxFiles: 20_000 },
+      defaults: { maxPackages: 100 },
+      maximums: { maxPackages: 10_000 },
+    });
+    const override = await app.inject({
+      method: 'PUT',
+      url: `/api/settings/remote-skill-sources/${source.id}/limits`,
+      payload: { limits: { maxPackages: 1_500 } },
+    });
+    expect(override.statusCode).toBe(200);
+    expect(override.json()).toMatchObject({ source: { limits: { maxPackages: 1_500 } } });
+    const invalid = await app.inject({
+      method: 'PUT',
+      url: `/api/settings/remote-skill-sources/${source.id}/limits`,
+      payload: { limits: { maxFiles: 0 } },
+    });
+    expect(invalid.statusCode).toBe(422);
+    const reset = await app.inject({
+      method: 'PUT',
+      url: `/api/settings/remote-skill-sources/${source.id}/limits`,
+      payload: { limits: null },
+    });
+    expect(reset.statusCode).toBe(200);
+    expect(reset.json<{ source: { limits?: unknown } }>().source.limits).toBeUndefined();
+    expect((await configStore.get()).remoteCatalogLimits.maxPackages).toBe(1_000);
+  });
+
   it('registers sources, catalogs pinned packages for both harnesses, and unregisters without deleting snapshots', async () => {
     const app = await buildTestApp();
     const registered = await openProject(app);
@@ -508,6 +550,31 @@ describe('remote skill source settings and catalog snapshots', () => {
       temporaryDirectory: root,
     });
     expect(snapshot.revision).toBe(revision);
+    const page = await app.inject({
+      method: 'GET',
+      url: `/api/settings/remote-skill-sources/${source.id}/snapshots/${revision}/entries?kind=skill&limit=1&search=REMOTE`,
+    });
+    expect(page.statusCode).toBe(200);
+    expect(page.json()).toMatchObject({
+      sourceId: source.id,
+      revision,
+      total: 1,
+      nextOffset: null,
+      items: [{ name: 'remote-demo', repositoryPath: 'collection/remote-demo' }],
+    });
+    const badPage = await app.inject({
+      method: 'GET',
+      url: `/api/settings/remote-skill-sources/${source.id}/snapshots/${revision}/entries?kind=skill&limit=101`,
+    });
+    expect(badPage.statusCode).toBe(422);
+    const agentPage = await app.inject({
+      method: 'GET',
+      url: `/api/settings/remote-skill-sources/${source.id}/snapshots/${revision}/entries?kind=agent`,
+    });
+    expect(agentPage.json()).toMatchObject({
+      total: 1,
+      items: [{ name: 'remote-reviewer' }],
+    });
 
     for (const harness of ['opencode', 'copilot']) {
       const catalog = await getCatalog(app, registered.id, harness);

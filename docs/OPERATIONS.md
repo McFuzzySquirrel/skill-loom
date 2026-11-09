@@ -47,6 +47,12 @@ The discovery skill's project-independent mode consumes a downloaded `*.loom-dis
 
 The helper is not the `skill-loom` server CLI and does not launch a nested Copilot or OpenCode process. Its `inspect`, `prepare`, `status`, `step`, `record`, and `resume` protocol is documented in the packaged `SKILL.md`; it receives state-changing options as JSON on stdin. The host agent uses its ordinary tools for each step, so recorded success is agent-reported rather than a verified CLI process exit or OpenCode OSC signal.
 
+Portable `prepare` requires the `reviewDigest` returned by `inspect` with the
+target project. It binds the bundle, canonical project identity, and existing
+destination fingerprints; changed evidence requires a new inspection and
+approval. This is a point-in-time check, not an external filesystem lock or
+proof that a person reviewed the content.
+
 ## Data locations
 
 | Path | Contents | Notes |
@@ -62,7 +68,30 @@ The helper is not the `skill-loom` server CLI and does not launch a nested Copil
 | `<project>/.loom/portable-runs/*.json` | Separate standalone-skill run snapshots, resolved input values, package fingerprints, attempts, and bounded summaries. | Contains local input values; created and Git-ignored by the portable helper. Writes use same-directory temporary files and atomic replacement; directory fsync is attempted where supported and may be skipped on platforms that reject it. It does not use native run records or the global active-run pointer. |
 | `~/.copilot/config.json` | Copilot's own persistent folder-trust configuration. | Skill Loom only reads `trustedFolders`; it never writes this file. |
 
-A run freezes an immutable snapshot of the chain definition and resolved inputs at creation. Editing the saved chain later does not change an existing or in-flight run, and retry uses the snapshot. Chain and run writes are versioned JSON with atomic temp-file replacement; restarting the server marks records that were active as `interrupted` instead of assuming completion.
+Current portable helpers reject preparation or step execution if another
+unfinished portable run is recorded in the project. The scan is limited to
+1,000 other records and 64 MiB and fails closed on unsafe or corrupt records.
+Archive completed records only when no helper can access them. This does not
+coordinate with managed runs, other profiles, or older helpers. Operators must arrange exclusive project use
+before installation or execution and maintain it through completion or explicit
+abort. Status checks do not lock the project; stop if exclusive use cannot be
+established.
+Do not start another profile that knows a project while a managed run is
+active. Recovery leaves active records not named by its own pointer unchanged
+and logs `RUN_RECOVERY_AMBIGUOUS`, but a matching stale pointer does not prove
+ownership, and profiles still do not coordinate starts.
+Matching-pointer recovery initializes a project-local `.loom/project-claim.sqlite`
+database and ignores it and its sidecars in `.loom/.gitignore`. Do not remove or
+replace it while a service is running. If a claim exists or project coordination
+is enabled, recovery retains the record and pointer and logs `RUN_RECOVERY_CLAIMED`;
+review controls are not yet exposed. Invalid coordination data blocks recovery.
+These safeguards do not coordinate run starts or actions.
+If the active-run pointer is corrupt, startup fails with
+`RUN_ACTIVE_POINTER_CORRUPT` and leaves the file unchanged. Establish that
+earlier work and processes have stopped before inspecting it or restoring a
+verified backup; do not delete it merely to bypass the error.
+
+A run freezes an immutable snapshot of the chain definition and resolved inputs at creation. Editing the saved chain later does not change an existing or in-flight run, and retry uses the snapshot. Chain and run writes are versioned JSON with atomic temp-file replacement; restarting the server marks the active record named by its profile pointer as `interrupted` instead of assuming completion.
 
 The **Test workspaces** page lists retained disposable projects, provides a link to inspect each project, and offers explicit cleanup. If cleanup reports that a workspace owns the active run, finish or explicitly abort/recover that run first. Workspaces isolate files from the original project only; they do not restrict the harness's normal filesystem, network, or credential access.
 
@@ -84,7 +113,7 @@ The skill catalog starts collapsed. Expanding an entry from a non-project source
 
 The builder also offers **Add instruction** for an ordered standalone prompt without a catalog skill. It uses the same harness, inputs, session modes, and run controls as skill steps.
 
-For cross-installation sharing, save the chain and choose **Export** on its project chain card. Review the instructions and complete skill package contents before downloading the `.loom.json` bundle. **Import bundle** previews the file, requires trust confirmation and explicit reuse choices for installed skill conflicts, then creates a fresh chain and installs new project-local packages without executing them. It never overwrites packages and resets automatic-permission consent. Input defaults, run history, and local catalog source paths are not exported; ordinary file contents are not secret-scanned. Limits are 100 packages, 2,000 files, 20 MiB decoded content, and 30 MiB JSON requests. See the [user guide](user-guide.md#share-a-chain-and-its-skills) for sharing restrictions and recipient prerequisites.
+For cross-installation sharing, save the chain and choose **Export** on its project chain card. Review the instructions and complete skill package contents before downloading the `.loom.json` bundle. **Import bundle** previews the file and installed-package inventories, requires trust confirmation and explicit reuse choices, and separately confirms differing installed contents. Inspect installed files directly before approving reuse. Review fingerprints are rechecked but do not lock external edits or prove human review. Import creates a fresh chain and installs new project-local packages without executing them. It never overwrites packages and resets automatic-permission consent. Input defaults, run history, and local catalog source paths are not exported; ordinary file contents are not secret-scanned. Limits are 100 packages, 2,000 files, 20 MiB decoded content, and 30 MiB JSON requests. See the [user guide](user-guide.md#share-a-chain-and-its-skills) for sharing restrictions and recipient prerequisites.
 
 The export dialog's **Download reusable runner skill** is a separate artifact and contains no chain-specific instructions or packages. Recipients install it in their project's `.agents/skills/`, refresh host discovery as needed, and pass the separately exported bundle to the skill. Package review/installation is separately confirmed before execution. Portable records persist resolved inputs locally; do not use credentials as chain inputs. The host's own tools and trust prompts remain authoritative.
 
@@ -110,7 +139,7 @@ Automatic Copilot mode requires an explicit per-chain opt-in. It is off by defau
 
 OpenCode automatic mode does not pass broad permission flags. Its intended advancement signal is OpenCode's terminal state sequence `OSC 7501` `state=working` followed by `state=idle`; Copilot automatic mode advances on process exit. A missing completion signal, non-zero exit, or a 30-minute per-step timeout pauses the run. Output-idle heuristics, animation quiescence, and fixed sleeps never advance a chain. At most one run can be active across the server; a second start is rejected while a run is starting, running, paused, or awaiting user input.
 
-> **Live-verification gap:** the live execution evidence records that OpenCode 2.2.5 emitted colon-separated OSC parameters while the product parser expects semicolon-separated parameters, and that live OpenCode emitted `clear` between `working` and `idle`. The probe's own parser recognized the signal; the product parser did not. Do not rely on automatic OpenCode chains until both issues are fixed and the live probe is rerun. See [Known live-verification gaps](#known-live-verification-gaps).
+> **Live-verification gap:** the product parser now accepts the observed colon-separated OSC parameters, but prior OpenCode 2.2.5 evidence also included `clear` between `working` and `idle`, which resets the product's observation. Do not rely on automatic OpenCode chains until the signal contract is resolved and the live probe is rerun. See [Known live-verification gaps](#known-live-verification-gaps).
 
 Starting a run opens the dedicated terminal page at `/runs/<runId>/terminal`, which keeps the xterm surface and compact controls visible without scrolling. **Run details** opens `/runs/<runId>` for the step rail, full controls, and recovery guidance. Both routes request the same run snapshot and event stream; neither starts, advances, or replays a step on load.
 
@@ -163,7 +192,7 @@ A handoff is not a byte-for-byte copy of the prior harness session. Treat it as 
 
 These are current gaps between the intended contract and what was observed with the verified CLIs. They are not shipped claims.
 
-- **Automatic OpenCode advancement:** `docs/evidence/live-execution.json` records `OSC7501_PRODUCT_PARSER_MISMATCH` and `OSC7501_CLEAR_BEFORE_IDLE`. OpenCode 2.2.5 emitted colon-separated `OSC 7501` parameters while the product parser splits on `;`, and emitted `clear` between `working` and `idle`. The probe's own parser recognized the sequence; the product parser did not. Supervised OpenCode runs are unaffected by this specific mismatch, but automatic OpenCode advancement is not proven end-to-end.
+- **Automatic OpenCode advancement:** `docs/evidence/live-execution.json` records the historical `OSC7501_PRODUCT_PARSER_MISMATCH` and `OSC7501_CLEAR_BEFORE_IDLE` observations. The product parser now accepts the observed colon-separated parameters, but `clear` still resets its working observation before `idle`. Supervised OpenCode runs are unaffected, but automatic OpenCode advancement is not proven end-to-end.
 - **Health active-run field:** `GET /api/health` reports an inactive `activeRun` placeholder in the production composition. Use `GET /api/runs/active` or the UI active-run banner for live run state.
 - **Platform coverage:** the recorded live probes ran on Linux ARM64 with OpenCode 2.2.5 and Copilot CLI 1.0.105. Other platforms and CLI versions are unverified.
 - **Package release:** version `0.1.0` is declared in `package.json`, but the package is private and has no Git release tag or npm publication.
@@ -192,4 +221,4 @@ A dirty working tree is a preflight **warning**, not a block. Commit, stash, or 
 
 ### Interrupted run
 
-If the server stops, the browser closes, or a step loses its process, startup recovery marks records that were active as `interrupted` and clears the stale active-run pointer. Open the run view and choose the offered recovery action: **Retry interrupted step** restarts only that step with the existing session plan, **Continue** resumes after the recorded point when available, and **Restart** creates a new run from the snapshot. Nothing replays silently on reload. Inspect the bounded step tail and reason before retrying, and do not edit the run JSON by hand unless you are discarding the record.
+If the server stops, startup recovery marks the active record named by its profile pointer `interrupted` and clears the stale pointer. Active records without a matching pointer are left unchanged and reported in the server log; they may belong to another profile. Closing a browser alone does not stop the run. Open the run view and choose the offered recovery action: **Retry interrupted step** restarts only that step with the existing session plan, **Continue** resumes after the recorded point when available, and **Restart** creates a new run from the snapshot. Nothing replays silently on reload. Inspect the bounded step tail and reason before retrying, and do not edit the run JSON by hand unless you are discarding the record.

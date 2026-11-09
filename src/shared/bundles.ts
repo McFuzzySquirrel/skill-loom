@@ -67,3 +67,22 @@ export interface BundlePreview {
     bytes: number;
   }>;
 }
+
+export interface BundleReuseEvidence {
+  name: string;
+  path: string;
+  fingerprint: string;
+  bundledFingerprint: string;
+  differs: boolean;
+  inventory: Array<
+    | { path: string; kind: 'directory' }
+    | { path: string; kind: 'file'; bytes: number; executable: boolean; fingerprint: string }
+  >;
+}
+
+export interface ReviewedBundlePreview extends BundlePreview {
+  projectDevice: string;
+  projectInode: string;
+  reuseEvidence: BundleReuseEvidence[];
+  reviewDigest: string;
+}

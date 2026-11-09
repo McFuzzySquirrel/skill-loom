@@ -55,15 +55,17 @@ export class ServerLifecycle {
     }
 
     this.stateValue = 'stopping';
-    this.shutdownPromise = this.responseBarrier.then(() => this.shutdownHandler?.()).then(
+    const attempt = this.responseBarrier.then(() => this.shutdownHandler?.()).then(
       () => {
         this.stateValue = 'stopped';
       },
       (error: unknown) => {
         this.stateValue = 'failed';
+        if (this.shutdownPromise === attempt) this.shutdownPromise = null;
         throw error;
       },
     );
-    return this.shutdownPromise;
+    this.shutdownPromise = attempt;
+    return attempt;
   }
 }

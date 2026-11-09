@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { CHAIN_VERSION, parseChain, type Chain } from './model.js';
 import {
   CHAIN_ID_PATTERN,
@@ -12,6 +12,8 @@ import {
 export const CHAIN_SERVICE_ERROR_CODES = {
   NAME_EXISTS: 'CHAIN_NAME_EXISTS',
   ID_GENERATION_FAILED: 'CHAIN_ID_GENERATION_FAILED',
+  STALE: 'CHAIN_STALE',
+  REVISION_REQUIRED: 'CHAIN_REVISION_REQUIRED',
 } as const;
 
 export type ChainServiceErrorCode =
@@ -60,6 +62,42 @@ export interface CreateChainOptions {
 export interface UpdateChainOptions {
   /** Reject a name already used by a different chain in the same project (409). */
   uniqueName?: boolean;
+  expectedRevision?: string;
+}
+
+export interface RemoveChainOptions {
+  expectedRevision?: string;
+}
+
+export function chainRevision(chain: Chain): string {
+  return createHash('sha256').update(JSON.stringify(chain)).digest('hex');
+}
+
+const mutationLocks = new Map<string, Promise<void>>();
+
+async function withChainMutation<T>(projectPath: string, chainId: string, operation: () => Promise<T>): Promise<T> {
+  const key = `${projectPath}\0${chainId}`;
+  const previous = mutationLocks.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => { release = resolve; });
+  mutationLocks.set(key, current);
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (mutationLocks.get(key) === current) mutationLocks.delete(key);
+  }
+}
+
+function assertRevision(existing: Chain, expectedRevision: string | undefined): void {
+  if (expectedRevision !== undefined && chainRevision(existing) !== expectedRevision) {
+    throw new ChainServiceError(
+      CHAIN_SERVICE_ERROR_CODES.STALE,
+      'The chain changed since it was loaded. Reload it before applying this change.',
+      { chainId: existing.id },
+    );
+  }
 }
 
 export interface DuplicateChainOptions {
@@ -99,7 +137,7 @@ export interface ChainService {
     source: Chain,
     options?: ImportChainOptions,
   ): Promise<Chain>;
-  remove(projectPath: string, chainId: string): Promise<void>;
+  remove(projectPath: string, chainId: string, options?: RemoveChainOptions): Promise<void>;
 }
 
 export type ChainStoreFactory = (projectPath: string) => ChainStore;
@@ -172,17 +210,18 @@ class ProjectChainService implements ChainService {
     draft: ChainDraft,
     options: UpdateChainOptions = {},
   ): Promise<Chain> {
-    const store = this.storeFor(projectPath);
-    // Reading first keeps 404 semantics authoritative and gives us the stored
-    // createdAt, which a client can never change.
-    const existing = await store.read(chainId);
-
-    if (options.uniqueName === true) {
-      await this.assertNameAvailable(store, draft.name, chainId);
-    }
-
-    const chain = this.buildChain(draft, existing.id, existing.createdAt, this.timestamp());
-    return store.update(chain);
+    return withChainMutation(projectPath, chainId, async () => {
+      const store = this.storeFor(projectPath);
+      const existing = await store.read(chainId);
+      assertRevision(existing, options.expectedRevision);
+      if (options.uniqueName === true) {
+        await this.assertNameAvailable(store, draft.name, chainId);
+      }
+      const currentTime = Date.parse(this.timestamp());
+      const nextTime = Math.max(currentTime, Date.parse(existing.updatedAt) + 1);
+      const chain = this.buildChain(draft, existing.id, existing.createdAt, new Date(nextTime).toISOString());
+      return store.update(chain);
+    });
   }
 
   async duplicate(
@@ -262,8 +301,14 @@ class ProjectChainService implements ChainService {
     );
   }
 
-  async remove(projectPath: string, chainId: string): Promise<void> {
-    await this.storeFor(projectPath).delete(chainId);
+  async remove(projectPath: string, chainId: string, options: RemoveChainOptions = {}): Promise<void> {
+    await withChainMutation(projectPath, chainId, async () => {
+      const store = this.storeFor(projectPath);
+      if (options.expectedRevision !== undefined) {
+        assertRevision(await store.read(chainId), options.expectedRevision);
+      }
+      await store.delete(chainId);
+    });
   }
 
   private storeFor(projectPath: string): ChainStore {

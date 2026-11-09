@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { execFileSync, spawn } from 'node:child_process';
+import { chmod, mkdtemp, mkdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { executePortableRequest } from '../../src/portable/runtime.js';
+import { executePortableRequest, packageFingerprint, treeFingerprint, type PackageTreeEntry } from '../../src/portable/runtime.js';
 import type { ChainBundle } from '../../src/shared/bundles.js';
+import { scanProjectRunRecords } from '../../src/shared/project-run-records.js';
 
 let root: string;
 let project: string;
@@ -52,12 +54,16 @@ afterEach(async () => {
 });
 
 async function prepare(extra: Record<string, unknown> = {}) {
+  const review = await executePortableRequest({ command: 'inspect', projectPath: project, bundlePath }) as {
+    reviewDigest: string;
+  };
   return await executePortableRequest({
     command: 'prepare',
     projectPath: project,
     bundlePath,
     input: {
       installConfirmed: true,
+      reviewDigest: review.reviewDigest,
       actualHost: 'opencode',
       hostSwitchConfirmed: false,
       progression: 'supervised',
@@ -88,6 +94,68 @@ function command(
 }
 
 describe('portable bundle execution', () => {
+  it('reports an unresolved portable run to the shared project record scanner', async () => {
+    const result = await prepare();
+    expect(await scanProjectRunRecords(project)).toEqual([expect.objectContaining({
+      kind: 'portable', runId: result.runId, status: 'ready', unresolved: true,
+    })]);
+    await writeFile(join(project, '.loom', 'portable-runs', `${result.runId}.json`), '{"version":1', 'utf8');
+    await expect(scanProjectRunRecords(project)).rejects.toMatchObject({ code: 'PROJECT_RUN_RECORDS_UNSAFE' });
+  });
+
+  it.each([
+    ['runs/\n# keep this comment\n', 'runs/\n# keep this comment\nportable-runs/\n'],
+    ['runs/', 'runs/\nportable-runs/\n'],
+    ['# keep this comment\n', '# keep this comment\nruns/\nportable-runs/\n'],
+    ['', 'runs/\nportable-runs/\n'],
+    ['runs/\nportable-runs/\n!runs/\n!portable-runs/\n', 'runs/\nportable-runs/\n!runs/\n!portable-runs/\nruns/\nportable-runs/\n'],
+    [' runs/\nportable-runs/\n', ' runs/\nportable-runs/\nruns/\nportable-runs/\n'],
+    ['"runs/\\nportable-runs/\\n"\n', '"runs/\\nportable-runs/\\n"\nruns/\nportable-runs/\n'],
+  ])(
+    'preserves existing Git ignore rules and ignores portable run records',
+    async (existing, expected) => {
+      execFileSync('git', ['init', '--quiet', project]);
+      await mkdir(join(project, '.loom'));
+      await writeFile(join(project, '.loom', '.gitignore'), existing);
+      const result = await prepare();
+      expect(await readFile(join(project, '.loom', '.gitignore'), 'utf8'))
+        .toBe(expected);
+      for (const path of ['.loom/runs/example.json', `.loom/portable-runs/${result.runId}.json`]) {
+        execFileSync('git', ['-C', project, 'check-ignore', '--quiet', path]);
+      }
+    },
+  );
+
+  it('ignores both run stores when portable execution creates the Loom directory', async () => {
+    execFileSync('git', ['init', '--quiet', project]);
+    const result = await prepare();
+    expect(await readFile(join(project, '.loom', '.gitignore'), 'utf8'))
+      .toBe('runs/\nportable-runs/\n');
+    for (const path of ['.loom/runs/example.json', `.loom/portable-runs/${result.runId}.json`]) {
+      execFileSync('git', ['-C', project, 'check-ignore', '--quiet', path]);
+    }
+  });
+  it('bounds installed-package review by exact file, byte, entry, and inventory thresholds', async () => {
+    const directory = join(project, 'package');
+    await mkdir(join(directory, 'scripts'), { recursive: true });
+    await writeFile(join(directory, 'SKILL.md'), 'abc');
+    await writeFile(join(directory, 'scripts', 'check.sh'), 'defg');
+    await chmod(join(directory, 'scripts', 'check.sh'), 0o755);
+    const inventory: PackageTreeEntry[] = [];
+    const fingerprint = await treeFingerprint(directory, inventory);
+    expect(fingerprint).toBe(packageFingerprint([
+      { path: 'SKILL.md', content: Buffer.from('abc').toString('base64'), executable: false },
+      { path: 'scripts/check.sh', content: Buffer.from('defg').toString('base64'), executable: true },
+    ]));
+    const inventoryBytes = inventory.reduce((sum, item) => sum + Buffer.byteLength(JSON.stringify(item), 'utf8') + 1, 0);
+    const exact = { files: 2, bytes: 7, entries: 3, inventoryBytes };
+    await expect(treeFingerprint(directory, [], exact)).resolves.toBe(fingerprint);
+    for (const dimension of ['files', 'bytes', 'entries', 'inventoryBytes'] as const) {
+      await expect(treeFingerprint(directory, [], { ...exact, [dimension]: exact[dimension] - 1 }))
+        .rejects.toMatchObject({ code: 'PACKAGE_TOO_LARGE' });
+    }
+  });
+
   it('inspects v2 agents but refuses to silently run with a different current agent', async () => {
     const agentText = '---\nname: reviewer\ndescription: Review changes\n---\nReview the task.\n';
     const fingerprint = createHash('sha256').update(agentText).digest('hex');
@@ -135,13 +203,16 @@ describe('portable bundle execution', () => {
   it('inspects without project writes and prepares frozen inputs and approved packages', async () => {
     const preview = await executePortableRequest({ command: 'inspect', bundlePath, projectPath: project }) as {
       bundleFingerprint: string;
+      reviewDigest: string;
       skills: Array<{ skillMarkdown: string; bundledFingerprint: string }>;
     };
     expect(preview.bundleFingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(preview.reviewDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(preview.skills[0]).toMatchObject({
       skillMarkdown: skillText,
       bundledFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
+
     await expect(readFile(join(project, '.loom', '.gitignore'))).rejects.toMatchObject({ code: 'ENOENT' });
 
     const result = await prepare() as { runId: string; revision: number; status: string };
@@ -154,6 +225,53 @@ describe('portable bundle execution', () => {
     expect(status.run).toMatchObject({ status: 'ready', currentStepIndex: 0 });
     expect(status.run).not.toHaveProperty('resolvedInputs');
     expect(status.run).not.toHaveProperty('bundle');
+  });
+
+  it('rejects missing or stale review evidence before installing anything', async () => {
+    const inspected = await executePortableRequest({ command: 'inspect', bundlePath, projectPath: project }) as {
+      reviewDigest: string;
+    };
+    await expect(prepare({ reviewDigest: undefined })).rejects.toMatchObject({ code: 'REVIEW_REQUIRED' });
+    const changed = structuredClone(bundle);
+    changed.chain.name = 'Changed after review';
+    await writeFile(bundlePath, JSON.stringify(changed));
+    await expect(prepare({ reviewDigest: inspected.reviewDigest })).rejects.toMatchObject({ code: 'REVIEW_STALE' });
+    await expect(readFile(join(project, '.agents', 'skills', 'review', 'SKILL.md')))
+      .rejects.toMatchObject({ code: 'ENOENT' });
+    const next = await executePortableRequest({ command: 'inspect', bundlePath, projectPath: project }) as {
+      reviewDigest: string;
+    };
+    await rename(project, join(root, 'old-project'));
+    await mkdir(project);
+    await expect(prepare({ reviewDigest: next.reviewDigest })).rejects.toMatchObject({ code: 'REVIEW_STALE' });
+  });
+
+  it('rejects a changed reuse package after inspection', async () => {
+    const destination = join(project, '.agents', 'skills', 'review');
+    await mkdir(destination, { recursive: true });
+    await writeFile(join(destination, 'SKILL.md'), skillText);
+    const inspected = await executePortableRequest({ command: 'inspect', bundlePath, projectPath: project }) as {
+      reviewDigest: string;
+    };
+    await writeFile(join(destination, 'SKILL.md'), `${skillText}\nChanged after review\n`);
+    await expect(prepare({
+      reviewDigest: inspected.reviewDigest, reuseSkills: ['review'], differingReuseConfirmed: true,
+    })).rejects.toMatchObject({ code: 'REVIEW_STALE' });
+    expect(await readFile(join(destination, 'SKILL.md'), 'utf8')).toContain('Changed after review');
+    await expect(readFile(join(project, '.loom', '.gitignore'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('refuses oversized or linked review inputs without installing', async () => {
+    const linked = join(root, 'linked.loom.json');
+    await symlink(bundlePath, linked);
+    await expect(executePortableRequest({ command: 'inspect', bundlePath: linked, projectPath: project }))
+      .rejects.toMatchObject({ code: 'BUNDLE_INVALID' });
+    const destination = join(project, '.agents', 'skills', 'review');
+    await mkdir(destination, { recursive: true });
+    await writeFile(join(destination, 'large.bin'), Buffer.alloc(20 * 1024 * 1024 + 1));
+    await expect(executePortableRequest({ command: 'inspect', bundlePath, projectPath: project }))
+      .rejects.toMatchObject({ code: 'PACKAGE_TOO_LARGE' });
+    await expect(readFile(join(project, '.loom', '.gitignore'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('requires per-step confirmation, preserves order and records completion', async () => {
@@ -228,10 +346,12 @@ describe('portable bundle execution', () => {
         summary: 'Completed the first step.',
       }) as { revision: number };
       const second = await command('step', run.runId, done.revision, { confirmed: true }) as {
+        revision: number;
         step: { handoffNote: string | null };
       };
       expect(second.step.handoffNote).toContain('not a native session fork');
       expect(second.step.handoffNote).toContain('Completed the first step.');
+      await command('record', run.runId, second.revision, { outcome: 'done', confirmed: true });
 
       const agentRun = await prepare({
         progression: 'agent',
@@ -251,6 +371,138 @@ describe('portable bundle execution', () => {
       }) as { status: string };
       expect(agentDone.status).toBe('ready');
   });
+
+  it('blocks new portable runs until the existing run completes or is aborted', async () => {
+    const first = await prepare();
+    await expect(prepare({ reuseSkills: ['review'] })).rejects.toMatchObject({ code: 'RUN_ACTIVE_CONFLICT' });
+    const paused = await command('record', first.runId, first.revision, { action: 'pause' }) as { revision: number };
+    await expect(prepare({ reuseSkills: ['review'] })).rejects.toMatchObject({ code: 'RUN_ACTIVE_CONFLICT' });
+    await command('record', first.runId, paused.revision, { action: 'abort' });
+    const second = await prepare({ reuseSkills: ['review'] });
+    expect(second.runId).not.toBe(first.runId);
+  });
+
+  it('keeps an unresolved attempt exclusive through explicit recovery', async () => {
+    const first = await prepare();
+    const step = await command('step', first.runId, first.revision, { confirmed: true }) as { revision: number };
+    await expect(prepare({ reuseSkills: ['review'] })).rejects.toMatchObject({ code: 'RUN_ACTIVE_CONFLICT' });
+    const interrupted = await command('resume', first.runId, step.revision, { stoppedConfirmed: true }) as { revision: number; status: string };
+    expect(interrupted.status).toBe('interrupted');
+    await expect(prepare({ reuseSkills: ['review'] })).rejects.toMatchObject({ code: 'RUN_ACTIVE_CONFLICT' });
+    const failed = await command('resume', first.runId, interrupted.revision, { decision: 'failed' }) as { revision: number };
+    await command('record', first.runId, failed.revision, { action: 'abort' });
+    await expect(prepare({ reuseSkills: ['review'] })).resolves.toMatchObject({ status: 'ready' });
+  });
+
+  it('does not remove an existing portable mutation lock', async () => {
+    const first = await prepare();
+    const lock = join(project, '.loom', 'portable-runs', '.lock');
+    await writeFile(lock, 'existing owner\n');
+    await expect(command('step', first.runId, first.revision, { confirmed: true }))
+      .rejects.toMatchObject({ code: 'RUN_LOCKED' });
+    expect(await readFile(lock, 'utf8')).toBe('existing owner\n');
+    await rm(lock);
+    await expect(command('step', first.runId, first.revision, { confirmed: true }))
+      .resolves.toMatchObject({ runId: first.runId });
+  });
+
+  it('admits only one of two concurrent portable helper processes', async () => {
+    const inspected = await executePortableRequest({ command: 'inspect', projectPath: project, bundlePath }) as {
+      reviewDigest: string;
+    };
+    const payload = JSON.stringify({
+      installConfirmed: true, reviewDigest: inspected.reviewDigest, actualHost: 'opencode',
+      progression: 'supervised', inputs: { task: 'the change' },
+      sessionDecision: {
+        requested: 'shared', mechanism: 'current-conversation', description: 'Current conversation.', confirmed: true,
+      },
+    });
+    const script = `
+      import { runPortableCli } from './src/portable/cli.ts';
+      process.exitCode = await runPortableCli(['prepare', '--project', process.argv[1], '--bundle', process.argv[2]]);
+    `;
+    const invoke = () => new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+      const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script, project, bundlePath],
+        { cwd: process.cwd(), stdio: 'pipe' });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.setEncoding('utf8').on('data', (chunk: string) => { stdout += chunk; });
+      child.stderr.setEncoding('utf8').on('data', (chunk: string) => { stderr += chunk; });
+      child.once('error', reject);
+      child.once('close', (code) => resolve({ code, stdout, stderr }));
+      child.stdin.end(payload);
+    });
+    const results = await Promise.all([invoke(), invoke()]);
+    expect(results.filter((result) => result.code === 0)).toHaveLength(1);
+    const rejected = results.find((result) => result.code !== 0)!;
+    expect(['RUN_LOCKED', 'RUN_ACTIVE_CONFLICT', 'REVIEW_STALE'])
+      .toContain((JSON.parse(rejected.stderr) as { error: { code: string } }).error.code);
+    await expect(prepare({ reuseSkills: ['review'] })).rejects.toMatchObject({ code: 'RUN_ACTIVE_CONFLICT' });
+  });
+
+  it('blocks a step when another unfinished legacy portable run exists', async () => {
+    const first = await prepare();
+    const directory = join(project, '.loom', 'portable-runs');
+    const original = JSON.parse(await readFile(join(directory, `${first.runId}.json`), 'utf8')) as Record<string, unknown>;
+    const otherId = '00000000-0000-4000-8000-000000000001';
+    await writeFile(join(directory, `${otherId}.json`), JSON.stringify({ ...original, id: otherId }));
+    await expect(command('step', first.runId, first.revision, { confirmed: true }))
+      .rejects.toMatchObject({ code: 'RUN_ACTIVE_CONFLICT' });
+    await command('record', otherId, first.revision, { action: 'abort' });
+    await expect(command('step', first.runId, first.revision, { confirmed: true }))
+      .resolves.toMatchObject({ runId: first.runId });
+  });
+
+  it('fails closed on corrupt or unsafe sibling run records', async () => {
+    const first = await prepare();
+    const directory = join(project, '.loom', 'portable-runs');
+    const otherId = '00000000-0000-4000-8000-000000000001';
+    const otherPath = join(directory, `${otherId}.json`);
+    await writeFile(otherPath, '{invalid');
+    await expect(command('step', first.runId, first.revision, { confirmed: true }))
+      .rejects.toMatchObject({ code: 'RUN_FILE_INVALID' });
+    await rm(otherPath);
+    await symlink(join(directory, `${first.runId}.json`), otherPath);
+    await expect(command('step', first.runId, first.revision, { confirmed: true }))
+      .rejects.toMatchObject({ code: 'RUN_FILE_INVALID' });
+    await rm(otherPath);
+    await writeFile(otherPath, await readFile(join(directory, `${first.runId}.json`)));
+    await expect(command('step', first.runId, first.revision, { confirmed: true }))
+      .rejects.toMatchObject({ code: 'RUN_FILE_INVALID' });
+  });
+
+  it('enforces the portable run conflict scan record limit at its boundary', async () => {
+    const first = await prepare();
+    await command('record', first.runId, first.revision, { action: 'abort' });
+    const directory = join(project, '.loom', 'portable-runs');
+    const record = JSON.parse(await readFile(join(directory, `${first.runId}.json`), 'utf8')) as Record<string, unknown>;
+    await Promise.all(Array.from({ length: 999 }, (_, index) => {
+      const id = `00000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, '0')}`;
+      return writeFile(join(directory, `${id}.json`), JSON.stringify({ ...record, id }));
+    }));
+    const atLimit = await prepare({ reuseSkills: ['review'] });
+    await command('record', atLimit.runId, atLimit.revision, { action: 'abort' });
+    await expect(prepare({ reuseSkills: ['review'] })).rejects.toMatchObject({ code: 'RUN_SCAN_TOO_LARGE' });
+  }, 30_000);
+
+  it('enforces the portable run conflict scan byte limit at its boundary', async () => {
+    const first = await prepare();
+    await command('record', first.runId, first.revision, { action: 'abort' });
+    const directory = join(project, '.loom', 'portable-runs');
+    const firstPath = join(directory, `${first.runId}.json`);
+    const record = JSON.parse(await readFile(firstPath, 'utf8')) as Record<string, unknown>;
+    const firstBytes = (await stat(firstPath)).size;
+    const part = 24 * 1024 * 1024;
+    for (const [index, bytes] of [part, part, 64 * 1024 * 1024 - 2 * part - firstBytes].entries()) {
+      const id = `00000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, '0')}`;
+      const content = Buffer.alloc(bytes, 0x20);
+      content.write(JSON.stringify({ ...record, id }), 'utf8');
+      await writeFile(join(directory, `${id}.json`), content);
+    }
+    const atLimit = await prepare({ reuseSkills: ['review'] });
+    await command('record', atLimit.runId, atLimit.revision, { action: 'abort' });
+    await expect(prepare({ reuseSkills: ['review'] })).rejects.toMatchObject({ code: 'RUN_SCAN_TOO_LARGE' });
+  }, 30_000);
 
   it('does not overwrite a package and requires explicit approval for differing reuse', async () => {
     const destination = join(project, '.agents', 'skills', 'review');
@@ -272,7 +524,12 @@ describe('portable bundle execution', () => {
   it('requires explicit interrupted-run recovery and never replays automatically', async () => {
     const run = await prepare() as { runId: string; revision: number };
     const step = await command('step', run.runId, run.revision, { confirmed: true }) as { revision: number };
-    const interrupted = await command('resume', run.runId, step.revision) as {
+    await expect(command('resume', run.runId, step.revision))
+      .rejects.toMatchObject({ code: 'STOP_CONFIRMATION_REQUIRED' });
+    expect(await command('status', run.runId, step.revision)).toMatchObject({
+      run: { status: 'running', revision: step.revision },
+    });
+    const interrupted = await command('resume', run.runId, step.revision, { stoppedConfirmed: true }) as {
       revision: number;
       decisionRequired: boolean;
     };

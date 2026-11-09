@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CHAIN_VERSION, type Chain, type ChainSessionMode } from '../../src/server/chains/model.js';
 import { createCopilotAdapter } from '../../src/server/harness/copilot.js';
 import { createOpenCodeAdapter } from '../../src/server/harness/opencode.js';
@@ -22,7 +22,7 @@ import {
   type SupervisedRunEvent,
   type SupervisedSpawnSpec,
 } from '../../src/server/runs/supervised.js';
-import type { TerminalExit } from '../../src/server/terminal/pty.js';
+import { createTerminalSession, type TerminalExit, type TerminalSession } from '../../src/server/terminal/pty.js';
 
 const CREATED_AT = '2026-11-04T10:00:00.000Z';
 const PROJECT_PATH = '/tmp/loom-supervised-project';
@@ -649,6 +649,132 @@ describe('supervised abort and completion cleanup', () => {
       harness.ptys[0]!.spawns.every((spawn) => spawn.process.writes.length === 0),
     ).toBe(true);
   });
+
+  it('reaps a stubborn process before starting the next supervised step', async () => {
+    const harness = makeHarness();
+    await harness.runner.start();
+    const first = harness.ptys[0]!.lastProcess;
+    const kill = first.kill.bind(first);
+    vi.spyOn(first, 'kill').mockImplementation((signal) => {
+      if (signal === 'SIGKILL') kill(signal);
+    });
+
+    await harness.runner.markDone();
+    await harness.runner.next();
+    expect(first.killSignals).toContain('SIGKILL');
+    expect(first.isRunning()).toBe(false);
+    expect(harness.ptys[0]!.spawns).toHaveLength(2);
+    await harness.runner.abort();
+  });
+
+  it.skipIf(process.platform === 'win32')('reaps a real SIGTERM-resistant PTY before advancing', async () => {
+    const harness = makeHarness();
+    const sessions: TerminalSession[] = [];
+    const runner = createSupervisedRunner({
+      run: harness.run,
+      adapter: harness.adapter,
+      projectPath: PROJECT_PATH,
+      now: harness.now,
+      createPty: (context) => ({
+        id: context.terminalId,
+        spawn: () => {
+          const session = createTerminalSession({
+            executable: process.execPath,
+            args: ['-e', "process.on('SIGTERM', () => {}); process.stdout.write('READY\\n'); setInterval(() => {}, 1000);"],
+            cwd: process.cwd(),
+          }, { id: `${context.terminalId}-${String(sessions.length)}` });
+          sessions.push(session);
+          return session;
+        },
+        close: () => sessions.at(-1)?.kill(),
+      }),
+    });
+    try {
+      await runner.start();
+      const first = sessions[0]!;
+      await vi.waitFor(() => expect(first.getBufferedOutput()).toContain('READY'), { timeout: 5_000 });
+      await runner.markDone();
+      await runner.next();
+      expect(first.isRunning()).toBe(false);
+      expect(sessions).toHaveLength(2);
+      await runner.abort();
+    } finally {
+      for (const session of sessions) session.kill('SIGKILL');
+      await runner.shutdown();
+    }
+  }, 10_000);
+
+  it('refuses to advance when the supervised process cannot be terminated', async () => {
+    const harness = makeHarness();
+    await harness.runner.start();
+    const first = harness.ptys[0]!.lastProcess;
+    const kill = vi.spyOn(first, 'kill').mockImplementation(() => { throw new Error('termination failed'); });
+    await harness.runner.markDone();
+    await expect(harness.runner.next()).rejects.toMatchObject({
+      code: 'SUPERVISED_PROCESS_TERMINATION_FAILED',
+    });
+    expect(harness.runner.getRun()).toMatchObject({ status: 'awaiting-user', currentStepIndex: 0 });
+    expect(harness.ptys[0]!.spawns).toHaveLength(1);
+    expect(first.isRunning()).toBe(true);
+    kill.mockRestore();
+    await harness.runner.shutdown();
+    expect(first.isRunning()).toBe(false);
+  });
+
+  it('does not record an abort when the supervised process cannot be terminated', async () => {
+    const harness = makeHarness();
+    await harness.runner.start();
+    const process = harness.ptys[0]!.lastProcess;
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => { throw new Error('termination failed'); });
+    await expect(harness.runner.abort()).rejects.toMatchObject({
+      code: 'SUPERVISED_PROCESS_TERMINATION_FAILED',
+    });
+    expect(harness.runner.getRun().status).not.toBe('aborted');
+    expect(process.isRunning()).toBe(true);
+    kill.mockRestore();
+    await harness.runner.shutdown();
+  });
+
+  it('retains the supervised process after a failed shutdown so cleanup can be retried', async () => {
+    const harness = makeHarness();
+    await harness.runner.start();
+    const process = harness.ptys[0]!.lastProcess;
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => { throw new Error('termination failed'); });
+
+    await expect(harness.runner.shutdown()).rejects.toMatchObject({
+      code: 'SUPERVISED_PROCESS_TERMINATION_FAILED',
+    });
+    expect(process.isRunning()).toBe(true);
+    expect(harness.ptys[0]!.closeCalls).toBe(0);
+
+    kill.mockRestore();
+    await harness.runner.shutdown();
+    expect(process.isRunning()).toBe(false);
+    expect(harness.ptys[0]!.closeCalls).toBe(1);
+  });
+
+  it('retains a supervised process that ignores both termination signals', async () => {
+    const harness = makeHarness();
+    await harness.runner.start();
+    const process = harness.ptys[0]!.lastProcess;
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => undefined);
+    vi.useFakeTimers();
+    try {
+      const shutdown = harness.runner.shutdown();
+      const failure = expect(shutdown).rejects.toMatchObject({
+        code: 'SUPERVISED_PROCESS_TERMINATION_FAILED',
+      });
+      await vi.advanceTimersByTimeAsync(2_500);
+      await failure;
+      expect(kill.mock.calls.map(([signal]) => signal)).toEqual(['SIGTERM', 'SIGKILL']);
+      expect(process.isRunning()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      kill.mockRestore();
+      await harness.runner.shutdown();
+    }
+    expect(process.isRunning()).toBe(false);
+  });
 });
 
 describe('supervised session plans', () => {
@@ -782,5 +908,44 @@ describe('supervised action dispatch', () => {
     expect(harness.persisted.at(-1)!.steps[0]!.status).toBe('done');
     // Each persisted snapshot is a clone, not the runner's live object.
     expect(harness.persisted[0]).not.toBe(harness.persisted[1]);
+  });
+
+  it('does not spawn a supervised step if its running snapshot cannot be persisted', async () => {
+    const harness = makeHarness({
+      persist: (run) => {
+        if (run.steps[0]?.status === 'running') throw new Error('simulated persistence failure');
+      },
+    });
+
+    await expect(harness.runner.start()).rejects.toMatchObject({
+      code: 'SUPERVISED_PERSIST_FAILED',
+    });
+    expect(harness.ptys[0]!.spawns).toHaveLength(0);
+    await harness.runner.shutdown();
+  });
+
+  it('does not spawn a later supervised step if its running snapshot cannot be persisted', async () => {
+    let fail = true;
+    const harness = makeHarness({
+      persist: (run) => {
+        if (fail && run.steps[1]?.status === 'running') throw new Error('simulated persistence failure');
+      },
+    });
+    await harness.runner.start();
+    const first = harness.ptys[0]!.lastProcess;
+    await harness.runner.markDone();
+    await expect(harness.runner.next()).rejects.toMatchObject({
+      code: 'SUPERVISED_PERSIST_FAILED',
+    });
+    expect(first.isRunning()).toBe(false);
+    expect(harness.ptys[0]!.spawns).toHaveLength(1);
+    expect(harness.runner.getRun()).toMatchObject({
+      status: 'paused', reason: 'PERSIST_FAILED', steps: [{ status: 'done' }, { status: 'failed' }, {}],
+    });
+    expect(harness.runner.state.canRetry).toBe(true);
+    fail = false;
+    await harness.runner.retry();
+    expect(harness.ptys[0]!.spawns).toHaveLength(2);
+    await harness.runner.shutdown();
   });
 });

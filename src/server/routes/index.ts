@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { catalogRoutes, type CatalogRoutesOptions } from './catalog.js';
 import { chainRoutes, type ChainRoutesOptions } from './chains.js';
 import { chainBundleRoutes } from './chain-bundles.js';
-import { draftRoutes } from './drafts.js';
+import { draftRoutes, type DraftRoutesOptions } from './drafts.js';
 import { fsRoutes, type FsRouteOptions } from './fs.js';
 import {
   globalChainRoutes,
@@ -16,7 +16,7 @@ import { scenarioPresetRoutes } from './presets.js';
 import { runRoutes, type RunRoutesOptions } from './runs.js';
 import { terminalRoutes, type TerminalRouteOptions } from './terminal.js';
 import { serverRoutes, type ServerRoutesOptions } from './server.js';
-import { testWorkspaceRoutes } from './test-workspaces.js';
+import { testWorkspaceRoutes, type TestWorkspaceRoutesOptions } from './test-workspaces.js';
 import { sharedBundleRoutes, type SharedBundleRoutesOptions } from './shared-bundles.js';
 import { discoveryRoutes } from './discovery.js';
 
@@ -27,10 +27,12 @@ export type RouteRegistrationOptions = HealthRouteOptions &
   ProjectRoutesOptions &
   CatalogRoutesOptions &
   ChainRoutesOptions &
+  DraftRoutesOptions &
   GlobalChainRoutesOptions &
   PreflightRoutesOptions &
   RunRoutesOptions &
-  SharedBundleRoutesOptions;
+  SharedBundleRoutesOptions &
+  TestWorkspaceRoutesOptions;
 
 /**
  * Single registration point for the HTTP and WebSocket surface. Every feature

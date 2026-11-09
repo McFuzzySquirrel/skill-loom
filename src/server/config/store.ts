@@ -8,6 +8,8 @@ import {
   CONFIG_VERSION,
   ConfigUpdateSchema,
   LoomConfigSchema,
+  LoomConfigV1Schema,
+  RemoteCatalogLimitsSchema,
   createDefaultConfig,
   type ConfigUpdate,
   type HarnessCommands,
@@ -144,6 +146,13 @@ export function parseConfigDocument(raw: unknown, configPath: string): LoomConfi
     throw new ConfigCorruptError(configPath, [{ path: 'version', code: 'invalid_type' }]);
   }
 
+  if (raw.version === 1) {
+    const previous = LoomConfigV1Schema.safeParse(raw);
+    if (!previous.success) {
+      throw new ConfigCorruptError(configPath, normalizeIssues(previous.error.issues));
+    }
+    return LoomConfigSchema.parse({ ...previous.data, version: CONFIG_VERSION });
+  }
   if (raw.version !== CONFIG_VERSION) {
     throw new ConfigUnsupportedVersionError(configPath, raw.version);
   }
@@ -319,6 +328,11 @@ export function createConfigStore(options: ConfigStoreOptions = {}): ConfigStore
   return new FileConfigStore(options);
 }
 
+/** Read the current profile without creating a config file when it is absent. */
+export async function readConfigSnapshot(options: ConfigPathOptions = {}): Promise<LoomConfig> {
+  return (await readExistingConfig(resolveConfigPath(options))) ?? createDefaultConfig();
+}
+
 let defaultStore: ConfigStore | undefined;
 
 /** Process-wide store used by feature services. Paths are resolved per call. */
@@ -380,6 +394,10 @@ function applyUpdate(current: LoomConfig, patch: ConfigUpdate): LoomConfig {
     harnessCommands,
     extraSkillDirectories: patch.extraSkillDirectories ?? current.extraSkillDirectories,
     remoteSkillSources: patch.remoteSkillSources ?? current.remoteSkillSources,
+    remoteCatalogLimits: RemoteCatalogLimitsSchema.parse({
+      ...current.remoteCatalogLimits,
+      ...Object.fromEntries(Object.entries(patch.remoteCatalogLimits ?? {}).filter(([, value]) => value !== undefined)),
+    }),
     ...(patch.sharedBundleDirectory === null
       ? {}
       : {

@@ -567,6 +567,36 @@ test.describe('Chain inputs and save', () => {
     expect(copyBody.chain.harness).toBe('copilot');
     expect(copyBody.chain.inputs).toHaveLength(1);
   });
+
+  test('keeps unsaved edits when another client changes the chain', async ({ page, request }) => {
+    const project = await openFixtureProject(request);
+    const draft = {
+      name: `Concurrent ${runSuffix}`, harness: 'opencode', sessionMode: 'shared',
+      steps: [{ id: 'step-1', skillName: 'deploy-helper', instruction: 'Initial instruction.' }],
+      inputs: [],
+    };
+    const created = await request.post(`/api/projects/${project.id}/chains`, { data: draft });
+    expect(created.status()).toBe(201);
+    const { chain, revision } = (await created.json()) as { chain: StoredChain; revision: string };
+    await page.goto(`/projects/${project.id}/chains/${chain.id}`);
+    await expect(page.getByTestId('builder-chain-id')).toHaveText(chain.id);
+    await openFirstStepEditor(page);
+    await page.getByTestId('step-instruction').fill('My unsaved instruction.');
+    await closeStepEditor(page);
+
+    const external = await request.put(`/api/projects/${project.id}/chains/${chain.id}`, {
+      headers: { 'x-loom-chain-revision': revision },
+      data: { ...draft, steps: [{ ...draft.steps[0]!, instruction: 'External instruction.' }] },
+    });
+    expect(external.status()).toBe(200);
+    await page.getByTestId('chain-save').click();
+    await expect(page.getByTestId('chain-save-error')).toContainText('CHAIN_STALE');
+    await expect(page.getByTestId('chain-dirty-indicator')).toContainText('Unsaved changes');
+    await openFirstStepEditor(page);
+    await expect(page.getByTestId('step-instruction')).toHaveValue('My unsaved instruction.');
+    const stored = await request.get(`/api/projects/${project.id}/chains/${chain.id}`);
+    expect(((await stored.json()) as { chain: StoredChain }).chain.steps[0]?.instruction).toBe('External instruction.');
+  });
 });
 
 function escapeRegExp(value: string): string {

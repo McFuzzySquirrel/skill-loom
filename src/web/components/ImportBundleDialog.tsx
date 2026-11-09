@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { BundlePreview, ChainBundle } from '../../shared/bundles';
+import type { ChainBundle, ReviewedBundlePreview } from '../../shared/bundles';
 import { bundlesApi } from '../api/bundles';
 import { toApiClientError, type Chain } from '../api/chains';
 import { ApiClientError } from '../api/client';
@@ -22,11 +22,12 @@ export function ImportBundleDialog({
   const titleId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const { announce } = useStatusAnnouncer();
-  const [preview, setPreview] = useState<BundlePreview | null>(null);
+  const [preview, setPreview] = useState<ReviewedBundlePreview | null>(null);
   const [error, setError] = useState<ApiClientError | null>(null);
   const [busy, setBusy] = useState(false);
   const [reviewed, setReviewed] = useState(false);
   const [reuse, setReuse] = useState<string[]>([]);
+  const [differingReuseConfirmed, setDifferingReuseConfirmed] = useState(false);
   const requestId = useRef(0);
 
   useEffect(() => {
@@ -42,6 +43,7 @@ export function ImportBundleDialog({
     setError(null);
     setReviewed(false);
     setReuse([]);
+    setDifferingReuseConfirmed(false);
     void bundlesApi.preview(projectId, initialBundle).then((result) => {
       if (id === requestId.current) setPreview(result);
     }).catch((caught: unknown) => {
@@ -61,6 +63,7 @@ export function ImportBundleDialog({
     setError(null);
     setReviewed(false);
     setReuse([]);
+    setDifferingReuseConfirmed(false);
     if (!file) return;
     setBusy(true);
     try {
@@ -91,7 +94,7 @@ export function ImportBundleDialog({
     setBusy(true);
     setError(null);
     try {
-      const chain = await bundlesApi.import(projectId, preview.bundle, reuse);
+      const chain = await bundlesApi.import(projectId, preview.bundle, reuse, preview.reviewDigest, differingReuseConfirmed);
       announce(`Imported chain ${chain.name}. Review permissions and run preflight before running.`);
       onImported(chain);
     } catch (caught) {
@@ -105,6 +108,7 @@ export function ImportBundleDialog({
   const unresolved = preview?.skills.some((skill) =>
     (skill.conflict || skill.directoryExists) && !reuse.includes(skill.name)) ?? false;
   const agentConflict = preview?.agents.some((agent) => agent.conflict) ?? false;
+  const differingReuse = preview?.reuseEvidence.some((item) => reuse.includes(item.name) && item.differs) ?? false;
 
   return (
     <section className="new-chain" role="dialog" aria-modal="false" aria-labelledby={titleId}>
@@ -134,14 +138,32 @@ export function ImportBundleDialog({
           {preview.skills.map((skill) => (
             <div key={skill.name}>
               <p>{skill.name}: {skill.files} files, {skill.bytes} bytes.</p>
+              {preview.reuseEvidence.filter((item) => item.name === skill.name).map((item) => (
+                <details key={item.name}>
+                  <summary>Installed package review: {item.name} ({item.differs ? 'different contents' : 'matching contents'})</summary>
+                  <p>Inspect the complete installed files at <code>{item.path}</code> before approving reuse. The inventory and fingerprints are point-in-time observations.</p>
+                  <p>Installed fingerprint: <code>{item.fingerprint}</code>; bundled fingerprint: <code>{item.bundledFingerprint}</code>.</p>
+                  <ul>
+                    {item.inventory.map((file) => (
+                      <li key={file.path}>
+                        <code>{file.path}</code>{file.kind === 'directory' ? ' (directory)' :
+                          ` (${file.bytes} bytes${file.executable ? ', executable' : ''}; SHA-256 ${file.fingerprint})`}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ))}
               {skill.conflict ? (
                 <label className="field__label">
                   <input
                     type="checkbox"
                     disabled={busy}
                     checked={reuse.includes(skill.name)}
-                    onChange={(event) => setReuse((current) => event.target.checked
-                      ? [...current, skill.name] : current.filter((name) => name !== skill.name))}
+                    onChange={(event) => {
+                      setDifferingReuseConfirmed(false);
+                      setReuse((current) => event.target.checked
+                        ? [...current, skill.name] : current.filter((name) => name !== skill.name));
+                    }}
                   />
                   {' '}Reuse installed "{skill.name}" instead of the bundled package (contents may differ).
                 </label>
@@ -150,6 +172,12 @@ export function ImportBundleDialog({
               ) : null}
             </div>
           ))}
+          {differingReuse ? (
+            <label className="field__label">
+              <input type="checkbox" checked={differingReuseConfirmed} disabled={busy} onChange={(event) => setDifferingReuseConfirmed(event.target.checked)} />
+              {' '}I reviewed the installed files and separately approve reusing the differing contents.
+            </label>
+          ) : null}
           {preview.agents.map((agent) => (
             <div key={`${agent.harness}:${agent.agentPath}`}>
               <p>
@@ -168,7 +196,7 @@ export function ImportBundleDialog({
             <input type="checkbox" checked={reviewed} disabled={busy} onChange={(event) => setReviewed(event.target.checked)} />
             {' '}I reviewed and trust these instructions and packages.
           </label>
-          <button type="button" className="button" disabled={busy || !reviewed || unresolved || agentConflict} onClick={() => void importCopy()}>
+          <button type="button" className="button" disabled={busy || !reviewed || unresolved || agentConflict || (differingReuse && !differingReuseConfirmed)} onClick={() => void importCopy()}>
             Import chain, skills, and agents
           </button>
         </>

@@ -68,7 +68,9 @@ export function GlobalDraftsPage({ api = globalDraftsApi }: GlobalDraftsPageProp
     setBusyId(draft.id);
     setMutationError(null);
     try {
-      await api.remove(draft.id);
+      await api.remove(draft.id, {
+        ...(draft.revision === undefined ? {} : { expectedRevision: draft.revision }),
+      });
       setConfirmingId(null);
       await reload();
       announce(`Deleted draft ${draft.name}.`);

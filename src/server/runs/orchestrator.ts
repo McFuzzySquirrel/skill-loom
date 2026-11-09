@@ -1,7 +1,8 @@
 import { spawn as spawnChild } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import type { ChildProcess } from 'node:child_process';
-import { stat } from 'node:fs/promises';
-import type { ChainService } from '../chains/service.js';
+import { realpath, stat } from 'node:fs/promises';
+import { chainRevision, type ChainService } from '../chains/service.js';
 import type { HarnessRegistry } from '../harness/registry.js';
 import type { HarnessAdapter } from '../harness/types.js';
 import { HarnessError } from '../harness/types.js';
@@ -124,6 +125,7 @@ export const RUN_ORCHESTRATOR_ERROR_CODES = {
   ACTION_INVALID: 'RUN_ACTION_INVALID',
   ACTION_MODE_MISMATCH: 'RUN_ACTION_MODE_MISMATCH',
   ACTION_NOT_ALLOWED: 'RUN_ACTION_NOT_ALLOWED',
+  STALE: 'RUN_STALE',
   NOT_LIVE: 'RUN_NOT_LIVE',
   RECOVERY_REQUIRED: 'RUN_RECOVERY_REQUIRED',
   RECOVERY_NOT_AVAILABLE: 'RUN_RECOVERY_NOT_AVAILABLE',
@@ -200,11 +202,32 @@ export interface CreateRunRequest {
   readonly mode?: string | undefined;
   readonly inputs?: unknown;
   readonly acknowledgements?: unknown;
+  readonly expectedStart?: {
+    chainRevision: string;
+    preflightDigest: string;
+    projectPath: string;
+    projectDevice: string;
+    projectInode: string;
+  };
 }
 
 export interface RunActionRequest {
   readonly action: string;
   readonly reason?: string | undefined;
+  readonly expectedRevision?: string | undefined;
+  readonly expectedProject?: {
+    path: string;
+    device: string;
+    inode: string;
+  };
+  readonly expectedPreflight?: {
+    digest: string;
+    acknowledgements?: unknown;
+  };
+}
+
+export function runRevision(run: Run): string {
+  return createHash('sha256').update(JSON.stringify(run)).digest('hex');
 }
 
 export interface RunActionResult {
@@ -372,8 +395,10 @@ class RunOrchestratorService implements RunOrchestrator {
   private readonly runLocations = new Map<string, string>();
   private readonly sequences = new Map<string, number>();
   private readonly finalized = new Set<string>();
+  private readonly finalizationQueues = new Map<string, Promise<void>>();
   private readonly subscribers = new Map<string, Set<Subscription>>();
   private readonly persistQueues = new Map<string, Promise<void>>();
+  private readonly actionQueues = new Map<string, Promise<void>>();
   private readonly reconnectBufferSize: number;
   private shuttingDown = false;
   private registryPromise: Promise<HarnessRegistry> | null = null;
@@ -397,6 +422,10 @@ class RunOrchestratorService implements RunOrchestrator {
     this.assertRunning();
     const projectPath = await this.resolveProjectPath(request.projectId);
     const chain = await this.options.chainService.get(projectPath, request.chainId);
+    if (request.expectedStart !== undefined &&
+        (projectPath !== request.expectedStart.projectPath || chainRevision(chain) !== request.expectedStart.chainRevision)) {
+      throw new RunOrchestratorError(RUN_ORCHESTRATOR_ERROR_CODES.STALE, 'The project or chain changed since review.');
+    }
 
     // Check for an active run before preflight so a second start is a clean
     // conflict even when the request would also fail preflight.
@@ -415,6 +444,21 @@ class RunOrchestratorService implements RunOrchestrator {
     };
 
     const report = await engine.run(preflightRequest);
+    if (request.expectedStart !== undefined) {
+      let info;
+      let canonicalPath;
+      try {
+        canonicalPath = await realpath(projectPath);
+        info = await stat(projectPath, { bigint: true });
+      } catch {
+        throw new RunOrchestratorError(RUN_ORCHESTRATOR_ERROR_CODES.STALE, 'The reviewed project is no longer available.');
+      }
+      if (canonicalPath !== projectPath || !info.isDirectory() || String(info.dev) !== request.expectedStart.projectDevice ||
+          String(info.ino) !== request.expectedStart.projectInode ||
+          createHash('sha256').update(JSON.stringify(report)).digest('hex') !== request.expectedStart.preflightDigest) {
+        throw new RunOrchestratorError(RUN_ORCHESTRATOR_ERROR_CODES.STALE, 'The project or preflight evidence changed since review.');
+      }
+    }
     if (!report.startAllowed || report.status === 'blocked') {
       throw new RunOrchestratorError(
         RUN_ORCHESTRATOR_ERROR_CODES.PREFLIGHT_BLOCKED,
@@ -482,7 +526,7 @@ class RunOrchestratorService implements RunOrchestrator {
     const pointer = await this.readPointerOrNull();
     if (pointer !== null) {
       const live = this.liveRuns.get(pointer.runId);
-      const run = live?.runner.getRun() ?? (await this.tryReadRun(pointer.projectPath, pointer.runId));
+      const run = live?.runner.getRun() ?? (await this.tryReadPointerRun(pointer));
       if (run !== null && isActiveRunStatus(run.status)) {
         return this.activeState(run);
       }
@@ -507,12 +551,63 @@ class RunOrchestratorService implements RunOrchestrator {
   }
 
   async applyAction(runId: string, request: RunActionRequest): Promise<RunActionResult> {
+    const previous = this.actionQueues.get(runId) ?? Promise.resolve();
+    const result = previous.then(
+      () => this.applyActionUnlocked(runId, request),
+      () => this.applyActionUnlocked(runId, request),
+    );
+    const settled = result.then(() => undefined, () => undefined);
+    this.actionQueues.set(runId, settled);
+    void settled.then(() => {
+      if (this.actionQueues.get(runId) === settled) this.actionQueues.delete(runId);
+    });
+    return result;
+  }
+
+  private async applyActionUnlocked(runId: string, request: RunActionRequest): Promise<RunActionResult> {
     this.assertRunning();
     const action = assertActionName(request.action);
     const located = await this.locateRun(runId);
+    if (request.expectedPreflight !== undefined) {
+      const preflightRun = this.liveRuns.get(runId)?.runner.getRun() ?? located.run;
+      const report = await (await this.preflightEngine()).run({
+        chain: preflightRun.chainSnapshot, projectPath: located.projectPath,
+        mode: preflightRun.mode, inputs: preflightRun.resolvedInputs,
+        ...(request.expectedPreflight.acknowledgements === undefined ? {} :
+          { acknowledgements: request.expectedPreflight.acknowledgements }),
+      });
+      if (createHash('sha256').update(JSON.stringify(report)).digest('hex') !== request.expectedPreflight.digest) {
+        throw new RunOrchestratorError(RUN_ORCHESTRATOR_ERROR_CODES.STALE, 'Preflight evidence changed since review.');
+      }
+      if (!report.startAllowed || report.status === 'blocked') {
+        throw new RunOrchestratorError(RUN_ORCHESTRATOR_ERROR_CODES.PREFLIGHT_BLOCKED, 'Preflight blocks this action.', { report });
+      }
+    }
+    if (request.expectedProject !== undefined) {
+      try {
+        const canonical = await realpath(located.projectPath);
+        const info = await stat(located.projectPath, { bigint: true });
+        if (canonical !== located.projectPath || located.projectPath !== request.expectedProject.path ||
+            !info.isDirectory() || String(info.dev) !== request.expectedProject.device ||
+            String(info.ino) !== request.expectedProject.inode) {
+          throw new RunOrchestratorError(RUN_ORCHESTRATOR_ERROR_CODES.STALE, 'The reviewed project changed.');
+        }
+      } catch (error) {
+        if (error instanceof RunOrchestratorError) throw error;
+        throw new RunOrchestratorError(RUN_ORCHESTRATOR_ERROR_CODES.STALE, 'The reviewed project is no longer available.');
+      }
+    }
+    const current = this.liveRuns.get(runId)?.runner.getRun() ?? located.run;
+    if (request.expectedRevision !== undefined && runRevision(current) !== request.expectedRevision) {
+      throw new RunOrchestratorError(
+        RUN_ORCHESTRATOR_ERROR_CODES.STALE,
+        'The run changed since the action was reviewed. Review the current state again.',
+        { runId },
+      );
+    }
 
     if (located.run.status === 'interrupted') {
-      return this.applyRecoveryAction(located.run, located.projectPath, action, request.reason);
+      return this.applyRecoveryAction(located.run, located.projectPath, action, request.reason, request.expectedRevision);
     }
 
     if (
@@ -556,7 +651,7 @@ class RunOrchestratorService implements RunOrchestrator {
     }
 
     if (isFinalRunStatus(run.status)) {
-      this.finalizeRun(runId);
+      await this.finalizeRunAsync(runId);
     }
 
     return { run: this.currentRun(runId) ?? run, restartedFrom: null };
@@ -620,29 +715,6 @@ class RunOrchestratorService implements RunOrchestrator {
     let clearedActiveRun = false;
 
     const pointer = await this.readPointerOrNull();
-    if (pointer === null) {
-      // A corrupt pointer is treated as recoverable: remove it and continue.
-      try {
-        await readActiveRunPointerFile({
-          configDirectory: this.options.configDirectory,
-        });
-      } catch (error) {
-        if (isActivePointerCorrupt(error)) {
-          warnings.push({
-            code: RUN_STORE_WARNING_CODES.ACTIVE_POINTER_CORRUPT,
-            message: 'The active-run pointer was corrupt and has been removed.',
-            path: activeRunPathFor(this.options.configDirectory),
-            reason: 'CORRUPT',
-          });
-          clearedActiveRun =
-            (await clearActiveRunPointerFile({
-              configDirectory: this.options.configDirectory,
-            })) || clearedActiveRun;
-        } else {
-          throw error;
-        }
-      }
-    }
 
     const recent = await this.options.projectRegistry.listKnownProjects();
     const targets: string[] = [];
@@ -706,7 +778,7 @@ class RunOrchestratorService implements RunOrchestrator {
     // pointer that would block every future start.
     const remaining = await this.readPointerOrNull();
     if (remaining !== null) {
-      const run = await this.tryReadRun(remaining.projectPath, remaining.runId);
+      const run = await this.tryReadPointerRun(remaining);
       if (run === null || !isActiveRunStatus(run.status)) {
         clearedActiveRun = (await this.clearPointerQuietly()) || clearedActiveRun;
       }
@@ -721,11 +793,12 @@ class RunOrchestratorService implements RunOrchestrator {
     const failures: unknown[] = [];
 
     for (const [runId, entry] of entries) {
-      this.finalized.add(runId);
-      this.liveRuns.delete(runId);
-      this.subscribers.delete(runId);
-
       try {
+        const finalizing = this.finalizationQueues.get(runId);
+        if (finalizing !== undefined) {
+          await finalizing;
+          continue;
+        }
         await entry.runner.shutdown();
         this.options.terminalManager.closeSession(entry.terminalId);
         await this.awaitPersistQueue(runId);
@@ -737,26 +810,24 @@ class RunOrchestratorService implements RunOrchestrator {
             'SERVER_SHUTDOWN',
           );
           await entry.store.update(interrupted);
-          await entry.store.releaseActiveRun(runId);
         }
+        await entry.store.releaseActiveRun(runId);
+        this.finalized.add(runId);
+        this.liveRuns.delete(runId);
+        this.subscribers.delete(runId);
       } catch (error) {
         failures.push(error);
       }
     }
 
     await Promise.all(this.persistQueues.values());
-    this.liveRuns.clear();
-    this.subscribers.clear();
     if (failures.length > 0) {
       throw new AggregateError(failures, 'One or more active runs could not be shut down cleanly.');
     }
+    this.subscribers.clear();
   }
 
   private async startRun(run: Run, projectPath: string): Promise<Run> {
-    this.assertRunning();
-    const registry = await this.harnessRegistry();
-    this.assertRunning();
-    const adapter = registry.get(run.harness);
     const store = this.storeFor(projectPath);
     const terminalId = runTerminalIdFor(run.id);
     const persist = (next: Run): Promise<void> => this.persistRun(projectPath, next);
@@ -765,6 +836,10 @@ class RunOrchestratorService implements RunOrchestrator {
     };
 
     try {
+      this.assertRunning();
+      const registry = await this.harnessRegistry();
+      this.assertRunning();
+      const adapter = registry.get(run.harness);
       if (run.mode === 'supervised') {
         const createPty = this.options.createSupervisedPty ?? ((context) =>
           createManagedSupervisedPty(this.options.terminalManager, context));
@@ -832,10 +907,23 @@ class RunOrchestratorService implements RunOrchestrator {
         await runner.start();
       }
     } catch (error) {
+      const live = this.liveRuns.get(run.id);
+      if (live !== undefined) {
+        try {
+          await live.runner.shutdown();
+        } catch (cleanupError) {
+          throw new RunOrchestratorError(
+            RUN_ORCHESTRATOR_ERROR_CODES.START_FAILED,
+            'The run could not start and its harness could not be terminated. The run remains active.',
+            { runId: run.id },
+            { cause: new AggregateError([error, cleanupError], 'Run start and cleanup failed.') },
+          );
+        }
+      }
       await this.awaitPersistQueue(run.id);
       await this.failStartingRun(store, run.id);
-      await store.releaseActiveRun(run.id).catch(() => undefined);
-      this.finalizeRun(run.id);
+      await store.releaseActiveRun(run.id);
+      await this.finalizeRunAsync(run.id);
       if (
         error instanceof RunOrchestratorError ||
         error instanceof SupervisedRunnerError ||
@@ -861,6 +949,7 @@ class RunOrchestratorService implements RunOrchestrator {
     projectPath: string,
     action: RunActionName,
     reason: string | undefined,
+    expectedRevision?: string,
   ): Promise<RunActionResult> {
     if (!(RUN_RECOVERY_ACTIONS as readonly string[]).includes(action)) {
       throw new RunOrchestratorError(
@@ -875,12 +964,13 @@ class RunOrchestratorService implements RunOrchestrator {
     }
 
     if (action === 'restart') {
-      return this.restartRun(run, projectPath);
+      return this.restartRun(run, projectPath, expectedRevision);
     }
 
     await this.assertNoActiveRun(run.id);
     await this.finalizeRunAsync(run.id);
     await this.awaitPersistQueue(run.id);
+    await this.assertRecoveryRevision(projectPath, run.id, expectedRevision);
 
     if (action === 'retry') {
       const step = run.steps[run.currentStepIndex];
@@ -936,10 +1026,11 @@ class RunOrchestratorService implements RunOrchestrator {
     return { run: started, restartedFrom: null };
   }
 
-  private async restartRun(run: Run, projectPath: string): Promise<RunActionResult> {
+  private async restartRun(run: Run, projectPath: string, expectedRevision?: string): Promise<RunActionResult> {
     await this.assertNoActiveRun(run.id);
     await this.finalizeRunAsync(run.id);
     await this.awaitPersistQueue(run.id);
+    await this.assertRecoveryRevision(projectPath, run.id, expectedRevision);
 
     const fresh = createRunRecord({
       ...(this.options.createRunId === undefined ? {} : { id: this.options.createRunId() }),
@@ -964,6 +1055,14 @@ class RunOrchestratorService implements RunOrchestrator {
     this.finalized.delete(fresh.id);
     const started = await this.startRun(fresh, projectPath);
     return { run: started, restartedFrom: run.id };
+  }
+
+  private async assertRecoveryRevision(projectPath: string, runId: string, expectedRevision?: string): Promise<void> {
+    if (expectedRevision === undefined) return;
+    const current = await this.storeFor(projectPath).read(runId);
+    if (runRevision(current) !== expectedRevision) {
+      throw new RunOrchestratorError(RUN_ORCHESTRATOR_ERROR_CODES.STALE, 'The interrupted run changed since review.');
+    }
   }
 
   private persistRun(projectPath: string, run: Run): Promise<void> {
@@ -1015,8 +1114,11 @@ class RunOrchestratorService implements RunOrchestrator {
       this.runLocations.set(runId, entry.projectPath);
     }
     this.broadcast(runId, event);
-    if (isFinalRunStatus(event.run.status)) {
-      this.finalizeRun(runId);
+    if (isFinalRunStatus(event.run.status) && event.type !== 'disposed' &&
+        !this.finalizationQueues.has(runId)) {
+      void this.finalizeRunAsync(runId).catch(() => {
+        console.error(`Skill Loom could not finish cleanup for run ${runId}; stop the service to retry.`);
+      });
     }
   }
 
@@ -1151,39 +1253,28 @@ class RunOrchestratorService implements RunOrchestrator {
     return entry.runner.state.surface === 'pty' ? entry.terminalId : null;
   }
 
-  private finalizeRun(runId: string): void {
-    if (this.finalized.has(runId)) {
-      return;
-    }
-    this.finalized.add(runId);
+  private finalizeRunAsync(runId: string): Promise<void> {
+    const pending = this.finalizationQueues.get(runId);
+    if (pending !== undefined) return pending;
     const entry = this.liveRuns.get(runId);
-    if (entry === undefined) {
-      return;
-    }
-    this.liveRuns.delete(runId);
-    try {
-      entry.runner.dispose();
-    } catch {
-      // Disposal is idempotent and must never mask the terminal transition.
-    }
-    try {
-      this.options.terminalManager.closeSession(entry.terminalId);
-    } catch {
-      // A PTY that already exited may no longer be registered.
-    }
-  }
+    if (entry === undefined || this.finalized.has(runId)) return Promise.resolve();
 
-  private async finalizeRunAsync(runId: string): Promise<void> {
-    this.finalizeRun(runId);
+    const finalizing = (async () => {
+      await entry.runner.shutdown();
+      this.options.terminalManager.closeSession(entry.terminalId);
+      this.finalized.add(runId);
+      this.liveRuns.delete(runId);
+    })();
+    this.finalizationQueues.set(runId, finalizing);
+    void finalizing.then(
+      () => { if (this.finalizationQueues.get(runId) === finalizing) this.finalizationQueues.delete(runId); },
+      () => { if (this.finalizationQueues.get(runId) === finalizing) this.finalizationQueues.delete(runId); },
+    );
+    return finalizing;
   }
 
   private async failStartingRun(store: RunStore, runId: string): Promise<void> {
-    let latest: Run;
-    try {
-      latest = await store.read(runId);
-    } catch {
-      return;
-    }
+    const latest = await store.read(runId);
     if (!isActiveRunStatus(latest.status)) {
       return;
     }
@@ -1196,7 +1287,7 @@ class RunOrchestratorService implements RunOrchestrator {
       finishedAt: timestamp,
       reason: truncateReason('START_FAILED'),
     };
-    await store.update(failed).catch(() => undefined);
+    await store.update(failed);
   }
 
   private assertActionAllowed(
@@ -1224,17 +1315,17 @@ class RunOrchestratorService implements RunOrchestrator {
         continue;
       }
       const live = entry.runner.getRun();
-      if (isActiveRunStatus(live.status)) {
-        throw new RunOrchestratorError(
-          RUN_ORCHESTRATOR_ERROR_CODES.ACTIVE_CONFLICT,
-          'Another run is already active.',
-          {
-            runId: live.id,
-            projectId: live.projectId,
-            status: live.status,
-          },
-        );
-      }
+      throw new RunOrchestratorError(
+        RUN_ORCHESTRATOR_ERROR_CODES.ACTIVE_CONFLICT,
+        isActiveRunStatus(live.status)
+          ? 'Another run is already active.'
+          : 'A previous run has not finished cleanup. Stop the service to retry cleanup.',
+        {
+          runId: live.id,
+          projectId: live.projectId,
+          status: live.status,
+        },
+      );
     }
 
     const pointer = await this.readPointerOrNull();
@@ -1245,7 +1336,7 @@ class RunOrchestratorService implements RunOrchestrator {
       return;
     }
 
-    const run = await this.tryReadRun(pointer.projectPath, pointer.runId);
+    const run = await this.tryReadPointerRun(pointer);
     if (run !== null && isActiveRunStatus(run.status)) {
       throw new RunOrchestratorError(
         RUN_ORCHESTRATOR_ERROR_CODES.ACTIVE_CONFLICT,
@@ -1304,7 +1395,7 @@ class RunOrchestratorService implements RunOrchestrator {
 
     const pointer = await this.readPointerOrNull();
     if (pointer !== null && pointer.runId === runId) {
-      const run = await this.tryReadRun(pointer.projectPath, runId);
+      const run = await this.tryReadPointerRun(pointer);
       if (run !== null) {
         this.runLocations.set(runId, pointer.projectPath);
         return { run, projectPath: pointer.projectPath };
@@ -1350,17 +1441,20 @@ class RunOrchestratorService implements RunOrchestrator {
     }
   }
 
-  private async readPointerOrNull(): Promise<ActiveRunPointer | null> {
+  private async tryReadPointerRun(pointer: ActiveRunPointer): Promise<Run | null> {
     try {
-      return await readActiveRunPointerFile({
-        configDirectory: this.options.configDirectory,
-      });
+      return await this.storeFor(pointer.projectPath).read(pointer.runId);
     } catch (error) {
-      if (isActivePointerCorrupt(error)) {
+      if (isRunStoreCode(error, RUN_STORE_ERROR_CODES.NOT_FOUND) ||
+          isRunStoreCode(error, RUN_STORE_ERROR_CODES.PROJECT_NOT_FOUND)) {
         return null;
       }
       throw error;
     }
+  }
+
+  private async readPointerOrNull(): Promise<ActiveRunPointer | null> {
+    return readActiveRunPointerFile({ configDirectory: this.options.configDirectory });
   }
 
   private async clearPointerQuietly(): Promise<boolean> {
@@ -1743,10 +1837,6 @@ function isProjectIdString(value: unknown): value is string {
 
 function isRunStoreCode(error: unknown, code: string): error is RunStoreError {
   return error instanceof RunStoreError && error.code === code;
-}
-
-function isActivePointerCorrupt(error: unknown): error is RunStoreError {
-  return isRunStoreCode(error, RUN_STORE_ERROR_CODES.ACTIVE_POINTER_CORRUPT);
 }
 
 function isRecoverableRecoveryError(error: unknown): boolean {

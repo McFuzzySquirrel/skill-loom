@@ -515,7 +515,7 @@ export function ChainBuilderPage({
         steps: copy.steps,
         inputs: copy.inputs,
         automaticPermissionOptIn: copy.automaticPermissionOptIn,
-      });
+      }, { ...(copy.revision === undefined ? {} : { expectedRevision: copy.revision }) });
       const agentNotice = copy.agent === undefined
         ? ''
         : ' The native agent was not copied because agent definitions are not translated between harnesses.';

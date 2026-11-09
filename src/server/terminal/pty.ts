@@ -464,12 +464,13 @@ export class TerminalManager {
   }
 
   createSession(spec: TerminalSpawnSpec, options: CreateTerminalSessionOptions = {}): TerminalSession {
-    const session = createTerminalSession(spec, { ...this.options, ...options });
-    if (this.terminals.has(session.id)) {
+    const id = validateSessionId(options.id ?? `term_${randomUUID()}`);
+    if (this.terminals.has(id)) {
       throw new TerminalInvalidSpecError('Terminal session id is already in use.', {
         field: 'id',
       });
     }
+    const session = createTerminalSession(spec, { ...this.options, ...options, id });
     this.terminals.set(session.id, {
       session,
       subscriber: null,
@@ -557,10 +558,11 @@ export class TerminalManager {
 
         if (entry.subscriber === subscriber) {
           entry.subscriber = null;
+          this.clearListeners(entry);
+        } else if (entry.subscriber !== null) {
+          return;
         }
-        this.clearListeners(entry);
-
-        if (detachOptions.terminate === true) {
+        if (detachOptions.terminate === true && this.terminals.get(sessionId) === entry) {
           this.closeSession(sessionId);
         }
       },

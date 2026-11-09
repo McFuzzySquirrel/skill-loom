@@ -15,6 +15,7 @@ import type { TestWorkspaceRecord } from '../config/schema.js';
 import type { ProjectRegistry } from '../projects/registry.js';
 import { readActiveRunPointerFile } from './store.js';
 import { exportBundle, importBundle } from '../chains/bundle.js';
+import { withWorkspaceLifecycleLock } from './workspace-lock.js';
 
 const WORKSPACE_DIRECTORY = 'test-workspaces';
 
@@ -26,6 +27,8 @@ export const TEST_WORKSPACE_ERROR_CODES = {
   PATH_INVALID: 'TEST_WORKSPACE_PATH_INVALID',
   CREATE_FAILED: 'TEST_WORKSPACE_CREATE_FAILED',
   CLEANUP_FAILED: 'TEST_WORKSPACE_CLEANUP_FAILED',
+  INSPECT_FAILED: 'TEST_WORKSPACE_INSPECT_FAILED',
+  ARTIFACT_NOT_FOUND: 'TEST_WORKSPACE_ARTIFACT_NOT_FOUND',
 } as const;
 
 export type TestWorkspaceErrorCode =
@@ -194,11 +197,17 @@ async function createWorkspace(
 
     return { ...record, path: canonicalWorkspace };
   } catch (error) {
-    if (registeredProjectId !== null) {
-      await options.projectRegistry.removeRecentProject(registeredProjectId).catch(() => undefined);
-    }
-    if (workspaceCreated) {
-      await rm(workspacePath, { recursive: true, force: true }).catch(() => undefined);
+    const cleanup = await Promise.allSettled([
+      ...(registeredProjectId === null ? [] : [options.projectRegistry.removeRecentProject(registeredProjectId)]),
+      ...(workspaceCreated ? [rm(workspacePath, { recursive: true, force: true })] : []),
+    ]);
+    if (cleanup.some((result) => result.status === 'rejected')) {
+      throw new TestWorkspaceError(
+        TEST_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
+        'Workspace creation failed and cleanup could not be completed. Inspect the managed workspace directory and project registry.',
+        { id },
+        { cause: error },
+      );
     }
     if (error instanceof TestWorkspaceError) throw error;
     throw new TestWorkspaceError(
@@ -267,6 +276,17 @@ async function listWorkspaces(options: TestWorkspaceServiceOptions): Promise<Tes
 }
 
 async function removeWorkspace(
+  id: string,
+  options: TestWorkspaceServiceOptions,
+): Promise<{ id: string; removed: true }> {
+  const record = (await options.configStore.get()).testWorkspaces.find((candidate) => candidate.id === id);
+  if (record === undefined) {
+    throw new TestWorkspaceError(TEST_WORKSPACE_ERROR_CODES.NOT_FOUND, 'No managed test workspace matches that id.', { id });
+  }
+  return withWorkspaceLifecycleLock(record.projectId, () => removeWorkspaceLocked(id, options));
+}
+
+async function removeWorkspaceLocked(
   id: string,
   options: TestWorkspaceServiceOptions,
 ): Promise<{ id: string; removed: true }> {

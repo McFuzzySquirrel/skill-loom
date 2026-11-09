@@ -64,7 +64,7 @@ export interface Osc7501ParserOptions {
 /**
  * Parse the parameter text of one OSC 7501 sequence.
  *
- * Parameters are semicolon-separated `key=value` pairs. `state` is required
+ * Parameters are semicolon- or colon-separated `key=value` pairs. `state` is required
  * and must be one of the documented values; a sequence with an unknown or
  * absent state is ignored. `id` is optional and only retained when it looks
  * like a safe token.
@@ -77,7 +77,7 @@ export function parseOsc7501Params(params: string): Osc7501Event | null {
   let state: Osc7501State | null = null;
   let sessionId: string | null = null;
 
-  for (const field of params.split(';')) {
+  for (const field of params.split(/;|:(?=[A-Za-z][A-Za-z0-9_-]*=)/)) {
     const separator = field.indexOf('=');
     if (separator <= 0) {
       continue;
@@ -87,6 +87,7 @@ export function parseOsc7501Params(params: string): Osc7501Event | null {
     const value = field.slice(separator + 1).trim();
 
     if (key === OSC7501_PARAM_STATE) {
+      if (state !== null) return null;
       const candidate = value.toLowerCase();
       if ((OSC7501_STATES as readonly string[]).includes(candidate)) {
         state = candidate as Osc7501State;
@@ -146,7 +147,7 @@ export function parseOsc7501Chunk(
       // which is safer than unbounded memory growth.
       return {
         events,
-        remainder: buffer.length <= maxBufferBytes ? buffer : '',
+        remainder: Buffer.byteLength(buffer, 'utf8') <= maxBufferBytes ? buffer : '',
       };
     }
 

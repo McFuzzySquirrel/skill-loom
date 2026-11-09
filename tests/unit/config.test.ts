@@ -7,6 +7,7 @@ import {
   CONFIG_VERSION,
   ConfigUpdateSchema,
   LoomConfigSchema,
+  REMOTE_CATALOG_DEFAULT_LIMITS,
   createDefaultConfig,
   type ConfigUpdate,
 } from '../../src/server/config/schema.js';
@@ -139,6 +140,30 @@ describe('missing configuration', () => {
 });
 
 describe('corrupt and unsupported configuration', () => {
+  it('reads version 1 without rewriting it and persists version 2 on update', async () => {
+    const root = await makeRoot();
+    const store = storeFor(root);
+    const target = store.getConfigPath();
+    const bytes = JSON.stringify({
+      version: 1,
+      remoteSkillSources: [{ id: 'legacy', repository: 'https://example.com/skills.git' }],
+    });
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, bytes);
+    expect(await store.get()).toMatchObject({
+      version: CONFIG_VERSION,
+      remoteCatalogLimits: REMOTE_CATALOG_DEFAULT_LIMITS,
+      remoteSkillSources: [{ id: 'legacy', repository: 'https://example.com/skills.git' }],
+    });
+    expect(await readFile(target, 'utf8')).toBe(bytes);
+    await store.update({ uiPreferences: { theme: 'dark' } });
+    expect(JSON.parse(await readFile(target, 'utf8'))).toMatchObject({
+      version: CONFIG_VERSION,
+      remoteCatalogLimits: REMOTE_CATALOG_DEFAULT_LIMITS,
+      uiPreferences: { theme: 'dark' },
+    });
+  });
+
   it('returns a typed error for malformed JSON and leaves the bytes untouched', async () => {
     const root = await makeRoot();
     const store = storeFor(root);
@@ -185,7 +210,7 @@ describe('corrupt and unsupported configuration', () => {
     const root = await makeRoot();
     const store = storeFor(root);
     const target = store.getConfigPath();
-    const bytes = JSON.stringify({ version: 2, harnessCommands: { opencode: '/bin/opencode' } });
+    const bytes = JSON.stringify({ version: CONFIG_VERSION + 1, harnessCommands: { opencode: '/bin/opencode' } });
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, bytes, 'utf8');
 
@@ -194,13 +219,32 @@ describe('corrupt and unsupported configuration', () => {
     expect(error).toBeInstanceOf(ConfigUnsupportedVersionError);
     expect(error).toMatchObject({
       code: 'CONFIG_UNSUPPORTED_VERSION',
-      details: { path: target, version: 2 },
+      details: { path: target, version: CONFIG_VERSION + 1 },
     });
     expect(await readFile(target, 'utf8')).toBe(bytes);
   });
 });
 
 describe('typed updates', () => {
+  it('merges bounded catalog limit overrides and rejects invalid values', async () => {
+    const root = await makeRoot();
+    const store = storeFor(root);
+    await store.update({ remoteCatalogLimits: { maxPackages: 1_000 } });
+    const updated = await store.update({ remoteCatalogLimits: { maxFiles: 20_000 } });
+    expect(updated.remoteCatalogLimits).toMatchObject({
+      maxPackages: 1_000,
+      maxFiles: 20_000,
+      maxSnapshotBytes: REMOTE_CATALOG_DEFAULT_LIMITS.maxSnapshotBytes,
+    });
+    await expect(store.update({ remoteCatalogLimits: { maxPackages: 0 } })).rejects.toMatchObject({
+      code: 'CONFIG_INVALID',
+    });
+    await expect(store.update({ remoteCatalogLimits: { maxPackages: 10_001 } })).rejects.toMatchObject({
+      code: 'CONFIG_INVALID',
+    });
+    expect((await store.get()).remoteCatalogLimits.maxPackages).toBe(1_000);
+  });
+
   it('merges nested maps and preserves unrelated fields in the written document', async () => {
     const root = await makeRoot();
     const store = storeFor(root);
@@ -234,13 +278,14 @@ describe('typed updates', () => {
     });
 
     expect(updated).toEqual({
-      version: 1,
+      version: CONFIG_VERSION,
       harnessCommands: {
         opencode: '/usr/local/bin/opencode',
         copilot: '/usr/local/bin/copilot',
       },
       extraSkillDirectories: [join(root, 'skills')],
       remoteSkillSources: [{ id: 'public-skills', repository: 'https://github.com/acme/skills.git', ref: 'main' }],
+      remoteCatalogLimits: REMOTE_CATALOG_DEFAULT_LIMITS,
       recentProjects: [recent],
       testWorkspaces: [workspace],
       discoveryWorkspaces: [],
@@ -389,6 +434,7 @@ describe('credential safety', () => {
       'harnessCommands',
       'extraSkillDirectories',
       'remoteSkillSources',
+      'remoteCatalogLimits',
       'sharedBundleDirectory',
       'recentProjects',
       'testWorkspaces',

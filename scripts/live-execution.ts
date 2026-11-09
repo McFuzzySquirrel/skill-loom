@@ -45,6 +45,7 @@ import {
 import { checkFolderTrust, type TrustCheckResult } from '../src/server/preflight/trust.js';
 import { Osc7501Parser, Osc7501StateMachine } from '../src/server/runs/osc.js';
 import { createTerminalSession, type TerminalSession } from '../src/server/terminal/pty.js';
+import { classifyFailure, type FailureClass } from './live-failure.js';
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const EVIDENCE_PATH = join(PROJECT_ROOT, 'docs', 'evidence', 'live-execution.json');
@@ -103,7 +104,6 @@ type EvidenceStatus = 'passed' | 'failed' | 'not-applicable';
 type HarnessName = 'opencode' | 'copilot';
 type CheckHarness = HarnessName | 'environment';
 type OpenCodeParamFormat = 'colon' | 'semicolon' | 'unknown';
-type FailureClass = 'none' | 'auth' | 'trust' | 'limit' | 'command' | 'timeout' | 'token-missing';
 
 interface CheckRecord {
   id: string;
@@ -689,23 +689,6 @@ function boundedExcerpt(
   return redacted.slice(-MAX_EXCERPT_CHARS);
 }
 
-function classifyFailure(combined: string): FailureClass {
-  if (/free usage limit|rate limit|quota|limit reached|too many requests|429/i.test(combined)) {
-    return 'limit';
-  }
-  if (
-    /not (?:logged|signed) in|not authenticated|unauthenticated|authentication (?:failed|required)|please (?:log|sign) in|run ['"]?copilot login|unauthorized|\b401\b/i.test(
-      combined,
-    )
-  ) {
-    return 'auth';
-  }
-  if (/untrusted folder|folder (?:is )?not trusted|trust (?:is )?required|confirm folder trust/i.test(combined)) {
-    return 'trust';
-  }
-  return 'command';
-}
-
 /* ------------------------------------------------------------------------- */
 /* OSC 7501 probe parser                                                     */
 /* ------------------------------------------------------------------------- */
@@ -714,10 +697,9 @@ function classifyFailure(combined: string): FailureClass {
  * Buffered OSC 7501 parser used by the probe.
  *
  * The installed OpenCode 2.2.5 emits colon-separated parameters such as
- * `OSC 7501;state=working:app=opencode:title=...`. The product parser splits
- * parameters on `;`, so the probe keeps an equivalent parser here that accepts
- * both separators and records the live format for the evidence file. This is a
- * probe assertion helper only; the product parser is not modified.
+ * `OSC 7501;state=working:app=opencode:title=...`. The probe keeps an
+ * independent parser that accepts both separators and records the live format
+ * for comparison with the product parser and state machine.
  */
 class ProbeOsc7501Parser {
   private buffer = '';
@@ -2634,7 +2616,7 @@ async function runOpenCodeProbe(input: {
     input.report.warnings.push({
       code: 'OSC7501_PRODUCT_PARSER_MISMATCH',
       harness: 'opencode',
-      message: `Live OpenCode ${EXPECTED_OPENCODE_VERSION} emitted colon-separated OSC 7501 parameters (state=working:app=opencode). The product parser splits on ";" and recognized ${String(
+      message: `Live OpenCode ${EXPECTED_OPENCODE_VERSION} emitted colon-separated OSC 7501 parameters (state=working:app=opencode). The product parser recognized ${String(
         seed.signal.productParser.eventCount,
       )} event(s), while the probe's equivalent buffered parser recognized the signal. Report this contract mismatch to the backend engineer.`,
     });
@@ -2644,7 +2626,7 @@ async function runOpenCodeProbe(input: {
       code: 'OSC7501_CLEAR_BEFORE_IDLE',
       harness: 'opencode',
       message:
-        'Live OpenCode emitted clear between working and idle. The product Osc7501StateMachine resets its working observation on clear, so this live order would still fail to advance after the parameter-separator defect is fixed. The probe asserts the CLI order (working before idle) without weakening the no-idle-only rule. Report this contract mismatch to the backend engineer.',
+        'Live OpenCode emitted clear between working and idle. The product Osc7501StateMachine resets its working observation on clear, so this live order cannot advance. The probe asserts the CLI order (working before idle) without weakening the no-idle-only rule. Report this contract mismatch to the backend engineer.',
     });
   }
 
@@ -2975,6 +2957,8 @@ function openCodeRemediation(failureClass: FailureClass, recall = false): string
       return 'Run "opencode auth login" in a terminal, then rerun npm run test:live:execution. The probe never reads credential values.';
     case 'limit':
       return 'The selected model is rate-limited or out of quota. Authenticate another provider, or set LOOM_LIVE_OPENCODE_MODEL to an available authenticated model, then rerun npm run test:live:execution.';
+    case 'network':
+      return 'Check DNS and network access to the selected model provider, then rerun npm run test:live:execution.';
     case 'timeout':
       return 'The interactive OpenCode run exceeded the bounded timeout. Check the login state and selected model, then rerun npm run test:live:execution.';
     case 'token-missing':
@@ -2999,6 +2983,8 @@ function copilotRemediation(
       }" in a terminal, accept the folder-trust dialog, then rerun npm run test:live:execution.`;
     case 'limit':
       return 'The selected model is rate-limited or out of quota. Authenticate another provider or choose an available model, then rerun npm run test:live:execution.';
+    case 'network':
+      return 'Check DNS and network access to the Copilot API, then rerun npm run test:live:execution.';
     case 'timeout':
       return 'The headless prompt exceeded the bounded timeout. Check the Copilot login state, trust state, and model availability, then rerun npm run test:live:execution.';
     case 'token-missing':

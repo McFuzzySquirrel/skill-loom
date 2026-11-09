@@ -128,6 +128,7 @@ export const AUTOMATIC_RUNNER_ERROR_CODES = {
   FINAL_RUN: 'AUTOMATIC_FINAL_RUN',
   RUN_NEXT_NOT_READY: 'AUTOMATIC_RUN_NEXT_NOT_READY',
   PROCESS_STILL_RUNNING: 'AUTOMATIC_PROCESS_STILL_RUNNING',
+  PROCESS_TERMINATION_FAILED: 'AUTOMATIC_PROCESS_TERMINATION_FAILED',
   RETRY_NOT_AVAILABLE: 'AUTOMATIC_RETRY_NOT_AVAILABLE',
   SKIP_REASON_REQUIRED: 'AUTOMATIC_SKIP_REASON_REQUIRED',
   PROMPT_FAILED: 'AUTOMATIC_PROMPT_FAILED',
@@ -216,6 +217,7 @@ export interface AutomaticRunEvent {
 export const AUTOMATIC_STEP_REASONS = {
   PROCESS_EXITED: 'PROCESS_EXITED',
   PROCESS_EXITED_NONZERO: 'PROCESS_EXITED_NONZERO',
+  PROCESS_TERMINATION_FAILED: 'PROCESS_TERMINATION_FAILED',
   COMPLETION_SIGNAL: 'COMPLETION_SIGNAL',
   COMPLETION_TIMEOUT: 'AUTOMATIC_TIMEOUT',
   MISSING_COMPLETION_SIGNAL: 'MISSING_COMPLETION_SIGNAL',
@@ -225,6 +227,8 @@ export const AUTOMATIC_STEP_REASONS = {
   ABORTED_BY_USER: 'ABORTED_BY_USER',
   PROMPT_FAILED: 'PROMPT_FAILED',
   COMMAND_FAILED: 'COMMAND_FAILED',
+  PERSIST_FAILED: 'PERSIST_FAILED',
+  TRANSITION_FAILED: 'AUTOMATIC_TRANSITION_FAILED',
   PERMISSION_OPT_IN_REQUIRED: 'PERMISSION_OPT_IN_REQUIRED',
   SPAWN_FAILED: 'SPAWN_FAILED',
   UNSUPPORTED_ADVANCEMENT: 'UNSUPPORTED_ADVANCEMENT',
@@ -332,6 +336,7 @@ export class AutomaticRunner {
   private surfaceValue: AutomaticSpawnSurface | null = null;
   private startedValue = false;
   private disposedValue = false;
+  private shutdownRequested = false;
   private pauseRequestedValue = false;
   private transitions: Promise<void> = Promise.resolve();
 
@@ -737,7 +742,7 @@ export class AutomaticRunner {
       );
     }
 
-    this.detachCurrent({ kill: true });
+    await this.stopCurrent();
     this.pauseRequestedValue = false;
     this.runValue.reason = null;
     this.runValue.updatedAt = this.timestamp();
@@ -762,7 +767,7 @@ export class AutomaticRunner {
     const bounded = requireSkipReason(reason);
 
     this.finishObservation();
-    this.detachCurrent({ kill: true });
+    await this.stopCurrent();
 
     const step = this.requireCurrentStep();
     const timestamp = this.timestamp();
@@ -791,8 +796,9 @@ export class AutomaticRunner {
 
     const step = this.currentStepOrNull();
     this.finishObservation();
-    this.terminateProcess();
-    this.detachCurrent({ kill: true });
+    const exit = this.current?.process.getExit();
+    if (exit !== null && exit !== undefined && step !== null) step.exitCode = exit.exitCode;
+    await this.stopCurrent();
 
     const timestamp = this.timestamp();
     const bounded = truncateReason(
@@ -862,8 +868,10 @@ export class AutomaticRunner {
   }
 
   async shutdown(): Promise<void> {
-    const process = this.current?.process ?? null;
-    await disposeAndWait(process, () => this.dispose());
+    this.shutdownRequested = true;
+    await this.whenSettled();
+    await this.stopCurrent();
+    this.dispose();
   }
 
   /**
@@ -946,7 +954,7 @@ export class AutomaticRunner {
       );
     }
 
-    this.detachCurrent({ kill: true });
+    await this.stopCurrent();
     const timestamp = this.timestamp();
     this.resetStepForRun(step, planned, timestamp, surface);
     this.runValue.status = 'running';
@@ -956,7 +964,20 @@ export class AutomaticRunner {
     this.terminalIdValue = this.requestedTerminalId;
     // Persist the running step before spawning so a crash can never leave a
     // live process attached to a record that still claims the step is pending.
-    await this.emitAndPersist('step-started', step, { reason: mode });
+    try {
+      await this.emitAndPersist('step-started', step, { reason: mode });
+    } catch (error) {
+      const failedAt = this.timestamp();
+      step.status = 'failed';
+      step.finishedAt = failedAt;
+      step.reason = AUTOMATIC_STEP_REASONS.PERSIST_FAILED;
+      this.runValue.status = 'paused';
+      this.runValue.reason = step.reason;
+      this.runValue.updatedAt = failedAt;
+      this.emit('run-paused', step, { reason: step.reason });
+      throw error;
+    }
+    if (this.shutdownRequested) return;
 
     let process: AutomaticProcess;
     try {
@@ -1211,14 +1232,13 @@ export class AutomaticRunner {
 
     this.clearStepTimeout();
     this.finishObservation();
+    if (!await this.stopCurrentOrPause(step)) return;
     const timestamp = this.timestamp();
     step.status = 'done';
     step.finishedAt = timestamp;
     step.reason = AUTOMATIC_STEP_REASONS.COMPLETION_SIGNAL;
     this.runValue.updatedAt = timestamp;
 
-    // The signal is complete; stop the PTY child gracefully before moving on.
-    this.detachCurrent({ kill: true });
     await this.afterStepCompleted(step, timestamp);
   }
 
@@ -1275,7 +1295,7 @@ export class AutomaticRunner {
     this.runValue.reason = step.reason;
     this.runValue.updatedAt = timestamp;
 
-    this.detachCurrent({ kill: true });
+    if (!await this.stopCurrentOrPause(step)) return;
     await this.emitAndPersist('step-failed', step, { reason });
     this.emit('run-paused', step, { reason: step.reason });
   }
@@ -1299,7 +1319,7 @@ export class AutomaticRunner {
     this.runValue.reason = step.reason;
     this.runValue.updatedAt = timestamp;
 
-    this.detachCurrent({ kill: true });
+    if (!await this.stopCurrentOrPause(step)) return;
     this.emit('timeout', step, { reason: step.reason });
     await this.emitAndPersist('step-failed', step, { reason: step.reason });
     this.emit('run-paused', step, { reason: step.reason });
@@ -1307,6 +1327,7 @@ export class AutomaticRunner {
 
   private async afterStepCompleted(step: RunStepRecord, timestamp: string): Promise<void> {
     await this.emitAndPersist('step-done', step);
+    if (this.shutdownRequested) return;
 
     const nextIndex = step.index + 1;
     if (nextIndex >= this.runValue.steps.length) {
@@ -1335,12 +1356,7 @@ export class AutomaticRunner {
     this.runValue.reason = null;
     this.runValue.updatedAt = this.timestamp();
     this.emit('step-advanced', step);
-    try {
-      await this.startCurrentStep('run-next');
-    } catch {
-      // startCurrentStep recorded a failed/paused state before throwing. The
-      // chain must not auto-continue through that failure.
-    }
+    await this.startCurrentStep('run-next');
   }
 
   private isCurrentRunningStep(stepIndex: number, token: symbol | null): boolean {
@@ -1388,24 +1404,6 @@ export class AutomaticRunner {
     }
   }
 
-  private terminateProcess(): void {
-    const current = this.current;
-    if (current === null) {
-      return;
-    }
-    const exit = current.process.getExit();
-    const step = this.runValue.steps[current.stepIndex];
-    if (exit !== null && step !== undefined) {
-      step.exitCode = exit.exitCode;
-    } else if (current.process.isRunning()) {
-      try {
-        current.process.kill('SIGTERM');
-      } catch {
-        // A process that exits between the check and the kill is already gone.
-      }
-    }
-  }
-
   private detachCurrent(options: { kill: boolean }): void {
     this.clearStepTimeout();
     const current = this.current;
@@ -1426,9 +1424,55 @@ export class AutomaticRunner {
     }
   }
 
+  private async stopCurrent(): Promise<void> {
+    this.clearStepTimeout();
+    const current = this.current;
+    if (current === null) return;
+    try {
+      await disposeAndWait(current.process, () => {
+        current.unsubscribeData();
+        current.unsubscribeExit();
+        if (current.process.isRunning()) {
+          try {
+            current.process.kill('SIGTERM');
+          } catch (error) {
+            if (current.process.isRunning()) throw error;
+          }
+        }
+      });
+    } catch (error) {
+      throw new AutomaticRunnerError(
+        AUTOMATIC_RUNNER_ERROR_CODES.PROCESS_TERMINATION_FAILED,
+        'The harness process could not be terminated; no later step was started.',
+        { runId: this.runValue.id, stepIndex: current.stepIndex },
+        { cause: error },
+      );
+    }
+    if (this.current === current) this.current = null;
+  }
+
+  private async stopCurrentOrPause(step: RunStepRecord): Promise<boolean> {
+    try {
+      await this.stopCurrent();
+      return true;
+    } catch (error) {
+      if (!(error instanceof AutomaticRunnerError) || error.code !== AUTOMATIC_RUNNER_ERROR_CODES.PROCESS_TERMINATION_FAILED) throw error;
+      const timestamp = this.timestamp();
+      step.status = 'failed';
+      step.finishedAt = timestamp;
+      step.reason = AUTOMATIC_STEP_REASONS.PROCESS_TERMINATION_FAILED;
+      this.runValue.status = 'paused';
+      this.runValue.reason = step.reason;
+      this.runValue.updatedAt = timestamp;
+      await this.emitAndPersist('step-failed', step, { reason: step.reason });
+      this.emit('run-paused', step, { reason: step.reason });
+      return false;
+    }
+  }
+
   private async failBeforeSpawn(step: RunStepRecord, reason: string): Promise<void> {
     this.finishObservation();
-    this.detachCurrent({ kill: true });
+    await this.stopCurrent();
     const timestamp = this.timestamp();
     step.status = 'failed';
     step.finishedAt = timestamp;
@@ -1526,7 +1570,37 @@ export class AutomaticRunner {
    * order identical to the real signal order and gives tests one `whenSettled`.
    */
   private enqueue(task: () => Promise<void>): void {
-    this.transitions = this.transitions.then(task).catch(() => undefined);
+    this.transitions = this.transitions.then(() => {
+      if (!this.shutdownRequested) return task();
+    }).catch(async (error: unknown) => {
+      if (error instanceof AutomaticRunnerError &&
+          error.code !== AUTOMATIC_RUNNER_ERROR_CODES.PERSIST_FAILED &&
+          this.runValue.status === 'paused') return;
+
+      const step = this.currentStepOrNull();
+      let reason: string = error instanceof AutomaticRunnerError &&
+        error.code === AUTOMATIC_RUNNER_ERROR_CODES.PERSIST_FAILED
+        ? AUTOMATIC_STEP_REASONS.PERSIST_FAILED
+        : AUTOMATIC_STEP_REASONS.TRANSITION_FAILED;
+      try {
+        await this.stopCurrent();
+      } catch {
+        reason = AUTOMATIC_STEP_REASONS.PROCESS_TERMINATION_FAILED;
+      }
+      const failedAt = this.timestamp();
+      if (step?.status === 'running') {
+        step.status = 'failed';
+        step.finishedAt = failedAt;
+        step.reason = reason;
+      }
+      const alreadyReported = this.runValue.status === 'paused' && this.runValue.reason === reason;
+      this.runValue.status = 'paused';
+      this.runValue.finishedAt = null;
+      this.runValue.reason = reason;
+      this.runValue.updatedAt = failedAt;
+      if (!alreadyReported) this.emit('run-paused', step, { reason });
+      console.error(`Skill Loom paused automatic run ${this.runValue.id}: ${reason}.`);
+    });
   }
 
   private assertStarted(): void {

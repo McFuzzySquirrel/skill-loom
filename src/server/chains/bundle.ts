@@ -14,6 +14,7 @@ import {
   removeNativeAgentIfUnchanged,
 } from '../catalog/agent-copy.js';
 import type { CatalogService } from '../catalog/merge.js';
+import { CATALOG_WARNING_CODES, type SkillEntry } from '../catalog/types.js';
 import type { Chain } from './model.js';
 import type { ChainService } from './service.js';
 import {
@@ -240,10 +241,31 @@ export async function previewBundle(
   raw: unknown,
   projectPath: string,
   catalog: CatalogService,
+  requireCompleteDiscovery = false,
 ): Promise<BundlePreview> {
+  return (await inspectBundleDestination(raw, projectPath, catalog, requireCompleteDiscovery)).preview;
+}
+
+export async function inspectBundleDestination(
+  raw: unknown,
+  projectPath: string,
+  catalog: CatalogService,
+  requireCompleteDiscovery = false,
+): Promise<{ preview: BundlePreview; entries: SkillEntry[] }> {
   const bundle = parseBundle(raw);
-  const entries = bundle.skills.length === 0 ? [] :
-    (await catalog.getCatalog({ projectPath, harness: bundle.chain.harness })).groups.flatMap((group) => group.entries);
+  const discovery = bundle.skills.length === 0 ? undefined :
+    await catalog.getCatalog({ projectPath, harness: bundle.chain.harness });
+  if (requireCompleteDiscovery && discovery !== undefined) {
+    const incomplete = discovery.warnings.filter((warning) =>
+      warning.code !== CATALOG_WARNING_CODES.DISCOVERY_SLOW &&
+      warning.code !== CATALOG_WARNING_CODES.REMOTE_SOURCE_UNAVAILABLE &&
+      (warning.source === undefined || warning.source === 'project'));
+    if (incomplete.length > 0) {
+      const codes = [...new Set(incomplete.map((warning) => warning.code))].sort().join(', ');
+      throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', `Project skill discovery is incomplete (${codes}); resolve the warnings before reviewing an import.`);
+    }
+  }
+  const entries = discovery?.groups.flatMap((group) => group.entries) ?? [];
   const agents = bundle.version === 2 && bundle.chain.agent !== undefined
     ? await Promise.all(bundle.agents.map(async (agent) => {
         const destination = installedNativeAgentPath(projectPath, bundle.chain.agent!);
@@ -256,7 +278,7 @@ export async function previewBundle(
         };
       }))
     : [];
-  return {
+  const preview: BundlePreview = {
     bundle,
     skills: await Promise.all(bundle.skills.map(async (skill) => ({
       name: skill.name,
@@ -269,6 +291,7 @@ export async function previewBundle(
     }))),
     agents,
   };
+  return { preview, entries };
 }
 
 async function safeSkillRoot(projectPath: string): Promise<string> {
@@ -306,8 +329,10 @@ export async function importBundle(
   catalog: CatalogService,
   chains: ChainService,
   reuseSkills: string[],
+  requireCompleteDiscovery = false,
+  verifyReuse?: () => Promise<void>,
 ): Promise<Chain> {
-  const preview = await previewBundle(raw, projectPath, catalog);
+  const preview = await previewBundle(raw, projectPath, catalog, requireCompleteDiscovery);
   const reuse = new Set(reuseSkills);
   if (reuse.size !== reuseSkills.length || [...reuse].some((name) =>
     !preview.skills.some((skill) => skill.name === name && skill.conflict))) {
@@ -360,6 +385,7 @@ export async function importBundle(
         });
       }
     }
+    if (verifyReuse !== undefined) await verifyReuse();
     return await chains.importChain(projectPath, bundleChain(preview.bundle));
   } catch (error) {
     await Promise.all(created.map((path) => rm(path, { recursive: true, force: true })));

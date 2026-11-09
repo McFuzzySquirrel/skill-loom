@@ -123,9 +123,13 @@ async function updateChain(
   payload: unknown,
   query = '',
 ): Promise<{ statusCode: number; body: unknown }> {
+  const current = await app.inject({ method: 'GET', url: chainUrl(projectId, chainId) });
+  const revision = current.statusCode === 200
+    ? current.json<{ revision: string }>().revision : '0'.repeat(64);
   const response = await app.inject({
     method: 'PUT',
     url: `${chainUrl(projectId, chainId)}${query}`,
+    headers: { 'x-loom-chain-revision': revision },
     payload: payload as Record<string, unknown>,
   });
   return { statusCode: response.statusCode, body: response.json<unknown>() };
@@ -151,9 +155,13 @@ async function deleteChain(
   projectId: string,
   chainId: string,
 ): Promise<{ statusCode: number; body: unknown }> {
+  const current = await app.inject({ method: 'GET', url: chainUrl(projectId, chainId) });
+  const revision = current.statusCode === 200
+    ? current.json<{ revision: string }>().revision : '0'.repeat(64);
   const response = await app.inject({
     method: 'DELETE',
     url: chainUrl(projectId, chainId),
+    headers: { 'x-loom-chain-revision': revision },
   });
   return { statusCode: response.statusCode, body: response.json<unknown>() };
 }
@@ -212,6 +220,35 @@ function sequenceIds(prefix = 'chain'): (name: string) => string {
 }
 
 describe('chain CRUD through src/server/app.ts', () => {
+  it('requires a current revision for HTTP update and deletion', async () => {
+    const app = await buildTestApp();
+    const projectId = await registerProject(app, join(root, 'revision-project'));
+    const created = await createChain(app, projectId, baseDraft());
+    const chain = chainOf(created.body);
+    const url = chainUrl(projectId, chain.id);
+    const original = await app.inject({ method: 'GET', url });
+    const revision = original.json<{ revision: string }>().revision;
+    for (const method of ['PUT', 'DELETE'] as const) {
+      const response = await app.inject({
+        method, url, ...(method === 'PUT' ? { payload: baseDraft({ name: 'Unexpected' }) } : {}),
+      });
+      expect(response.statusCode).toBe(428);
+      expect(response.json()).toMatchObject({ error: { code: 'CHAIN_REVISION_REQUIRED' } });
+    }
+    const updated = await app.inject({
+      method: 'PUT', url, headers: { 'x-loom-chain-revision': revision },
+      payload: baseDraft({ name: 'Reviewed change' }),
+    });
+    expect(updated.statusCode).toBe(200);
+    const stale = await app.inject({
+      method: 'DELETE', url, headers: { 'x-loom-chain-revision': revision },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toMatchObject({ error: { code: 'CHAIN_STALE' } });
+    const current = await app.inject({ method: 'GET', url });
+    expect(current.json<{ chain: Chain }>().chain.name).toBe('Reviewed change');
+  });
+
   it('persists and duplicates an exact native-agent selection', async () => {
     const app = await buildTestApp();
     const projectId = await registerProject(app, join(root, 'project-agent-chain'));

@@ -14,6 +14,7 @@ import {
 import {
   CHAIN_SERVICE_ERROR_CODES,
   ChainServiceError,
+  chainRevision,
   createChainService,
   type ChainDraft,
   type ChainService,
@@ -94,10 +95,33 @@ interface ChainRouteParams extends ProjectRouteParams {
   chainId: string;
 }
 
-type ChainListResponse = ChainListResult;
+type ChainListResponse = ChainListResult & { revisions: Record<string, string> };
 
 interface ChainResponse {
   chain: Chain;
+  revision: string;
+}
+
+export function chainRevisionHeader(headers: { [key: string]: unknown }): string {
+  const value = headers['x-loom-chain-revision'];
+  if (value === undefined) {
+    throw new ChainServiceError(
+      CHAIN_SERVICE_ERROR_CODES.REVISION_REQUIRED,
+      'Load the chain and provide its revision before changing it.',
+    );
+  }
+  if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) {
+    throw new ChainServiceError(CHAIN_SERVICE_ERROR_CODES.STALE, 'The chain revision is not valid.');
+  }
+  return value;
+}
+
+export function chainResponse(chain: Chain): ChainResponse {
+  return { chain, revision: chainRevision(chain) };
+}
+
+export function chainListResponse(result: ChainListResult): ChainListResponse {
+  return { ...result, revisions: Object.fromEntries(result.chains.map((chain) => [chain.id, chainRevision(chain)])) };
 }
 
 interface ChainDeletedResponse {
@@ -154,10 +178,7 @@ export const chainRoutes: FastifyPluginAsync<ChainRoutesOptions> = async (
       try {
         const projectPath = await resolveProjectPath(registry, request.params.projectId);
         const result = await service.list(projectPath);
-        return reply.code(200).send({
-          chains: result.chains,
-          warnings: result.warnings,
-        } satisfies ChainListResponse);
+        return reply.code(200).send(chainListResponse(result));
       } catch (error) {
         return sendChainFailure(reply, error);
       }
@@ -170,7 +191,7 @@ export const chainRoutes: FastifyPluginAsync<ChainRoutesOptions> = async (
       try {
         const projectPath = await resolveProjectPath(registry, request.params.projectId);
         const chain = await service.get(projectPath, request.params.chainId);
-        return reply.code(200).send({ chain } satisfies ChainResponse);
+        return reply.code(200).send(chainResponse(chain));
       } catch (error) {
         return sendChainFailure(reply, error);
       }
@@ -210,7 +231,7 @@ export const chainRoutes: FastifyPluginAsync<ChainRoutesOptions> = async (
         const chain = await service.create(projectPath, toDraft(parsed.data), {
           uniqueName: wantsUniqueName(query.data.uniqueName, parsed.data.uniqueName),
         });
-        return reply.code(201).send({ chain } satisfies ChainResponse);
+        return reply.code(201).send(chainResponse(chain));
       } catch (error) {
         return sendChainFailure(reply, error);
       }
@@ -247,13 +268,17 @@ export const chainRoutes: FastifyPluginAsync<ChainRoutesOptions> = async (
 
       try {
         const projectPath = await resolveProjectPath(registry, request.params.projectId);
+        const revision = chainRevisionHeader(request.headers);
         const chain = await service.update(
           projectPath,
           request.params.chainId,
           toDraft(parsed.data),
-          { uniqueName: wantsUniqueName(query.data.uniqueName, parsed.data.uniqueName) },
+          {
+            uniqueName: wantsUniqueName(query.data.uniqueName, parsed.data.uniqueName),
+            expectedRevision: revision,
+          },
         );
-        return reply.code(200).send({ chain } satisfies ChainResponse);
+        return reply.code(200).send(chainResponse(chain));
       } catch (error) {
         return sendChainFailure(reply, error);
       }
@@ -286,7 +311,7 @@ export const chainRoutes: FastifyPluginAsync<ChainRoutesOptions> = async (
           ...(parsed.data.name === undefined ? {} : { name: parsed.data.name }),
           uniqueName: wantsUniqueName(query.data.uniqueName, parsed.data.uniqueName),
         });
-        return reply.code(201).send({ chain } satisfies ChainResponse);
+        return reply.code(201).send(chainResponse(chain));
       } catch (error) {
         return sendChainFailure(reply, error);
       }
@@ -311,7 +336,7 @@ export const chainRoutes: FastifyPluginAsync<ChainRoutesOptions> = async (
         const chain = await service.importChain(projectPath, source, {
           ...(parsed.data.name === undefined ? {} : { name: parsed.data.name }),
         });
-        return reply.code(201).send({ chain } satisfies ChainResponse);
+        return reply.code(201).send(chainResponse(chain));
       } catch (error) {
         return sendChainFailure(reply, error);
       }
@@ -323,7 +348,8 @@ export const chainRoutes: FastifyPluginAsync<ChainRoutesOptions> = async (
     async (request, reply) => {
       try {
         const projectPath = await resolveProjectPath(registry, request.params.projectId);
-        await service.remove(projectPath, request.params.chainId);
+        const revision = chainRevisionHeader(request.headers);
+        await service.remove(projectPath, request.params.chainId, { expectedRevision: revision });
         return reply.code(200).send({
           chainId: request.params.chainId,
           deleted: true,
@@ -435,7 +461,9 @@ export function sendChainFailure(reply: FastifyReply, error: unknown): FastifyRe
   }
 
   if (error instanceof ChainServiceError) {
-    const status = error.code === CHAIN_SERVICE_ERROR_CODES.NAME_EXISTS ? 409 : 500;
+    const status = error.code === CHAIN_SERVICE_ERROR_CODES.REVISION_REQUIRED ? 428 :
+      error.code === CHAIN_SERVICE_ERROR_CODES.NAME_EXISTS ||
+      error.code === CHAIN_SERVICE_ERROR_CODES.STALE ? 409 : 500;
     return reply
       .code(status)
       .send(createApiErrorEnvelope(error.code, error.message, error.details));

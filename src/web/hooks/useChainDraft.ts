@@ -47,6 +47,7 @@ export interface ChainDraftDocument {
   agent?: ChainAgentSelection;
   createdAt?: string;
   updatedAt?: string;
+  revision?: string;
 }
 
 export type ChainDraftState =
@@ -188,6 +189,7 @@ export function documentFromChain(chain: Chain): ChainDraftDocument {
     ...(chain.agent === undefined ? {} : { agent: chain.agent }),
     createdAt: chain.createdAt,
     updatedAt: chain.updatedAt,
+    ...(chain.revision === undefined ? {} : { revision: chain.revision }),
   };
 }
 
@@ -941,7 +943,7 @@ export function useChainDraft({
           ...(state.document.createdAt === undefined
             ? {}
             : { createdAt: state.document.createdAt }),
-        });
+        }, { ...(state.document.revision === undefined ? {} : { expectedRevision: state.document.revision }) });
 
     const next = documentFromChain(saved);
     setState({ status: 'ready', chainId: saved.id, document: next, error: null });

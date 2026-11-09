@@ -2,8 +2,14 @@
 import { spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
+import type { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import packageManifest from '../../package.json' with { type: 'json' };
+import { runPortableCli } from '../portable/cli.js';
+import { runCatalogCli } from './catalog/cli.js';
+import { callControl, ControlError } from './control.js';
+import { runControlCli } from './control-cli.js';
+import { createBundleCli } from './bundle-cli.js';
 import type { ServerSettings } from './app.js';
 import { resolveConfigDir } from './config/store.js';
 import { startServer } from './index.js';
@@ -38,6 +44,18 @@ export function cliUsage(): string {
 
 Usage:
   skill-loom [options]
+  skill-loom bundle inspect --bundle <absolute-path> [--project <absolute-path>]
+  skill-loom bundle create (--draft <id> | --project <id> --chain <id>) --output <absolute-path> [--config-dir <path>]
+  skill-loom bundle review|import [--config-dir <path>]  # JSON on stdin
+  skill-loom catalog --help
+  skill-loom discovery --help
+  skill-loom service start [--config-dir <path>] [--port <number>]
+  skill-loom service status [--config-dir <path>]
+  skill-loom service stop [--config-dir <path>]
+  skill-loom project --help
+  skill-loom chain --help
+  skill-loom run --help
+  skill-loom workspace --help
 
 Options:
   -h, --help              Show this help text
@@ -52,6 +70,8 @@ Environment:
   LOOM_HOST               Loopback host (127.0.0.1 by default)
   LOOM_WEB_ROOT           Built web asset directory override
 
+Bundle inspection is read-only and returns JSON without starting the server.
+Catalog commands read configured sources and snapshots without starting the server.
 The server always binds to loopback. Open the printed URL in a browser.`;
 }
 
@@ -124,11 +144,12 @@ export interface CliStartedServer {
 }
 
 export interface RunCliDependencies {
-  start?: (options: { logger?: boolean }) => Promise<CliStartedServer>;
+  start?: (options: { logger?: boolean; env?: NodeJS.ProcessEnv; enableControl?: boolean }) => Promise<CliStartedServer>;
   openBrowser?: (url: string) => void;
   stdout?: Pick<NodeJS.WriteStream, 'write' | 'isTTY'>;
   stderr?: Pick<NodeJS.WriteStream, 'write'>;
   env?: NodeJS.ProcessEnv;
+  stdin?: Readable;
 }
 
 export async function runCli(
@@ -138,6 +159,51 @@ export async function runCli(
   const stdout = dependencies.stdout ?? process.stdout;
   const stderr = dependencies.stderr ?? process.stderr;
   const env = dependencies.env ?? process.env;
+
+  if (argv[0] === 'bundle' && argv[1] === 'inspect') {
+    return runPortableCli(['inspect', ...argv.slice(2)], { stdout, stderr });
+  }
+  if (argv[0] === 'bundle' && argv[1] === 'create') {
+    return createBundleCli(argv.slice(2), { stdout, stderr, env });
+  }
+  if (argv[0] === 'catalog') {
+    return runCatalogCli(argv.slice(1), { stdout, stderr, env, stdin: dependencies.stdin ?? process.stdin });
+  }
+  if (argv[0] === 'project' || argv[0] === 'chain' ||
+      (argv[0] === 'bundle' && (argv[1] === 'review' || argv[1] === 'import')) ||
+      argv[0] === 'run' || argv[0] === 'workspace' || argv[0] === 'discovery') {
+    return runControlCli(argv, { stdout, stderr, env, stdin: dependencies.stdin ?? process.stdin });
+  }
+  if (argv[0] === 'service' && (argv[1] === 'start' || argv[1] === 'status' || argv[1] === 'stop')) {
+    try {
+      const options = parseCliArgs(argv.slice(2));
+      if (options.help || options.version || (argv[1] !== 'start' && options.port !== undefined)) {
+        throw new CliUsageError('Invalid service option.');
+      }
+      if (options.configDir !== undefined) env.LOOM_CONFIG_DIR = options.configDir;
+      if (options.port !== undefined) env.LOOM_PORT = String(options.port);
+      if (argv[1] === 'start') {
+        const started = await (dependencies.start ?? startServer)({ logger: false, env, enableControl: true });
+        stdout.write(`${JSON.stringify({ protocolVersion: 1, ok: true, result: {
+          state: 'running', host: started.settings.host, port: started.settings.port,
+        } })}\n`);
+      } else {
+        const response = await callControl(resolveConfigDir({ env }), argv[1] === 'stop' ? 'service.stop' : 'status', {});
+        (response.ok ? stdout : stderr).write(`${JSON.stringify(response)}\n`);
+        return response.ok ? 0 : 1;
+      }
+      return 0;
+    } catch (error) {
+      const code = error instanceof CliUsageError ? 'CLI_USAGE'
+        : error instanceof ControlError ? error.code
+          : typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
+            ? error.code : 'SERVICE_START_FAILED';
+      const message = error instanceof CliUsageError || error instanceof ControlError
+        ? error.message : 'The Skill Loom service could not be started.';
+      stderr.write(`${JSON.stringify({ protocolVersion: 1, ok: false, error: { code, message } })}\n`);
+      return error instanceof CliUsageError ? 2 : 1;
+    }
+  }
 
   let options: CliOptions;
   try {
@@ -232,6 +298,9 @@ function describeStartFailure(error: unknown): string {
     const code = (error as { code?: unknown }).code;
     if (code === 'EADDRINUSE') {
       return 'the configured port is already in use. Choose another port with --port or LOOM_PORT.';
+    }
+    if (code === 'PROFILE_IN_USE') {
+      return 'another Skill Loom process owns this configuration profile. Stop it or use a different --config-dir.';
     }
     if (typeof code === 'string' && code !== '') {
       return `${code}. Check the server settings and try again.`;

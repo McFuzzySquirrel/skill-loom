@@ -112,6 +112,7 @@ export const SUPERVISED_RUNNER_ERROR_CODES = {
   PROMPT_FAILED: 'SUPERVISED_PROMPT_FAILED',
   COMMAND_FAILED: 'SUPERVISED_COMMAND_FAILED',
   SPAWN_FAILED: 'SUPERVISED_SPAWN_FAILED',
+  PROCESS_TERMINATION_FAILED: 'SUPERVISED_PROCESS_TERMINATION_FAILED',
   PTY_FAILED: 'SUPERVISED_PTY_FAILED',
   PERSIST_FAILED: 'SUPERVISED_PERSIST_FAILED',
 } as const;
@@ -199,6 +200,7 @@ export const SUPERVISED_STEP_REASONS = {
   SPAWN_FAILED: 'SPAWN_FAILED',
   PROMPT_FAILED: 'PROMPT_FAILED',
   COMMAND_FAILED: 'COMMAND_FAILED',
+  PERSIST_FAILED: 'PERSIST_FAILED',
   ABORTED_BY_USER: 'ABORTED_BY_USER',
   PTY_CREATE_FAILED: 'PTY_CREATE_FAILED',
 } as const;
@@ -645,7 +647,7 @@ export class SupervisedRunner {
       );
     }
 
-    this.detachCurrent({ kill: true });
+    await this.stopCurrent();
     const nextIndex = this.runValue.currentStepIndex + 1;
 
     if (nextIndex >= this.runValue.steps.length) {
@@ -682,7 +684,7 @@ export class SupervisedRunner {
       );
     }
 
-    this.detachCurrent({ kill: true });
+    await this.stopCurrent();
     this.runValue.reason = null;
     this.runValue.updatedAt = this.timestamp();
     await this.startCurrentStep('retry');
@@ -705,11 +707,9 @@ export class SupervisedRunner {
 
     const step = this.currentStepOrNull();
     this.finishObservation();
-    // Record an already-exited child's code before detaching. A child that is
-    // still live is killed and its exit is best-effort because the run is
-    // ending and no listener should outlive it.
+    // Record an already-exited child's code before waiting for termination.
     this.terminateProcess();
-    this.detachCurrent({ kill: true });
+    await this.stopCurrent();
 
     const timestamp = this.timestamp();
     const bounded = truncateReason(
@@ -780,8 +780,8 @@ export class SupervisedRunner {
   }
 
   async shutdown(): Promise<void> {
-    const process = this.current?.process ?? null;
-    await disposeAndWait(process, () => this.dispose());
+    await this.stopCurrent();
+    this.dispose();
   }
 
   private async startCurrentStep(mode: 'start' | 'retry'): Promise<void> {
@@ -836,13 +836,25 @@ export class SupervisedRunner {
 
     // Never reuse a live TUI across steps. A prior process is killed and its
     // listeners detached before the next spawn, including on retry.
-    this.detachCurrent({ kill: true });
+    await this.stopCurrent();
 
     const timestamp = this.timestamp();
     this.resetStepForRun(step, planned, timestamp);
     this.runValue.status = 'running';
     this.runValue.updatedAt = timestamp;
-    this.emit('step-started', step, { reason: mode });
+    try {
+      await this.emitAndPersist('step-started', step, { reason: mode });
+    } catch (error) {
+      const failedAt = this.timestamp();
+      step.status = 'failed';
+      step.finishedAt = failedAt;
+      step.reason = SUPERVISED_STEP_REASONS.PERSIST_FAILED;
+      this.runValue.status = 'paused';
+      this.runValue.reason = step.reason;
+      this.runValue.updatedAt = failedAt;
+      this.emit('run-paused', step, { reason: step.reason });
+      throw error;
+    }
 
     if (this.pty === null) {
       throw new SupervisedRunnerError(
@@ -1101,6 +1113,32 @@ export class SupervisedRunner {
     }
   }
 
+  private async stopCurrent(): Promise<void> {
+    const current = this.current;
+    if (current === null) return;
+    try {
+      await disposeAndWait(current.process, () => {
+        current.unsubscribeData();
+        current.unsubscribeExit();
+        if (current.process.isRunning()) {
+          try {
+            current.process.kill('SIGTERM');
+          } catch (error) {
+            if (current.process.isRunning()) throw error;
+          }
+        }
+      });
+    } catch (error) {
+      throw new SupervisedRunnerError(
+        SUPERVISED_RUNNER_ERROR_CODES.PROCESS_TERMINATION_FAILED,
+        'The harness process could not be terminated; no later step was started.',
+        { runId: this.runValue.id, stepIndex: current.stepIndex },
+        { cause: error },
+      );
+    }
+    if (this.current === current) this.current = null;
+  }
+
   private closePty(): void {
     const pty = this.pty;
     this.pty = null;
@@ -1115,7 +1153,7 @@ export class SupervisedRunner {
 
   private async failBeforeSpawn(step: RunStepRecord, reason: string): Promise<void> {
     this.finishObservation();
-    this.detachCurrent({ kill: true });
+    await this.stopCurrent();
     const timestamp = this.timestamp();
     step.status = 'failed';
     step.finishedAt = timestamp;

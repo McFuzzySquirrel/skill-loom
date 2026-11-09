@@ -6,7 +6,7 @@ import {
   link,
   mkdir,
   open,
-  readdir,
+  opendir,
   readFile,
   realpath,
   rename,
@@ -15,76 +15,33 @@ import {
   unlink,
 } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { z } from 'zod';
 import type { ChainBundle, BundleSkill } from '../shared/bundles.js';
 import { chainStepName } from '../shared/chain.js';
 import { frontmatterString, parseSkillFrontmatter } from '../server/catalog/frontmatter.js';
 import {
   MAX_BUNDLE_REQUEST_BYTES,
+  MAX_BUNDLE_BYTES,
+  MAX_BUNDLE_FILES,
   BundleError,
   chainFromBundle,
   decodeBundleFile,
   parseBundle,
 } from './bundle.js';
+import {
+  MAX_ATTEMPTS_PER_STEP,
+  MAX_PORTABLE_STEPS,
+  MAX_SUMMARY_BYTES,
+  RUN_ID_PATTERN,
+  RUN_VERSION,
+  RunSchema,
+  SafeInputSchema,
+  parsePortableRunDocument,
+  type PortableRun,
+} from './run-schema.js';
 
-const RUN_VERSION = 1;
-const MAX_SUMMARY_BYTES = 8 * 1024;
 const MAX_STEP_INSTRUCTION_BYTES = 64 * 1024;
-const MAX_PORTABLE_STEPS = 1_000;
-const MAX_ATTEMPTS_PER_STEP = 50;
-const RUN_ID_PATTERN = /^[a-f0-9-]{36}$/;
-const SafeInputSchema = z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]*$/), z.string().max(16_384));
-const AttemptSchema = z.strictObject({
-  number: z.number().int().positive(),
-  status: z.enum(['running', 'done', 'failed', 'skipped', 'interrupted']),
-  startedAt: z.iso.datetime({ offset: true }),
-  finishedAt: z.iso.datetime({ offset: true }).nullable(),
-  summary: z.string().max(MAX_SUMMARY_BYTES).nullable(),
-  reason: z.string().max(2_000).nullable(),
-});
-const RunSchema = z.strictObject({
-  version: z.literal(RUN_VERSION),
-  id: z.string().regex(RUN_ID_PATTERN),
-  revision: z.number().int().positive(),
-  projectPath: z.string().min(1),
-  bundleFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-  bundle: z.custom<ChainBundle>((value) => {
-    try {
-      parseBundle(value);
-      return true;
-    } catch {
-      return false;
-    }
-  }),
-  actualHost: z.enum(['copilot', 'opencode', 'other']),
-  hostSwitchConfirmed: z.boolean(),
-  progression: z.enum(['supervised', 'agent']),
-  progressionConfirmed: z.boolean(),
-  sessionDecision: z.strictObject({
-    requested: z.enum(['shared', 'fresh', 'fork']),
-    mechanism: z.enum(['current-conversation', 'isolated-worker', 'native-fork', 'handoff']),
-    description: z.string().trim().min(1).max(500),
-    confirmed: z.boolean(),
-  }),
-  resolvedInputs: SafeInputSchema,
-  installedSkills: z.array(z.strictObject({
-    name: z.string(),
-    directory: z.string(),
-    fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-    reused: z.boolean(),
-  })),
-  status: z.enum(['ready', 'running', 'paused', 'failed', 'completed', 'aborted', 'interrupted']),
-  currentStepIndex: z.number().int().min(0),
-  resumeRequired: z.boolean(),
-  steps: z.array(z.strictObject({
-    id: z.string().min(1),
-    index: z.number().int().min(0),
-    attempts: z.array(AttemptSchema).max(MAX_ATTEMPTS_PER_STEP),
-  })).min(1).max(MAX_PORTABLE_STEPS),
-  createdAt: z.iso.datetime({ offset: true }),
-  updatedAt: z.iso.datetime({ offset: true }),
-});
-type PortableRun = z.infer<typeof RunSchema>;
+const MAX_RUN_CONFLICT_SCAN_RECORDS = 1_000;
+const MAX_RUN_CONFLICT_SCAN_BYTES = 64 * 1024 * 1024;
 
 export class PortableRunError extends Error {
   constructor(
@@ -108,7 +65,7 @@ function fingerprint(data: Uint8Array | string): string {
   return createHash('sha256').update(data).digest('hex');
 }
 
-function packageFingerprint(files: BundleSkill['files']): string {
+export function packageFingerprint(files: BundleSkill['files']): string {
   const hash = createHash('sha256');
   const directories = new Set<string>();
   const fileMap = new Map(files.map((file) => [file.path, file]));
@@ -221,10 +178,71 @@ async function ensureSkillRoot(project: string): Promise<string> {
   return skills;
 }
 
-async function treeFingerprint(directory: string): Promise<string> {
+async function readBoundedFile(path: string, limit: number, nonblocking = false): Promise<{ content: Buffer; executable: boolean }> {
+  let handle;
+  try {
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | (nonblocking ? constants.O_NONBLOCK : 0));
+  } catch (error) {
+    if (isErrno(error, 'ELOOP')) fail('PACKAGE_UNSAFE', 'An existing package file is a symbolic link.');
+    throw error;
+  }
+  try {
+    const info = await handle.stat();
+    if (!info.isFile() || info.size > limit) {
+      fail('PACKAGE_TOO_LARGE', 'An existing package file is unsafe or exceeds the portable review limit.');
+    }
+    const data = Buffer.alloc(info.size + 1);
+    let offset = 0;
+    while (offset < data.length) {
+      const { bytesRead } = await handle.read(data, offset, data.length - offset, offset);
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    const after = await handle.stat();
+    if (offset !== info.size || after.size !== info.size || after.mtimeMs !== info.mtimeMs ||
+        after.mode !== info.mode) {
+      fail('PACKAGE_CHANGED', 'An existing package changed while it was inspected. Review it again.');
+    }
+    return { content: data.subarray(0, offset), executable: (info.mode & 0o111) !== 0 };
+  } finally {
+    await handle.close();
+  }
+}
+
+export type PackageTreeEntry =
+  | { path: string; kind: 'directory' }
+  | { path: string; kind: 'file'; bytes: number; executable: boolean; fingerprint: string };
+
+export async function treeFingerprint(
+  directory: string,
+  inventory?: PackageTreeEntry[],
+  limits: { files: number; bytes: number; entries?: number; inventoryBytes?: number } = { files: MAX_BUNDLE_FILES, bytes: MAX_BUNDLE_BYTES },
+): Promise<string> {
   const hash = createHash('sha256');
-  async function visit(root: string, prefix: string): Promise<void> {
-    const entries = await readdir(root, { withFileTypes: true });
+  let bytes = 0;
+  let files = 0;
+  let entryCount = 0;
+  let inventoryBytes = 0;
+  function record(item: PackageTreeEntry): void {
+    if (inventory === undefined) return;
+    inventoryBytes += Buffer.byteLength(JSON.stringify(item), 'utf8') + 1;
+    if (inventoryBytes > (limits.inventoryBytes ?? Number.MAX_SAFE_INTEGER)) {
+      fail('PACKAGE_TOO_LARGE', 'The existing package inventory exceeds the portable review limit.');
+    }
+    inventory.push(item);
+  }
+  async function visit(root: string, prefix: string, depth: number): Promise<void> {
+    if (depth > 32 || await realpath(root) !== root) {
+      fail('PACKAGE_UNSAFE', 'An installed skill has unsafe directories or exceeds the depth limit.');
+    }
+    const entries = [];
+    for await (const entry of await opendir(root)) {
+      entryCount += 1;
+      if (entryCount > (limits.entries ?? MAX_BUNDLE_FILES * 33)) {
+        fail('PACKAGE_TOO_LARGE', 'The existing package exceeds the portable review entry limit.');
+      }
+      entries.push(entry);
+    }
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const entry of entries) {
       const path = join(root, entry.name);
@@ -233,16 +251,27 @@ async function treeFingerprint(directory: string): Promise<string> {
       if (info.isSymbolicLink()) fail('PACKAGE_UNSAFE', 'An installed skill contains a symbolic link.');
       if (info.isDirectory()) {
         hash.update(relativePath).update('\0d\0');
-        await visit(path, relativePath);
+        record({ path: relativePath, kind: 'directory' });
+        await visit(path, relativePath, depth + 1);
       } else if (info.isFile()) {
-        hash.update(relativePath).update('\0f\0').update((info.mode & 0o111) !== 0 ? '1' : '0').update('\0');
-        hash.update(await readFile(path)).update('\0');
+        files += 1;
+        if (files > limits.files) fail('PACKAGE_TOO_LARGE', 'The existing package exceeds the portable review file limit.');
+        const file = await readBoundedFile(path, limits.bytes - bytes);
+        bytes += file.content.length;
+        hash.update(relativePath).update('\0f\0').update(file.executable ? '1' : '0').update('\0');
+        hash.update(file.content).update('\0');
+        if (inventory !== undefined) {
+          record({
+            path: relativePath, kind: 'file', bytes: file.content.length, executable: file.executable,
+            fingerprint: fingerprint(file.content),
+          });
+        }
       } else {
         fail('PACKAGE_UNSAFE', 'An installed skill contains a special file.');
       }
     }
   }
-  await visit(directory, '');
+  await visit(directory, '', 0);
   return hash.digest('hex');
 }
 
@@ -251,6 +280,7 @@ async function installSkills(
   project: string,
   reuseSkills: string[],
   differingReuseConfirmed: boolean,
+  reviewedFingerprints: ReadonlyMap<string, string | null>,
 ): Promise<{ installedSkills: PortableRun['installedSkills']; createdDirectories: string[] }> {
   const root = await ensureSkillRoot(project);
   const reuse = new Set(reuseSkills);
@@ -283,10 +313,13 @@ async function installSkills(
         if (!entryInfo.isFile() || entryInfo.isSymbolicLink()) {
           fail('PACKAGE_CONFLICT', `Existing "${skill.name}" is not a valid skill package.`);
         }
-        const metadata = parseSkillFrontmatter(await readFile(entry, 'utf8'));
+        const metadata = parseSkillFrontmatter((await readBoundedFile(entry, MAX_BUNDLE_BYTES)).content.toString('utf8'));
         const name = frontmatterString(metadata.data, 'name') ?? skill.directory;
         if (name !== skill.name) fail('PACKAGE_CONFLICT', `Existing skill directory does not contain "${skill.name}".`);
         const existingFingerprint = await treeFingerprint(destination);
+        if (existingFingerprint !== reviewedFingerprints.get(skill.name)) {
+          fail('REVIEW_STALE', `Existing "${skill.name}" changed since inspection; inspect and review it again.`);
+        }
         if (existingFingerprint !== packageFingerprint(skill.files) && !differingReuseConfirmed) {
           fail('REUSE_CONTENT_CONFIRMATION_REQUIRED', `Existing "${skill.name}" differs from the bundle; explicitly confirm reuse of its installed contents.`);
         }
@@ -297,6 +330,9 @@ async function installSkills(
           reused: true,
         });
         continue;
+      }
+      if (reviewedFingerprints.get(skill.name) !== null) {
+        fail('REVIEW_STALE', `Existing "${skill.name}" changed since inspection; inspect and review it again.`);
       }
       if (reuse.has(skill.name)) fail('REUSE_MISSING', `Skill "${skill.name}" selected for reuse is missing.`);
       await mkdir(destination, { mode: 0o755 });
@@ -343,7 +379,7 @@ async function ensureRunDirectory(project: string): Promise<string> {
   try {
     const handle = await open(ignore, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     try {
-        await handle.writeFile('portable-runs/\n', 'utf8');
+        await handle.writeFile('runs/\nportable-runs/\n', 'utf8');
         await handle.sync();
     } finally {
       await handle.close();
@@ -353,19 +389,27 @@ async function ensureRunDirectory(project: string): Promise<string> {
     const info = await lstat(ignore);
     if (!info.isFile() || info.isSymbolicLink()) fail('PATH_UNSAFE', 'The Loom ignore file is not a regular file.');
     const text = await readFile(ignore, 'utf8');
-    if (!text.split(/\r?\n/).some((line) => line.trim() === 'portable-runs/')) {
-      await atomicWrite(ignore, `${text}${text.endsWith('\n') || text === '' ? '' : '\n'}portable-runs/\n`);
+    const rules = text.split(/\r?\n/).filter((line) => line !== '' && !line.startsWith('#'));
+    const missing = rules.at(-1) === 'portable-runs/' && rules.at(-2) === 'runs/'
+      ? []
+      : rules.at(-1) === 'runs/' ? ['portable-runs/'] : ['runs/', 'portable-runs/'];
+    if (missing.length > 0) {
+      await atomicWriteText(ignore, `${text}${text.endsWith('\n') || text === '' ? '' : '\n'}${missing.join('\n')}\n`);
     }
   }
   return directory;
 }
 
 async function atomicWrite(target: string, value: unknown, exclusive = false): Promise<void> {
+  return atomicWriteText(target, `${JSON.stringify(value, null, 2)}\n`, exclusive);
+}
+
+async function atomicWriteText(target: string, value: string, exclusive = false): Promise<void> {
   const temporary = join(dirname(target), `.${randomUUID()}.tmp`);
   try {
     const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     try {
-      await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`, 'utf8');
+      await handle.writeFile(value, 'utf8');
       await handle.sync();
     } finally {
       await handle.close();
@@ -418,22 +462,64 @@ async function withRunLock<T>(directory: string, task: () => Promise<T>): Promis
   }
 }
 
-async function readRun(path: string, project: string): Promise<PortableRun> {
-  const info = await lstat(path);
-  if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_BUNDLE_REQUEST_BYTES) {
-    fail('RUN_FILE_INVALID', 'The portable run record is unsafe or exceeds its size limit.');
+async function readRunRecord(path: string, project: string, maximumBytes = MAX_BUNDLE_REQUEST_BYTES) {
+  let content: Buffer;
+  try {
+    ({ content } = await readBoundedFile(path, maximumBytes, true));
+  } catch (error) {
+    if (!(error instanceof PortableRunError)) throw error;
+    if (error.code === 'PACKAGE_TOO_LARGE' && maximumBytes < MAX_BUNDLE_REQUEST_BYTES) {
+      fail('RUN_SCAN_TOO_LARGE', 'Portable run records exceed the conflict scan budget; archive completed records before retrying.');
+    }
+    fail('RUN_FILE_INVALID', 'The portable run record is unsafe, changed during inspection, or exceeds its size limit.');
   }
-  const parsed = RunSchema.safeParse(JSON.parse(await readFile(path, 'utf8')) as unknown);
-  if (!parsed.success || parsed.data.projectPath !== project) {
+  let document: unknown;
+  try {
+    document = JSON.parse(content.toString('utf8')) as unknown;
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
     fail('RUN_FILE_INVALID', 'The portable run record is corrupt, unsupported, or belongs to another project.');
   }
-  const bundle = parseBundle(parsed.data.bundle);
-  if (fingerprint(JSON.stringify(bundle)) !== parsed.data.bundleFingerprint ||
-    bundle.chain.steps.length !== parsed.data.steps.length ||
-    bundle.chain.steps.some((step, index) => parsed.data.steps[index]?.id !== step.id)) {
-    fail('RUN_FILE_INVALID', 'The portable run snapshot does not match its stored fingerprint or step list.');
+  const id = basename(path).slice(0, -'.json'.length);
+  const parsed = parsePortableRunDocument(document, project, id);
+  if (parsed === null || basename(path) !== `${parsed.id}.json`) {
+    fail('RUN_FILE_INVALID', 'The portable run record is corrupt, unsupported, or belongs to another project.');
   }
-  return parsed.data;
+  return { run: parsed, bytes: content.length };
+}
+
+async function readRun(path: string, project: string): Promise<PortableRun> {
+  return (await readRunRecord(path, project)).run;
+}
+
+async function assertNoOtherPortableRun(directory: string, project: string, currentRunId?: string): Promise<void> {
+  let count = 0;
+  let bytes = 0;
+  const entries = await opendir(directory);
+  for await (const entry of entries) {
+    if (!entry.name.endsWith('.json')) continue;
+    const id = entry.name.slice(0, -'.json'.length);
+    if (!RUN_ID_PATTERN.test(id)) {
+      fail('RUN_FILE_INVALID', 'The portable run directory contains an invalid run record name.');
+    }
+    if (id === currentRunId) continue;
+    count += 1;
+    if (count > MAX_RUN_CONFLICT_SCAN_RECORDS) {
+      fail('RUN_SCAN_TOO_LARGE', 'Too many portable run records to check for conflicts; archive completed records before retrying.');
+    }
+    const path = runPath(directory, id);
+    const record = await readRunRecord(path, project, Math.min(MAX_BUNDLE_REQUEST_BYTES, MAX_RUN_CONFLICT_SCAN_BYTES - bytes));
+    bytes += record.bytes;
+    const { run } = record;
+    const terminal = run.status === 'completed' || run.status === 'aborted' || run.status === 'failed';
+    if (terminal && (run.resumeRequired ||
+        run.steps.some((step) => step.attempts.some((attempt) => attempt.status === 'running')))) {
+      fail('RUN_FILE_INVALID', 'A finished portable run contains an unresolved attempt.');
+    }
+    if (!terminal) {
+      fail('RUN_ACTIVE_CONFLICT', 'Another portable run is unfinished; finish or explicitly abort it before continuing.');
+    }
+  }
 }
 
 async function verifyInstalledSkills(run: PortableRun, project: string): Promise<void> {
@@ -476,74 +562,116 @@ export interface PortableRequest {
   input?: unknown;
 }
 
-export async function executePortableRequest(request: PortableRequest): Promise<unknown> {
-  if (request.command === 'inspect') {
-    if (!request.bundlePath || !isAbsolute(request.bundlePath)) fail('BUNDLE_PATH_INVALID', 'Provide an absolute bundle file path.');
-    const info = await lstat(request.bundlePath);
-    if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_BUNDLE_REQUEST_BYTES) {
+async function loadPortableBundle(path: string | undefined): Promise<ChainBundle> {
+  if (!path || !isAbsolute(path)) fail('BUNDLE_PATH_INVALID', 'Provide an absolute bundle file path.');
+  let handle;
+  try {
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error) {
+    if (isErrno(error, 'ELOOP')) fail('BUNDLE_INVALID', 'The bundle must not be a symbolic link.');
+    throw error;
+  }
+  try {
+    const info = await handle.stat();
+    if (!info.isFile() || info.size > MAX_BUNDLE_REQUEST_BYTES) {
       fail('BUNDLE_INVALID', 'The bundle is not a regular file or exceeds the size limit.');
     }
-    const raw = JSON.parse(await readFile(request.bundlePath, 'utf8')) as unknown;
-    const bundle = parseBundle(raw);
+    const data = Buffer.alloc(info.size + 1);
+    let offset = 0;
+    while (offset < data.length) {
+      const { bytesRead } = await handle.read(data, offset, data.length - offset, offset);
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    const after = await handle.stat();
+    if (offset !== info.size || after.size !== info.size || after.mtimeMs !== info.mtimeMs) {
+      fail('BUNDLE_INVALID', 'The bundle changed while being read; inspect it again.');
+    }
+    const bundle = parseBundle(JSON.parse(data.subarray(0, offset).toString('utf8')) as unknown);
     if (bundle.chain.steps.length > MAX_PORTABLE_STEPS) {
       fail('CHAIN_TOO_LARGE', `Portable chains are limited to ${String(MAX_PORTABLE_STEPS)} steps.`);
     }
-    const project = request.projectPath ? await canonicalProject(request.projectPath) : null;
-    const skills = [];
-    for (const skill of bundle.skills) {
-      let existing: string | null = null;
-      if (project !== null) {
-        const candidate = join(project, '.agents', 'skills', skill.directory);
-        try {
-          const entry = await lstat(candidate);
-          existing = entry.isDirectory() && !entry.isSymbolicLink() ? await treeFingerprint(candidate) : 'unsafe';
-        } catch (error) {
-          if (!isErrno(error, 'ENOENT')) throw error;
-        }
+    return bundle;
+  } finally {
+    await handle.close();
+  }
+}
+
+async function inspectBundle(bundle: ChainBundle, project: string | null) {
+  const skills = [];
+  for (const skill of bundle.skills) {
+    let existing: string | null = null;
+    if (project !== null) {
+      const candidate = join(project, '.agents', 'skills', skill.directory);
+      try {
+        const entry = await lstat(candidate);
+        existing = entry.isDirectory() && !entry.isSymbolicLink() && await realpath(candidate) === candidate
+          ? await treeFingerprint(candidate) : 'unsafe';
+      } catch (error) {
+        if (!isErrno(error, 'ENOENT')) throw error;
       }
-      skills.push({
-        name: skill.name,
-        directory: skill.directory,
-        files: skill.files.map((file) => ({ path: file.path, bytes: decodeBundleFile(file.content).length, executable: file.executable })),
-        skillMarkdown: Buffer.from(skill.files.find((file) => file.path === 'SKILL.md')!.content, 'base64').toString('utf8'),
-        existingFingerprint: existing,
-        bundledFingerprint: packageFingerprint(skill.files),
-      });
     }
-    const agents = bundle.version === 2
-      ? await Promise.all(bundle.agents.map(async (agent) => {
-          let existing: string | null = null;
-          if (project !== null) {
-            const root = agent.harness === 'opencode' ? '.opencode/agents' : '.github/agents';
-            const candidate = join(project, root, agent.agentPath);
-            try {
-              const entry = await lstat(candidate);
-              existing = entry.isFile() &&
-                !entry.isSymbolicLink() &&
-                await realpath(candidate) === candidate
-                ? fingerprint(await readFile(candidate))
-                : 'unsafe';
-            } catch (error) {
-              if (!isErrno(error, 'ENOENT')) throw error;
-            }
+    skills.push({
+      name: skill.name,
+      directory: skill.directory,
+      files: skill.files.map((file) => ({ path: file.path, bytes: decodeBundleFile(file.content).length, executable: file.executable })),
+      skillMarkdown: Buffer.from(skill.files.find((file) => file.path === 'SKILL.md')!.content, 'base64').toString('utf8'),
+      existingFingerprint: existing,
+      bundledFingerprint: packageFingerprint(skill.files),
+    });
+  }
+  const agents = bundle.version === 2
+    ? await Promise.all(bundle.agents.map(async (agent) => {
+        let existing: string | null = null;
+        if (project !== null) {
+          const root = agent.harness === 'opencode' ? '.opencode/agents' : '.github/agents';
+          const candidate = join(project, root, agent.agentPath);
+          try {
+            const entry = await lstat(candidate);
+            existing = entry.isFile() &&
+              !entry.isSymbolicLink() &&
+              await realpath(candidate) === candidate
+              ? fingerprint((await readBoundedFile(candidate, MAX_BUNDLE_BYTES)).content)
+              : 'unsafe';
+          } catch (error) {
+            if (!isErrno(error, 'ENOENT')) throw error;
           }
-          return {
-            name: agent.name,
-            harness: agent.harness,
-            agentPath: agent.agentPath,
-            fingerprint: agent.fingerprint,
-            content: decodeBundleFile(agent.content).toString('utf8'),
-            existingFingerprint: existing,
-          };
-        }))
-      : [];
-    return {
-      ok: true,
-      chain: bundle.chain,
-      bundleFingerprint: fingerprint(JSON.stringify(bundle)),
-      skills,
-      agents,
-    };
+        }
+        return {
+          name: agent.name,
+          harness: agent.harness,
+          agentPath: agent.agentPath,
+          fingerprint: agent.fingerprint,
+          content: decodeBundleFile(agent.content).toString('utf8'),
+          existingFingerprint: existing,
+        };
+      }))
+    : [];
+  const bundleFingerprint = fingerprint(JSON.stringify(bundle));
+  let reviewDigest: string | null = null;
+  if (project !== null) {
+    const info = await stat(project, { bigint: true });
+    if (!info.isDirectory() || await realpath(project) !== project) {
+      fail('PROJECT_INVALID', 'The inspected project is no longer a canonical directory.');
+    }
+    reviewDigest = fingerprint(JSON.stringify({
+      version: 1,
+      project,
+      projectDevice: String(info.dev),
+      projectInode: String(info.ino),
+      bundleFingerprint,
+      skills: skills.map(({ name, directory, existingFingerprint }) => ({ name, directory, existingFingerprint })),
+      agents: agents.map(({ harness, agentPath, existingFingerprint }) => ({ harness, agentPath, existingFingerprint })),
+    }));
+  }
+  return { ok: true, chain: bundle.chain, bundleFingerprint, skills, agents, reviewDigest };
+}
+
+export async function executePortableRequest(request: PortableRequest): Promise<unknown> {
+  if (request.command === 'inspect') {
+    const bundle = await loadPortableBundle(request.bundlePath);
+    const project = request.projectPath ? await canonicalProject(request.projectPath) : null;
+    return inspectBundle(bundle, project);
   }
 
   if (!request.projectPath || !isAbsolute(request.projectPath)) fail('PROJECT_INVALID', 'Provide an absolute project path.');
@@ -553,15 +681,10 @@ export async function executePortableRequest(request: PortableRequest): Promise<
   if (request.command === 'prepare') {
     if (!request.bundlePath || !isAbsolute(request.bundlePath)) fail('BUNDLE_PATH_INVALID', 'Provide an absolute bundle file path.');
     if (input.installConfirmed !== true) fail('INSTALL_CONFIRMATION_REQUIRED', 'Review and explicitly confirm package installation first.');
-    const info = await lstat(request.bundlePath);
-    if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_BUNDLE_REQUEST_BYTES) {
-      fail('BUNDLE_INVALID', 'The bundle is not a regular file or exceeds the size limit.');
+    if (typeof input.reviewDigest !== 'string' || !/^[a-f0-9]{64}$/.test(input.reviewDigest)) {
+      fail('REVIEW_REQUIRED', 'Inspect the bundle and project, then provide the review digest with installation approval.');
     }
-    const raw = JSON.parse(await readFile(request.bundlePath, 'utf8')) as unknown;
-    const bundle = parseBundle(raw);
-    if (bundle.chain.steps.length > MAX_PORTABLE_STEPS) {
-      fail('CHAIN_TOO_LARGE', `Portable chains are limited to ${String(MAX_PORTABLE_STEPS)} steps.`);
-    }
+    const bundle = await loadPortableBundle(request.bundlePath);
     const chain = chainFromBundle(bundle);
     if (chain.agent !== undefined) {
       fail(
@@ -618,13 +741,23 @@ export async function executePortableRequest(request: PortableRequest): Promise<
     if (!Array.isArray(reuseSkills) || reuseSkills.some((name) => typeof name !== 'string')) {
       fail('REUSE_INVALID', 'Reuse choices must be a list of skill names.');
     }
+    const reviewed = await inspectBundle(bundle, project);
+    if (reviewed.reviewDigest !== input.reviewDigest) {
+      fail('REVIEW_STALE', 'The bundle, project, or existing package state changed since inspection; review it again.');
+    }
     const directory = await ensureRunDirectory(project);
     return withRunLock(directory, async () => {
+      await assertNoOtherPortableRun(directory, project);
+      const current = await inspectBundle(bundle, project);
+      if (current.reviewDigest !== input.reviewDigest) {
+        fail('REVIEW_STALE', 'The bundle, project, or existing package state changed since inspection; review it again.');
+      }
       const { installedSkills, createdDirectories } = await installSkills(
         bundle,
         project,
         reuseSkills as string[],
         input.differingReuseConfirmed === true,
+        new Map(current.skills.map((skill) => [skill.name, skill.existingFingerprint])),
       );
       const timestamp = now();
       const id = randomUUID();
@@ -691,6 +824,7 @@ export async function executePortableRequest(request: PortableRequest): Promise<
       const current = await readRun(path, project);
       if (input.revision !== current.revision) fail('REVISION_CONFLICT', 'Portable run state changed; refresh status before acting.');
       if (current.status !== 'ready' || current.resumeRequired) fail('RUN_NOT_READY', 'The run is not ready to start another step.');
+      await assertNoOtherPortableRun(directory, project, current.id);
       await verifyInstalledSkills(current, project);
       if (current.progression === 'supervised' && input.confirmed !== true) {
         fail('STEP_CONFIRMATION_REQUIRED', 'Confirm this step before execution.');
@@ -850,6 +984,9 @@ export async function executePortableRequest(request: PortableRequest): Promise<
         return { ok: true, runId: current.id, revision: current.revision, status: current.status };
       }
       if (current.status === 'running') {
+        if (input.stoppedConfirmed !== true) {
+          fail('STOP_CONFIRMATION_REQUIRED', 'Confirm that the earlier host work has stopped before marking this attempt interrupted.');
+        }
         const attempt = current.steps[current.currentStepIndex]?.attempts.at(-1);
         if (attempt?.status !== 'running') fail('RUN_STATE_INVALID', 'The active run has no in-flight attempt.');
         attempt.status = 'interrupted';

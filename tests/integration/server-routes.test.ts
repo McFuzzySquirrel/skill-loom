@@ -185,4 +185,36 @@ describe('server lifecycle routes', () => {
       await started.stop();
     }
   });
+
+  it('rejects a second server for the same profile without disturbing the owner', async () => {
+    const reservation = createServer();
+    await new Promise<void>((resolve, reject) => {
+      reservation.once('error', reject);
+      reservation.listen(0, '127.0.0.1', resolve);
+    });
+    const address = reservation.address() as AddressInfo;
+    await new Promise<void>((resolve, reject) => {
+      reservation.close((error) =>
+        error === undefined || error === null ? resolve() : reject(error),
+      );
+    });
+    const options = {
+      host: '127.0.0.1',
+      port: address.port,
+      serveStatic: false,
+      env: { ...process.env, LOOM_CONFIG_DIR: root },
+      runRecoverOnStartup: false,
+    };
+    const started = await startServer(options);
+    try {
+      await expect(startServer(options)).rejects.toMatchObject({ code: 'PROFILE_IN_USE' });
+      const response = await fetch(`http://127.0.0.1:${String(address.port)}/api/server/lifecycle`);
+      expect(response.status).toBe(200);
+      expect((await response.json() as { state: string }).state).toBe('running');
+    } finally {
+      await started.stop();
+    }
+    const restarted = await startServer(options);
+    await restarted.stop();
+  });
 });
