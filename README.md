@@ -230,6 +230,51 @@ The unambiguous `npm exec` form is also supported:
 npm exec --package ./skill-loom-cli-0.1.0.tgz -- skill-loom --help
 ```
 
+### Install globally
+
+A global install also comes from the packed tarball, because the package is not published to the registry:
+
+```bash
+git clone https://github.com/McFuzzySquirrel/skill-loom.git
+cd skill-loom
+npm install
+npm run build
+npm pack
+npm install -g ./skill-loom-cli-<version>.tgz
+skill-loom --version
+```
+
+`npm pack` runs the full build through its `prepack` hook, so the explicit `npm run build` only surfaces build errors before packing. The install runs the package's PTY helper and may compile `node-pty`, so the native toolchain above must be available. For development against a checkout, `npm link` exposes the same `skill-loom` command without copying a tarball.
+
+If `npm install -g` fails with `EACCES`, configure a user-level prefix (`npm config set prefix ~/.npm-global`, then add `~/.npm-global/bin` to `PATH`) instead of running the install with `sudo`; the `node-pty` build and the postinstall helper should run as your user.
+
+### npm install-script warnings
+
+On npm 11.20 and newer, a global install can report `install scripts not yet covered by allowScripts` for `skill-loom-cli` and `node-pty`. Unless `strict-allow-scripts` is enabled, npm still runs those scripts and the warning is advisory, so a successful install behind it is usable. A name-only allowlist does not silence it for a tarball install: npm matches a `file:` dependency by path, not by name, so `--allow-scripts=skill-loom-cli,node-pty` covers `node-pty` but not the package you installed. Pass the tarball path together with the dependency name:
+
+```bash
+npm install -g ./skill-loom-cli-0.1.0.tgz \
+  --allow-scripts="file:$PWD/skill-loom-cli-0.1.0.tgz,node-pty"
+```
+
+To allow the same list for every global install, persist it (and rewrite the absolute path after moving the tarball):
+
+```bash
+npm config set allow-scripts="file:/absolute/path/to/skill-loom-cli-0.1.0.tgz,node-pty" --location=user
+```
+
+`allow-scripts=all` is not a wildcard. `--dangerously-allow-all-scripts` suppresses the warning for one command but allows every dependency's install scripts, so prefer the scoped list. After a registry release, the file path is unnecessary: `npm install -g skill-loom-cli --allow-scripts=skill-loom-cli,node-pty` matches both packages by name.
+
+A global install provides the CLI only. It does not register the companion skills anywhere; copy `dist/skills/<skill-name>/` into the target project's `.agents/skills/` to use them. Once the package is published, the equivalent command becomes `npm install -g skill-loom-cli`.
+
+With a global install, the flags above become plain `skill-loom` commands:
+
+```bash
+skill-loom --help
+skill-loom --no-open --port 7399
+skill-loom --config-dir /absolute/path/to/profile
+```
+
 The CLI starts the same production server and prints the loopback URL and config directory. It opens the default browser only when stdout is a TTY; `--no-open` and `CI` disable that. Once the package is published, the command becomes `npx skill-loom-cli`.
 
 The packed package contains `dist/src`, `dist/web`, the compiled package metadata, a cross-platform PTY installation helper, `docs/OPERATIONS.md`, and the package manifest. It excludes source, tests, build scripts, and the other documentation files. The native `node-pty` toolchain may still be required when npm installs the package. The helper repairs the macOS spawn-helper owner-execute permission and applies a hash-bound Windows `node-pty` 1.1.0 natural-exit resource cleanup fix; unknown dependency bytes fail installation rather than receiving an unverified patch.

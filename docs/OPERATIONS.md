@@ -39,7 +39,23 @@ The CLI supports `--help`, `--version`, `--no-open`, `--port <number>`, and `--c
 
 `--port` sets `LOOM_PORT`; `--config-dir` sets `LOOM_CONFIG_DIR`. Environment variables remain authoritative when a flag is omitted. The package contains the compiled server, built chain editor, compiled package metadata, the macOS PTY installation helper, `docs/OPERATIONS.md`, and the manifest; source, tests, build scripts, and the other documentation files are excluded. Installing the package may build the native `node-pty` module, so the Python/make/C++ toolchain is required.
 
-Before publishing, flip `"private"` to `false`, add repository metadata, verify the package name is still available, run `npm run test:package`, and publish with `npm publish`. Once published, the invocation is `npx skill-loom-cli`.
+To install the command globally instead of invoking the tarball through `npx`:
+
+```bash
+npm install -g ./skill-loom-cli-0.1.0.tgz
+skill-loom --version
+```
+
+On npm 11.20 and newer this can warn that `skill-loom-cli` and `node-pty` have install scripts "not yet covered by allowScripts". The scripts still run unless `strict-allow-scripts` is enabled, so the warning is advisory. npm matches a `file:` dependency by path rather than by name, so a name-only allowlist covers `node-pty` but not the tarball package; pass both:
+
+```bash
+npm install -g ./skill-loom-cli-0.1.0.tgz \
+  --allow-scripts="file:$PWD/skill-loom-cli-0.1.0.tgz,node-pty"
+```
+
+Persist that list with `npm config set allow-scripts="file:/absolute/path/to/skill-loom-cli-0.1.0.tgz,node-pty" --location=user`. `allow-scripts=all` is not a wildcard, and `--dangerously-allow-all-scripts` allows every dependency's scripts, so prefer the scoped list. A global install provides the CLI only; the companion skills are still copied into a project's `.agents/skills/<skill-name>/`. If `npm install -g` fails with `EACCES`, set a user-level npm prefix rather than installing with `sudo`, because the `node-pty` build and postinstall helper should run as the user.
+
+Before publishing, flip `"private"` to `false`, add repository metadata, verify the package name is still available, run `npm run test:package`, and publish with `npm publish`. Once published, the invocation is `npx skill-loom-cli` or `npm install -g skill-loom-cli`, and the name-based allowlist `--allow-scripts=skill-loom-cli,node-pty` covers both packages.
 
 The build creates `dist/skills/loom-run-bundle/`, `dist/skills/scenario-discovery/`, and `dist/skills/loom-chain-workflow/` and their ZIP archives. It updates the generated runner helper in both checked-in skill locations and synchronizes the discovery and workflow skill mirrors; runner instructions are maintained in both locations. The ZIP archives are the distributable skill packages; there is no in-app download. To install manually from a checkout, run `npm run build:portable-skill`, then copy the relevant directories into the target project's `.agents/skills/<skill-name>/`. The workflow skill requires both companion skills and the Skill Loom CLI and owner service; the companion helpers themselves run on Node.js 24+ without that service, a native PTY, or an installed Loom npm package. Portable runner mutations use a project-local SQLite database. The runner skill prescribes `--disable-warning=ExperimentalWarning` to keep early Node 24 SQLite warnings out of structured stderr; this also suppresses other experimental warnings. The standalone ZIPs and files are included in the packed Skill Loom artifact. The development `npm run dev` lifecycle builds the skills before starting the server and UI.
 

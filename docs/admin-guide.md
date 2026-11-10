@@ -65,6 +65,24 @@ The CLI accepts `--help`, `--version`, `--no-open`, `--port <number>`, and `--co
 
 The tarball contains `dist/src`, `dist/web`, the compiled package metadata, `docs/OPERATIONS.md`, and the manifest. Source, tests, build scripts, and the other documentation files are excluded. Installing the package still builds the native `node-pty` module.
 
+To install the command globally instead of running the tarball through `npx`:
+
+```bash
+npm install -g ./skill-loom-cli-0.1.0.tgz
+skill-loom --version
+```
+
+On npm 11.20 and newer the install can warn that `skill-loom-cli` and `node-pty` have install scripts "not yet covered by allowScripts". Unless `strict-allow-scripts` is enabled, npm still runs them and the warning is advisory. npm matches a `file:` dependency by path rather than by name, so a name-only allowlist covers `node-pty` but not the tarball package; allow both:
+
+```bash
+npm install -g ./skill-loom-cli-0.1.0.tgz \
+  --allow-scripts="file:$PWD/skill-loom-cli-0.1.0.tgz,node-pty"
+```
+
+Persist the list with `npm config set allow-scripts="file:/absolute/path/to/skill-loom-cli-0.1.0.tgz,node-pty" --location=user`, and update or remove that path if the tarball moves. `allow-scripts=all` is not a wildcard; `--dangerously-allow-all-scripts` allows every dependency's scripts and is not recommended. If `npm install -g` fails with `EACCES`, configure a user-level npm prefix instead of using `sudo`, so the native build and postinstall helper run as your user. A global install provides the CLI only; companion skills are still copied into each project's `.agents/skills/<skill-name>/`.
+
+After a registry release, `npm install -g skill-loom-cli` works, and `--allow-scripts=skill-loom-cli,node-pty` matches both packages by name.
+
 ### Publishing is a deliberate future step
 
 Before publishing, add repository metadata, verify the package name, flip `"private"`, run `npm run test:package`, and publish. Do not treat the current tarball as a supported public release.
