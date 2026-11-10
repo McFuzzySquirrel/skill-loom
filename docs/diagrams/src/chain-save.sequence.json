@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Saving a chain from the editor",
+    "subtitle": "Revision check, guarded store write, atomic commit",
+    "locale": "en",
+    "output": "chain-save-sequence.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/McFuzzySquirrel/skill-loom.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "343fda335d9f77a990b24a83e39565508bc337b8"
+    }
+  },
+  "participants": [
+    {
+      "id": "editor",
+      "type": "frontend",
+      "label": "Chain editor",
+      "sublabel": "draft hook",
+      "sources": [
+        {
+          "path": "src/web/hooks/useChainDraft.ts",
+          "line": 929,
+          "end_line": 956
+        }
+      ]
+    },
+    {
+      "id": "route",
+      "type": "backend",
+      "label": "Chain route",
+      "sublabel": "Fastify PUT",
+      "sources": [
+        {
+          "path": "src/server/routes/chains.ts",
+          "line": 216,
+          "end_line": 260
+        }
+      ]
+    },
+    {
+      "id": "service",
+      "type": "backend",
+      "label": "ChainService",
+      "sublabel": "revision + build",
+      "sources": [
+        {
+          "path": "src/server/chains/service.ts",
+          "line": 211,
+          "end_line": 229
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": "ChainStore",
+      "sublabel": ".loom/chains",
+      "sources": [
+        {
+          "path": "src/server/chains/store.ts",
+          "line": 400,
+          "end_line": 432
+        }
+      ]
+    },
+    {
+      "id": "fs",
+      "type": "database",
+      "label": "Filesystem",
+      "sublabel": "atomic JSON",
+      "sources": [
+        {
+          "path": "src/server/config/store.ts",
+          "line": 187,
+          "end_line": 242
+        }
+      ]
+    }
+  ],
+  "messages": [
+    {
+      "id": "put-chain",
+      "from": "editor",
+      "to": "route",
+      "y": 170,
+      "label": "PUT + revision header",
+      "variant": "emphasis"
+    },
+    {
+      "id": "route-update",
+      "from": "route",
+      "to": "service",
+      "y": 200,
+      "label": "update(draft, revision)"
+    },
+    {
+      "id": "read-existing",
+      "from": "service",
+      "to": "store",
+      "y": 240,
+      "label": "read(chainId)"
+    },
+    {
+      "id": "read-file",
+      "from": "store",
+      "to": "fs",
+      "y": 268,
+      "label": "read chain JSON"
+    },
+    {
+      "id": "file-bytes",
+      "from": "fs",
+      "to": "store",
+      "y": 296,
+      "label": "chain",
+      "variant": "return"
+    },
+    {
+      "id": "existing-chain",
+      "from": "store",
+      "to": "service",
+      "y": 324,
+      "label": "chain + revision",
+      "variant": "return"
+    },
+    {
+      "id": "write-chain",
+      "from": "service",
+      "to": "store",
+      "y": 352,
+      "label": "update(chain)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "atomic-write",
+      "from": "store",
+      "to": "fs",
+      "y": 380,
+      "label": "temp, fsync, rename",
+      "variant": "emphasis"
+    },
+    {
+      "id": "commit-ack",
+      "from": "fs",
+      "to": "store",
+      "y": 408,
+      "label": "committed",
+      "variant": "return"
+    },
+    {
+      "id": "saved-chain",
+      "from": "store",
+      "to": "service",
+      "y": 436,
+      "label": "saved chain",
+      "variant": "return"
+    },
+    {
+      "id": "new-revision",
+      "from": "service",
+      "to": "route",
+      "y": 464,
+      "label": "chain + new revision",
+      "variant": "return"
+    },
+    {
+      "id": "response",
+      "from": "route",
+      "to": "editor",
+      "y": 492,
+      "label": "200 JSON",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "editor",
+      "from": 165,
+      "to": 500,
+      "type": "frontend"
+    },
+    {
+      "participant": "route",
+      "from": 165,
+      "to": 496,
+      "type": "backend"
+    },
+    {
+      "participant": "service",
+      "from": 196,
+      "to": 474,
+      "type": "backend"
+    },
+    {
+      "participant": "store",
+      "from": 226,
+      "to": 444,
+      "type": "database"
+    },
+    {
+      "participant": "fs",
+      "from": 256,
+      "to": 416,
+      "type": "database"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "Revision is required",
+      "items": [
+        "The editor sends the revision it loaded",
+        "The service compares SHA-256 of the stored chain",
+        "A mismatch returns a stale-chain error, not a merge"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Commit is crash-safe",
+      "items": [
+        "The temporary file lives beside the target",
+        "The write flushes before an atomic rename",
+        "A symlink or escaped id is refused"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "One writer per chain",
+      "items": [
+        "Mutations for the same project and chain are serialized",
+        "The server owns ids and timestamps",
+        "A successful save resets the editor's dirty baseline"
+      ]
+    }
+  ]
+}

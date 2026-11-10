@@ -76,6 +76,8 @@ The classic labels “Clean Architecture” or “Hexagonal” only partly apply
 
 ## 3. Architecture Visualization
 
+The Mermaid views below stay readable as text. The same revision also has an explorable form: [system map and run flows](docs/diagrams/skill-loom-architecture.html), [chain-save sequence](docs/diagrams/chain-save-sequence.html), and [portable handoff](docs/diagrams/portable-handoff-workflow.html).
+
 ### 3.1 C4 Level 1 — System context
 
 ```mermaid

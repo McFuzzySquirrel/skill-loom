@@ -15,6 +15,7 @@ This page lists the canonical documentation and where retired material lives. Ke
 | [Visual tour](visual-tour.md) | editor users | the chain editor and its controls |
 | [Known gaps](current-gaps.md) | everyone | blocked, partial, and unverified capabilities |
 | [Architecture blueprint](../Project_Architecture_Blueprint.md) | maintainers | detected stack, C4 views, component/layer map, data and communication patterns, extension guide |
+| [Architecture diagrams](diagrams/README.md) | maintainers | [system map and run flows](diagrams/skill-loom-architecture.html), [chain save](diagrams/chain-save-sequence.html), [portable handoff](diagrams/portable-handoff-workflow.html) |
 | [ADR index](adr/README.md) | maintainers | durable architecture decisions |
 | [Release notes](releases/0.1.0.md) | everyone | current release status, compatibility, limitations, evidence |
 | [Changelog](../CHANGELOG.md) | everyone | notable changes |
