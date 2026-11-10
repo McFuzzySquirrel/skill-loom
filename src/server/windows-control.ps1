@@ -13,6 +13,13 @@ function Is-Trusted([string]$sid, [string]$user) {
         $sid -eq 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'
 }
 
+function Read-DirectoryAcl([System.IO.DirectoryInfo]$directory) {
+    if ($PSVersionTable.PSEdition -eq 'Core') {
+        return [System.IO.FileSystemAclExtensions]::GetAccessControl($directory)
+    }
+    return $directory.GetAccessControl()
+}
+
 function Check-Acl($security, [string]$user, [bool]$private) {
     $owner = $security.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
     if (-not (Is-Trusted $owner $user)) { Fail 'WINDOWS_PROFILE_UNSAFE' }
@@ -43,7 +50,7 @@ function Check-Parents([string]$path, [string]$user) {
     while ($null -ne $current) {
         if ($current.Exists) {
             if (($current.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { Fail 'WINDOWS_PROFILE_UNSAFE' }
-            Check-Acl ($current.GetAccessControl()) $user $false
+            Check-Acl (Read-DirectoryAcl $current) $user $false
         }
         $current = $current.Parent
     }
@@ -84,6 +91,11 @@ function New-Certificate([string]$name, [string]$usage) {
 }
 
 try {
+    if (($PSVersionTable.PSEdition -eq 'Core' -and
+         ($PSVersionTable.PSVersion.Major -ne 7 -or $PSVersionTable.PSVersion.PreReleaseLabel)) -or
+        ($PSVersionTable.PSEdition -ne 'Core' -and $PSVersionTable.PSVersion -lt [Version]'5.1')) {
+        Fail 'WINDOWS_PROFILE_CHECK_FAILED'
+    }
     $text = [Console]::In.ReadToEnd()
     if ($text.Length -gt 8192) { Fail 'WINDOWS_PROFILE_INVALID' }
     $inputData = ConvertFrom-Json -InputObject $text
@@ -108,18 +120,22 @@ try {
             ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit),
             [System.Security.AccessControl.PropagationFlags]::None, [System.Security.AccessControl.AccessControlType]::Allow)
         $security.AddAccessRule($rule)
-        $null = [System.IO.Directory]::CreateDirectory($path, $security)
+        if ($PSVersionTable.PSEdition -eq 'Core') {
+            $null = [System.IO.FileSystemAclExtensions]::CreateDirectory($security, $path)
+        } else {
+            $null = [System.IO.Directory]::CreateDirectory($path, $security)
+        }
     }
     Check-Parents $path $user
     $directory = [System.IO.DirectoryInfo]::new($path)
     if (-not $directory.Exists -or ($directory.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { Fail 'WINDOWS_PROFILE_UNSAFE' }
-    Check-Acl ($directory.GetAccessControl()) $user $true
+    Check-Acl (Read-DirectoryAcl $directory) $user $true
     if ($inputData.operation -ne 'prepare') {
         $canonical = Local-Path ([string]$inputData.canonicalPath)
         Check-Parents $canonical $user
         $canonicalDirectory = [System.IO.DirectoryInfo]::new($canonical)
         if (-not $canonicalDirectory.Exists) { Fail 'WINDOWS_PROFILE_UNSAFE' }
-        Check-Acl ($canonicalDirectory.GetAccessControl()) $user $true
+        Check-Acl (Read-DirectoryAcl $canonicalDirectory) $user $true
     }
     if ($inputData.operation -eq 'prepare' -or $inputData.operation -eq 'check') {
         [Console]::Out.WriteLine('{"ok":true}')
@@ -138,7 +154,9 @@ try {
     $stream = [System.IO.File]::Open($filePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, $share)
     try {
         # Files may inherit the already-protected directory's private DACL.
-        $security = $stream.GetAccessControl()
+        $security = if ($PSVersionTable.PSEdition -eq 'Core') {
+            [System.IO.FileSystemAclExtensions]::GetAccessControl($stream)
+        } else { $stream.GetAccessControl() }
         Check-Acl $security $user $false
         foreach ($rule in $security.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])) {
             if ($rule.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and

@@ -473,8 +473,22 @@ and broadly accessible profiles or metadata are rejected. Administrators,
 SYSTEM and TrustedInstaller are privileged, trusted principals; this is not
 isolation from them or from another process running as the same user.
 
-Windows profiles require a local fixed NTFS/ReFS drive, Windows PowerShell 5.1
-with .NET 4.7.2+ and permission to run the shipped script. Execution-policy or
+Windows profiles require a local fixed NTFS/ReFS drive and permission to run
+the shipped script. By default, the helper prefers stable PowerShell 7 at
+`%ProgramFiles%\PowerShell\7\pwsh.exe`. If that file is absent, it uses the
+OS-provided Windows PowerShell 5.1 with .NET 4.7.2+. It does not search `PATH`,
+use preview installations, or require PowerShell on Linux/macOS.
+Set `LOOM_WINDOWS_POWERSHELL=7` to require the modern host, `5.1` to select the
+legacy host explicitly, or `auto` (the default) for availability-based selection.
+Set it consistently for the owner and CLI processes. A forced missing host,
+inaccessible or linked modern executable, or helper failure fails closed:
+there is no retry under another host after a security, policy, or execution
+failure. The PowerShell 7 path uses modern .NET ACL extension APIs; the
+5.1 path retains its .NET Framework APIs, including private ACL creation.
+Both preserve requested/canonical ancestor and open-handle ACL checks.
+The native Windows integration suite now targets both hosts; the PowerShell 7
+path still requires a successful native Windows run before being considered
+verified. Execution-policy or
 constrained-language restrictions fail closed; Loom does not change policy,
 elevate, or fall back to an unsecured listener. Existing ACLs are never silently
 changed. For an older or inherited-ACL profile, stop all owners and use

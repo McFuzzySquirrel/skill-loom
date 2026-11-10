@@ -34,7 +34,7 @@ Deliver both managed harness execution and execution in the calling agent's sess
 
 Installed-mode preservation does not complete the other three requirements or lift their execution and recovery gates.
 
-The Windows control transport uses the OS-provided Windows PowerShell/.NET
+The Windows control transport uses a shipped PowerShell/.NET
 helper shipped with Loom, not default named-pipe permissions. New profiles are
 created with a protected, inheritable current-user-only DACL. Existing unsafe
 profiles, reparse-point ancestors, broadly accessible metadata/lock files, and
@@ -43,7 +43,11 @@ changing ACLs. Both the requested and canonical physical profile paths are
 checked: a SUBST drive must not hide an unsafe physical ancestor. System,
 administrators, and TrustedInstaller are privileged
 principals, not isolation targets. Profiles must be on a local fixed NTFS/ReFS
-drive with Windows PowerShell 5.1 and .NET 4.7.2+ available.
+drive. The helper now prefers stable PowerShell 7 at the standard Program Files
+path, with an availability-only fallback to Windows PowerShell 5.1 and .NET
+4.7.2+. `LOOM_WINDOWS_POWERSHELL=7|5.1|auto` selects the host; security or helper
+failures never trigger a downgrade. The existing native verification applies to
+5.1; the expanded integration suite must pass on Windows for 7 verification.
 
 The transport binds an exclusive loopback TCP port, requires TLS 1.3 and the
 `loom-control-v1` ALPN protocol, and authenticates both peers with fresh,
