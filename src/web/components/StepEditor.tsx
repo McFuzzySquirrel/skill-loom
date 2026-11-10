@@ -119,7 +119,7 @@ export function StepEditor({
             Pinned to remote snapshot <code>{step.skillBinding.sourceId}</code> at{' '}
             <code>{step.skillBinding.revision.slice(0, 12)}</code> (
             <code>{step.skillBinding.repositoryPath}</code>). To use another revision, remove this
-            step and add the desired catalog entry.
+            step and add the desired skill with the CLI.
           </p>
         )}
       </div>}

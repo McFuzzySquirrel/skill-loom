@@ -149,17 +149,14 @@ export function StepList({
       </div>
 
       <p className="field__hint" id={hintId}>
-        Choose Add instruction or add a skill from the catalog. Drag a step to reorder, or use
+        Choose Add instruction to add a prompt. Drag a step to reorder, or use
         Move up and Move down. Reordering never discards unsaved text.
       </p>
 
       {steps.length === 0 ? (
         <div className="empty-state" data-testid="step-list-empty">
           <p>No steps yet.</p>
-          <p>
-            Expand a skill in the catalog and choose <strong>Add as step</strong> to start
-            building the ordered recipe.
-          </p>
+          <p>Add skill steps with the Skill Loom CLI or companion skills.</p>
         </div>
       ) : (
         <>

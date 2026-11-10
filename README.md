@@ -10,9 +10,8 @@ Skill Loom is a local workspace for discovering, designing, saving, and bundling
 
 Skill Loom does not author skills and does not execute a skill as a callable command. Each chain step is sent to a local harness as a prompt; skills are **model-invoked** context. The chain order is prompt order, **not a guarantee** that a harness loads or fires a named skill. A harness may decline to load a skill even when preflight resolved it.
 
-![Slow visual tour of Skill Loom](docs/assets/skill-loom-tour.gif)
 
-See the [visual tour](docs/visual-tour.md) for captions and full-size screenshots.
+See the [visual tour](docs/visual-tour.md) for the chain editor.
 
 Start with the [user guide](docs/user-guide.md) to design and share a workflow, or the [administrator guide](docs/admin-guide.md) to install, configure, back up, and upgrade the application. To run chains with only the companion Agent Skills and no Skill Loom server, see the [standalone skill guide](docs/standalone-skill-guide.md).
 
@@ -43,7 +42,7 @@ Start with the [user guide](docs/user-guide.md) to design and share a workflow, 
 
 ## About
 
-Agent CLIs such as OpenCode and GitHub Copilot can load installed skills, but turning a set of skills into a repeatable, ordered workflow is manual and easy to get wrong. Skill Loom provides a local workspace to inspect available skills, assemble and save chains, keep reusable templates in a library, and export reviewed bundles for use in other repositories. Register a project when you want its skill catalog for authoring or optional local tests.
+Agent CLIs such as OpenCode and GitHub Copilot can load installed skills, but turning a set of skills into a repeatable, ordered workflow is manual and easy to get wrong. Skill Loom is driven by its CLI and companion skills (which install the CLI when missing); its only web screen is a visual chain editor, opened with `skill-loom edit`, for changing step order, instructions, and inputs. It provides a local workspace to inspect available skills, assemble and save chains, keep reusable templates in a library, and export reviewed bundles for use in other repositories. Register a project when you want its skill catalog for authoring or optional local tests.
 
 The product promise is deliberately narrow:
 
@@ -261,15 +260,11 @@ The packed package contains `dist/src`, `dist/web`, the compiled package metadat
 | Unit tests | `npm run test:unit` | Vitest, Node environment. |
 | Integration tests | `npm run test:integration` | Vitest, real Fastify composition root. |
 | All Node tests | `npm test` | Unit and integration suites. |
-| Browser end-to-end | `npm run test:e2e` | Builds and starts an isolated app; see below. |
 | Package smoke test | `npm run test:package` | Packs, inspects, and starts the packaged CLI on a spare loopback port. |
 | Live discovery probe | `npm run test:live:discovery` | Requires real harness CLIs. |
 | Live execution probe | `npm run test:live:execution` | Requires real harness CLIs and may make paid model calls. |
 | Managed OpenCode acceptance | `npm run test:live:managed -- --confirm-live` | Checkout-only; uses the production managed runner, makes paid calls and grants temporary-project read/edit permissions. See the [procedure](docs/OPERATIONS.md#managed-opencode-acceptance). |
 | Documentation gate | `npm run check` | Runs `scripts/check-docs.mjs`. |
-| Capture docs visuals | `npm run docs:capture` | Builds the app, captures the visual-tour screenshots, and assembles the slow README GIF under `docs/assets/`. |
-
-Playwright never reads or writes your real Skill Loom or harness state. `npm run test:e2e` builds the app, starts it with a temporary `LOOM_CONFIG_DIR`, a temporary `HOME`, a temporary project area, and an isolated harness `PATH`; it never attaches to an already-running developer instance.
 
 The default live probes exercise real OpenCode and Copilot CLIs. They fail with a clear diagnostic when a required CLI is absent; they do not silently skip. Run them only when you intend to use the installed harnesses and credentials. For an OpenCode-only execution probe, see the [verification guide](docs/OPERATIONS.md#opencode-only-live-verification); it does not invoke Copilot and writes separate evidence.
 
@@ -350,7 +345,7 @@ Maintained by **McFuzzySquirrel** ([GitHub](https://github.com/McFuzzySquirrel))
 
 ## Operations guide
 
-- [Visual tour](docs/visual-tour.md) — captioned screenshots of the project, catalog, chain builder, preflight, terminal, run view, and global library.
+- [Visual tour](docs/visual-tour.md) — the visual chain editor.
 - [End-to-end explainer](docs/skill-loom-end-to-end.html) — one-page visual tour of the components, run journey, step path, and harness differences.
 - [User guide](docs/user-guide.md) — build, preflight, run, recover, accessibility, and privacy.
 - [Administrator guide](docs/admin-guide.md) — install, configure, back up, upgrade, monitor, and harden.

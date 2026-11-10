@@ -7,7 +7,7 @@ applies_to:
   - "src/web/components/PublishSharedBundleDialog.tsx"
   - "tests/unit/shared-library.test.ts"
   - "tests/integration/shared-bundle-routes.test.ts"
-status: Accepted
+status: Accepted; web UI superseded in part by ADR-0027 and ADR-0028
 ---
 
 # ADR-0020: Publish reviewed bundles to a configured local library

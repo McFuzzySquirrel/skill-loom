@@ -7,9 +7,29 @@ description: Coordinate reviewed CLI discovery, optional workspace testing, bund
 
 Use this skill when a user wants an agent to discover skills, assemble a chain,
 optionally test it in a retained workspace, import it into a project, and run it
-without using the web UI. The workflow composes the installed
+without the web UI; the only interactive screen is the chain editor. The workflow composes the installed
 `scenario-discovery` and `loom-run-bundle` skills with the Skill Loom CLI; it
 does not replace their instructions or make their decisions on the user's behalf.
+
+## Ensure the Skill Loom CLI
+
+This skill drives Skill Loom through its CLI; there is no general web UI. Before
+the first CLI command, run `skill-loom --version`.
+
+- If it succeeds, continue. Use `skill-loom --help` for the installed contract.
+- If the command is missing, tell the user and ask for approval before changing
+  their machine. It needs Node.js 24 or newer, npm, Git, and a native build
+  toolchain for `node-pty`. After approval, install from the project repository:
+  `git clone https://github.com/McFuzzySquirrel/skill-loom.git <temp-dir>`, then in
+  that directory `npm install`, `npm run build`, `npm pack`, and
+  `npm install -g ./skill-loom-cli-<version>.tgz`. Show each command's result,
+  verify `skill-loom --version`, and remove the temporary clone only after the
+  user agrees. If any step fails, stop and report it; do not work around it.
+- The only interactive screen is the chain editor. When the user wants to change
+  step order, instructions, or inputs visually, run
+  `skill-loom edit --draft <id>` or `skill-loom edit --project <id> --chain <id>`
+  in the background, give the user the printed URL, and wait for them to say they
+  saved. Edits are saved to the chain; re-export or re-inspect before any run.
 
 ## Boundaries
 

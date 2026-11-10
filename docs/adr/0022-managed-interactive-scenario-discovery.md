@@ -8,7 +8,7 @@ applies_to:
   - "src/web/routes/DiscoveryPage.tsx"
   - "src/web/routes/RunPage.tsx"
   - ".github/skills/scenario-discovery/"
-status: Accepted
+status: Accepted; web UI superseded in part by ADR-0027 and ADR-0028
 ---
 
 # ADR-0022: Run scenario discovery in a retained managed workspace

@@ -8,7 +8,7 @@ applies_to:
   - ".github/skills/scenario-discovery/"
   - "tests/integration/discovery-routes.test.ts"
   - "tests/e2e/discovery.spec.ts"
-status: Accepted
+status: Accepted; web UI superseded in part by ADR-0027 and ADR-0028
 ---
 
 # ADR-0021: Prepare validated discovery handoffs from pinned snapshots

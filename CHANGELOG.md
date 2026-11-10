@@ -6,6 +6,14 @@ All notable changes are documented here. This project follows the [Keep a Change
 
 The package version `0.1.0` is private and has no Git release tag or npm publication; all listed changes remain unreleased.
 
+### Changed
+
+- Skill Loom is now CLI- and skill-driven. The web app is reduced to a single visual chain editor (flow overview, drag reordering, step instructions, inputs) opened with `skill-loom edit --draft <id>` or `skill-loom edit --project <id> --chain <id>`; saves write back to the chain. The `loom-chain-workflow` and `scenario-discovery` skills now install the CLI (with user approval) when it is missing.
+
+### Removed
+
+- Web screens for projects, catalogs, discovery, libraries, test workspaces, runs, and the terminal, along with their browser tests (Playwright) and the `docs:capture` and `test:e2e` scripts. The server API and CLI commands remain. User-guide and visual-tour pages describing those screens are outdated.
+
 ### Added
 
 - Opt-in `test:live:managed -- --confirm-live` OpenCode acceptance probe using the production profile lock, preflight, orchestrator, persistence and PTYs. It checks ordered two-step artifacts, shared sessions, pause, abort, orderly recovery and verified tracked-resource/session cleanup, with bounded redacted evidence and no automatic CLI guard changes.

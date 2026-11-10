@@ -19,10 +19,9 @@ requirements and execution tooling have been retired.
 |---|---|---|
 | `src/server` | backend-engineer | `npm test` |
 | `src/shared` | backend-engineer | `npm test` |
-| `src/web` | frontend-engineer | `npm run test:e2e` |
+| `src/web` | frontend-engineer | `npm run typecheck:web` |
 | `tests/unit` | backend-engineer | `npx vitest run tests/unit` |
 | `tests/integration` | backend-engineer | `npx vitest run tests/integration` |
-| `tests/e2e` | frontend-engineer | `npm run test:e2e` |
 | `scripts/live-discovery.ts` | integration-engineer | `npm run test:live:discovery` |
 | `scripts/live-execution.ts` | integration-engineer | `npm run test:live:execution` |
 | `scripts/check-docs.mjs` | platform-engineer | `npm run check` |

@@ -10,6 +10,7 @@ import {
   CliUsageError,
   cliUsage,
   parseCliArgs,
+  parseEditArgs,
   runCli,
 } from '../../src/server/cli.js';
 
@@ -325,5 +326,21 @@ describe('CLI output and environment', () => {
 
     expect(code).toBe(2);
     expect(stderr.read()).toContain('Unknown option: --unknown');
+  });
+});
+
+describe('edit command', () => {
+  it('maps a draft or project chain to an editor path and keeps server options', () => {
+    expect(parseEditArgs(['--draft', 'a b', '--no-open', '--port', '8000'])).toEqual({
+      path: '/drafts/a%20b',
+      rest: ['--no-open', '--port', '8000'],
+    });
+    expect(parseEditArgs(['--project', 'p1', '--chain', 'c1']).path).toBe('/projects/p1/chains/c1');
+  });
+
+  it('requires a complete, unambiguous target', () => {
+    expect(() => parseEditArgs(['--project', 'p1'])).toThrow(CliUsageError);
+    expect(() => parseEditArgs(['--draft', 'd', '--chain', 'c'])).toThrow(CliUsageError);
+    expect(() => parseEditArgs(['--draft'])).toThrow(CliUsageError);
   });
 });

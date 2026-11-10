@@ -1,4 +1,4 @@
-import { Link, useRouter } from '../router';
+import { useRouter } from '../router';
 
 /** Fallback for any path the shell does not recognise. */
 export function NotFoundPage() {
@@ -10,10 +10,8 @@ export function NotFoundPage() {
       <p>
         No Skill Loom screen matches <code>{pathname}</code>.
       </p>
-      <p className="panel__actions">
-        <Link className="button" to="/projects">
-          Back to projects
-        </Link>
+      <p>
+        Use <code>skill-loom edit</code> to open a chain in the editor.
       </p>
     </section>
   );

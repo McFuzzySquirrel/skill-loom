@@ -1,32 +1,11 @@
-import { Suspense, lazy, useEffect, useMemo, type ReactElement } from 'react';
-import { AppLayout } from './components/AppLayout';
+import { useEffect, useMemo, type ReactElement } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { HelpPopoverProvider } from './components/HelpPopover';
-import { StatusAnnouncerProvider } from './components/StatusRegion';
+import { StatusAnnouncerProvider, StatusRegion } from './components/StatusRegion';
 import { ThemeProvider } from './ThemeProvider';
-import { WorkspaceProvider } from './WorkspaceContext';
 import { RouterProvider, matchRoute, useRouter } from './router';
-import { ChainBuilderPage } from './routes/ChainBuilderPage';
-import { GlobalChainsPage } from './routes/GlobalChainsPage';
-import { GlobalDraftsPage } from './routes/GlobalDraftsPage';
-import { SharedBundlesPage } from './routes/SharedBundlesPage';
+import { ChainEditorPage } from './routes/ChainEditorPage';
 import { NotFoundPage } from './routes/NotFoundPage';
-import { ProjectPage, ProjectsPage } from './routes/ProjectsPage';
-import { RunPage } from './routes/RunPage';
-import { RunStartPage } from './routes/RunStartPage';
-import { DiscoveryWorkspaceStartPage } from './routes/DiscoveryWorkspaceStartPage';
-import { RemoteSourcesPage } from './routes/RemoteSourcesPage';
-import { ScenarioCatalogPage } from './routes/ScenarioCatalogPage';
-import { TerminalRunPage } from './routes/TerminalRunPage';
-import { TestWorkspacesPage } from './routes/TestWorkspacesPage';
-import { StartPage } from './routes/StartPage';
-import { LibraryOverviewPage } from './routes/LibraryOverviewPage';
-import { DiscoveryPage } from './routes/DiscoveryPage';
-
-const HelpPage = lazy(async () => {
-  const module = await import('./routes/HelpPage');
-  return { default: module.HelpPage };
-});
 
 interface RouteDefinition {
   pattern: string;
@@ -34,121 +13,32 @@ interface RouteDefinition {
   render: (params: Record<string, string>) => ReactElement;
 }
 
+function EditorLanding() {
+  return (
+    <section className="panel" aria-labelledby="landing-title">
+      <h1 className="panel__title" id="landing-title">Skill Loom chain editor</h1>
+      <p>
+        Skill Loom is driven by its CLI and skills. Open this editor for a specific chain
+        with <code>skill-loom edit --project &lt;id&gt; --chain &lt;id&gt;</code> or{' '}
+        <code>skill-loom edit --draft &lt;id&gt;</code>.
+      </p>
+    </section>
+  );
+}
+
 const ROUTES: RouteDefinition[] = [
-  {
-    pattern: '/',
-    title: 'Start',
-    render: () => <StartPage />,
-  },
-  {
-    pattern: '/library',
-    title: 'Libraries and saved work',
-    render: () => <LibraryOverviewPage />,
-  },
-  {
-    pattern: '/discovery',
-    title: 'Discover reusable workflows',
-    render: () => <DiscoveryPage />,
-  },
-  {
-    pattern: '/help',
-    title: 'Help and user guide',
-    render: () => <HelpPage />,
-  },
-  {
-    pattern: '/projects',
-    title: 'Projects',
-    render: () => <ProjectsPage />,
-  },
-  {
-    pattern: '/chains',
-    title: 'Global chain library',
-    render: () => <GlobalChainsPage />,
-  },
-  {
-    pattern: '/drafts',
-    title: 'Chain drafts',
-    render: () => <GlobalDraftsPage />,
-  },
+  { pattern: '/', title: 'Chain editor', render: () => <EditorLanding /> },
   {
     pattern: '/drafts/:draftId',
-    title: 'Draft workflow designer',
-    render: (params) => (
-      <ChainBuilderPage
-        projectId="__global_drafts__"
-        chainId={params.draftId ?? ''}
-        draftMode
-      />
-    ),
-  },
-  {
-    pattern: '/shared-bundles',
-    title: 'Shared bundle library',
-    render: () => <SharedBundlesPage />,
-  },
-  {
-    pattern: '/scenarios',
-    title: 'Scenario catalog',
-    render: () => <ScenarioCatalogPage />,
-  },
-  {
-    pattern: '/sources',
-    title: 'Remote skill repositories',
-    render: () => <RemoteSourcesPage />,
-  },
-  {
-    pattern: '/test-workspaces',
-    title: 'Disposable test workspaces',
-    render: () => <TestWorkspacesPage />,
-  },
-  {
-    pattern: '/projects/:projectId/skills',
-    title: 'Project skills',
-    render: (params) => (
-      <ProjectPage projectId={params.projectId ?? ''} view="skills" />
-    ),
-  },
-  {
-    pattern: '/projects/:projectId',
-    title: 'Project workspace',
-    render: (params) => <ProjectPage projectId={params.projectId ?? ''} view="chains" />,
-  },
-  {
-    pattern: '/discovery/workspaces/:workspaceId/start',
-    title: 'Start interactive discovery',
-    render: (params) => (
-      <DiscoveryWorkspaceStartPage workspaceId={params.workspaceId ?? ''} />
-    ),
-  },
-  {
-    pattern: '/projects/:projectId/chains/:chainId/run',
-    title: 'Run start',
-    render: (params) => (
-      <RunStartPage
-        projectId={params.projectId ?? ''}
-        chainId={params.chainId ?? ''}
-      />
-    ),
+    title: 'Edit draft chain',
+    render: (params) => <ChainEditorPage chainId={params.draftId ?? ''} />,
   },
   {
     pattern: '/projects/:projectId/chains/:chainId',
-    title: 'Workflow designer',
+    title: 'Edit chain',
     render: (params) => (
-      <ChainBuilderPage
-        projectId={params.projectId ?? ''}
-        chainId={params.chainId ?? ''}
-      />
+      <ChainEditorPage projectId={params.projectId ?? ''} chainId={params.chainId ?? ''} />
     ),
-  },
-  {
-    pattern: '/runs/:runId/terminal',
-    title: 'Run terminal',
-    render: (params) => <TerminalRunPage runId={params.runId ?? ''} />,
-  },
-  {
-    pattern: '/runs/:runId',
-    title: 'Run view',
-    render: (params) => <RunPage runId={params.runId ?? ''} />,
   },
 ];
 
@@ -164,7 +54,6 @@ export function resolveScreen(pathname: string): Screen {
       return { title: route.title, element: route.render(match.params) };
     }
   }
-
   return { title: 'Page not found', element: <NotFoundPage /> };
 }
 
@@ -177,30 +66,22 @@ function RoutedShell() {
   }, [screen.title]);
 
   return (
-    <AppLayout>
-      <Suspense fallback={<p role="status">Loading help content…</p>}>
-        {/* Keying by pathname resets a route-level render failure on navigation. */}
-        <ErrorBoundary key={pathname}>{screen.element}</ErrorBoundary>
-      </Suspense>
-    </AppLayout>
+    <main id="main-content" className="app-main" tabIndex={-1}>
+      <ErrorBoundary key={pathname}>{screen.element}</ErrorBoundary>
+      <StatusRegion />
+    </main>
   );
 }
 
-/**
- * Composition root for every web route (ARCH-05). The router, announcement
- * provider, layout, and error boundary wrap all screens.
- */
 export function App() {
   return (
     <RouterProvider>
       <ThemeProvider>
-        <WorkspaceProvider>
-          <StatusAnnouncerProvider>
-            <HelpPopoverProvider>
-              <RoutedShell />
-            </HelpPopoverProvider>
-          </StatusAnnouncerProvider>
-        </WorkspaceProvider>
+        <StatusAnnouncerProvider>
+          <HelpPopoverProvider>
+            <RoutedShell />
+          </HelpPopoverProvider>
+        </StatusAnnouncerProvider>
       </ThemeProvider>
     </RouterProvider>
   );

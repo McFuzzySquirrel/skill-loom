@@ -5,7 +5,7 @@ applies_to:
   - "src/server/routes/global-chains.ts"
   - "src/web/routes/GlobalChainsPage.tsx"
   - "src/web/components/ImportChainDialog.tsx"
-status: Accepted
+status: Accepted; web UI superseded in part by ADR-0027 and ADR-0028
 ---
 
 # ADR-0010: Store the global chain library as independent snapshots

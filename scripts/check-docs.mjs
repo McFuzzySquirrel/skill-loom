@@ -61,7 +61,6 @@ export const REQUIRED_README_COMMANDS = Object.freeze([
   Object.freeze({ command: 'npm start', script: 'start' }),
   Object.freeze({ command: 'npm run typecheck', script: 'typecheck' }),
   Object.freeze({ command: 'npm run test:unit', script: 'test:unit' }),
-  Object.freeze({ command: 'npm run test:e2e', script: 'test:e2e' }),
   Object.freeze({ command: 'npm run test:package', script: 'test:package' }),
   Object.freeze({
     command: 'npx --yes --package=./skill-loom-cli-0.1.0.tgz skill-loom',

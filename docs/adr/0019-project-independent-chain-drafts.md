@@ -7,7 +7,7 @@ applies_to:
   - "src/web/routes/ChainBuilderPage.tsx"
   - "src/server/runs/test-workspaces.ts"
   - "tests/integration/drafts-routes.test.ts"
-status: Accepted
+status: Accepted; web UI superseded in part by ADR-0027 and ADR-0028
 ---
 
 # ADR-0019: Store project-independent chain drafts separately

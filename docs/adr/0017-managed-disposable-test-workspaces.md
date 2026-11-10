@@ -8,7 +8,7 @@ applies_to:
   - "src/server/routes/test-workspaces.ts"
   - "src/web/routes/ChainBuilderPage.tsx"
   - "src/web/routes/TestWorkspacesPage.tsx"
-status: Accepted
+status: Accepted; web UI superseded in part by ADR-0027 and ADR-0028
 ---
 
 # ADR-0017: Run chain tests in managed disposable workspaces

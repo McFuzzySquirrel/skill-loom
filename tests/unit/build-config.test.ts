@@ -53,7 +53,6 @@ const verifiedVersions: Record<string, string> = {
   zod: '4.6.7',
   yaml: '2.9.1',
   vitest: '5.1.0',
-  '@playwright/test': '1.64.1',
   tsx: '4.23.15',
 };
 
@@ -68,7 +67,6 @@ const requiredScripts = [
   'test',
   'test:unit',
   'test:integration',
-  'test:e2e',
   'test:package',
   'test:live:discovery',
   'test:live:execution',
@@ -99,7 +97,6 @@ describe('package contract', () => {
     expect(pkg.scripts?.start).toContain('dist/src/server/index.js');
     expect(pkg.scripts?.['test:unit']).toContain('tests/unit');
     expect(pkg.scripts?.['test:integration']).toContain('tests/integration');
-    expect(pkg.scripts?.['test:e2e']).toBe('playwright test');
     expect(pkg.scripts?.['test:package']).toContain('scripts/package-smoke.mjs');
     expect(pkg.scripts?.prepack).toBe('npm run build');
     expect(pkg.scripts?.['test:live:discovery']).toContain('scripts/live-discovery.ts');
@@ -207,34 +204,5 @@ describe('build tooling contract', () => {
     expect(vitestConfig).toContain("environment: 'node'");
     expect(vitestConfig).toContain('tests/unit/**/*.test.ts');
     expect(vitestConfig).toContain('tests/integration/**/*.test.ts');
-  });
-});
-
-describe('Playwright isolation contract', () => {
-  const playwrightConfig = read('playwright.config.ts');
-
-  it('starts the built app through the real server', () => {
-    expect(playwrightConfig).toContain('testDir: \'./tests/e2e\'');
-    expect(playwrightConfig).toContain('npm run build && npm run start');
-    expect(playwrightConfig).toContain('http://127.0.0.1:');
-  });
-
-  it('uses a temporary LOOM_CONFIG_DIR instead of the developer config', () => {
-    expect(playwrightConfig).toContain('LOOM_CONFIG_DIR');
-    expect(playwrightConfig).toContain('tmpdir()');
-    expect(playwrightConfig).toContain("join(isolatedRoot, 'config')");
-    expect(playwrightConfig).not.toContain('~/.config/loom');
-    expect(tmpdir()).toBeTruthy();
-  });
-
-  it('isolates HOME so browser tests never spawn harnesses with real credentials', () => {
-    expect(playwrightConfig).toContain('HOME: homeDir');
-    expect(playwrightConfig).toContain("join(isolatedRoot, 'home')");
-  });
-
-  it('passes LOOM_CONFIG_DIR through the web server environment', () => {
-    expect(playwrightConfig).toMatch(
-      /env:\s*\{[\s\S]*LOOM_CONFIG_DIR:\s*configDir[\s\S]*\}/,
-    );
   });
 });
