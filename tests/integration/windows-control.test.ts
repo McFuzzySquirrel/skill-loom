@@ -91,7 +91,7 @@ describe.skipIf(process.platform !== 'win32').each(['7', '5.1'])('Windows privat
     await expect(access(join(profile, 'control.json'))).rejects.toMatchObject({ code: 'ENOENT' });
   }, 90_000);
 
-  it('shares CLI mutations with the production UI owner and stops through authenticated control', async () => {
+  it('shares CLI mutations with the production owner and stops through authenticated control', async () => {
     const reservation = createServer();
     await new Promise<void>((ready, reject) => {
       reservation.once('error', reject);
@@ -119,8 +119,10 @@ describe.skipIf(process.platform !== 'win32').each(['7', '5.1'])('Windows privat
       expect(await cli(['service', 'status'])).toMatchObject({ ok: true, result: { state: 'running' } });
       await Promise.all(['one', 'two'].map((name) =>
         cli(['catalog', 'source', 'add'], { repository: `https://example.invalid/${name}.git` })));
-      const response = await started.app.inject('/api/settings/remote-skill-sources');
-      expect(response.json<{ remoteSkillSources: Array<{ repository: string }> }>().remoteSkillSources
+      const persisted = JSON.parse(
+        await readFile(join(profile, 'config.json'), 'utf8'),
+      ) as { remoteSkillSources: Array<{ repository: string }> };
+      expect(persisted.remoteSkillSources
         .map((source) => source.repository).sort()).toEqual([
         'https://example.invalid/one.git', 'https://example.invalid/two.git',
       ]);
