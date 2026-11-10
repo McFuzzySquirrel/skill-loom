@@ -47,6 +47,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Changed
 
+- Windows profile-security helpers prefer stable PowerShell 7 from its standard Program Files installation, retaining Windows PowerShell 5.1 as an availability-only fallback. Explicit `LOOM_WINDOWS_POWERSHELL` selection and dual-host integration coverage preserve fail-closed ACL checks; native PowerShell 7 verification remains pending.
 - Remote repository sizing settings start collapsed and can be expanded for editing. Size limits, maximums, and saved package sizes display in decimal MB instead of bytes; stored and API budgets are unchanged.
 - Live discovery and execution probes accept stable OpenCode versions >=2.2.5, including 2.2.6, while retaining exact observed versions in evidence. Older and prerelease versions still warn; automatic advancement remains subject to live signal verification.
 - CLI-managed starts remain limited to instruction-only chains without native agents; OpenCode automatic starts stay blocked until the `clear` signal between `working` and `idle` is live-verified ([ADR-0007](docs/adr/0007-explicit-advancement-signals.md)).
@@ -60,6 +61,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Fixed
 
+- Remote refresh now fetches blobs with the shallow clone instead of triggering a separate lazy network fetch for each package file. No-checkout ingestion, staging limits and content validation remain in place. Discovery and bundle-import size displays now also use MB.
 - User-supplied Linux x64 evidence now confirms the OpenCode 2.2.6 record-aware parser fix: prompt, product advancement, recall and cleanup pass. Copilot CLI 1.0.107 also passes execution and recall, with its exact-baseline version warning retained. Managed multi-step automatic acceptance remains open; CLI guards are unchanged.
 - OpenCode OSC advancement now distinguishes root summary and child record IDs: child removal no longer erases root working, while root clear, matching-record clear, idle-only streams and per-step reset retain their fail-closed behavior. Live probe evidence now includes up to 64 status records and a truncation flag; automatic CLI starts remain blocked pending managed multi-step acceptance.
 - Health reporting now reads the existing run owner or persisted active-run pointer instead of always returning an inactive placeholder; invalid pointer files surface an error without being modified.

@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { X509Certificate } from 'node:crypto';
-import { realpath } from 'node:fs/promises';
-import { isAbsolute, join, resolve } from 'node:path';
+import { lstat, realpath } from 'node:fs/promises';
+import { resolve, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
@@ -22,16 +22,44 @@ const resultSchema = z.union([
 export class WindowsControlSecurityError extends Error {
   readonly details: Record<string, unknown> = {};
   constructor(readonly code: string) {
-    super('Windows control security verification failed. Use a protected current-user-private profile on a local NTFS/ReFS drive without reparse points. Windows PowerShell 5.1 with .NET 4.7.2+ is required; existing ACLs are never repaired automatically.');
+    super('Windows control security verification failed. Use a protected current-user-private profile on a local NTFS/ReFS drive without reparse points. Install stable PowerShell 7 in Program Files\\PowerShell\\7, or use Windows PowerShell 5.1 with .NET 4.7.2+. LOOM_WINDOWS_POWERSHELL accepts auto, 7, or 5.1; helper failures never trigger fallback and existing ACLs are never repaired automatically.');
     this.name = 'WindowsControlSecurityError';
   }
 }
 
+export async function resolveWindowsPowerShell(env: NodeJS.ProcessEnv = process.env): Promise<string> {
+  const host = env.LOOM_WINDOWS_POWERSHELL ?? 'auto';
+  if (!['auto', '7', '5.1'].includes(host)) {
+    throw new WindowsControlSecurityError('WINDOWS_POWERSHELL_INVALID');
+  }
+  if (host !== '5.1' && env.ProgramFiles !== undefined) {
+    if (!/^[A-Za-z]:[\\/]/.test(env.ProgramFiles) || !win32.isAbsolute(env.ProgramFiles)) {
+      throw new WindowsControlSecurityError('WINDOWS_POWERSHELL_INVALID');
+    }
+    const executable = win32.join(env.ProgramFiles, 'PowerShell', '7', 'pwsh.exe');
+    try {
+      const info = await lstat(executable);
+      if (!info.isFile() || info.isSymbolicLink()) {
+        throw new WindowsControlSecurityError('WINDOWS_POWERSHELL_INVALID');
+      }
+      return executable;
+    } catch (error) {
+      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) {
+        throw new WindowsControlSecurityError('WINDOWS_POWERSHELL_INVALID');
+      }
+    }
+  }
+  if (host === '7') throw new WindowsControlSecurityError('WINDOWS_POWERSHELL_UNAVAILABLE');
+  const systemRoot = env.SystemRoot ?? 'C:\\Windows';
+  if (!/^[A-Za-z]:[\\/]/.test(systemRoot) || !win32.isAbsolute(systemRoot)) {
+    throw new WindowsControlSecurityError('WINDOWS_PROFILE_INVALID');
+  }
+  return win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+}
+
 async function invoke(operation: 'prepare' | 'check' | 'metadata' | 'lock' | 'certificates', path?: string) {
   if (process.platform !== 'win32') throw new WindowsControlSecurityError('WINDOWS_PROFILE_UNSUPPORTED');
-  const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
-  if (!isAbsolute(systemRoot)) throw new WindowsControlSecurityError('WINDOWS_PROFILE_INVALID');
-  const executable = join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const executable = await resolveWindowsPowerShell();
   const script = fileURLToPath(new URL('./windows-control.ps1', import.meta.url));
   let canonicalPath: string | undefined;
   if (path !== undefined && operation !== 'prepare') {

@@ -132,6 +132,8 @@ test('discovery bulk-selects hidden candidates and downloads only an explicitly 
   await expect(page.getByRole('heading', { name: 'Discover reusable workflows' })).toBeVisible();
   await page.getByLabel('What outcome do you want?').fill('Review a release workflow');
   await page.getByLabel('Search candidates').fill('alpha');
+  await expect(page.locator('.discovery-candidate').filter({ hasText: 'alpha-skill' }).first())
+    .toContainText('0.000048 MB');
   await expect(page.getByRole('checkbox', { name: /Select beta-skill/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'Select all available skills' }).click();
   await expect(page.getByRole('status').filter({ hasText: '2 selected · 2 available' })).toBeVisible();

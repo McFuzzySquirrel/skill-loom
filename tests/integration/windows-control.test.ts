@@ -19,15 +19,20 @@ import { startServer } from '../../src/server/index.js';
 import type { RunOrchestrator } from '../../src/server/runs/orchestrator.js';
 import { createTerminalManager } from '../../src/server/terminal/pty.js';
 
-describe.skipIf(process.platform !== 'win32')('Windows private control', () => {
+describe.skipIf(process.platform !== 'win32').each(['7', '5.1'])('Windows private control / PowerShell %s', (host) => {
   let temporary: string;
   let profile: string;
   beforeEach(async () => {
+    vi.stubEnv('LOOM_WINDOWS_POWERSHELL', host);
     temporary = await mkdtemp(join(tmpdir(), 'loom-windows-control-'));
     profile = join(temporary, 'private profile');
     await verifyWindowsProfile(profile, 'prepare');
   }, 60_000);
-  afterEach(async () => { await rm(temporary, { recursive: true, force: true }); });
+  afterEach(async () => {
+    try {
+      if (temporary !== undefined) await rm(temporary, { recursive: true, force: true });
+    } finally { vi.unstubAllEnvs(); }
+  });
 
   async function config() {
     const store = createConfigStore({ env: { LOOM_CONFIG_DIR: profile } });

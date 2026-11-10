@@ -336,7 +336,6 @@ async function refreshRemoteSkillSourceUnlocked(
         'clone',
         '--no-checkout',
         '--depth=1',
-        '--filter=blob:none',
         '--no-tags',
         ...(ref === undefined || isCommit(ref) ? [] : [`--branch=${ref}`]),
         '--',

@@ -82,8 +82,9 @@ Start the shared owner without opening a browser with
 `skill-loom service start`; use
 `skill-loom service status` and `skill-loom service stop` to check and stop it.
 Unix uses a private socket; Windows uses mutually authenticated loopback TLS
-and requires a protected private profile on local NTFS/ReFS storage, Windows
-PowerShell 5.1 and .NET 4.7.2+. Unsafe existing Windows profiles are rejected,
+and requires a protected private profile on local NTFS/ReFS storage. The Windows
+helper prefers stable PowerShell 7 from its standard Program Files installation;
+when absent it uses Windows PowerShell 5.1 with .NET 4.7.2+. Unsafe existing Windows profiles are rejected,
 not silently reconfigured; see the administrator guide.
 The owner also supports project registration, draft creation and model
 validation, bundle export, and reviewed import without package reuse; see the

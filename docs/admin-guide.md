@@ -120,6 +120,12 @@ example, a 1,000-package, 20,000-file source also needs sufficient Git output,
 staging, total snapshot size, and timeouts. Each setting has a finite maximum.
 The UI edits and displays sizes in decimal MB (1 MB = 1,000,000 bytes);
 configuration and API values remain integer bytes, with no change to budgets.
+Refresh uses a depth-one, no-checkout clone with blobs included. This avoids
+partial-clone lazy fetches for individual package files, which can add a
+network round trip per file. Git staging still includes the whole fetched
+revision, including non-skill blobs, and is subject to the same finite budget;
+large mixed-content repositories may need a higher staging budget or a
+dedicated skills repository. Only validated skill/agent contents are retained.
 Staging is polled during Git operations and checked again afterward, so it is
 not a hard filesystem quota. Existing snapshots remain readable when budgets
 are lowered. Discovery handoffs and bundles retain their independent limits.
@@ -473,8 +479,22 @@ and broadly accessible profiles or metadata are rejected. Administrators,
 SYSTEM and TrustedInstaller are privileged, trusted principals; this is not
 isolation from them or from another process running as the same user.
 
-Windows profiles require a local fixed NTFS/ReFS drive, Windows PowerShell 5.1
-with .NET 4.7.2+ and permission to run the shipped script. Execution-policy or
+Windows profiles require a local fixed NTFS/ReFS drive and permission to run
+the shipped script. By default, the helper prefers stable PowerShell 7 at
+`%ProgramFiles%\PowerShell\7\pwsh.exe`. If that file is absent, it uses the
+OS-provided Windows PowerShell 5.1 with .NET 4.7.2+. It does not search `PATH`,
+use preview installations, or require PowerShell on Linux/macOS.
+Set `LOOM_WINDOWS_POWERSHELL=7` to require the modern host, `5.1` to select the
+legacy host explicitly, or `auto` (the default) for availability-based selection.
+Set it consistently for the owner and CLI processes. A forced missing host,
+inaccessible or linked modern executable, or helper failure fails closed:
+there is no retry under another host after a security, policy, or execution
+failure. The PowerShell 7 path uses modern .NET ACL extension APIs; the
+5.1 path retains its .NET Framework APIs, including private ACL creation.
+Both preserve requested/canonical ancestor and open-handle ACL checks.
+The native Windows integration suite now targets both hosts; the PowerShell 7
+path still requires a successful native Windows run before being considered
+verified. Execution-policy or
 constrained-language restrictions fail closed; Loom does not change policy,
 elevate, or fall back to an unsecured listener. Existing ACLs are never silently
 changed. For an older or inherited-ACL profile, stop all owners and use
@@ -634,6 +654,17 @@ Config, chain, run, and active-run documents carry explicit versions. Unknown ve
 - **Live evidence is platform-specific.** Historical probes cover Linux ARM64 with OpenCode 2.2.5 and Copilot CLI 1.0.105. The supplied passing execution probe covers Linux x64 with OpenCode 2.2.6 and Copilot CLI 1.0.107, with a Copilot exact-version warning. Other platforms and versions remain unverified.
 
 ## Troubleshooting
+
+### Remote settings still show byte inputs or are not collapsed
+
+The current UI uses MB for size inputs and their maximums, with **Remote catalog
+limits** collapsed initially. API/config byte values are intentional. A running
+owner serves the built application, not changes made to source files. Finish
+or abort active runs, stop the owner using your normal UI/CLI shutdown path,
+update the checkout, run `npm run build`, and restart it. For a tarball install,
+rebuild/repack and reinstall the updated package instead. Reload the browser
+after restarting, and check that you are using the expected owner/profile.
+Do not delete configuration or change budgets to fix a stale UI.
 
 ### The server refuses to start with a host error
 

@@ -4,6 +4,8 @@ applies_to:
   - "src/server/control.ts"
   - "src/server/index.ts"
   - "src/server/runs/owner.ts"
+  - "src/server/windows-control.ts"
+  - "src/server/windows-control.ps1"
 status: Accepted
 ---
 
@@ -34,6 +36,15 @@ If cleanup fails, the process retains ownership rather than allowing a second
 owner to start while resources may still be live; restart the process after
 investigating the reported error.
 
+The Windows security helper prefers stable PowerShell 7 in the standard
+Program Files location and falls back to the OS-provided 5.1 host only when
+that installation is absent. `LOOM_WINDOWS_POWERSHELL=7|5.1|auto` supports
+explicit selection. Do not resolve a helper host through `PATH` or retry
+another host after helper execution or security checks fail. Modern .NET ACL
+extensions and legacy Framework ACL APIs must enforce the same private
+creation, requested/canonical ancestor and open-handle checks. This does not
+add a PowerShell dependency to Unix systems or make Windows APIs portable.
+
 ## Consequences
 
 - The bearer capability must not be shared or included in backups. It provides
@@ -57,3 +68,7 @@ investigating the reported error.
 - **Check:** `npx vitest run tests/integration/control.test.ts tests/unit/run-owner.test.ts`
 - **Expected:** Authentication, stale-endpoint recovery, CLI/UI interoperability,
   active-run stop refusal, and run mutation barriers are verified.
+- **Host selection:** `npx vitest run tests/unit/windows-powershell.test.ts`.
+- **Native Windows:** `npx vitest run tests/integration/windows-control.test.ts`
+  targets PowerShell 7 and 5.1, including unsafe ACLs and SUBST aliases. Both
+  must pass on Windows; non-Windows skipped cases are not verification.
