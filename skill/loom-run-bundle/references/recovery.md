@@ -2,6 +2,11 @@
 
 Portable run documents live in `<project>/.loom/portable-runs/`, separate from Skill Loom's native run store and global active-run pointer. They contain frozen inputs and bounded agent-reported summaries; the directory is Git-ignored.
 
+If a previous helper left `.loom/.gitignore` as a quoted JSON string, inspect and
+repair it manually so it contains separate `runs/` and `portable-runs/` lines.
+Check the Git index as well: ignore rules do not untrack files already staged or
+committed. Do not copy run documents or their inputs into a repair report.
+
 Use `status` before taking any recovery action. A run left in `running` is uncertain. Confirm that the earlier host work has stopped, then call `resume` with the current revision and `stoppedConfirmed: true` to mark its active attempt interrupted. This confirmation is an operator assertion, not a process check. A separate decision is then required:
 
 - `retry`: start a new attempt; changes from the earlier attempt may remain.

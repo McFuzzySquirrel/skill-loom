@@ -1,11 +1,9 @@
 ---
 id: ADR-0010
 applies_to:
-  - "src/server/chains/library.ts"
-  - "src/server/routes/global-chains.ts"
-  - "src/web/routes/GlobalChainsPage.tsx"
-  - "src/web/components/ImportChainDialog.tsx"
-status: Accepted
+  - "src/server/chains/store.ts"
+  - "src/server/config/schema.ts"
+status: Superseded by ADR-0027 and ADR-0028
 ---
 
 # ADR-0010: Store the global chain library as independent snapshots

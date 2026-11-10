@@ -19,11 +19,11 @@ LOOM_CONFIG_DIR=/absolute/path/to/loom-profile npm start
 | `LOOM_CONFIG_DIR` | `~/.config/loom` | Overrides the global config, recent-project, and active-run pointer location. |
 | `LOOM_HOST` | `127.0.0.1` | Bind host. Only `127.0.0.0/8`, `::1`, and `localhost` (normalized to `127.0.0.1`) are accepted; any other value aborts startup. |
 | `LOOM_PORT` | `7373` | TCP port from 1 to 65535. |
-| `LOOM_WEB_ROOT` | discovered `dist/web` | Optional override for the built UI directory; intended for controlled deployments and tests. |
+| `LOOM_WEB_ROOT` | discovered `dist/web` | Optional override for the built chain editor directory; intended for controlled deployments and tests. |
 
 The versioned config document contains `version`, `harnessCommands`, `extraSkillDirectories`, `remoteSkillSources`, `recentProjects`, and `uiPreferences`. `remoteSkillSources` stores validated credential-free Git URLs and optional refs; pinned package snapshots are retained below `<LOOM_CONFIG_DIR>/catalog-sources/`. `harnessCommands` may override the executable name or absolute path for `opencode` or `copilot`; a missing entry resolves from `PATH`. The config schema is strict: credential-like fields such as `apiKey`, `token`, or `secret` are invalid and are never stored there. Configuration writes use an atomic temporary-file replacement. A corrupt or unsupported-version config is reported rather than silently rewritten.
 
-`extraSkillDirectories` is the global list managed from the skill-catalog settings dialog. Recent projects store the canonical path, display name, derived id, and last-opened time; removing a recent entry never removes project files.
+`extraSkillDirectories` is the global extra-skill search list stored in the config file; there is no editor for it, so change it in `config.json` while the service is stopped. Recent projects store the canonical path, display name, derived id, and last-opened time; removing a recent entry never removes project files.
 
 ## Package and CLI
 
@@ -37,11 +37,27 @@ npx --yes --package=./skill-loom-cli-0.1.0.tgz skill-loom
 
 The CLI supports `--help`, `--version`, `--no-open`, `--port <number>`, and `--config-dir <path>`. It starts the same loopback-only production server as `npm start`, prints the resolved config directory and URL, and opens the default browser only when stdout is a TTY and `CI` is unset. `--no-open` disables that behavior entirely.
 
-`--port` sets `LOOM_PORT`; `--config-dir` sets `LOOM_CONFIG_DIR`. Environment variables remain authoritative when a flag is omitted. The package contains the compiled server, built web UI, compiled package metadata, the macOS PTY installation helper, `docs/OPERATIONS.md`, and the manifest; source, tests, build scripts, and the other documentation files are excluded. Installing the package may build the native `node-pty` module, so the Python/make/C++ toolchain is required.
+`--port` sets `LOOM_PORT`; `--config-dir` sets `LOOM_CONFIG_DIR`. Environment variables remain authoritative when a flag is omitted. The package contains the compiled server, built chain editor, compiled package metadata, the macOS PTY installation helper, `docs/OPERATIONS.md`, and the manifest; source, tests, build scripts, and the other documentation files are excluded. Installing the package may build the native `node-pty` module, so the Python/make/C++ toolchain is required.
 
-Before publishing, flip `"private"` to `false`, add repository metadata, verify the package name is still available, run `npm run test:package`, and publish with `npm publish`. Once published, the invocation is `npx skill-loom-cli`.
+To install the command globally instead of invoking the tarball through `npx`:
 
-The build creates `dist/skills/loom-run-bundle/`, `dist/skills/scenario-discovery/`, and `dist/skills/loom-chain-workflow/` and their ZIP archives. It updates the generated runner helper in both checked-in skill locations and synchronizes the discovery and workflow skill mirrors; runner instructions are maintained in both locations. The export dialog downloads the runner ZIP; the discovery page downloads the discovery and CLI workflow ZIPs. To install manually from a checkout, run `npm run build:portable-skill`, then copy the relevant directories into the target project's `.agents/skills/<skill-name>/`. The workflow skill requires both companion skills and the Skill Loom CLI and owner service; the companion helpers themselves run on Node.js 24+ without that service, a native PTY, or an installed Loom npm package. Portable runner mutations use a project-local SQLite database. The runner skill prescribes `--disable-warning=ExperimentalWarning` to keep early Node 24 SQLite warnings out of structured stderr; this also suppresses other experimental warnings. The standalone ZIPs and files are included in the packed Skill Loom artifact. The development `npm run dev` lifecycle builds the skills before starting the server and UI.
+```bash
+npm install -g ./skill-loom-cli-0.1.0.tgz
+skill-loom --version
+```
+
+On npm 11.20 and newer this can warn that `skill-loom-cli` and `node-pty` have install scripts "not yet covered by allowScripts". The scripts still run unless `strict-allow-scripts` is enabled, so the warning is advisory. npm matches a `file:` dependency by path rather than by name, so a name-only allowlist covers `node-pty` but not the tarball package; pass both:
+
+```bash
+npm install -g ./skill-loom-cli-0.1.0.tgz \
+  --allow-scripts="file:$PWD/skill-loom-cli-0.1.0.tgz,node-pty"
+```
+
+Persist that list with `npm config set allow-scripts="file:/absolute/path/to/skill-loom-cli-0.1.0.tgz,node-pty" --location=user`. `allow-scripts=all` is not a wildcard, and `--dangerously-allow-all-scripts` allows every dependency's scripts, so prefer the scoped list. A global install provides the CLI only; the companion skills are still copied into a project's `.agents/skills/<skill-name>/`. If `npm install -g` fails with `EACCES`, set a user-level npm prefix rather than installing with `sudo`, because the `node-pty` build and postinstall helper should run as the user.
+
+Before publishing, flip `"private"` to `false`, add repository metadata, verify the package name is still available, run `npm run test:package`, and publish with `npm publish`. Once published, the invocation is `npx skill-loom-cli` or `npm install -g skill-loom-cli`, and the name-based allowlist `--allow-scripts=skill-loom-cli,node-pty` covers both packages.
+
+The build creates `dist/skills/loom-run-bundle/`, `dist/skills/scenario-discovery/`, and `dist/skills/loom-chain-workflow/` and their ZIP archives. It syncs the `scenario-discovery` and `loom-chain-workflow` trees into `skill/`, and syncs the generated runner helper into `skill/loom-run-bundle/`; review any other checked-in mirror changes separately. The ZIP archives are the distributable skill packages; there is no in-app download. To install manually from a checkout, run `npm run build:portable-skill`, then copy the relevant directories into the target project's `.agents/skills/<skill-name>/`. The workflow skill requires both companion skills and the Skill Loom CLI and owner service; the companion helpers themselves run on Node.js 24+ without that service, a native PTY, or an installed Loom npm package. Portable runner mutations use a project-local SQLite database. The runner skill prescribes `--disable-warning=ExperimentalWarning` to keep early Node 24 SQLite warnings out of structured stderr; this also suppresses other experimental warnings. The standalone ZIPs and files are included in the packed Skill Loom artifact. The development `npm run dev` lifecycle builds the skills before starting the server and UI.
 
 The discovery skill's project-independent mode consumes a downloaded `*.loom-discovery.json` handoff, validates its schema, fingerprints, paths, and content offline, then proposes reviewed scenarios. It builds a standard v1 `.loom.json` bundle from only the approved packages. It does not import, install, run package code, or make network requests. Hosts must pass helper arguments as structured process arguments; do not substitute shell-concatenated commands.
 
@@ -57,12 +73,16 @@ proof that a person reviewed the content.
 
 | Path | Contents | Notes |
 |------|----------|-------|
-| `~/.config/loom/config.json` | Global config, harness command overrides, extra skill directories, recent projects, UI preferences. | Override the whole directory with `LOOM_CONFIG_DIR`. |
-| `~/.config/loom/test-workspaces/<uuid>/` | Retained managed test project, including its `.loom/chains/` and `.loom/runs/` data. | Hidden from the ordinary recent-project list. Remove from **Test workspaces** after inspecting results; active-run ownership blocks cleanup. |
+| `~/.config/loom/config.json` | Global config, harness command overrides, extra skill directories, remote sources, recent projects, and UI preferences (unused by the chain editor). | Override the whole directory with `LOOM_CONFIG_DIR`. |
+| `~/.config/loom/drafts/*.json` | Project-independent chain drafts. | Independent of projects; back up with the config directory. |
+| `~/.config/loom/profile-owner.sqlite` | Profile ownership lock. | One owner per profile. Do not remove while the service is running; the OS releases the lock on exit. |
+| `~/.config/loom/control.json` | Temporary local control endpoint and bearer capability; Windows also holds client TLS credentials. | Private to the owning process. Do not commit, back up, or remove while the service is running. |
+| `~/.config/loom/test-workspaces/<uuid>/` | Retained managed test project, including its `.loom/chains/` and `.loom/runs/` data. | Hidden from the ordinary recent-project list. Remove with `skill-loom workspace remove` after inspecting results; active-run ownership blocks cleanup. |
+| `~/.config/loom/discovery-workspaces/<uuid>/` | Reviewed discovery handoff, bundled `scenario-discovery` package, managed project, result file, and run state. | Retained until explicit CLI cleanup; cleanup refuses the workspace that owns the active run. |
 | `~/.config/loom/catalog-sources/<source-id>/<commit>/` | Immutable snapshots of validated remote skill packages and their manifest. | Created only by explicit refresh; unregistering a source retains snapshots. Refresh uses bounded staging and package limits. |
-| User-selected download location (`*.loom-discovery.json`) | A self-contained discovery handoff with goal, harness, exact pinned candidate identities, and selected package files. | Generated for download from a verified retained snapshot; not persisted by the server. Treat it as potentially private and redistribution-restricted. Maximum 100 packages, 2,000 files, 20 MiB decoded content, and 30 MiB JSON. |
+| User-selected download location (`*.loom-discovery.json`) | A self-contained discovery handoff with goal, harness, exact pinned candidate identities, and selected package files. | Returned on stdout by `skill-loom discovery handoff`; not persisted by the server. Treat it as potentially private and redistribution-restricted. Maximum 100 packages, 2,000 files, 20 MiB decoded content, and 30 MiB JSON. |
 | `~/.config/loom/active-run.json` | Single global active-run pointer used for health reporting and startup recovery. | Holds only the active run's project path, run id, and status. |
-| `~/.config/loom/chains/*.json` | Global chain templates saved with **Save copy to library**. | Independent snapshots, not live links to project chains. Importing copies one into a project with a new id. |
+| `~/.config/loom/chains/*.json` (legacy) | Chains written by the removed global-template library. | No current command reads or writes this directory. Keep it only if you are preserving an old installation's data. |
 | `<project>/.loom/chains/*.json` | Saved chain definitions, including steps, inputs, harness, session mode, and the automatic-permission opt-in. | Versioned JSON written atomically. Chain files can be backed up or versioned if you want to keep recipes. |
 | `<project>/.loom/runs/*.json` | Run snapshots, statuses, actions, and a bounded terminal tail per step. | At most a **200-line or 32 KiB** tail per step; never a full transcript. `.loom/runs/` is **git-ignored** by this repository's `.gitignore`. |
 | `<project>/.loom/portable-runs/*.json` | Separate standalone-skill run snapshots, resolved input values, package fingerprints, attempts, and bounded summaries. | Contains local input values; created and Git-ignored by the portable helper. Writes use same-directory temporary files and atomic replacement; directory fsync is attempted where supported and may be skipped on platforms that reject it. It does not use native run records or the global active-run pointer. |
@@ -102,7 +122,7 @@ verified backup; do not delete it merely to bypass the error.
 
 A run freezes an immutable snapshot of the chain definition and resolved inputs at creation. Editing the saved chain later does not change an existing or in-flight run, and retry uses the snapshot. Chain and run writes are versioned JSON with atomic temp-file replacement; restarting the server marks the active record named by its profile pointer as `interrupted` instead of assuming completion.
 
-The **Test workspaces** page lists retained disposable projects, provides a link to inspect each project, and offers explicit cleanup. If cleanup reports that a workspace owns the active run, finish or explicitly abort/recover that run first. Workspaces isolate files from the original project only; they do not restrict the harness's normal filesystem, network, or credential access.
+`skill-loom workspace list` shows retained disposable projects, `workspace inspect` reads bounded files from one, and `workspace remove` (with `"confirmed":true`) cleans one up. If cleanup reports that a workspace owns the active run, finish or explicitly abort/recover that run first. Workspaces isolate files from the original project only; they do not restrict the harness's normal filesystem, network, or credential access.
 
 ## Harness prerequisites
 
@@ -118,17 +138,16 @@ Authentication is evidence-based: preflight may inspect command output, credenti
 - OpenCode: `opencode auth login`
 - Copilot: `copilot login`, or set `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`
 
-The skill catalog starts collapsed. Expanding an entry from a non-project source exposes **Copy into this project**, which copies the whole package into `<project>/.agents/skills/` for either harness. The copy is bounded, refuses symlinks, and never overwrites an existing package; a numeric suffix is used instead. The original personal, plugin, custom, or extra skill is left untouched.
+Skills are installed into a project only by reviewed bundle import (`skill-loom bundle import`), which copies whole packages into `<project>/.agents/skills/` for either harness. The copy is bounded, refuses symlinks, and never overwrites an existing package. Originals are left untouched.
 
-The builder also offers **Add instruction** for an ordered standalone prompt without a catalog skill. It uses the same harness, inputs, session modes, and run controls as skill steps.
+The chain editor's **Add instruction** adds an ordered standalone prompt without a catalog skill. It uses the same harness, inputs, session modes, and run controls as skill steps.
 
-For cross-installation sharing, save the chain and choose **Export** on its project chain card. Review the instructions and complete skill package contents before downloading the `.loom.json` bundle. **Import bundle** previews the file and installed-package inventories, requires trust confirmation and explicit reuse choices, and separately confirms differing installed contents. Inspect installed files directly before approving reuse. Review fingerprints are rechecked but do not lock external edits or prove human review. Import creates a fresh chain and installs new project-local packages without executing them. It never overwrites packages and resets automatic-permission consent. Input defaults, run history, and local catalog source paths are not exported; ordinary file contents are not secret-scanned. Limits are 100 packages, 2,000 files, 20 MiB decoded content, and 30 MiB JSON requests. See the [user guide](user-guide.md#share-a-chain-and-its-skills) for sharing restrictions and recipient prerequisites.
+For cross-installation sharing, save the chain and run `skill-loom bundle create`. Review the instructions and complete skill package contents with `bundle inspect` before sharing the `.loom.json` bundle. `bundle review` previews the file and installed-package inventories, requires trust confirmation and explicit reuse choices, and separately confirms differing installed contents. Inspect installed files directly before approving reuse. Review fingerprints are rechecked but do not lock external edits or prove human review. Import creates a fresh chain and installs new project-local packages without executing them. It never overwrites packages and resets automatic-permission consent. Input defaults, run history, and local catalog source paths are not exported; ordinary file contents are not secret-scanned. Limits are 100 packages, 2,000 files, 20 MiB decoded content, and 30 MiB JSON requests. See the [user guide](user-guide.md#share-a-chain-and-its-skills) for sharing restrictions and recipient prerequisites.
 
-The export dialog's **Download reusable runner skill** is a separate artifact and contains no chain-specific instructions or packages. Recipients install it in their project's `.agents/skills/`, refresh host discovery as needed, and pass the separately exported bundle to the skill. Package review/installation is separately confirmed before execution. Portable records persist resolved inputs locally; do not use credentials as chain inputs. The host's own tools and trust prompts remain authoritative.
+The reusable runner skill (`loom-run-bundle`) is a separate artifact and contains no chain-specific instructions or packages. Recipients install it in their project's `.agents/skills/`, refresh host discovery as needed, and pass the separately exported bundle to the skill. Package review/installation is separately confirmed before execution. Portable records persist resolved inputs locally; do not use credentials as chain inputs. The host's own tools and trust prompts remain authoritative.
 
-The discovery handoff is a different artifact from `skill-loom-chain` and is not accepted by chain import or execution APIs. The web producer accepts only goal, harness, and immutable candidate identities; it resolves and verifies files from retained snapshots and rejects stale or unsafe packages. No artifact is retained server-side. The CLI helper treats the goal and package content as untrusted input, never executes package files, and writes the generated bundle exclusively. Native-agent selection is outside handoff v1; use the managed designer and run path for selected native agents.
+The discovery handoff is a different artifact from `skill-loom-chain` and is not accepted by chain import or execution APIs. `skill-loom discovery handoff` accepts only goal, harness, and immutable candidate identities; it resolves and verifies files from retained snapshots and rejects stale or unsafe packages. No artifact is retained server-side. The CLI helper treats the goal and package content as untrusted input, never executes package files, and writes the generated bundle exclusively. Native-agent selection is outside handoff v1; use the managed designer and run path for selected native agents.
 
-The **Shared bundles** page can preview and publish a locally selected `.loom.json` without a project. The browser sends the bounded bundle content, never a server-side path. The server validates the strict bundle format and reviewed fingerprint, then uses the existing atomic, exclusive no-overwrite publisher. Library entries can be reviewed and downloaded without a project; importing remains a separate explicit project-scoped action. Publication does not install or execute content and does not establish redistribution rights.
 
 Copilot CLI and OpenCode project skills both use `.agents/skills/` in Skill Loom's current adapter contract. This does not establish that every host version exposes subagents, isolated sessions, native forks, or skill reload. The runner must verify capabilities in the active host and block unsupported behavior; a shared-session fallback or handoff requires explicit user consent. Host-reported completion is not guaranteed work verification.
 
@@ -142,7 +161,7 @@ Copilot records persistent folder trust in `~/.copilot/config.json` under `trust
 - A missing or unlisted project is **untrusted** and hard-blocks a Copilot run.
 - An unreadable or invalid config is **unknown**; preflight requires an explicit acknowledgement rather than assuming either outcome.
 
-The trust panel can start an interactive trust session in the project directory. In Copilot's folder-trust dialog, choose **Yes, and remember this folder for future sessions**; a session-only choice is not saved and will still be reported as untrusted. Then verify trust again; Skill Loom reads the result back from Copilot's config and never writes it. The manual fallback is to run `copilot -C <absolute-project-path>` yourself, choose the same persistent option, exit, and rerun preflight. Preflight resolves trust before step 1 because a prompt queued behind a trust dialog can be swallowed.
+Skill Loom does not currently offer an in-app trust terminal. Run `copilot -C <absolute-project-path>` in a normal terminal and choose **Yes, and remember this folder for future sessions**; a session-only choice is not saved and is still reported as untrusted. Exit the terminal and rerun preflight. Skill Loom never writes `~/.copilot/config.json`. Preflight resolves trust before step 1 because a prompt queued behind a trust dialog can be swallowed.
 
 Automatic Copilot mode requires an explicit per-chain opt-in. It is off by default. When enabled, Skill Loom passes the exact broad flags `--allow-all-paths` and `--allow-all-tools` for automatic steps and shows those flags at preflight and on the run; this grants broad filesystem and tool access inside the selected project. Revoke the opt-in on the chain to return to supervised mode. Supervised mode never passes automatic permission flags.
 
@@ -150,15 +169,15 @@ OpenCode automatic mode does not pass broad permission flags. Its intended advan
 
 > **Live-verification scope:** the record-aware parser passed a user-supplied OpenCode 2.2.6 live probe. Managed multi-step automatic chain execution remains unverified and CLI starts remain blocked. See [Known live-verification gaps](#known-live-verification-gaps).
 
-Starting a run opens the dedicated terminal page at `/runs/<runId>/terminal`, which keeps the xterm surface and compact controls visible without scrolling. **Run details** opens `/runs/<runId>` for the step rail, full controls, and recovery guidance. Both routes request the same run snapshot and event stream; neither starts, advances, or replays a step on load.
+Watch a run with `skill-loom run attach --run <id>` (Ctrl-] detaches), `run show`, and `run events`; there is no browser run or terminal page. Attaching, showing, or streaming never starts, advances, or replays a step.
 
 ## Security model
 
-Skill Loom is a **loopback-only** single-user application. The server binds to `127.0.0.1`, rejects non-loopback hosts, and has **no authentication** because it is not designed for remote access. Never expose it through a reverse proxy, tunnel, published container port, or remote host. The full-filesystem folder browser is an accepted single-user risk on a loopback origin.
+Skill Loom is a **loopback-only** single-user application. The server binds to `127.0.0.1`, rejects non-loopback hosts, and has **no authentication** because it is not designed for remote access. Never expose it through a reverse proxy, tunnel, published container port, or remote host. The loopback HTTP and control surfaces are an accepted single-user risk.
 
-The server owns all filesystem traversal, path canonicalization, persistence, CLI process spawning, and PTY handling. Harness processes are spawned with an executable plus an argument array, never a shell command string; project paths are canonicalized and traversal outside the intended project data directory is rejected. The browser performs no shell execution and receives only typed API and WebSocket data.
+The server owns all filesystem traversal, path canonicalization, persistence, CLI process spawning, and PTY handling. Harness processes are spawned with an executable plus an argument array, never a shell command string; project paths are canonicalized and traversal outside the intended project data directory is rejected. The chain editor performs no shell execution and receives only typed API data.
 
-Skill Loom sends no telemetry, crash reporting, or remote logging. Git network access occurs only when a user explicitly refreshes a registered source; user-invoked harness CLIs and package installation may also use the network. Terminal output is rendered through xterm.js and skill text through escaped React text; harness, skill, and run content is never rendered as raw HTML. Credentials and tokens are never persisted or logged.
+Skill Loom sends no telemetry, crash reporting, or remote logging. Git network access occurs only when a user explicitly refreshes a registered source; user-invoked harness CLIs and package installation may also use the network. Terminal output is streamed to `skill-loom run attach`; the chain editor never renders it, and skill text is rendered as escaped React text. Harness, skill, and run content is never rendered as raw HTML. Credentials and tokens are never persisted or logged.
 
 ## Backup and cleanup
 
@@ -168,22 +187,22 @@ Back up the global config if you want to preserve `harnessCommands`, extra skill
 cp ~/.config/loom/config.json ~/loom-config.backup.json
 ```
 
-Back up a project's recipes by copying `<project>/.loom/chains/`, and back up reusable templates by copying `~/.config/loom/chains/`. Run records under `<project>/.loom/runs/` are optional history; because they can contain terminal output, treat them as sensitive local data and keep them out of version control. This repository already ignores `.loom/runs/`.
+Back up a project's recipes by copying `<project>/.loom/chains/`. Run records under `<project>/.loom/runs/` are optional history; because they can contain terminal output, treat them as sensitive local data and keep them out of version control. This repository already ignores `.loom/runs/`. A legacy `~/.config/loom/chains/` directory from the removed template library has no current interface; back it up only if you are preserving an old installation.
 
 Cleanup behavior:
 
 - **Remove a recent project:** removes only the recent-entry record. The project directory and its files are untouched.
-- **Delete a chain:** removes only that chain's file under `<project>/.loom/chains/`. The action is confirmed in the UI and cannot be undone.
-- **Remove a global template:** removes only its file under `~/.config/loom/chains/`. Imported project copies are independent and are not affected.
+- **Delete a chain:** removes only that chain's file under `<project>/.loom/chains/`. `skill-loom chain project remove` requires `expectedRevision` and `"confirmed":true`; it cannot be undone.
+- **Remove a legacy template file:** the removed template library wrote files under `~/.config/loom/chains/`. No current command reads or deletes them; remove individual files only if you are intentionally discarding that historical data.
 - **Delete run history:** with no active run, remove individual files under `<project>/.loom/runs/`, or the directory. Do not delete `active-run.json` while a run is live; let Skill Loom release it, or restart the server so startup recovery marks the stale run interrupted.
-- **Stop the server:** close browser sessions and let `SIGINT`/`SIGTERM` shut down PTYs, WebSocket subscribers, and child processes. Do not kill harness children manually and then resume the run.
+- **Stop the server:** run `skill-loom service stop` (refused while a run is active) or let `SIGINT`/`SIGTERM` shut down PTYs, control-channel clients, and child processes. Do not kill harness children manually and then resume the run.
 - **Reset all Skill Loom state for a test profile:** use a temporary `LOOM_CONFIG_DIR` and project directory; never point test tooling at your real `~/.config/loom`.
 
 ## Skill firing limitation
 
 Skills are **model-invoked** context, not callable commands. Skill Loom guarantees deterministic **prompt order** only. That order is **not a guarantee** that the harness loads or fires a named skill: a model may decline to load a skill even when it exists and preflight resolved it.
 
-The run view reports skill observation on a best-effort basis. OpenCode interactive output does not expose a reliable skill-load line, so its state is shown as not observable. Copilot may print skill evidence that Skill Loom records as observed or not observed. None of these observations block or fail a step. Treat the terminal and the step result as the source of truth, and confirm skill behavior during acceptance rather than assuming it.
+Run records report skill observation on a best-effort basis, visible with `skill-loom run show`. OpenCode interactive output does not expose a reliable skill-load line, so its state is recorded as not observable. Copilot may print skill evidence that Skill Loom records as observed or not observed. None of these observations block or fail a step. Treat the attached terminal and the step result as the source of truth, and confirm skill behavior during acceptance rather than assuming it.
 
 ## Fork handoff behavior
 
@@ -207,7 +226,7 @@ These are current gaps between the intended contract and what was observed with 
 
 ## OpenCode-only live verification
 
-Run this from the `feature/standalone-cli-agent-workflow` checkout on a machine
+Run this from a current checkout on a machine
 with Node 24+, dependencies installed, stable OpenCode 2.2.5 or newer on `PATH`, and an
 authenticated, available model provider. This makes real network/model calls
 and may incur charges. It creates a disposable project in the user cache and
@@ -215,9 +234,9 @@ an OpenCode session in the normal OpenCode session store; it attempts to delete
 and verify removal of that session and the disposable project afterward. It is
 not a sandbox. Review the final cleanup status, especially after interruption.
 
+From a current checkout, confirm the tool versions:
+
 ```bash
-git switch feature/standalone-cli-agent-workflow
-git pull --ff-only
 node --version
 opencode --version
 ```
@@ -360,11 +379,11 @@ Run `opencode auth login` or `copilot login` in a normal terminal and retry pref
 
 ### Copilot trust block
 
-If preflight says the folder is untrusted, use the trust panel to start the interactive Copilot trust session and choose **Yes, and remember this folder for future sessions**, or run `copilot -C <absolute-project-path>` manually and choose that persistent option. Session-only trust does not add the folder to `trustedFolders`. Then verify trust in the trust panel and rerun preflight. If Copilot's `~/.copilot/config.json` is unreadable or invalid, repair Copilot's own configuration or acknowledge the unknown-trust finding explicitly. Skill Loom never writes this file. A prompt queued during the trust dialog can be swallowed, so resolve trust before step 1.
+If preflight says the folder is untrusted, run `copilot -C <absolute-project-path>` in a normal terminal and choose **Yes, and remember this folder for future sessions**. Session-only trust does not add the folder to `trustedFolders`. Skill Loom does not provide an in-app trust terminal; exit the terminal and rerun preflight. If Copilot's `~/.copilot/config.json` is unreadable or invalid, repair Copilot's own configuration or acknowledge the unknown-trust finding explicitly. Skill Loom never writes this file. A prompt queued during the trust dialog can be swallowed, so resolve trust before step 1.
 
 ### node-pty build failure
 
-A `node-pty` install failure usually means the native toolchain is missing. Install Python 3, `make`, and a C++ compiler (Debian/Ubuntu: `build-essential python3`; macOS: Xcode Command Line Tools), then run `npm install` again or `npm rebuild node-pty`. Read the actual compiler error; Skill Loom and npm do not convert a native build failure into a successful install message. Confirm with `npm run test:unit` or by starting the server and opening a run terminal.
+A `node-pty` install failure usually means the native toolchain is missing. Install Python 3, `make`, and a C++ compiler (Debian/Ubuntu: `build-essential python3`; macOS: Xcode Command Line Tools), then run `npm install` again or `npm rebuild node-pty`. Read the actual compiler error; Skill Loom and npm do not convert a native build failure into a successful install message. Confirm with `npm run test:unit` or by attaching to a supervised run with `skill-loom run attach`.
 
 On a hosted macOS ARM64 runner, a clean install of `node-pty` 1.1.0 produced
 `posix_spawnp failed` because its prebuilt `spawn-helper` had mode `0644`.
@@ -389,4 +408,4 @@ A dirty working tree is a preflight **warning**, not a block. Commit, stash, or 
 
 ### Interrupted run
 
-If the server stops, startup recovery marks the active record named by its profile pointer `interrupted` and clears the stale pointer. Active records without a matching pointer are left unchanged and reported in the server log; they may belong to another profile. Closing a browser alone does not stop the run. Open the run view and choose the offered recovery action: **Retry interrupted step** restarts only that step with the existing session plan, **Continue** resumes after the recorded point when available, and **Restart** creates a new run from the snapshot. Nothing replays silently on reload. Inspect the bounded step tail and reason before retrying, and do not edit the run JSON by hand unless you are discarding the record.
+If the server stops, startup recovery marks the active record named by its profile pointer `interrupted` and clears the stale pointer. Active records without a matching pointer are left unchanged and reported in the server log; they may belong to another profile. Closing a browser or editor does not stop the run. Inspect the bounded step tail and reason with `skill-loom run show`, then use `run review-action` and `run action` to retry the interrupted step, continue from the next pending step, or restart from the snapshot. Nothing replays silently. Do not edit the run JSON by hand unless you are discarding the record.

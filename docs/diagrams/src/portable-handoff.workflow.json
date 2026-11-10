@@ -1,0 +1,161 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Portable bundle handoff without the service",
+    "subtitle": "Inspect, confirm, prepare, run one step, record the outcome",
+    "locale": "en",
+    "output": "portable-handoff-workflow.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/McFuzzySquirrel/skill-loom.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "343fda335d9f77a990b24a83e39565508bc337b8"
+    }
+  },
+  "lanes": [
+    { "id": "files", "label": "Project files" },
+    { "id": "helper", "label": "Portable helper" },
+    { "id": "host", "label": "Host session" },
+    { "id": "finish", "label": "Run record" },
+    { "id": "recovery", "label": "Recovery", "variant": "exception" }
+  ],
+  "mainPath": ["bundle", "inspect", "review", "prepare", "install", "step", "work", "record", "complete"],
+  "nodes": [
+    {
+      "id": "bundle",
+      "lane": "files",
+      "col": 0,
+      "type": "cloud",
+      "label": "Bundle file",
+      "sublabel": "chain and skills",
+      "tag": "untrusted input",
+      "sources": [{ "path": "docs/standalone-skill-guide.md", "line": 39, "end_line": 53 }]
+    },
+    {
+      "id": "inspect",
+      "lane": "helper",
+      "col": 1,
+      "type": "backend",
+      "label": "Inspect bundle",
+      "sublabel": "read-only and digest",
+      "sources": [{ "path": "src/portable/runtime.ts", "line": 748, "end_line": 752 }]
+    },
+    {
+      "id": "review",
+      "lane": "host",
+      "col": 2,
+      "type": "security",
+      "label": "Review and confirm",
+      "sublabel": "files plus digest",
+      "tag": "human decision",
+      "sources": [{ "path": "docs/standalone-skill-guide.md", "line": 45, "end_line": 53 }]
+    },
+    {
+      "id": "prepare",
+      "lane": "helper",
+      "col": 3,
+      "type": "backend",
+      "label": "Prepare run",
+      "sublabel": "install plus inputs",
+      "sources": [{ "path": "src/portable/runtime.ts", "line": 758, "end_line": 776 }]
+    },
+    {
+      "id": "install",
+      "lane": "files",
+      "col": 4,
+      "type": "database",
+      "label": "Install skills",
+      "sublabel": ".agents/skills",
+      "sources": [{ "path": "src/portable/install-skill.ts", "line": 17, "end_line": 84 }]
+    },
+    {
+      "id": "step",
+      "lane": "helper",
+      "col": 4,
+      "type": "backend",
+      "label": "Return step",
+      "sublabel": "instruction and path",
+      "sources": [{ "path": "src/portable/runtime.ts", "line": 901, "end_line": 906 }]
+    },
+    {
+      "id": "work",
+      "lane": "host",
+      "col": 5,
+      "type": "external",
+      "label": "Host does the work",
+      "sublabel": "its own tools",
+      "tag": "agent-reported",
+      "sources": [{ "path": "docs/standalone-skill-guide.md", "line": 78, "end_line": 87 }]
+    },
+    {
+      "id": "record",
+      "lane": "helper",
+      "col": 5,
+      "type": "backend",
+      "label": "Record outcome",
+      "sublabel": "done, failed, skipped",
+      "sources": [{ "path": "src/portable/runtime.ts", "line": 970, "end_line": 977 }]
+    },
+    {
+      "id": "complete",
+      "lane": "finish",
+      "col": 5,
+      "type": "backend",
+      "label": "Run complete",
+      "sublabel": "nothing replays",
+      "sources": [{ "path": "docs/standalone-skill-guide.md", "line": 88, "end_line": 90 }]
+    },
+    {
+      "id": "resume",
+      "lane": "recovery",
+      "col": 3,
+      "type": "security",
+      "label": "Resume after stop",
+      "sublabel": "stoppedConfirmed",
+      "sources": [{ "path": "src/portable/runtime.ts", "line": 1054, "end_line": 1062 }]
+    }
+  ],
+  "edges": [
+    { "id": "read-bundle", "from": "bundle", "to": "inspect", "label": "read-only", "role": "main" },
+    { "id": "show-digest", "from": "inspect", "to": "review", "label": "digest", "role": "main" },
+    { "id": "confirm-prepare", "from": "review", "to": "prepare", "label": "confirmed", "role": "main" },
+    { "id": "prepare-install", "from": "prepare", "to": "install", "label": "confirmed", "role": "main" },
+    { "id": "install-step", "from": "install", "to": "step", "role": "main" },
+    { "id": "send-instruction", "from": "step", "to": "work", "label": "instruction", "role": "main" },
+    { "id": "report-work", "from": "work", "to": "record", "label": "outcome", "role": "main" },
+    { "id": "last-step", "from": "record", "to": "complete", "label": "last step", "role": "main" },
+    { "id": "next-step", "from": "record", "to": "step", "label": "next step", "variant": "dashed", "role": "branch" },
+    { "id": "resume-step", "from": "resume", "to": "step", "label": "continue", "variant": "dashed", "role": "branch" }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "The helper never runs the harness",
+      "items": [
+        "The host performs each instruction with its own tools",
+        "An outcome is agent-reported, not a verified process exit",
+        "A named skill may still decline to load"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Two separate consents",
+      "items": [
+        "Inspect is read-only and returns a review digest",
+        "Prepare installs packages only after explicit confirmation",
+        "An installed package is never overwritten"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "One unfinished run",
+      "items": [
+        "A project-local claim rejects a second preparation or step",
+        "It does not coordinate with managed runs or older helpers",
+        "Resume needs the earlier work confirmed stopped"
+      ]
+    }
+  ]
+}

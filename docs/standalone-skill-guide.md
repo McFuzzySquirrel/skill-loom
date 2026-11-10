@@ -1,10 +1,10 @@
 # Standalone Skill Guide
 
-*How to discover, review, and run Skill Loom chains using only the companion Agent Skills inside your own agent session. Skill Loom's server, browser UI, and CLI are not required.*
+*How to discover, review, and run Skill Loom chains using only the companion Agent Skills inside your own agent session. Skill Loom's server, chain editor, and CLI are not required.*
 
 ## Who This Is For
 
-Use this path when you already work in an agent harness (GitHub Copilot CLI, OpenCode, or another Agent Skills host) and want chains without installing or running Skill Loom. If you want the visual builder, terminal runner, managed automatic runs, or the CLI owner, use the [user guide](user-guide.md) instead.
+Use this path when you already work in an agent harness (GitHub Copilot CLI, OpenCode, or another Agent Skills host) and want chains without installing or running Skill Loom. If you want the visual chain editor, managed automatic runs, or the CLI owner, use the [user guide](user-guide.md) instead.
 
 ## What You Get and What You Do Not
 
@@ -30,9 +30,7 @@ Limits of the skill-only path:
 
 ## Install the Skills
 
-1. Obtain the packages by one of these routes:
-   - Download **Download reusable runner skill** (export dialog or shared library) and **Download scenario-discovery v1** (Discover workflows page) from a running Skill Loom, or
-   - From a checkout, run `npm run build:portable-skill` and use `dist/skills/loom-run-bundle/`, `dist/skills/scenario-discovery/`, and `dist/skills/loom-chain-workflow/` (ZIP archives sit beside them), or copy the checked-in `skill/` directories.
+1. From a checkout, run `npm run build:portable-skill` and use `dist/skills/loom-run-bundle/`, `dist/skills/scenario-discovery/`, and `dist/skills/loom-chain-workflow/` (ZIP archives sit beside them), or copy the checked-in `skill/` directories.
 2. Copy each directory into the target project's `.agents/skills/`. Do not merge over an existing package.
 3. Refresh or restart the host so it discovers them.
 
@@ -113,7 +111,7 @@ When a Skill Loom owner is running (`skill-loom service start`), `loom-chain-wor
 
 ## Related Documents
 
-- [User guide: Run an exported chain inside a harness](user-guide.md#run-an-exported-chain-inside-a-harness)
+- [User guide: Run an exported chain inside your harness](user-guide.md#run-an-exported-chain-inside-your-harness)
 - [ADR-0014: Execute exported chains through a standalone agent skill](adr/0014-portable-agent-skill-execution.md)
 - [Administrator guide: Portable bundle administration](admin-guide.md#portable-bundle-administration)
 - [Changelog](../CHANGELOG.md)

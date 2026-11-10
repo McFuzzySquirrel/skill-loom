@@ -1,19 +1,12 @@
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { readFile } from 'node:fs/promises';
 import {
   API_ERROR_CODES,
   createApiErrorEnvelope,
   type ApiValidationIssue,
 } from '../../shared/api.js';
-import { BundleError, exportBundle } from '../chains/bundle.js';
 import { createGlobalDraftService, DraftPayloadSchema } from '../chains/drafts.js';
 import type { ChainDraft, ChainService } from '../chains/service.js';
-import {
-  createCatalogService,
-  type CatalogService,
-} from '../catalog/merge.js';
-import { SKILL_SOURCE_ORDER, type SkillHarness } from '../catalog/types.js';
 import {
   CHAIN_ID_PATTERN,
 } from '../chains/store.js';
@@ -22,16 +15,10 @@ import { chainListResponse, chainResponse, chainRevisionHeader, sendChainFailure
 
 const draftPayloadSchema = DraftPayloadSchema;
 
-const catalogQuerySchema = z.strictObject({
-  harness: z.enum(['opencode', 'copilot']),
-  query: z.string().max(200).optional(),
-});
-
 export interface DraftRoutesOptions {
   configStore: ConfigStore;
   draftService?: ChainService;
   getDraftService?: () => ChainService;
-  catalogService?: CatalogService;
 }
 
 interface DraftParams {
@@ -48,10 +35,6 @@ export const draftRoutes: FastifyPluginAsync<DraftRoutesOptions> = async (
     service ??= options.getDraftService?.() ?? createGlobalDraftService(getConfigDirectory());
     return service;
   };
-  const catalogService =
-    options.catalogService ??
-    createCatalogService({ configStore: options.configStore });
-
   app.get('/api/drafts', async (_request, reply) => {
     try {
       const configDirectory = getConfigDirectory();
@@ -71,108 +54,6 @@ export const draftRoutes: FastifyPluginAsync<DraftRoutesOptions> = async (
       return sendChainFailure(reply, error);
     }
   });
-
-  app.get<{ Params: DraftParams }>('/api/drafts/:draftId/bundle', async (request, reply) => {
-    try {
-      const configDirectory = getConfigDirectory();
-      const chain = await getDraftService().get(configDirectory, request.params.draftId);
-      return reply.code(200).send({
-        bundle: await exportBundle(chain, configDirectory, catalogService),
-      });
-    } catch (error) {
-      if (error instanceof BundleError) {
-        const status =
-          error.code === 'BUNDLE_TOO_LARGE'
-            ? 413
-            : error.code === 'BUNDLE_CONFLICT'
-              ? 409
-              : 422;
-        return reply.code(status).send(createApiErrorEnvelope(error.code, error.message));
-      }
-      return sendChainFailure(reply, error);
-    }
-  });
-
-  app.get('/api/drafts/catalog', async (request, reply) => {
-    const parsed = catalogQuerySchema.safeParse(request.query);
-    if (!parsed.success) {
-      return sendValidationFailure(reply, 'The draft catalog request is not valid.', parsed.error.issues);
-    }
-
-    try {
-      const configDirectory = getConfigDirectory();
-      const catalog = await catalogService.getCatalog({
-        projectPath: configDirectory,
-        harness: parsed.data.harness as SkillHarness,
-        ...(parsed.data.query === undefined ? {} : { query: parsed.data.query }),
-      });
-      const skills = catalog.groups
-        .filter((group) => group.source === 'remote')
-        .flatMap((group) => group.entries);
-      const bySource = Object.fromEntries(
-        SKILL_SOURCE_ORDER.map((source) => [
-          source,
-          source === 'remote' ? skills.length : 0,
-        ]),
-      );
-      return reply.code(200).send({
-        harness: catalog.harness,
-        query: catalog.query,
-        total: skills.length,
-        counts: { total: skills.length, bySource },
-        groups: skills.length === 0 ? [] : [{ source: 'remote', count: skills.length, entries: skills }],
-        agents: catalog.agents,
-        warnings: catalog.warnings.filter(
-          (warning) => warning.source === undefined || warning.source === 'remote',
-        ),
-        elapsedMs: catalog.elapsedMs,
-      });
-    } catch (error) {
-      return sendChainFailure(reply, error);
-    }
-  });
-
-  app.get<{ Params: { skillId: string }; Querystring: { harness?: string } }>(
-    '/api/drafts/catalog/skills/:skillId',
-    async (request, reply) => {
-      const parsed = catalogQuerySchema.safeParse({
-        harness: request.query.harness,
-      });
-      if (!parsed.success) {
-        return sendValidationFailure(
-          reply,
-          'The draft catalog request is not valid.',
-          parsed.error.issues,
-        );
-      }
-      try {
-        const configDirectory = getConfigDirectory();
-        const catalog = await catalogService.getCatalog({
-          projectPath: configDirectory,
-          harness: parsed.data.harness as SkillHarness,
-        });
-        const skill = catalog.groups
-          .filter((group) => group.source === 'remote')
-          .flatMap((group) => group.entries)
-          .find((entry) => entry.id === request.params.skillId);
-        if (skill === undefined) {
-          return reply.code(404).send({
-            error: { code: 'SKILL_NOT_FOUND', message: 'The remote skill is not available.' },
-          });
-        }
-        const content = await readFile(skill.path, 'utf8');
-        return reply.code(200).send({
-          id: skill.id,
-          harness: skill.harness,
-          name: skill.name,
-          path: skill.path,
-          content,
-        });
-      } catch (error) {
-        return sendChainFailure(reply, error);
-      }
-    },
-  );
 
   app.post('/api/drafts', async (request, reply) => {
     const parsed = draftPayloadSchema.safeParse(request.body);
@@ -210,17 +91,6 @@ export const draftRoutes: FastifyPluginAsync<DraftRoutesOptions> = async (
         { expectedRevision: revision },
       );
       return reply.code(200).send(chainResponse(chain));
-    } catch (error) {
-      return sendChainFailure(reply, error);
-    }
-  });
-
-  app.delete<{ Params: DraftParams }>('/api/drafts/:draftId', async (request, reply) => {
-    try {
-      const configDirectory = getConfigDirectory();
-      const revision = chainRevisionHeader(request.headers);
-      await getDraftService().remove(configDirectory, request.params.draftId, { expectedRevision: revision });
-      return reply.code(200).send({ draftId: request.params.draftId, deleted: true });
     } catch (error) {
       return sendChainFailure(reply, error);
     }

@@ -5,7 +5,7 @@ import type {
   SkillSnapshotBinding,
 } from '../../shared/chain';
 import { isAbortError, type ApiClientError } from '../api/client';
-import type { SkillEntry } from '../api/catalog';
+import type { SkillEntry } from '../api/skills';
 import {
   CHAIN_HARNESSES,
   CHAIN_INPUT_NAME_PATTERN,
@@ -126,9 +126,20 @@ export interface UseChainDraftResult {
   validation: ChainDraftValidation;
   /** True when the editable content differs from the last load or save. */
   isDirty: boolean;
-  /** Persist through the chain API and return the server's saved document. */
-  save: () => Promise<Chain>;
+  /** Persist through the chain API and describe whether newer edits survived. */
+  save: () => Promise<ChainSaveResult>;
   reload: () => void;
+}
+
+export interface ChainSaveResult {
+  /** The server's saved document. */
+  chain: Chain;
+  /**
+   * True when the user changed the chain while the save request was in flight.
+   * The newer local edits are kept and remain dirty; only the server-owned
+   * identity fields are adopted from this response.
+   */
+  superseded: boolean;
 }
 
 const DEFAULT_NEW_CHAIN_NAME = 'Untitled chain';
@@ -209,6 +220,28 @@ export function toChainDraft(document: ChainDraftDocument): ChainDraft {
 /** Human name used in row actions and announcements. */
 export function stepDisplayName(step: ChainStep): string {
   return chainStepName(step);
+}
+
+/**
+ * Adopt server-owned identity after a save that raced with local editing.
+ *
+ * The saved content is intentionally not applied: the user's newer steps,
+ * inputs, and instructions stay in place. Only the fields the next save needs
+ * (id, version, revision, timestamps) come from the response, so the dirty
+ * state survives and the following save uses the new revision precondition.
+ */
+export function adoptSavedIdentity(
+  current: ChainDraftDocument,
+  saved: ChainDraftDocument,
+): ChainDraftDocument {
+  return {
+    ...current,
+    ...(saved.id === undefined ? {} : { id: saved.id }),
+    ...(saved.version === undefined ? {} : { version: saved.version }),
+    ...(saved.revision === undefined ? {} : { revision: saved.revision }),
+    ...(saved.createdAt === undefined ? {} : { createdAt: saved.createdAt }),
+    ...(saved.updatedAt === undefined ? {} : { updatedAt: saved.updatedAt }),
+  };
 }
 
 /**
@@ -586,7 +619,12 @@ export function useChainDraft({
   );
   const [reloadToken, setReloadToken] = useState(0);
   const generation = useRef(0);
+  const latestState = useRef(state);
   const { announce } = useStatusAnnouncer();
+
+  useEffect(() => {
+    latestState.current = state;
+  }, [state]);
 
   useEffect(() => {
     if (isNew) {
@@ -926,26 +964,49 @@ export function useChainDraft({
     [announce, state],
   );
 
-  const save = useCallback(async (): Promise<Chain> => {
+  const save = useCallback(async (): Promise<ChainSaveResult> => {
     if (state.status !== 'ready') {
       throw new Error('The chain must finish loading before it can be saved.');
     }
 
-    const draft = normalizeChainDraft(toChainDraft(state.document));
+    const requested = state.document;
+    const requestedSerialized = serializeChainDraft(requested);
+    const draft = normalizeChainDraft(toChainDraft(requested));
     const saved = isNew
       ? await api.createChain(projectId, draft)
       : await api.updateChain(projectId, chainId, {
           ...draft,
-          ...(state.document.id === undefined ? {} : { id: state.document.id }),
-          ...(state.document.version === undefined
+          ...(requested.id === undefined ? {} : { id: requested.id }),
+          ...(requested.version === undefined
             ? {}
-            : { version: state.document.version }),
-          ...(state.document.createdAt === undefined
+            : { version: requested.version }),
+          ...(requested.createdAt === undefined
             ? {}
-            : { createdAt: state.document.createdAt }),
-        }, { ...(state.document.revision === undefined ? {} : { expectedRevision: state.document.revision }) });
+            : { createdAt: requested.createdAt }),
+        }, { ...(requested.revision === undefined ? {} : { expectedRevision: requested.revision }) });
 
     const next = documentFromChain(saved);
+    const latest = latestState.current;
+
+    if (latest.status !== 'ready') {
+      // A reload replaced the editable document while the request was in
+      // flight. Leave that newer state alone; the load path owns the baseline.
+      return { chain: saved, superseded: true };
+    }
+
+    if (serializeChainDraft(latest.document) !== requestedSerialized) {
+      // The user edited after the request captured the document. Keep the
+      // newer edits, adopt the new revision, and leave the chain dirty so the
+      // next save cannot silently drop them.
+      setState({
+        status: 'ready',
+        chainId: saved.id,
+        document: adoptSavedIdentity(latest.document, next),
+        error: null,
+      });
+      return { chain: saved, superseded: true };
+    }
+
     setState({ status: 'ready', chainId: saved.id, document: next, error: null });
     setSelectedStepId((current) =>
       current !== null && next.steps.some((step) => step.id === current)
@@ -953,7 +1014,7 @@ export function useChainDraft({
         : (next.steps[0]?.id ?? null),
     );
     setBaseline(serializeChainDraft(next));
-    return saved;
+    return { chain: saved, superseded: false };
   }, [api, chainId, isNew, projectId, state]);
 
   const reload = useCallback(() => {

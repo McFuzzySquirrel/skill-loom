@@ -9,7 +9,6 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { guideAnchor } from '../help/guide';
 import { HELP_TOPICS, type HelpTopicId } from '../help/topics';
 
 interface HelpPopoverContextValue {
@@ -109,13 +108,6 @@ export function HelpPopover({ topic }: { topic: HelpTopicId }) {
             </button>
           </div>
           <p>{details.summary}</p>
-          <a
-            href={`/help#${guideAnchor(details.article, details.anchor)}`}
-            target="_blank"
-            rel="noopener"
-          >
-            Read the full guide (opens in a new tab)
-          </a>
         </div>
       ) : null}
     </span>

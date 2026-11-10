@@ -35,7 +35,7 @@ If a session already has a subscriber, then reject the second with a typed confl
 
 ### Step 2: Stream output and keep only a bounded tail
 
-Forward raw bytes to the single WebSocket subscriber and append them to a per-step tail buffer. Enforce both limits at write time: at most 200 lines and 32 KiB. Trim from the oldest end and never persist a full transcript.
+Forward raw bytes to the single control-channel subscriber and append them to a per-step tail buffer. Enforce both limits at write time: at most 200 lines and 32 KiB. Trim from the oldest end and never persist a full transcript.
 
 ```ts
 tail = trimTail(tail + chunk, { maxLines: 200, maxBytes: 32 * 1024 });
@@ -79,7 +79,7 @@ Marking a supervised step Failed does not enable Next; Done or Skipped does. Rec
 
 ### Step 6: Clean up on every exit path
 
-Kill the child and dispose the PTY on socket close, stream error, step completion, run completion, abort, and server `SIGINT`/`SIGTERM`. Guard against double-kill and tolerate an already-exited process. Close WebSocket subscriptions and clear timers before marking the run final.
+Kill the child and dispose the PTY on socket close, stream error, step completion, run completion, abort, and server `SIGINT`/`SIGTERM`. Guard against double-kill and tolerate an already-exited process. Close control-channel subscriptions and clear timers before marking the run final.
 
 ```ts
 try { pty.kill(); } catch {}
@@ -107,9 +107,9 @@ Use a fake PTY that emits `OSC 7501;state=working` then `state=idle`, one that e
 
 ## Gotchas
 
-- **`node-pty` children survive a dropped socket.** Closing the WebSocket does not kill the child. Kill on close, error, completion, abort, and process signals, and test that no process remains.
+- **`node-pty` children survive a dropped socket.** Closing the control channel does not kill the child. Kill on close, error, completion, abort, and process signals, and test that no process remains.
 - **OSC sequences split across chunks.** `OSC 7501;state=idle` can arrive in two writes or be surrounded by unrelated ANSI. Buffer across chunks and parse complete sequences; do not regex a single chunk.
-- **Idle without working.** An `idle` state with no prior `working` in the same step must not advance. A `clear` state resets the observation and requires a fresh `working`.
+- **Idle without working.** An `idle` state with no prior `working` for the same record in the same step must not advance. Root `clear` resets observation and requires fresh `working`; child `clear` must not erase a working root summary.
 - **Quiet terminal is not completion.** Copilot's TUI animation and OpenCode's approval prompt both look idle. Use the documented signal or process exit, with a bounded timeout that pauses.
 - **Second subscriber.** A reconnect must not attach a second consumer to the same PTY. Reject it and keep the first active, or explicitly hand off ownership.
 - **Unbounded tail.** A run record is not a transcript. Cap at 200 lines or 32 KiB before storing; stripping ANSI later does not undo the privacy exposure.

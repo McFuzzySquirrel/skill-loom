@@ -30,15 +30,14 @@ await mkdir(join(output, 'scripts'), { recursive: true });
 await build({ configFile: join(root, 'vite.portable.config.ts'), root });
 await rename(join(output, 'scripts', 'loom-bundle.js'), join(output, 'scripts', 'loom-bundle.mjs'));
 await mkdir(join(source, 'scripts'), { recursive: true });
-await mkdir(join(mirroredSource, 'scripts'), { recursive: true });
 await cp(
   join(output, 'scripts', 'loom-bundle.mjs'),
   join(source, 'scripts', 'loom-bundle.mjs'),
 );
-await cp(
-  join(output, 'scripts', 'loom-bundle.mjs'),
-  join(mirroredSource, 'scripts', 'loom-bundle.mjs'),
-);
+// The checked-in mirror must match the canonical skill package, not only the
+// generated helper; otherwise references and notices drift silently.
+await rm(mirroredSource, { recursive: true, force: true });
+await cp(source, mirroredSource, { recursive: true });
 await cp(join(source, 'SKILL.md'), join(output, 'SKILL.md'));
 await cp(join(source, 'THIRD_PARTY_NOTICES.md'), join(output, 'THIRD_PARTY_NOTICES.md'));
 await cp(join(source, 'references'), join(output, 'references'), { recursive: true });

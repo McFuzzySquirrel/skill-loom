@@ -4,28 +4,22 @@ applies_to:
   - "src/server/catalog/remote.ts"
   - "src/server/catalog/merge.ts"
   - "src/server/catalog/skill-resolution.ts"
-  - "src/server/routes/catalog.ts"
   - "src/server/chains/model.ts"
   - "src/server/preflight/engine.ts"
   - "src/server/chains/bundle.ts"
   - "src/web/api/chains.ts"
-  - "src/web/api/runs.ts"
   - "src/web/hooks/useChainDraft.ts"
   - "src/web/components/StepEditor.tsx"
   - "tests/unit/catalog-remote.test.ts"
   - "tests/unit/chain-model.test.ts"
   - "tests/unit/preflight-engine.test.ts"
-  - "tests/web/runs-api.test.ts"
-  - "tests/integration/catalog-routes.test.ts"
-  - "tests/integration/chain-bundles.test.ts"
-  - "tests/e2e/chain-builder.spec.ts"
 status: Accepted
 ---
 
 # ADR-0015: Ingest remote skills as pinned immutable snapshots
 
 - **Deciders:** McFuzzySquirrel and the Skill Loom agent team
-- **Date:** 2026-11-13
+- **Date:** 2026-11-07
 
 **Technical Story:** Let users catalog skills from Git repositories without making mutable branches or repository-controlled execution part of the project workflow.
 

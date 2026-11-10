@@ -15,7 +15,7 @@ status: Accepted
 # ADR-0016: Select source-pinned native agents through harness capabilities
 
 - **Deciders:** McFuzzySquirrel and the Skill Loom agent team
-- **Date:** 2026-11-13
+- **Date:** 2026-11-07
 
 **Technical Story:** Let a chain optionally use one agent definition from a reviewed remote snapshot without translating it between harnesses or silently changing the selected agent.
 

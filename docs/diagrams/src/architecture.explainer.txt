@@ -1,0 +1,184 @@
+# How Skill Loom carries a chain from a project folder to a guarded run {#architecture}
+
+Skill Loom is a local owner process. The CLI and companion skills ask it to author chains, preflight them, and run one chain at a time under review.
+
+- The owner is the only process that writes project state or spawns a harness.
+- Every mutating start needs a review digest and explicit confirmations.
+- One active run per profile; tails are bounded and recovery is explicit.
+- Harness differences live in adapters, not in routes or runners.
+
+@answer scope="Repository at 343fda3 · managed service and portable path"
+@meta locale=en quality_profile=showcase
+@source app title="Loopback host assertion" path=src/server/app.ts lines=185:196
+@source control title="Control request limits" path=src/server/control.ts lines=65:66
+@source orchestrator title="Run orchestration ownership" path=src/server/runs/orchestrator.ts lines=61:70
+@source model title="Run status vocabulary" path=src/server/runs/model.ts lines=31:55
+@source automatic title="Signal-driven automatic advancement" path=src/server/runs/automatic.ts lines=8:16
+@source blueprint title="Persistence locations" path=Project_Architecture_Blueprint.md lines=531:546
+
+## What is the system made of? {#system}
+
+The browser only edits chains. Everything else crosses the CLI or a companion skill, and the owner process holds the filesystem and process privileges.
+
+@architecture id=system-map title="Skill Loom on one machine"
+| actor | Developer | external | source:app |
+| cli | skill-loom CLI | frontend |
+| skills | Companion skills | frontend |
+| editor | Chain editor | frontend |
+| services | Loom service | backend | source:orchestrator |
+| profile | ~/.config/loom | database | source:blueprint |
+| project | project .loom | database | source:blueprint |
+| harness | Harness CLIs | external |
+| portable | Portable runtime | backend |
+| actor > cli | CLI |
+| actor > skills | asks |
+| actor > editor | edit |
+| skills > cli | JSON |
+| skills > portable | |
+| editor > services | HTTP |
+| cli > services | protocol |
+| services > profile | config |
+| services > project | chains and runs |
+| services > harness | spawn |
+| portable > project | runs |
+
+## What happens from a folder to a finished run? {#journey-panel}
+
+Each lane is a hand-off, not an automatic continuation. Validity, preflight, and the reviewed digest are separate gates, so a failure returns you to the lane that owns it.
+
+@workflow id=journey title="From a project folder to a finished run"
+| lane setup | Set up |
+| lane author | Author |
+| lane run | Run |
+| lane finish | Finish |
+| install | Install and start | external | setup |
+| project | Register project | backend | setup |
+| catalog | Inspect skill catalog | backend | setup |
+| draft | Create or copy chain | backend | author |
+| edit | Edit in browser | frontend | author |
+| validate | Validate chain | backend | author |
+| preflight | Run preflight | backend | run |
+| review | Review start digest | security | run |
+| start | Start run | backend | run |
+| execute | Execute steps | backend | run |
+| done | Run complete | backend | finish |
+| share | Export or import bundle | backend | finish |
+| install > project | |
+| project > catalog | |
+| catalog > draft | |
+| draft > edit | |
+| edit > validate | |
+| validate > preflight | valid |
+| preflight > review | gates pass |
+| review > start | digest confirmed |
+| start > execute | |
+| execute > done | last step |
+| done > share | bundle |
+
+## Where is each guard enforced when a run starts? {#run-start-panel}
+
+The control server checks the token and request shape. The orchestrator then re-runs preflight and compares the reviewed digest before it claims the single slot. The owner writes the frozen snapshot before the first process starts.
+
+@sequence id=run-start title="Starting a run: review, claim, snapshot, spawn"
+| actor cli | CLI | frontend |
+| actor control | Control server | backend | source:control |
+| actor orch | Orchestrator | backend | source:orchestrator |
+| actor pre | Preflight engine | backend |
+| actor owner | Run owner | backend |
+| actor store | Run store | database | source:model |
+| actor pty | PTY and harness | backend |
+| cli | control | JSON line and bearer token |
+| control | orch | run.start |
+| orch | pre | re-run preflight |
+| pre | orch | report and acknowledgements | return |
+| orch | owner | digest ok, claim slot | security |
+| owner | store | frozen snapshot and pointer |
+| owner | pty | spawn shell-free |
+| pty | owner | output and exit or OSC 7501 | return |
+| owner | store | step state and bounded tail |
+| orch | control | RunView and events | return |
+| control | cli | JSON response or events | return |
+
+## What can a run be, and how does it move? {#run-lifecycle-panel}
+
+`starting` covers snapshot and claim. `awaiting-user` is the supervised hand-off after a step ends; automatic runs skip it. Recovery from `interrupted` writes a new `starting` state and never replays a completed step.
+
+@diagram lifecycle id=run-lifecycle source=run-lifecycle.lifecycle.json title="Run status and recovery"
+
+## Which scenario am I in? {#scenarios}
+
+| Scenario | Commands | Where it happens |
+| --- | --- | --- |
+| First install and owner start | `skill-loom --version`, `service start` | [CLI and owner](node:system-map.cli) |
+| Discover or copy a recipe | `scenario-discovery`, `chain draft create` | [chain authoring](node:journey.draft) |
+| Edit a chain visually | `skill-loom edit --draft <id>` | [chain editor](node:system-map.editor) |
+| Supervised run | `run preflight`, `run review-start`, `run start` | [start path](route:run-start.control~orch) |
+| Automatic run | `run start` with signal-based advancement | [running state](node:run-lifecycle.running) |
+| Restart recovery | `run list`, then retry, continue, or restart | [interrupted state](node:run-lifecycle.interrupted) |
+| Share or import a bundle | `bundle create`, `bundle review`, `bundle import` | [bundle step](node:journey.share) |
+| Portable run | `loom-run-bundle` inspect, prepare, step, record | [portable runtime](node:system-map.portable) |
+| Remote catalog | `catalog source refresh`, `catalog snapshot inspect` | [catalog service](node:system-map.services) |
+| Managed test workspace | `workspace create`, `workspace evaluate` | [service core](node:system-map.services) |
+
+## What must be true before a run starts? {#gates}
+
+| Gate | Fails when | Checked by |
+| --- | --- | --- |
+| Chain shape | The document does not parse or its version is unknown | Chain model |
+| Inputs | A required named input has no value | Orchestrator |
+| Skills | A named skill is missing, disabled, or ambiguous | Preflight |
+| Harness | The executable is missing or the version is unsupported | Preflight and adapter |
+| Trust | The Copilot folder dialog has not been accepted | Trust session service |
+| Permissions | Automatic broad permissions were not opted in | Preflight |
+| Active run | Another run holds the single slot | Run owner |
+| Review digest | The payload changed after you reviewed it | Reviewed-start flow |
+
+## Where does state live, and who owns it? {#state}
+
+| Location | Data | Writer |
+| --- | --- | --- |
+| `~/.config/loom/config.json` | Harness commands, sources, projects | Config store |
+| `~/.config/loom/drafts/*.json` | Project-independent drafts | Chain store |
+| `~/.config/loom/active-run.json` | The single active pointer | Run store |
+| `<project>/.loom/chains/*.json` | Project chains | Chain store |
+| `<project>/.loom/runs/*.json` | Frozen runs and bounded tails | Run store |
+| `<project>/.loom/portable-runs/*.json` | Portable runs | Portable runtime |
+| `<project>/.agents/skills/` | Installed skill packages | Bundle import |
+
+## How do OpenCode and Copilot differ? {#harnesses}
+
+| Capability | OpenCode | Copilot CLI |
+| --- | --- | --- |
+| Automatic advancement | OSC 7501 working to idle | Process exit |
+| Supervised step end | User only | User only |
+| Trust handling | None | Folder dialog, read back from config |
+| Automatic permissions | None | Opt-in per chain |
+| Skill observation | Unobservable | Best-effort log lines |
+| Fork | Native on the headless run, otherwise handoff | Handoff only |
+| Latest passing probe | 2.2.6 | 1.0.107 |
+
+## What is still blocked or unverified? {#limits}
+
+@callout level=warning title="Do not read these as working paths"
+| Protected managed skill execution is blocked until a verified content view exists. |
+| Descendant containment is unverified on Linux, macOS, and Windows. |
+| Automatic OpenCode CLI starts remain blocked; one single-step probe passed on 2.2.6. |
+| Windows PowerShell 7 behavior is implemented but not verified. |
+| A portable run cannot prepare a bundle that selects a native agent. |
+
+## What should I verify before trusting a run? {#checklist}
+
+- [ ] The chain parses and every required input has a value.
+- [ ] Preflight resolves every named skill, or reports the missing one.
+- [ ] The review digest matches the payload you read.
+- [ ] Another run is not holding the active slot.
+- [ ] The run record keeps its chain snapshot after you edit the saved chain.
+- [ ] A restart shows the run as `interrupted`, not `running`.
+
+## What changed since the November 6 page? {#changes}
+
+That page predates the CLI and skill pivot in `cfbf981`. Its service-first framing still centers the server and editor. The current web surface is the chain editor only; projects, catalogs, discovery, workspaces, and runs are CLI- or skill-driven.
+
+## Where are the deeper views? {#deep-dives}
+
+The companion pages open beside this one. `chain-save-sequence.html` follows the editor save from `PUT` to atomic rename. `portable-handoff-workflow.html` follows a bundle that runs without the service. Both pages come from the same repository revision.

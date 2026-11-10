@@ -20,10 +20,6 @@ import {
   type ChainService,
 } from '../chains/service.js';
 import {
-  createGlobalChainService,
-  type GlobalChainService,
-} from '../chains/library.js';
-import {
   CHAIN_STORE_ERROR_CODES,
   ChainStoreError,
   type ChainListResult,
@@ -31,7 +27,6 @@ import {
 } from '../chains/store.js';
 import { ConfigError } from '../config/store.js';
 import type { ConfigStore } from '../config/store.js';
-import { HarnessIdSchema } from '../config/schema.js';
 import {
   createProjectRegistry,
   isProjectId,
@@ -63,17 +58,6 @@ const chainPayloadSchema = z.strictObject({
   updatedAt: z.string().optional(),
 });
 
-const duplicatePayloadSchema = z.strictObject({
-  name: z.string().optional(),
-  harness: HarnessIdSchema.optional(),
-  uniqueName: z.boolean().optional(),
-});
-
-const importPayloadSchema = z.strictObject({
-  libraryChainId: z.string().min(1).max(64),
-  name: z.string().optional(),
-});
-
 const uniqueNameQuerySchema = z.object({
   uniqueName: z.enum(['true', 'false', '1', '0']).optional(),
 });
@@ -86,7 +70,6 @@ export interface ChainRoutesOptions {
   /** Injected chain service. Defaults to the filesystem-backed service. */
   chainService?: ChainService;
   /** Injected global template service used by the import route. */
-  globalChainService?: GlobalChainService;
 }
 
 interface ProjectRouteParams {
@@ -126,11 +109,6 @@ export function chainListResponse(result: ChainListResult): ChainListResponse {
   return { ...result, revisions: Object.fromEntries(result.chains.map((chain) => [chain.id, chainRevision(chain)])) };
 }
 
-interface ChainDeletedResponse {
-  chainId: string;
-  deleted: true;
-}
-
 /** HTTP status for each typed chain-storage failure. */
 const STATUS_BY_STORE_CODE: Record<ChainStoreErrorCode, number> = {
   CHAIN_ID_INVALID: 422,
@@ -153,7 +131,7 @@ const STATUS_BY_STORE_CODE: Record<ChainStoreErrorCode, number> = {
 };
 
 /**
- * Chain CRUD and duplicate routes.
+ * Chain read and save routes used by the chain editor.
  *
  * Every operation takes a registered project id (never a filesystem path),
  * resolves it to the canonical project directory, and lets the chain service
@@ -168,11 +146,6 @@ export const chainRoutes: FastifyPluginAsync<ChainRoutesOptions> = async (
     options.projectRegistry ??
     createProjectRegistry({ configStore: options.configStore });
   const service = options.chainService ?? createChainService();
-  // Keep config access lazy: merely registering routes must not read the
-  // config directory, and an injected service bypasses it entirely.
-  const globalService = (): GlobalChainService =>
-    options.globalChainService ??
-    createGlobalChainService({ configDirectory: options.configStore.getConfigDir() });
 
   app.get<{ Params: ProjectRouteParams }>(
     '/api/projects/:projectId/chains',
@@ -281,85 +254,6 @@ export const chainRoutes: FastifyPluginAsync<ChainRoutesOptions> = async (
           },
         );
         return reply.code(200).send(chainResponse(chain));
-      } catch (error) {
-        return sendChainFailure(reply, error);
-      }
-    },
-  );
-
-  app.post<{
-    Params: ChainRouteParams;
-    Querystring: { uniqueName?: string };
-  }>(
-    '/api/projects/:projectId/chains/:chainId/duplicate',
-    async (request, reply) => {
-      const query = uniqueNameQuerySchema.safeParse(request.query);
-      if (!query.success) {
-        return sendValidationFailure(reply, 'The chain request is not valid.', query.error.issues);
-      }
-
-      const parsed = duplicatePayloadSchema.safeParse(request.body ?? {});
-      if (!parsed.success) {
-        return sendValidationFailure(
-          reply,
-          'The chain request is not valid.',
-          parsed.error.issues,
-        );
-      }
-
-      try {
-        const projectPath = await resolveProjectPath(registry, request.params.projectId);
-        const revision = request.headers['x-loom-chain-revision'] === undefined
-          ? undefined : chainRevisionHeader(request.headers);
-        const chain = await service.duplicate(projectPath, request.params.chainId, {
-          ...(parsed.data.name === undefined ? {} : { name: parsed.data.name }),
-          ...(parsed.data.harness === undefined ? {} : { harness: parsed.data.harness }),
-          ...(revision === undefined ? {} : { expectedRevision: revision }),
-          uniqueName: wantsUniqueName(query.data.uniqueName, parsed.data.uniqueName),
-        });
-        return reply.code(201).send(chainResponse(chain));
-      } catch (error) {
-        return sendChainFailure(reply, error);
-      }
-    },
-  );
-
-  app.post<{ Params: ProjectRouteParams }>(
-    '/api/projects/:projectId/chains/import',
-    async (request, reply) => {
-      const parsed = importPayloadSchema.safeParse(request.body);
-      if (!parsed.success) {
-        return sendValidationFailure(
-          reply,
-          'The chain import request is not valid.',
-          parsed.error.issues,
-        );
-      }
-
-      try {
-        const projectPath = await resolveProjectPath(registry, request.params.projectId);
-        const source = await globalService().read(parsed.data.libraryChainId);
-        const chain = await service.importChain(projectPath, source, {
-          ...(parsed.data.name === undefined ? {} : { name: parsed.data.name }),
-        });
-        return reply.code(201).send(chainResponse(chain));
-      } catch (error) {
-        return sendChainFailure(reply, error);
-      }
-    },
-  );
-
-  app.delete<{ Params: ChainRouteParams }>(
-    '/api/projects/:projectId/chains/:chainId',
-    async (request, reply) => {
-      try {
-        const projectPath = await resolveProjectPath(registry, request.params.projectId);
-        const revision = chainRevisionHeader(request.headers);
-        await service.remove(projectPath, request.params.chainId, { expectedRevision: revision });
-        return reply.code(200).send({
-          chainId: request.params.chainId,
-          deleted: true,
-        } satisfies ChainDeletedResponse);
       } catch (error) {
         return sendChainFailure(reply, error);
       }

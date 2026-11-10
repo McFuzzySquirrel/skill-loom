@@ -75,6 +75,7 @@ Usage:
   skill-loom service status [--config-dir <path>]
   skill-loom service stop [--config-dir <path>]
   skill-loom service --help
+  skill-loom edit (--draft <id> | --project <id> --chain <id>) [--no-open] [--port <number>] [--config-dir <path>]
   skill-loom project --help
   skill-loom chain --help
   skill-loom run --help
@@ -93,6 +94,7 @@ Environment:
   LOOM_HOST               Loopback host (127.0.0.1 by default)
   LOOM_WEB_ROOT           Built web asset directory override
 
+Edit opens the visual chain editor, the only web screen; saving writes to the chain.
 Bundle inspection is read-only and returns JSON without starting the server.
 Read-only catalog source, limit, and snapshot commands do not start the server.
 Catalog mutations and project catalog paging require a running service.
@@ -163,6 +165,46 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
   return options;
 }
 
+export interface EditTarget {
+  path: string;
+  rest: string[];
+}
+
+/** Resolve `edit` arguments to an editor URL path plus the remaining server options. */
+export function parseEditArgs(argv: readonly string[]): EditTarget {
+  let draft: string | undefined;
+  let project: string | undefined;
+  let chain: string | undefined;
+  const rest: string[] = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index]!;
+    const takesValue = argument === '--draft' || argument === '--project' || argument === '--chain';
+    if (!takesValue) {
+      rest.push(argument);
+      if ((argument === '--port' || argument === '--config-dir') && argv[index + 1] !== undefined) {
+        rest.push(argv[index + 1]!);
+        index += 1;
+      }
+      continue;
+    }
+    const value = argv[index + 1];
+    if (value === undefined || value.trim() === '' || value.startsWith('--')) {
+      throw new CliUsageError(`${argument} requires an id.`);
+    }
+    index += 1;
+    if (argument === '--draft') draft = value;
+    else if (argument === '--project') project = value;
+    else chain = value;
+  }
+  if (draft !== undefined && project === undefined && chain === undefined) {
+    return { path: `/drafts/${encodeURIComponent(draft)}`, rest };
+  }
+  if (draft === undefined && project !== undefined && chain !== undefined) {
+    return { path: `/projects/${encodeURIComponent(project)}/chains/${encodeURIComponent(chain)}`, rest };
+  }
+  throw new CliUsageError('edit needs either --draft <id> or both --project <id> and --chain <id>.');
+}
+
 export interface CliStartedServer {
   settings: ServerSettings;
 }
@@ -170,10 +212,40 @@ export interface CliStartedServer {
 export interface RunCliDependencies {
   start?: (options: { logger?: boolean; env?: NodeJS.ProcessEnv; enableControl?: boolean }) => Promise<CliStartedServer>;
   openBrowser?: (url: string) => void;
+  /** Local control seam; defaults to the real control transport. */
+  controlCall?: (configDirectory: string, operation: string, input: unknown) => Promise<ControlStatusResponse>;
   stdout?: Pick<NodeJS.WriteStream, 'write' | 'isTTY'>;
   stderr?: Pick<NodeJS.WriteStream, 'write'>;
   env?: NodeJS.ProcessEnv;
   stdin?: Readable;
+}
+
+interface ControlStatusResponse {
+  ok: boolean;
+  result?: unknown;
+  error?: { code: string; message: string };
+}
+
+function readHttpEndpoint(result: unknown): { host: string; port: number } | null {
+  if (typeof result !== 'object' || result === null || !('httpEndpoint' in result)) {
+    return null;
+  }
+  const endpoint = (result as { httpEndpoint?: unknown }).httpEndpoint;
+  if (typeof endpoint !== 'object' || endpoint === null) {
+    return null;
+  }
+  const { host, port } = endpoint as { host?: unknown; port?: unknown };
+  if (
+    typeof host !== 'string' ||
+    host === '' ||
+    typeof port !== 'number' ||
+    !Number.isInteger(port) ||
+    port < 1 ||
+    port > 65_535
+  ) {
+    return null;
+  }
+  return { host, port };
 }
 
 export async function runCli(
@@ -236,9 +308,29 @@ export async function runCli(
     }
   }
 
+  let editPath: string | undefined;
+  let serverArgs = argv;
+  if (argv[0] === 'edit') {
+    if (argv.length === 2 && (argv[1] === '--help' || argv[1] === '-h')) {
+      stdout.write(`${cliUsage()}\n`);
+      return 0;
+    }
+    try {
+      const target = parseEditArgs(argv.slice(1));
+      editPath = target.path;
+      serverArgs = target.rest;
+    } catch (error) {
+      if (error instanceof CliUsageError) {
+        stderr.write(`${error.message}\n\n${cliUsage()}\n`);
+        return 2;
+      }
+      throw error;
+    }
+  }
+
   let options: CliOptions;
   try {
-    options = parseCliArgs(argv);
+    options = parseCliArgs(serverArgs);
   } catch (error) {
     if (error instanceof CliUsageError) {
       stderr.write(`${error.message}\n\n${cliUsage()}\n`);
@@ -263,10 +355,36 @@ export async function runCli(
     env.LOOM_CONFIG_DIR = options.configDir;
   }
 
+  const configDirectory = resolveConfigDir({ env });
+
   try {
-    const started = await (dependencies.start ?? startServer)({ logger: false });
-    const url = `http://${started.settings.host}:${String(started.settings.port)}`;
-    const configDirectory = resolveConfigDir({ env });
+    let baseUrl: string;
+    try {
+      const started = await (dependencies.start ?? startServer)({ logger: false });
+      baseUrl = `http://${started.settings.host}:${String(started.settings.port)}`;
+    } catch (error) {
+      const inUse = typeof error === 'object' && error !== null && 'code' in error &&
+        (error as { code?: unknown }).code === 'PROFILE_IN_USE';
+      if (editPath === undefined || !inUse) throw error;
+      // Another process owns the profile. Ask the owner for the endpoint it is
+      // actually serving instead of assuming LOOM_PORT matches it.
+      const status = await (dependencies.controlCall ?? callControl)(configDirectory, 'status', {});
+      if (!status.ok) {
+        throw new ControlError(
+          status.error?.code ?? 'CONTROL_UNAVAILABLE',
+          status.error?.message ?? 'The running Skill Loom service rejected the status request.',
+        );
+      }
+      const endpoint = readHttpEndpoint(status.result);
+      if (endpoint === null) {
+        throw new ControlError(
+          'CONTROL_ENDPOINT_UNAVAILABLE',
+          'The running Skill Loom service did not report its editor endpoint. Retry, or pass the same --port the service uses.',
+        );
+      }
+      baseUrl = `http://${endpoint.host}:${String(endpoint.port)}`;
+    }
+    const url = editPath === undefined ? baseUrl : `${baseUrl}${editPath}`;
 
     stdout.write(
       `Skill Loom ${packageManifest.version}\nConfig: ${configDirectory}\nURL: ${url}\nPress Ctrl+C to stop.\n`,
@@ -325,6 +443,9 @@ function openBrowser(url: string): void {
 }
 
 function describeStartFailure(error: unknown): string {
+  if (error instanceof ControlError) {
+    return error.message;
+  }
   if (typeof error === 'object' && error !== null && 'code' in error) {
     const code = (error as { code?: unknown }).code;
     if (code === 'EADDRINUSE') {

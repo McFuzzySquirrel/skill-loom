@@ -69,7 +69,7 @@ Chosen option: "Freeze the chain and persist a bounded tail", because it preserv
 
 ### Live chain reference plus full transcript
 
-- Good, because the run view could reproduce everything.
+- Good, because a run record could reproduce everything.
 - Bad, because edits change history and stored transcripts create a large sensitive archive.
 
 ### No stored output

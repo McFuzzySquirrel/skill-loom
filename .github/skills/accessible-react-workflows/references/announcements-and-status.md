@@ -62,4 +62,4 @@ const labels = {
 
 ## Test
 
-Use Playwright with `page.getByRole("status")` and assert the exact message once. Then assert the previous message is gone so a hidden duplicate does not pass.
+Use the component tests or a manual browser pass with `getByRole("status")` semantics and assert the exact message once. Then assert the previous message is gone so a hidden duplicate does not pass. There is no Playwright suite in this repository.

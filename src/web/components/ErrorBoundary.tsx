@@ -9,9 +9,9 @@ interface ErrorBoundaryState {
 }
 
 /**
- * Keeps a render failure inside the main landmark. The header, local-only
- * badge, and navigation remain usable, and the fallback offers both a retry
- * and a plain anchor back to projects.
+ * Keeps a render failure inside the main landmark. The skip link and main
+ * landmark remain usable, and the fallback offers both a retry and a plain
+ * anchor back to the editor landing page.
  */
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   override state: ErrorBoundaryState = { error: null };
@@ -46,8 +46,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           <button type="button" className="button" onClick={this.handleRetry}>
             Try again
           </button>
-          <a className="button button--secondary" href="/projects">
-            Back to projects
+          <a className="button button--secondary" href="/">
+            Back to chain editor
           </a>
         </div>
       </section>

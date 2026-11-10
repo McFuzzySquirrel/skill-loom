@@ -3,7 +3,7 @@ id: ADR-0006
 applies_to:
   - "src/server/runs/store.ts"
   - "src/server/runs/orchestrator.ts"
-  - "src/server/routes/runs.ts"
+  - "src/server/runs/"
 status: Accepted
 ---
 

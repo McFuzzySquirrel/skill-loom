@@ -56,7 +56,7 @@ its idle and clear must match its ID. Reset all observation before each step.
 
 The [OpenCode 2.2.6 implementation](https://github.com/anomalyco/opencode/blob/v2.2.6/packages/tui/src/context/program-status.ts)
 clears removed child records before publishing the root summary. This explains
-the user-supplied [Linux x64 evidence](../evidence/live-execution-2026-11-10-opencode-2.2.6.json),
+the user-supplied [Linux x64 evidence](../evidence/live-execution-2026-11-10-opencode-2.2.6-failed.json),
 which passed the prompt, loose signal, recall and cleanup checks but failed
 product advancement. A subsequent user-supplied [passing probe](../evidence/live-execution-2026-11-10-opencode-2.2.6-passed.json)
 on Linux x64 with OpenCode 2.2.6 verifies the changed parser: child clear

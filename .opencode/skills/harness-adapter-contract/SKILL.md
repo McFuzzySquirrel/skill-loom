@@ -40,12 +40,13 @@ Every adapter exports the same shape. Load `references/descriptor-contract.md` f
 | Field | OpenCode 2.2.5 | Copilot CLI 1.0.105 |
 |-------|----------------|---------------------|
 | `id` / display | `opencode` / OpenCode | `copilot` / GitHub Copilot |
-| Discovery | Filesystem scan of `.opencode/skills` roots | `copilot skill list --json` |
+| Discovery | Filesystem scan of shared `.agents/skills` and legacy `.opencode/skills` roots | `copilot skill list --json` |
 | Session modes | `shared`, `fresh`, `fork` | `shared`, `fresh`, `fork` as handoff |
 | Native fork | Yes on `run --fork` | No |
 | Trust | None | Interactive folder-trust dialog |
 | Automatic signal | `OSC 7501;state=idle` after `working` | Process exit |
 | Broad permissions | None | `--allow-all-paths --allow-all-tools` |
+| Native agent selection | Headless `run` only | Interactive and headless |
 
 If a capability is unknown, then report it as unsupported and block preflight; do not guess. The descriptor is the only place a harness name may appear in command construction.
 
@@ -53,7 +54,7 @@ If a capability is unknown, then report it as unsupported and block preflight; d
 
 ### Step 3: Map discovery to the descriptor
 
-For OpenCode, scan the project `.opencode/skills`, the personal `~/.config/opencode/skills`, and each Loom-configured extra directory. For Copilot, invoke `copilot skill list --json` in the project directory with a bounded timeout. In both cases:
+For OpenCode, scan the shared project `.agents/skills`, legacy project `.opencode/skills`, personal `~/.config/opencode/skills`, and each Loom-configured extra directory. For Copilot, invoke `copilot skill list --json` in the project directory with a bounded timeout; keep the CLI authoritative. New Skill Loom project copies and bundle imports use `.agents/skills` for both harnesses. In both cases:
 
 - Preserve the source label and canonical path.
 - Return duplicates instead of deduplicating by name.
@@ -80,6 +81,8 @@ Return an executable plus `string[]`; never return a command line.
 // Copilot headless step, only with the per-chain opt-in
 ["-p", prompt, "--session-id", uuid, "--allow-all-paths", "--allow-all-tools", projectDir]
 ```
+
+When a chain selects a native agent, pass its exact name with `--agent <name>` only on surfaces declared by the adapter. OpenCode's interactive surface has no supported selector and must block selected-agent chains; OpenCode headless and Copilot surfaces use the adapter's native selection capability.
 
 Confirm the exact flags against the installed version before shipping; the table is the v1 contract, not a substitute for `--help`. If a flag is unavailable, then fail preflight with the installed version and the unsupported capability instead of silently dropping it.
 
@@ -134,6 +137,7 @@ If the installed version differs from 2.2.5 or 1.0.105, then run the live probes
 - **Discovery failure is not an empty catalog.** A missing executable, timeout, or invalid JSON must surface a warning and an error state so the user does not mistake a broken CLI for "no skills installed".
 - **Trust config is read-only to Skill Loom.** Detect `trustedFolders` in `~/.copilot/config.json`; never write it. A prompt queued during the trust dialog can be swallowed.
 - **Broad permissions are opt-in only.** `--allow-all-paths --allow-all-tools` never appear without a per-chain opt-in and must be shown verbatim at preflight and run start.
+- **Native agents stay harness-specific.** Bind the exact remote snapshot to the chain, copy it only to its native project directory, verify its fingerprint at preflight, and block surfaces without a verified selector. Never translate or silently omit an agent.
 - **OpenCode skill firing is not observable.** Interactive OpenCode exposes no `skill(name)` equivalent; record `not-observable` rather than inventing a match.
 
 ---
@@ -147,6 +151,7 @@ After completing the process, verify:
 - [ ] `shared`, `fresh`, and `fork` plans select the documented session id behavior; Copilot fork reports `handoff`.
 - [ ] `--trust-folder` is never emitted together with `--session-id`.
 - [ ] Copilot broad flags appear only when the chain opt-in is true and are identical in preflight and run construction.
+- [ ] Native-agent selection is fingerprint-verified and passed only through target-version-verified `--agent` surfaces.
 - [ ] `npx vitest run tests/unit/harness-registry.test.ts` passes.
 - [ ] Run the self-check `rg -n "opencode|copilot" src/server/routes src/web | rg -v "harness/|types|test"` and confirm no route or UI branches on a harness name.
 

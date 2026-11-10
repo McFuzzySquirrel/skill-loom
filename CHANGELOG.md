@@ -8,73 +8,58 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Added
 
-- Opt-in `test:live:managed -- --confirm-live` OpenCode acceptance probe using the production profile lock, preflight, orchestrator, persistence and PTYs. It checks ordered two-step artifacts, shared sessions, pause, abort, orderly recovery and verified tracked-resource/session cleanup, with bounded redacted evidence and no automatic CLI guard changes.
-- Standalone skill guide for the skill-only path: discover, inspect, run, and recover chains with `scenario-discovery`, `loom-run-bundle`, and `loom-chain-workflow` without the Skill Loom server.
-- `loom-chain-workflow` companion skill, with a downloadable package, coordinating reviewed discovery, optional workspace testing, bundle import, and current-session execution.
-- Shared-owner CLI (`service`, `catalog`, `project`, `chain`, `bundle`, `discovery`, `run`, `workspace`) with versioned JSON envelopes, stdin payloads, paginated catalog snapshots, a 1,000-skill / 20,000-file catalog budget, and read-only `bundle inspect`.
-- Profile ownership lock and authenticated local control transport (Unix socket; mutually authenticated loopback TLS on Windows) so the UI and CLI share one owner ([ADR-0023](docs/adr/0023-profile-owner-lock.md), [ADR-0024](docs/adr/0024-local-control-transport.md)).
-- Reviewed CLI approvals for bundle import, run start and actions, and workspace removal using review digests and explicit confirmations ([ADR-0025](docs/adr/0025-reviewed-cli-approval-contract.md)); managed `run events` streams and `run attach` terminal attachment.
-- Opt-in project claim protocol and coordination review for managed and portable runners.
-- Bounded `workspace inspect` and `workspace evaluate` checks that never execute workspace content ([ADR-0026](docs/adr/0026-bounded-opt-in-workspace-evaluation.md)).
-
-- Global remote skill-repository registration with explicit pinned refresh, bounded package snapshots, and catalog visibility for either supported harness.
-- Project-independent drafts start from an outcome, register and explicitly refresh optional remote repositories, and select pinned skills and agents without installing them into an existing project.
-- A configurable local shared bundle library supports reviewed no-overwrite publication, browsing, and import of portable bundles.
-- Remote native-agent discovery and selection, safe installation into native project locations, and preflight checks for installed content and command-surface support.
-- Remote skill selections persist their exact source, revision, and package path through chain editing, preflight, and export.
-- Disposable chain-test workspaces with retained project/run state, recent-project hiding, explicit cleanup, and refusal to delete a workspace that owns the active run.
-- Reusable `loom-run-bundle` Agent Skill package with a standalone Node.js helper for reviewed bundle installation, host-mediated chain execution, confirmation gates, and explicit interrupted-run recovery.
-- Separate portable run records, bundle fingerprints, no-overwrite skill installation, and an export-dialog download for the reusable runner skill.
-- Portable `.loom.json` chain export/import with complete skill packages, review previews, explicit reuse of installed skills, safe bounded file handling, and fresh permission consent.
-- Version 2 portable bundles that preserve an exact selected native agent definition; version 1 remains available for agent-free chains.
-- Standalone agent instruction steps alongside skill steps, with labels, ordering, named inputs, preflight, and run lifecycle support.
-- Managed interactive scenario discovery workspaces with a pinned handoff, supervised harness launch, fingerprint-bound result review, retained recovery state, and optional import into a new project-independent draft.
-- Project skill copies and bundle imports use the shared `.agents/skills/` location for either harness.
-- Project workspace navigation and selectable system, light, and dark appearance modes.
-- Project documentation set: user guide, administrator guide, ADR index and records, release notes, and this changelog.
-- Documentation navigation from the README and the operations guide.
-- Loopback-only Fastify server with a React web UI, typed JSON API, and WebSocket terminal transport.
-- Project registration, recent projects, folder browser, optional `git init`, and canonical path handling.
-- Skill catalogs for OpenCode filesystem discovery and Copilot `copilot skill list --json`, including extra directories, warnings, and bounded copy-into-project.
-- Chain model, builder, step reordering, named inputs and `{{name}}` placeholders, session modes, per-chain automatic-permission opt-in, and project-local persistence.
-- Global chain library with independent template snapshots and import-with-new-id.
-- Deterministic preflight for harness executable resolution, authentication evidence, Copilot folder trust, catalog resolution, inputs, session mode, permissions, and Git state.
-- Supervised and automatic run modes with a frozen chain snapshot, resolved inputs, bounded tails, one global active run, and startup recovery.
-- OpenCode and Copilot adapters with shell-free command construction, session planning, native fork where available, and deterministic handoff elsewhere.
-- Terminal run view, run details, recovery controls, keyboard focus exit from xterm, and live status announcements.
-- Local `skill-loom` CLI with `--help`, `--version`, `--no-open`, `--port`, and `--config-dir`.
-- Unit, integration, Playwright end-to-end, package smoke, and live discovery/execution probes.
+- Skill Loom is CLI- and skill-driven. A shared-owner CLI (`service`, `project`, `chain`, `catalog`, `discovery`, `bundle`, `run`, `workspace`) provides versioned JSON envelopes, stdin payloads, reviewed digests, and explicit confirmations.
+- Companion skills: `scenario-discovery` discovers candidates and builds reviewed bundles, `loom-chain-workflow` coordinates discovery, optional workspace testing, import, and current-session execution, and `loom-run-bundle` runs a bundle in the current host session. The first two offer to install the CLI when it is missing.
+- A single visual chain editor opened with `skill-loom edit` for reordering steps, editing instructions, managing `{{inputs}}`, and saving back to a draft or project chain.
+- Project-independent drafts and project chains with revision preconditions and atomic versioned persistence.
+- Portable `.loom.json` bundles with complete referenced skill packages, project-local source preference, bounded validation, explicit conflict handling, and no-overwrite import. Version 2 preserves one selected native agent.
+- Local and pinned remote skill catalogs with explicit HTTPS/SSH source registration, bounded refresh, pagination, candidate inspection, and no execution of package content.
+- Validated discovery handoffs prepared from pinned snapshots and consumed offline by the standalone discovery skill.
+- Managed disposable test workspaces and discovery workspaces with retained output and explicit `skill-loom workspace remove` cleanup.
+- Deterministic preflight with hard blocks, warnings, and acknowledgements; preflight makes no model call.
+- Supervised and automatic managed runs with frozen snapshots, one global active run, bounded step tails, explicit interruption recovery, `run events`, and `run attach`.
+- Profile ownership lock and authenticated local control transport: a private socket on Unix and mutually authenticated loopback TLS on Windows.
+- Documentation set: user, administrator, operations, scenario, standalone skill, and visual tour guides; ADR index and records; release notes; [known gaps](docs/current-gaps.md); and a [documentation archive](docs/archive/README.md) for retired plans.
+- Global install guidance for a locally packed tarball, including the npm 11 `allow-scripts` workaround for `file:` dependencies.
+- An extended documentation gate that checks relative links and anchors, documented npm scripts, retired vocabulary, ADR index dates, and checked-in skill mirrors.
 
 ### Changed
 
-- Windows profile-security helpers prefer stable PowerShell 7 from its standard Program Files installation, retaining Windows PowerShell 5.1 as an availability-only fallback. Explicit `LOOM_WINDOWS_POWERSHELL` selection and dual-host integration coverage preserve fail-closed ACL checks; native PowerShell 7 verification remains pending.
-- Remote repository sizing settings start collapsed and can be expanded for editing. Size limits, maximums, and saved package sizes display in decimal MB instead of bytes; stored and API budgets are unchanged.
-- Live discovery and execution probes accept stable OpenCode versions >=2.2.5, including 2.2.6, while retaining exact observed versions in evidence. Older and prerelease versions still warn; automatic advancement remains subject to live signal verification.
-- CLI-managed starts remain limited to instruction-only chains without native agents; OpenCode automatic starts stay blocked until the `clear` signal between `working` and `idle` is live-verified ([ADR-0007](docs/adr/0007-explicit-advancement-signals.md)).
-- Copilot trust guidance now distinguishes persistent folder trust from session-only approval.
-- Persisted chain documents now use version 3 for exact remote skill snapshot bindings and migrate valid version 1 and 2 chains while preserving their existing fields.
-- Portable bundle export uses version 2 for chains with a selected native agent, while preserving version 1 for agent-free chains; import is no-overwrite and rollback-safe for both packages and agent definitions.
-- The workflow designer now gives the skill catalog and ordered steps a two-column layout on wider screens and opens selected-step editing in a dialog.
+- The web application is reduced to the chain editor. Projects, catalogs, discovery, libraries, test workspaces, runs, themes, and the terminal are CLI-, skill-, or harness-driven.
+- Chain documents use version 3 for exact remote skill bindings and optional native-agent identity. Valid version 1 and 2 records migrate on read.
+- Portable bundle export uses version 2 for chains with a selected native agent and version 1 for agent-free chains.
 - OpenCode discovery includes the shared `.agents/skills/` directory while retaining legacy `.opencode/skills/` discovery. Copilot discovery remains CLI-authoritative.
-- Bundle export prefers one enabled project-local package over same-named personal or extra-directory packages, while rejecting distinct project duplicates and other ambiguous sources.
-- README, user, administrator, and release documentation now distinguish supported behavior, limitations, and unpublished status.
+- Windows profile security prefers stable PowerShell 7 and retains Windows PowerShell 5.1 with .NET 4.7.2+ as an availability-only fallback.
+- Live discovery and execution probes accept stable OpenCode versions >=2.2.5, including 2.2.6, while retaining exact observed versions in evidence.
+- README, user, administrator, operations, release, and evidence documentation now distinguish supported behavior, blocked gates, and unpublished status.
+
+### Removed
+
+- The HTTP API surface the CLI never used: project, catalog, discovery, filesystem, preflight, run, test-workspace, shared-bundle library, global-template, scenario-preset, portable-skill, and bundle routes.
+- The WebSocket terminal transport, the xterm.js renderer, and the `@fastify/websocket` and `ws` dependencies. Run output is streamed to `skill-loom run attach` instead.
+- Web screens for projects, catalogs, discovery, libraries, test workspaces, runs, and the terminal, along with their Playwright browser tests and the `docs:capture` and `test:e2e` scripts.
+- The global chain-template library and the shared bundle library, whose interfaces were removed by ADR-0027 and ADR-0028. Retained files under the config directory have no current command.
+- Historical planning and generated explainer documents moved to `docs/archive/`; stale machine-generated review and delivery artifacts were deleted.
 
 ### Fixed
 
-- Remote refresh now fetches blobs with the shallow clone instead of triggering a separate lazy network fetch for each package file. No-checkout ingestion, staging limits and content validation remain in place. Discovery and bundle-import size displays now also use MB.
-- User-supplied Linux x64 evidence now confirms the OpenCode 2.2.6 record-aware parser fix: prompt, product advancement, recall and cleanup pass. Copilot CLI 1.0.107 also passes execution and recall, with its exact-baseline version warning retained. Managed multi-step automatic acceptance remains open; CLI guards are unchanged.
-- OpenCode OSC advancement now distinguishes root summary and child record IDs: child removal no longer erases root working, while root clear, matching-record clear, idle-only streams and per-step reset retain their fail-closed behavior. Live probe evidence now includes up to 64 status records and a truncation flag; automatic CLI starts remain blocked pending managed multi-step acceptance.
-- Health reporting now reads the existing run owner or persisted active-run pointer instead of always returning an inactive placeholder; invalid pointer files surface an error without being modified.
+- The chain editor now blocks step, input, and reorder mutations while a save is in flight and keeps any newer edit if one still arrives, adopting only the server's identity fields instead of silently replacing newer work.
+- `skill-loom edit` now asks the running profile owner for its actual HTTP endpoint instead of guessing from `LOOM_PORT`; it fails with a clear message when the endpoint is unavailable.
+- The editor restores its skip-to-content link, and the render fallback returns to the editor landing page rather than the removed `/projects` route.
+- OpenCode OSC advancement now distinguishes root summary and child record IDs: child removal no longer erases root working, while root clear, matching-record clear, idle-only streams, and per-step reset retain their fail-closed behavior. Automatic CLI starts remain blocked pending managed multi-step acceptance.
+- Health reporting reads the existing run owner or persisted active-run pointer instead of always returning an inactive placeholder; invalid pointer files surface an error without being modified.
 - Chain bundle export no longer rejects a valid project package merely because another enabled package with the same name exists outside the project.
 - Bundle import no longer treats a same-name personal or remote catalog entry as an installed project conflict when the target package directory is empty.
 - Missing, disabled, ambiguous, and unavailable bundle sources now have distinct actionable diagnostics.
 - Legacy name-only steps no longer pass preflight by selecting the first of multiple same-named remote packages.
-- Copilot catalog discovery now maps `personal-agents` and `personal-copilot` source labels to `personal` instead of skipping those skills.
-- Portable run-state writes now succeed on platforms such as Windows that reject directory fsync after an atomic replacement.
+- Copilot catalog discovery maps `personal-agents` and `personal-copilot` source labels to `personal`.
+- Remote refresh fetches blobs with the shallow clone instead of triggering a lazy network fetch for each package file.
+- Portable run-state writes succeed on platforms that reject directory fsync after an atomic replacement.
+- Windows installation repairs the pinned `node-pty` 1.1.0 natural-exit resource lifecycle with a hash-bound compatibility fix; unknown dependency bytes fail installation rather than receiving an unverified patch.
 
 ### Security
 
-- The server is loopback-only with no authentication; credential-like fields are rejected, and authentication checks use presence evidence only.
+- The server is loopback-only with no authentication; credential-like config fields are rejected, and authentication checks use presence evidence only.
 - Remote repository access occurs only after an explicit user refresh. Git uses the machine's existing authentication without storing credentials; package scripts are not checked out or executed.
 - Harness processes are spawned with an executable and argument array, never a shell string.
 - Copilot trust is read-only, and broad automatic flags require an explicit per-chain opt-in.

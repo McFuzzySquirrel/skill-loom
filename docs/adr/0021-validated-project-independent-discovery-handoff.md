@@ -3,18 +3,14 @@ id: ADR-0021
 applies_to:
   - "src/shared/discovery-handoff.ts"
   - "src/server/catalog/discovery-handoff.ts"
-  - "src/server/routes/discovery.ts"
-  - "src/web/routes/DiscoveryPage.tsx"
   - ".github/skills/scenario-discovery/"
-  - "tests/integration/discovery-routes.test.ts"
-  - "tests/e2e/discovery.spec.ts"
-status: Accepted
+status: Accepted; web UI superseded in part by ADR-0027 and ADR-0028
 ---
 
 # ADR-0021: Prepare validated discovery handoffs from pinned snapshots
 
 - **Deciders:** McFuzzySquirrel and the Skill Loom agent team
-- **Date:** 2026-11-13
+- **Date:** 2026-11-08
 
 **Technical Story:** Let users review candidate skills from retained remote snapshots and continue scenario discovery in an existing compatible CLI session without opening or modifying a project.
 

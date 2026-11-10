@@ -1,19 +1,12 @@
 ---
 id: ADR-0020
-applies_to:
-  - "src/server/bundles/shared-library.ts"
-  - "src/server/routes/shared-bundles.ts"
-  - "src/web/routes/SharedBundlesPage.tsx"
-  - "src/web/components/PublishSharedBundleDialog.tsx"
-  - "tests/unit/shared-library.test.ts"
-  - "tests/integration/shared-bundle-routes.test.ts"
-status: Accepted
+status: Superseded by ADR-0027 and ADR-0028
 ---
 
 # ADR-0020: Publish reviewed bundles to a configured local library
 
 - **Deciders:** McFuzzySquirrel and the Skill Loom agent team
-- **Date:** 2026-11-13
+- **Date:** 2026-11-07
 
 **Technical Story:** Provide a stable location where reviewed chain bundles can be browsed and imported across Skill Loom projects or installations without adding a hosted service.
 

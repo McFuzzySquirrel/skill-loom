@@ -10,6 +10,9 @@ status: Accepted
 
 # ADR-0025: Require reviewed digests and explicit confirmations for CLI mutations
 
+- **Deciders:** McFuzzySquirrel and the Skill Loom agent team
+- **Date:** 2026-11-10
+
 ## Context
 
 CLI callers, including agents, can reach the same application services as the

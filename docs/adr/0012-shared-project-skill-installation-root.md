@@ -4,7 +4,6 @@ applies_to:
   - "src/server/catalog/**"
   - "src/server/chains/bundle.ts"
   - "tests/unit/catalog-*.test.ts"
-  - "tests/integration/chain-bundles.test.ts"
 status: Accepted
 ---
 

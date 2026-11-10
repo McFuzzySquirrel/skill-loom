@@ -36,10 +36,10 @@ function createFixture(): string {
   return root;
 }
 
-function runCheck(root: string) {
+function runCheck(root: string, extraArgs: string[] = []) {
   const result = spawnSync(
     process.execPath,
-    [checkScript, '--root', root],
+    [checkScript, '--root', root, ...extraArgs],
     { encoding: 'utf8' },
   );
 
@@ -75,6 +75,28 @@ describe('operator documentation gate', () => {
 
     expect(outputOf(result)).toContain('Documentation check passed');
     expect(result.status).toBe(0);
+  });
+
+  it('passes the integrity checks for the repository documentation', () => {
+    const result = runCheck(repoRoot, ['--integrity']);
+
+    expect(outputOf(result)).toContain('Documentation check passed');
+    expect(result.status).toBe(0);
+  });
+
+  it('fails when a relative link target is missing', () => {
+    const root = createFixture();
+    replaceAllInFile(
+      join(root, 'README.md'),
+      '[user guide](docs/user-guide.md)',
+      '[user guide](docs/missing-guide.md)',
+    );
+
+    const result = runCheck(root, ['--integrity']);
+
+    expect(result.status).not.toBe(0);
+    expect(outputOf(result)).toContain('link target does not exist');
+    expect(outputOf(result)).toContain('docs/missing-guide.md');
   });
 
   it('fails when a required heading is missing', () => {

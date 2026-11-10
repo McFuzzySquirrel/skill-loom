@@ -11,6 +11,8 @@ export interface StepEditorProps {
   skillOptions: string[];
   /** Placeholder problems for this step, already naming the input. */
   placeholderIssues?: string[];
+  /** Blocks editing fields while the editor is saving. */
+  disabled?: boolean;
   onChange: (patch: Partial<Pick<SkillChainStep, 'skillName' | 'skillBinding' | 'instruction' | 'label'>>) => void;
 }
 
@@ -28,6 +30,7 @@ export function StepEditor({
   totalSteps,
   skillOptions,
   placeholderIssues = [],
+  disabled = false,
   onChange,
 }: StepEditorProps) {
   const baseId = useId();
@@ -99,6 +102,7 @@ export function StepEditor({
           className="input"
           id={skillId}
           value={step.skillName}
+          disabled={disabled}
           onChange={(event) =>
             onChange({ skillName: event.target.value, skillBinding: undefined })
           }
@@ -119,7 +123,7 @@ export function StepEditor({
             Pinned to remote snapshot <code>{step.skillBinding.sourceId}</code> at{' '}
             <code>{step.skillBinding.revision.slice(0, 12)}</code> (
             <code>{step.skillBinding.repositoryPath}</code>). To use another revision, remove this
-            step and add the desired catalog entry.
+            step and add the desired skill with the CLI.
           </p>
         )}
       </div>}
@@ -132,6 +136,7 @@ export function StepEditor({
           className="input step-editor__instruction"
           id={instructionId}
           value={step.instruction}
+          disabled={disabled}
           onChange={(event) => onChange({ instruction: event.target.value })}
           rows={7}
           required
@@ -176,6 +181,7 @@ export function StepEditor({
           id={labelId}
           type="text"
           value={step.label ?? ''}
+          disabled={disabled}
           onChange={(event) => onChange({ label: event.target.value })}
           maxLength={120}
           autoComplete="off"

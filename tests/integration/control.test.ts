@@ -588,10 +588,9 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       expect(code).toBe(0);
       expect(error).toBe('');
       expect(JSON.parse(output)).toMatchObject({ ok: true, result: { source: { repository: 'https://example.invalid/shared.git' } } });
-      const response = await started.app.inject('/api/settings/remote-skill-sources');
-      expect(response.json()).toMatchObject({
-        remoteSkillSources: [{ repository: 'https://example.invalid/shared.git' }],
-      });
+      expect((await configStore.get()).remoteSkillSources).toMatchObject([
+        { repository: 'https://example.invalid/shared.git' },
+      ]);
       const addFromProcess = (repository: string) => new Promise<{ code: number | null; stdout: string }>((done, reject) => {
         const child = spawn(process.execPath, [
           '--import', 'tsx', 'src/server/cli.ts', 'catalog', 'source', 'add', '--config-dir', root,
@@ -610,10 +609,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
         expect(result.code).toBe(0);
         expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
       }
-      const allSources = await started.app.inject('/api/settings/remote-skill-sources');
-      expect(allSources.json<{ remoteSkillSources: Array<{ repository: string }> }>().remoteSkillSources.map(
-        (source) => source.repository,
-      ).sort()).toEqual([
+      expect((await configStore.get()).remoteSkillSources.map((source) => source.repository).sort()).toEqual([
         'https://example.invalid/a.git', 'https://example.invalid/b.git', 'https://example.invalid/shared.git',
       ]);
       const project = join(root, 'project');
@@ -737,10 +733,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
         env: {}, stdout: { write: (chunk) => { projectBundleOutput += String(chunk); return true; }, isTTY: false },
       })).toBe(0);
       expect(JSON.parse(projectBundleOutput)).toMatchObject({ ok: true, result: { path: projectBundlePath } });
-      const uiBundle = await started.app.inject(`/api/projects/${projectId}/chains/${skillChainId}/bundle`);
-      expect(uiBundle.statusCode).toBe(200);
       const projectBundle = JSON.parse(await readFile(projectBundlePath, 'utf8'));
-      expect(projectBundle).toEqual(uiBundle.json<{ bundle: unknown }>().bundle);
       expect(projectBundle).toMatchObject({ skills: [{ name: 'local-review' }] });
       expect(copilotRunner).toHaveBeenCalled();
       const portableProject = join(root, 'portable-project');
@@ -880,21 +873,13 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
         stdout: { write: (chunk) => { preflightOutput += String(chunk); return true; }, isTTY: false },
       })).toBe(0);
       expect(JSON.parse(preflightOutput)).toMatchObject({ ok: true, result: report });
-      const uiPreflight = await started.app.inject({
-        method: 'POST', url: `/api/projects/${projectId}/preflight`,
-        payload: { chainId: imported.result.chain.id, mode: 'supervised' },
-      });
-      expect(uiPreflight.json()).toEqual(report);
-      expect(runPreflight).toHaveBeenCalledTimes(2);
-      expect(runPreflight.mock.calls[0]?.[0]).toEqual(runPreflight.mock.calls[1]?.[0]);
+      expect(runPreflight).toHaveBeenCalledTimes(1);
       let workspaceOutput = '';
       expect(await runCli(['workspace', 'create', '--config-dir', root], {
         env: {}, stdin: Readable.from([JSON.stringify({ sourceDraftId: created.result.chain.id })]),
         stdout: { write: (chunk) => { workspaceOutput += String(chunk); return true; }, isTTY: false },
       })).toBe(0);
       const workspace = (JSON.parse(workspaceOutput) as { result: { workspace: { id: string; path: string } } }).result.workspace;
-      const workspaceList = await started.app.inject('/api/test-workspaces');
-      expect(workspaceList.json()).toMatchObject({ workspaces: [{ id: workspace.id, path: workspace.path }] });
       await writeFile(join(workspace.path, 'result.bin'), Buffer.from([0, 1, 255]));
       await symlink(project, join(workspace.path, 'outside'));
       expect(await callControl(root, 'workspace.inspect', { workspaceId: workspace.id, path: 'result.bin' }))
@@ -1058,7 +1043,6 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
         .toMatchObject({ ok: false, error: { code: 'CONTROL_INVALID_REQUEST' } });
       expect(await callControl(root, 'workspace.remove', { workspaceId: workspace.id, confirmed: true }))
         .toMatchObject({ ok: true, result: { id: workspace.id, removed: true } });
-      expect((await started.app.inject('/api/test-workspaces')).json()).toMatchObject({ workspaces: [] });
       expect(await callControl(root, 'service.stop', {})).toMatchObject({
         ok: true, result: { state: 'stopping' },
       });
@@ -1102,7 +1086,8 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
         ok: false, error: { code: 'CONTROL_RUN_ACTIVE' },
       });
       expect(started.app.loomLifecycle.state).toBe('running');
-      expect(await callControl(root, 'status', {})).toMatchObject({ ok: true });
+      expect(await callControl(root, 'status', {}))
+        .toMatchObject({ ok: true, result: { httpEndpoint: { host: '127.0.0.1', port } } });
       expect(orchestrator.shutdown).not.toHaveBeenCalled();
       expect(await callControl(root, 'run.abort', { runId: 'run-test' }))
         .toMatchObject({ ok: false, error: { code: 'CONTROL_INVALID_REQUEST' } });

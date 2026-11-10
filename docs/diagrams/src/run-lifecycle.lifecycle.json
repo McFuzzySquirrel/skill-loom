@@ -1,0 +1,124 @@
+{
+  "schema_version": 3,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Run status and recovery",
+    "locale": "en",
+    "output": "run-lifecycle.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/McFuzzySquirrel/skill-loom.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "343fda335d9f77a990b24a83e39565508bc337b8"
+    }
+  },
+  "mainPath": ["starting", "running", "completed"],
+  "states": [
+    {
+      "id": "starting",
+      "type": "start",
+      "label": "Starting",
+      "sublabel": "snapshot and claim",
+      "tag": "owns slot",
+      "step": "01",
+      "sources": [{ "path": "src/server/runs/model.ts", "line": 31, "end_line": 55 }]
+    },
+    {
+      "id": "running",
+      "type": "active",
+      "label": "Running",
+      "sublabel": "one step in flight",
+      "tag": "owns slot",
+      "step": "02",
+      "sources": [{ "path": "src/server/runs/model.ts", "line": 31, "end_line": 55 }]
+    },
+    {
+      "id": "awaiting-user",
+      "type": "waiting",
+      "label": "Awaiting user",
+      "sublabel": "confirm the step",
+      "tag": "supervised",
+      "sources": [{ "path": "src/server/runs/supervised.ts", "line": 271, "end_line": 272 }]
+    },
+    {
+      "id": "paused",
+      "type": "waiting",
+      "label": "Paused",
+      "sublabel": "operator or 30 min timeout",
+      "tag": "recoverable",
+      "sources": [{ "path": "src/server/runs/automatic.ts", "line": 58, "end_line": 62 }]
+    },
+    {
+      "id": "interrupted",
+      "type": "failure",
+      "label": "Interrupted",
+      "sublabel": "server restarted",
+      "tag": "final, needs recovery",
+      "sources": [{ "path": "src/server/runs/orchestrator.ts", "line": 375, "end_line": 376 }]
+    },
+    {
+      "id": "completed",
+      "type": "success",
+      "label": "Completed",
+      "sublabel": "last step done",
+      "tag": "final",
+      "step": "03",
+      "sources": [{ "path": "src/server/runs/model.ts", "line": 54, "end_line": 55 }]
+    },
+    {
+      "id": "failed",
+      "type": "failure",
+      "label": "Failed",
+      "sublabel": "explicit failure",
+      "tag": "final",
+      "sources": [{ "path": "src/server/runs/model.ts", "line": 54, "end_line": 55 }]
+    },
+    {
+      "id": "aborted",
+      "type": "neutral",
+      "label": "Aborted",
+      "sublabel": "operator stopped it",
+      "tag": "final",
+      "sources": [{ "path": "src/server/runs/model.ts", "line": 54, "end_line": 55 }]
+    }
+  ],
+  "transitions": [
+    { "id": "starting-running", "from": "starting", "to": "running", "label": "runner starts" },
+    { "id": "running-completed", "from": "running", "to": "completed", "label": "last step done" },
+    { "id": "running-awaiting", "from": "running", "to": "awaiting-user", "label": "step ends" },
+    { "id": "awaiting-running", "from": "awaiting-user", "to": "running", "label": "done or next" },
+    { "id": "running-paused", "from": "running", "to": "paused", "label": "pause or timeout", "variant": "dashed" },
+    { "id": "paused-running", "from": "paused", "to": "running", "label": "resume" },
+    { "id": "running-failed", "from": "running", "to": "failed", "label": "explicit failure" },
+    { "id": "running-aborted", "from": "running", "to": "aborted", "label": "abort" },
+    { "id": "awaiting-aborted", "from": "awaiting-user", "to": "aborted", "label": "abort" },
+    { "id": "paused-aborted", "from": "paused", "to": "aborted", "label": "abort" },
+    { "id": "starting-interrupted", "from": "starting", "to": "interrupted", "label": "restart", "variant": "dashed" },
+    { "id": "running-interrupted", "from": "running", "to": "interrupted", "label": "restart", "variant": "dashed" },
+    { "id": "awaiting-interrupted", "from": "awaiting-user", "to": "interrupted", "label": "restart", "variant": "dashed" },
+    { "id": "paused-interrupted", "from": "paused", "to": "interrupted", "label": "restart", "variant": "dashed" },
+    { "id": "interrupted-starting", "from": "interrupted", "to": "starting", "label": "retry, continue, or restart", "variant": "emphasis" }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "One slot",
+      "items": [
+        "Starting, running, awaiting user, and paused hold the single active slot",
+        "A second start is refused instead of queued",
+        "A final status releases the slot"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Recovery is explicit",
+      "items": [
+        "Startup marks active records interrupted",
+        "Retry resets only the interrupted step",
+        "Continue starts at the next pending step",
+        "Restart creates a new run from the frozen chain"
+      ]
+    }
+  ]
+}

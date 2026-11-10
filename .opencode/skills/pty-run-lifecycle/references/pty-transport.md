@@ -27,10 +27,10 @@ interface TerminalSession {
 
 ## Subscriber rules
 
-- At most one WebSocket subscriber per PTY.
+- At most one control-channel subscriber per PTY.
 - A second subscriber receives a typed conflict and does not receive output.
 - On reconnect, either reattach the original subscriber or create a new session; never attach two.
-- Terminal output is forwarded as bytes; the client renders it through xterm.js.
+- Terminal output is forwarded as bytes; `skill-loom run attach` renders it in the invoking terminal.
 
 ## Tail rules
 
@@ -64,6 +64,6 @@ Guard cleanup with an `exited` flag and tolerate a missing process.
 ## Tests
 
 - Spawn a short Node process and observe stdout, resize, and input.
-- Connect a real WebSocket client through the registered route.
+- Connect a real control-channel client through the registered endpoint.
 - Assert a second subscriber is rejected.
 - Assert close, abort, and signal each terminate the child.

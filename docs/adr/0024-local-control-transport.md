@@ -11,6 +11,9 @@ status: Accepted
 
 # ADR-0024: Authenticate local control of the profile owner
 
+- **Deciders:** McFuzzySquirrel and the Skill Loom agent team
+- **Date:** 2026-11-08
+
 ## Context
 
 Short-lived CLI processes cannot safely own managed runs or use process-local

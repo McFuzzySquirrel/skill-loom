@@ -12,7 +12,7 @@
 | Run | `<canonicalProject>/.loom/runs/<runId>.json` | `runs/` is listed in `<project>/.loom/.gitignore` |
 | `.loom` guard | `<canonicalProject>/.loom/.gitignore` | Created only when absent; contains `runs/` |
 
-`LOOM_CONFIG_DIR` must be honored by every store operation, including the active pointer. Unit tests inject a temporary directory; Playwright starts the app with an isolated directory.
+`LOOM_CONFIG_DIR` must be honored by every store operation, including the active pointer. Unit tests inject a temporary directory, and integration tests start the app with an isolated directory.
 
 ## Identifier rules
 

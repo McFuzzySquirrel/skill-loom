@@ -5,9 +5,7 @@ applies_to:
   - "src/portable/bundle.ts"
   - "src/portable/runtime.ts"
   - "src/server/chains/bundle.ts"
-  - "src/server/routes/chain-bundles.ts"
   - ".github/skills/loom-run-bundle/"
-  - "tests/integration/chain-bundles.test.ts"
   - "tests/unit/portable-runtime.test.ts"
 status: Accepted
 ---
@@ -15,7 +13,7 @@ status: Accepted
 # ADR-0018: Version portable bundles for native-agent assets
 
 - **Deciders:** McFuzzySquirrel and the Skill Loom agent team
-- **Date:** 2026-11-13
+- **Date:** 2026-11-07
 
 **Technical Story:** Share an exact selected native agent with a chain without silently losing its identity or definition in existing portable bundle readers.
 

@@ -59,24 +59,21 @@ describe('project-independent chain drafts', () => {
     expect(await readdir(target)).toEqual([]);
   });
 
-  it('requires a current revision for HTTP update and deletion', async () => {
+  it('requires a current revision for HTTP updates', async () => {
     const created = await app.inject({ method: 'POST', url: '/api/drafts', payload: draftPayload });
     const { chain, revision } = created.json<{ chain: Chain; revision: string }>();
     const url = `/api/drafts/${encodeURIComponent(chain.id)}`;
-    for (const method of ['PUT', 'DELETE'] as const) {
-      const response = await app.inject({
-        method, url, ...(method === 'PUT' ? { payload: { ...draftPayload, name: 'Unexpected' } } : {}),
-      });
-      expect(response.statusCode).toBe(428);
-      expect(response.json()).toMatchObject({ error: { code: 'CHAIN_REVISION_REQUIRED' } });
-    }
+    const missing = await app.inject({ method: 'PUT', url, payload: { ...draftPayload, name: 'Unexpected' } });
+    expect(missing.statusCode).toBe(428);
+    expect(missing.json()).toMatchObject({ error: { code: 'CHAIN_REVISION_REQUIRED' } });
     const updated = await app.inject({
       method: 'PUT', url, headers: { 'x-loom-chain-revision': revision },
       payload: { ...draftPayload, name: 'Reviewed change' },
     });
     expect(updated.statusCode).toBe(200);
     const stale = await app.inject({
-      method: 'DELETE', url, headers: { 'x-loom-chain-revision': revision },
+      method: 'PUT', url, headers: { 'x-loom-chain-revision': revision },
+      payload: { ...draftPayload, name: 'Stale change' },
     });
     expect(stale.statusCode).toBe(409);
     expect(stale.json()).toMatchObject({ error: { code: 'CHAIN_STALE' } });
@@ -84,7 +81,7 @@ describe('project-independent chain drafts', () => {
     expect(current.json<{ chain: Chain }>().chain.name).toBe('Reviewed change');
   });
 
-  it('creates, updates, lists, and deletes drafts outside project chains and templates', async () => {
+  it('creates, updates, and lists drafts outside project chains and templates', async () => {
     const createdResponse = await app.inject({
       method: 'POST',
       url: '/api/drafts',
@@ -117,13 +114,6 @@ describe('project-independent chain drafts', () => {
       'Updated remote review',
     );
 
-    const deleted = await app.inject({
-      method: 'DELETE',
-      url: `/api/drafts/${encodeURIComponent(created.id)}`,
-      headers: { 'x-loom-chain-revision': updatedResponse.json<{ revision: string }>().revision },
-    });
-    expect(deleted.statusCode).toBe(200);
-    expect(await readdir(globalDraftsDirectoryFor(configDirectory))).toEqual([]);
   });
 
   it('rejects invalid chain drafts without creating a stored record', async () => {
