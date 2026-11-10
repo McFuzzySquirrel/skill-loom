@@ -19,6 +19,7 @@ On Windows, service startup also requires a protected private profile on a local
 | You want to | Use |
 |---|---|
 | Find skills and propose a workflow | The `scenario-discovery` skill, or `skill-loom catalog` and `discovery` |
+| Create a missing skill for a chain step | The `skill-creator` and `skill-review` skills, through the explicit per-gap branch |
 | Coordinate discovery, testing, import, and running | The `loom-chain-workflow` skill |
 | Create, inspect, or edit chain data | `skill-loom chain ...` |
 | Change step order, instructions, or inputs visually | `skill-loom edit` |
@@ -51,6 +52,8 @@ skill-loom service stop
 ### Discover candidate skills
 
 Ask an agent: **"Use scenario-discovery to propose a workflow for reviewing our API changes."** The skill asks for the outcome and whether remote repositories are in scope, inspects skills as untrusted data without running their scripts, proposes ordered steps and inputs, and shows every package file for your review before anything is packaged. Its result is a reviewed `.loom.json` bundle or a draft; it never imports or runs one.
+
+If a step role has no suitable skill, the proposal marks it as a gap. You decide that gap individually: use an instruction-only step, search again, or author a new skill. Authoring stages the package under `<project>/.skill-loom-authored/<name>/`, audits only that package with `skill-review`, and installs nothing until you approve. The audit is advisory, not a safety certification.
 
 ### Create and edit a chain
 

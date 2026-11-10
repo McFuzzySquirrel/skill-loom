@@ -10,7 +10,7 @@
       "url": "https://github.com/McFuzzySquirrel/skill-loom.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "343fda335d9f77a990b24a83e39565508bc337b8"
+      "revision": "122fdc85ef24881d0e17c5165eb15f1a249775c1"
     }
   },
   "mainPath": ["starting", "running", "completed"],

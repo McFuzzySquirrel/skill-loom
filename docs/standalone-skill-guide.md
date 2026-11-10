@@ -11,8 +11,10 @@ Use this path when you already work in an agent harness (GitHub Copilot CLI, Ope
 | Skill | Purpose | Needs Skill Loom? |
 |---|---|---|
 | `scenario-discovery` | Inventories project-local skills, proposes workflows, and writes a reviewed `.loom.json` bundle. | No |
+| `skill-creator` | Stages a new skill for an explicitly approved discovery gap. | No |
+| `skill-review` | Audits only the staged package; the score is advisory. | No |
 | `loom-run-bundle` | Inspects, installs, and runs a bundle in the **current** host session through a Node.js helper. | No |
-| `loom-chain-workflow` | Coordinates the two skills above and, when Skill Loom's CLI owner is running, optional workspace tests and reviewed import. | Only for the CLI phases |
+| `loom-chain-workflow` | Coordinates the skills above and, when Skill Loom's CLI owner is running, optional workspace tests and reviewed import. | Only for the CLI phases |
 
 Limits of the skill-only path:
 
@@ -30,8 +32,8 @@ Limits of the skill-only path:
 
 ## Install the Skills
 
-1. From a checkout, run `npm run build:portable-skill` and use `dist/skills/loom-run-bundle/`, `dist/skills/scenario-discovery/`, and `dist/skills/loom-chain-workflow/` (ZIP archives sit beside them), or copy the checked-in `skill/` directories.
-2. Copy each directory into the target project's `.agents/skills/`. Do not merge over an existing package.
+1. From a checkout, run `npm run build:portable-skill` and use `dist/skills/loom-run-bundle/`, `dist/skills/scenario-discovery/`, `dist/skills/loom-chain-workflow/`, `dist/skills/skill-creator/`, and `dist/skills/skill-review/` (ZIP archives sit beside them), or copy the checked-in `skill/` directories.
+2. Copy each directory into the target project's `.agents/skills/`. Do not merge over an existing package. `skill-creator` and `skill-review` are only needed for the optional gap-authoring branch.
 3. Refresh or restart the host so it discovers them.
 
 ## Workflow
@@ -39,6 +41,8 @@ Limits of the skill-only path:
 ### 1. Discover and package (optional)
 
 Ask the host: **"Use scenario-discovery to propose a workflow for <outcome>."** The skill asks for the outcome and whether remote repositories matter, inspects only enabled project-local skills as untrusted data, proposes scenarios, and shows the full chain and every package file. After you confirm, it writes a version 1 `.loom.json`. It does not import or run it. Remote repositories must already be copied into the project; the skill never clones.
+
+A proposal may mark individual step roles as `new skill needed`. The skill explains the evidence for each gap and asks you to choose instruction-only, search again, or author a skill. If you choose authoring, `skill-creator` stages the package at `<project>/.skill-loom-authored/<name>/`, `skill-review` audits only that package, and nothing is installed until you approve the install. The audit is advisory. A failed gap does not invalidate the steps that already resolved.
 
 You can skip this step if you already have a bundle, for example exported from Skill Loom or shared by a colleague.
 

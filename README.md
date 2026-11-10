@@ -57,7 +57,7 @@ The product promise is deliberately narrow:
 
 | Capability | What it does |
 |---|---|
-| Companion skills | `scenario-discovery`, `loom-chain-workflow`, and `loom-run-bundle` discover skills, coordinate testing and import, and run a bundle in the current agent session. The first two offer to install the CLI when `skill-loom` is missing. |
+| Companion skills | `scenario-discovery`, `skill-creator`, `skill-review`, `loom-chain-workflow`, and `loom-run-bundle` discover skills, author an explicitly approved missing skill, coordinate testing and import, and run a bundle in the current agent session. The first and fourth offer to install the CLI when `skill-loom` is missing. |
 | Visual chain editor | `skill-loom edit` opens a local editor to drag steps into a new order, edit instructions, manage `{{inputs}}`, and save back to the draft or project chain. It is the only web screen. |
 | Chain drafts and project chains | Create, validate, update, and remove project-independent drafts and project chains with `skill-loom chain`. |
 | Portable chain bundles | Export a chain with complete referenced skill packages as `.loom.json` (version 2 also preserves one native agent); inspect, review, and import it into another project. |
@@ -149,8 +149,9 @@ The full decision directory is in [docs/adr/README.md](docs/adr/README.md).
 - `tests/integration/` — Fastify composition-root suites for routes, the control channel, and run orchestration.
 - `scripts/` — Documentation gate, package smoke test, and live harness probes.
 - `docs/` — User, administrator, and operations guides, ADRs, release notes, support ownership, and live evidence.
-- `.github/skills/` — Project-maintained Copilot skills and their references.
-- `skill/scenario-discovery/` — Mirrored standalone project-independent discovery skill and helpers.
+- `.github/skills/` — Canonical project-maintained agent skills and their references.
+- `skill/scenario-discovery/` — Mirrored standalone discovery skill, gap-authoring procedure, and helpers.
+- `skill/skill-creator/` and `skill/skill-review/` — Mirrored staged authoring and advisory audit skills.
 - `skill/loom-chain-workflow/` — Mirrored CLI workflow skill that coordinates discovery, optional workspace testing, reviewed import, and current-session execution using the companion skills.
 - `.opencode/agents/` and `.opencode/skills/` — OpenCode agent definitions and mirrored project skills.
 - `<project>/.agents/skills/` — Shared destination for new project skill copies and bundle imports; OpenCode also discovers legacy `.opencode/skills/`.

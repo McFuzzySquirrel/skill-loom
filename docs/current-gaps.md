@@ -24,6 +24,7 @@ This page is the current list of capabilities that are implemented only in part,
 - The web surface is limited to the visual chain editor. Projects, catalogs, discovery, libraries, test workspaces, and runs are CLI- and skill-driven.
 - The global chain-template and shared-bundle-library interfaces were removed by [ADR-0027](adr/0027-cli-and-skill-driven-workflow.md) and [ADR-0028](adr/0028-single-purpose-chain-editor.md). Retained files under the config directory have no current command.
 - Portable bundle runners cannot prepare a bundle that selects a native agent; use the managed run path for those bundles.
+- Managed discovery workspaces do not accept locally authored skills. The reviewed per-gap authoring flow is supported in the project-local and downloaded-handoff paths; extending the managed result model needs a reachable create/preview/import surface and a local-origin binding first. See [ADR-0029](adr/0029-authored-skill-gap-flow.md).
 
 ## Quality gates
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { cp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { zipSync } from 'fflate';
 import { build } from 'vite';
@@ -18,6 +18,14 @@ const workflowSource = join(root, '.github', 'skills', 'loom-chain-workflow');
 const workflowMirror = join(root, 'skill', 'loom-chain-workflow');
 const workflowOutput = join(root, 'dist', 'skills', 'loom-chain-workflow');
 const workflowArchive = join(root, 'dist', 'skills', 'loom-chain-workflow.zip');
+const creatorSource = join(root, '.github', 'skills', 'skill-creator');
+const creatorMirror = join(root, 'skill', 'skill-creator');
+const creatorOutput = join(root, 'dist', 'skills', 'skill-creator');
+const creatorArchive = join(root, 'dist', 'skills', 'skill-creator.zip');
+const reviewSource = join(root, '.github', 'skills', 'skill-review');
+const reviewMirror = join(root, 'skill', 'skill-review');
+const reviewOutput = join(root, 'dist', 'skills', 'skill-review');
+const reviewArchive = join(root, 'dist', 'skills', 'skill-review.zip');
 const fixedTime = new Date('2000-01-01T00:00:00.000Z');
 
 await rm(output, { recursive: true, force: true });
@@ -26,6 +34,10 @@ await rm(discoveryOutput, { recursive: true, force: true });
 await rm(discoveryArchive, { force: true });
 await rm(workflowOutput, { recursive: true, force: true });
 await rm(workflowArchive, { force: true });
+await rm(creatorOutput, { recursive: true, force: true });
+await rm(creatorArchive, { force: true });
+await rm(reviewOutput, { recursive: true, force: true });
+await rm(reviewArchive, { force: true });
 await mkdir(join(output, 'scripts'), { recursive: true });
 await build({ configFile: join(root, 'vite.portable.config.ts'), root });
 await rename(join(output, 'scripts', 'loom-bundle.js'), join(output, 'scripts', 'loom-bundle.mjs'));
@@ -101,3 +113,23 @@ for (const path of await listFiles(workflowOutput)) {
 }
 await writeFile(workflowArchive, zipSync(workflowFiles, { level: 9 }));
 console.log(`Built ${relative(root, workflowOutput)} and ${relative(root, workflowArchive)}.`);
+
+async function buildCompanionSkill(source, mirror, output, archive) {
+  await rm(mirror, { recursive: true, force: true });
+  await cp(source, mirror, { recursive: true });
+  await cp(source, output, { recursive: true });
+  await cp(join(root, 'LICENSE'), join(output, 'LICENSE'));
+  const files = {};
+  for (const path of await listFiles(output)) {
+    const relativePath = relative(output, path).split('\\').join('/');
+    files[`${basename(output)}/${relativePath}`] = [
+      new Uint8Array(await readFile(path)),
+      { mtime: fixedTime, os: 3, attrs: 0o100644 << 16 },
+    ];
+  }
+  await writeFile(archive, zipSync(files, { level: 9 }));
+  console.log(`Built ${relative(root, output)} and ${relative(root, archive)}.`);
+}
+
+await buildCompanionSkill(creatorSource, creatorMirror, creatorOutput, creatorArchive);
+await buildCompanionSkill(reviewSource, reviewMirror, reviewOutput, reviewArchive);

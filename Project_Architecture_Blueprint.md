@@ -2,6 +2,8 @@
 
 *Generated: 2026-11-10 · Package version `0.1.0` · Configuration: `PROJECT_TYPE=Auto-detect`, `ARCHITECTURE_PATTERN=Auto-detect`, `DIAGRAM_TYPE=C4`, `DETAIL_LEVEL=Comprehensive`, `INCLUDES_CODE_EXAMPLES=true`, `INCLUDES_IMPLEMENTATION_PATTERNS=true`, `INCLUDES_DECISION_RECORDS=true`, `FOCUS_ON_EXTENSIBILITY=true`.*
 
+*Refreshed 2026-11-10 for ADR-0029: per-gap skill authoring, staged validation and install, mixed-origin bundles, and the `skill-creator`/`skill-review` companion skills.*
+
 This document is the reference for how Skill Loom is actually built. It describes the code that exists, not an aspirational pattern. File paths and symbols are named so a maintainer can go straight from this document to the implementation.
 
 ---
@@ -19,7 +21,7 @@ This document is the reference for how Skill Loom is actually built. It describe
 | Terminal | `node-pty` `1.1.0`, server-owned PTY sessions | `src/server/terminal/pty.ts` |
 | Contracts/validation | Zod `4.6.7`, YAML `2.9.1` | `src/server/**/model.ts`, `config/schema.ts`, `catalog/frontmatter.ts` |
 | Persistence | Versioned JSON files with atomic replacement; SQLite for profile/claim locks | `config/store.ts`, `runs/store.ts`, `shared/project-claim.ts` |
-| Tests | Vitest `5.1.0`, 60 suites under `tests/unit` and `tests/integration` | `vitest.config.ts`, CI |
+| Tests | Vitest `5.1.0`, 62 suites under `tests/unit` and `tests/integration` | `vitest.config.ts`, CI |
 | Packaging | npm tarball, postinstall native PTY helper, GitHub Actions matrix | `scripts/package-smoke.mjs`, `.github/workflows/cross-platform-verification.yml` |
 
 ### 1.2 Architectural pattern detected
@@ -51,6 +53,7 @@ The classic labels “Clean Architecture” or “Hexagonal” only partly apply
 8. **Identity is deterministic.** Project ids, skill ids, agent ids, chain revisions, run revisions, and bundle fingerprints are content- or path-derived hashes (`projects/registry.ts`, `catalog/types.ts`, `chains/service.ts`, `runs/orchestrator.ts`, `portable/bundle.ts`).
 9. **Uncertainty is surfaced, never guessed.** Ambiguous auth/trust becomes an acknowledgement-required preflight finding; unobservable skill firing becomes `not-observable` (`preflight/engine.ts`, `runs/observations.ts`).
 10. **The product is CLI/skill-driven with one web screen.** The web UI is only the chain editor (ADR-0027, ADR-0028).
+11. **New capabilities are authored, not invented.** A discovery gap is decided per step role; an authored package is staged outside host-discovered roots, audited as advisory, and installed only after separate approval (ADR-0029).
 
 ### 2.2 Architectural boundaries
 
@@ -63,6 +66,7 @@ The classic labels “Clean Architecture” or “Hexagonal” only partly apply
 | Server ↔ remote Git | HTTPS/SSH only, explicit refresh, bounded staging, immutable snapshots, no execution |
 | Web UI ↔ run execution | No run/workspace HTTP routes; execution is CLI/control-only |
 | Portable helper ↔ managed server | Separate run records under `.loom/portable-runs`; opt-in project coordination protocol |
+| Companion authoring ↔ project skill root | `.skill-loom-authored/` staging, deterministic helper validation, advisory audit, explicit install, catalog refresh |
 
 ### 2.3 Notable hybrid or adapted patterns
 
@@ -71,6 +75,7 @@ The classic labels “Clean Architecture” or “Hexagonal” only partly apply
 - **Snapshot + pointer**: run documents are immutable-ish snapshots plus a single global `active-run.json` pointer for cross-project exclusivity.
 - **Reviewed command pattern**: review produces a digest, the mutation re-computes and compares it, then requires `confirmed: true`.
 - **Filesystem as database**: one JSON document per aggregate, guarded by naming conventions and atomic replacement rather than a transactional store.
+- **Staged authoring + reviewed install**: a missing skill is generated into a non-discoverable staging directory, fingerprinted, audited as advisory, then installed without overwrite and re-resolved through the catalog.
 
 ---
 
@@ -104,7 +109,7 @@ flowchart LR
 flowchart TB
   subgraph Client["Client surfaces"]
     CLI["skill-loom CLI<br/>dist/src/server/cli.js"]
-    Skill["Companion skills<br/>scenario-discovery<br/>loom-chain-workflow<br/>loom-run-bundle"]
+    Skill["Companion skills<br/>scenario-discovery<br/>skill-creator · skill-review<br/>loom-chain-workflow<br/>loom-run-bundle"]
     Web["React chain editor<br/>dist/web"]
   end
 
@@ -125,6 +130,7 @@ flowchart TB
   CLI -->|"control protocol"| Control
   Web -->|"JSON /api"| Fastify
   Skill -->|"CLI invocations"| CLI
+  Skill -->|"staged authored package"| Project
   Skill -->|"portable helper"| Project
 
   Fastify --> Services
@@ -413,11 +419,21 @@ The status vocabulary is defined in `src/server/runs/model.ts`; recovery actions
 
 ### 4.16 Companion skills and maintainer agents
 
-**Purpose.** Teach a coding agent how to use the CLI, discover skills, run bundles, and maintain the repository.
+**Purpose.** Teach a coding agent how to use the CLI, discover skills, author a missing skill, run bundles, and maintain the repository.
 
-**Internal structure.** `.github/skills/**` is canonical; `scripts/build-portable-skill.mjs` generates `dist/skills/**` and mirrors `skill/**` and `.opencode/skills/**`. `.opencode/agents/**` defines maintainer agents. Project copies install to `<project>/.agents/skills`, with legacy OpenCode discovery preserved.
+**Internal structure.** `.github/skills/**` is canonical. The shipped set is `scenario-discovery`, `skill-creator`, `skill-review`, `loom-chain-workflow`, and `loom-run-bundle`. `scripts/build-portable-skill.mjs` generates `dist/skills/**` and their archives, and mirrors `skill/**` and `.opencode/skills/**`. `skill-review` ships without its generated `node_modules`; its script-based audit requires a local `npm install`. `.opencode/agents/**` defines maintainer agents. Project copies install to `<project>/.agents/skills`, with legacy OpenCode discovery preserved.
 
-**Interactions.** Skills invoke the CLI as a subprocess; they do not import server code. Documentation and mirrors are validated by `npm run check`.
+**Interactions.** Skills invoke the CLI as a subprocess; they do not import server code. `scenario-discovery` may hand an approved gap to `skill-creator`, then scope `skill-review` to the staged package and invoke `scripts/authored-skill.mjs` for validation and installation. Documentation and mirrors are validated by `npm run check`.
+
+### 4.17 Authored-skill gap flow
+
+**Purpose.** Let discovery propose a chain that mixes existing skills, instruction-only steps, and new skills without inventing capabilities or installing unreviewed prompt content.
+
+**Internal structure.** `.github/skills/scenario-discovery/references/authored-skill-gap.md` defines the procedure; `scripts/authored-skill.mjs` implements `check` and `install`; `scripts/build-from-handoff.mjs` accepts `localSkills` beside pinned candidates. `skill-creator` owns the interview and scaffold; `skill-review` owns the advisory audit. Policy is recorded in [ADR-0029](docs/adr/0029-authored-skill-gap-flow.md).
+
+**Interactions.** A gap is recorded per step role. Approval is per gap and again for install. The helper validates real directories, safe paths, symlinks, excluded directories, size limits, and frontmatter names; it fingerprints the package, installs without overwrite, preserves executable bits, verifies the installed bytes, and removes a partial destination on failure. The catalog is refreshed and every step name is re-resolved before the chain is finalized.
+
+**Evolution.** Managed discovery workspaces cannot yet carry authored skills; extending that model needs a reachable create/preview/import surface and a reviewed local-origin binding. Do not treat the advisory audit as a correctness or security gate.
 
 ---
 
@@ -527,8 +543,8 @@ Core documents:
 - **Config** (`version: 2`): harness commands, extra skill directories, remote sources, project catalog pages, recent projects, test/discovery workspaces, discovery settings, remote limits.
 - **Chain** (`CHAIN_VERSION`): id, name, harness, session mode, steps (skill or instruction), inputs, automatic-permission opt-in, optional pinned native agent, timestamps.
 - **Run** (`RUN_VERSION`): frozen chain snapshot, mode, status, steps with status/tail/attempts/reason, session plan, project/test-workspace identity, skill observations, revision.
-- **Bundle** (`version: 1 | 2`): chain, skill packages with content and fingerprints, optional selected agent plus agent inventory.
-- **Discovery handoff**: goal, harness, pinned candidate identities, selected package files, fingerprints, size bounds.
+- **Bundle** (`version: 1 | 2`): chain, skill packages with content and fingerprints, optional selected agent plus agent inventory. A bundle may mix pinned remote candidates and reviewed locally authored packages.
+- **Discovery handoff**: goal, harness, pinned candidate identities, selected package files, fingerprints, size bounds. The standalone builder may add `localSkills` entries with a package path inside the declared project and a reviewed local fingerprint.
 
 ### 6.2 Persistence locations
 
@@ -542,6 +558,7 @@ Core documents:
 | `~/.config/loom/test-workspaces/<uuid>` | Retained managed test projects | Project registry + config records |
 | `~/.config/loom/discovery-workspaces/<uuid>` | Discovery handoff, managed project, results | Same |
 | `~/.config/loom/catalog-sources/<source>/<commit>` | Immutable remote snapshots | Content-addressed directories |
+| `<project>/.skill-loom-authored/<name>/` | Staged authored skill packages; audit reports sit beside them | Outside host-discovered roots; removed after install, refusal, or abandonment |
 | `<project>/.loom/chains/*.json` | Project chains | Atomic write + safe id/symlink checks |
 | `<project>/.loom/runs/*.json` | Run snapshots | Atomic write + bounded tails |
 | `<project>/.loom/portable-runs/*.json` | Portable helper runs | Atomic write, separate from managed runs |
@@ -564,12 +581,13 @@ Core documents:
 | Chain revision | SHA-256 of canonical chain JSON (`chainRevision`) |
 | Run revision | SHA-256 of run JSON (`runRevision`) |
 | Bundle fingerprint | SHA-256 of the serialized bundle |
+| Authored skill fingerprint | SHA-256 over sorted package paths, executable bits, and file contents |
 | Snapshot id | Source + commit/revision |
 | Skill id | Source kind + harness + package identity |
 | Native agent id | Harness + source + path + fingerprint |
 | Review digest | SHA-256 of the exact review evidence shown to the caller |
 
-Integrity checks appear at bundle parse (file hashes/paths), agent copy (fingerprint), remote snapshot review, and run-start/action review. A digest is evidence that the reviewed payload has not changed; it is not proof a human reviewed it (documented in CLI help and ADRs).
+Integrity checks appear at bundle parse (file hashes/paths), agent copy (fingerprint), authored-package check and install, remote snapshot review, and run-start/action review. A digest or fingerprint is evidence that the reviewed payload has not changed; it is not proof a human reviewed it (documented in CLI help and ADRs).
 
 ### 6.5 Concurrency and retention
 
@@ -839,7 +857,7 @@ Every unbounded surface has a cap: request bytes, response bytes, terminal tail 
 | Package smoke | `scripts/package-smoke.mjs` | Tarball contents, install, service startup, authenticated control, clean shutdown |
 | Docs gate | `scripts/check-docs.mjs` | Required headings, commands, safety statements, links/anchors, ADR index consistency, skill mirrors |
 
-There are 60 Vitest suites. There is no browser E2E suite in the current tree; the web editor is covered by TypeScript checks and component-level expectations where present, while live harness behavior is verified by probes rather than mocked assertions.
+There are 62 Vitest suites. The authored-skill helper and mixed handoff builder have dedicated unit coverage for path safety, fingerprints, collisions, install refusal, and executable bits. There is no browser E2E suite in the current tree; the web editor is covered by TypeScript checks and component-level expectations where present, while live harness behavior is verified by probes rather than mocked assertions.
 
 ### 11.2 Test boundary patterns
 
@@ -1136,6 +1154,7 @@ The durable decisions live in `docs/adr/`. The index is authoritative; this tabl
 | 0026 | Bounded opt-in workspace evaluation | Explicit checks, bounded output, no arbitrary execution |
 | 0027 | CLI and skill-driven workflow | CLI is the primary product surface |
 | 0028 | Single-purpose chain editor | Web UI limited to editing; no run/project screens |
+| 0029 | Explicit per-gap authored skills | Staged, advisory review, explicit install, mixed bundles |
 
 ### 15.1 Decision rationale patterns
 

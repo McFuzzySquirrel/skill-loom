@@ -28,7 +28,7 @@ This page lists the canonical documentation and where retired material lives. Ke
 ## Skills and agents
 
 - `.github/skills/**` is the canonical companion skill source. `scripts/build-portable-skill.mjs` builds `dist/skills/**` and syncs the checked-in mirrors.
-- `skill/**` is the distributable mirror of `scenario-discovery`, `loom-chain-workflow`, and the generated `loom-run-bundle` helper.
+- `skill/**` is the distributable mirror of `scenario-discovery`, `loom-chain-workflow`, `skill-creator`, `skill-review`, and the generated `loom-run-bundle` helper.
 - `.opencode/skills/**` contains the project-local OpenCode copies of the shared skills.
 - `.opencode/agents/**` defines the maintainer agent team described in [Support](SUPPORT.md).
 

@@ -11,7 +11,7 @@
       "url": "https://github.com/McFuzzySquirrel/skill-loom.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "343fda335d9f77a990b24a83e39565508bc337b8"
+      "revision": "122fdc85ef24881d0e17c5165eb15f1a249775c1"
     }
   },
   "lanes": [
@@ -31,7 +31,7 @@
       "label": "Bundle file",
       "sublabel": "chain and skills",
       "tag": "untrusted input",
-      "sources": [{ "path": "docs/standalone-skill-guide.md", "line": 39, "end_line": 53 }]
+      "sources": [{ "path": "docs/standalone-skill-guide.md", "line": 43, "end_line": 47 }]
     },
     {
       "id": "inspect",
@@ -50,7 +50,7 @@
       "label": "Review and confirm",
       "sublabel": "files plus digest",
       "tag": "human decision",
-      "sources": [{ "path": "docs/standalone-skill-guide.md", "line": 45, "end_line": 53 }]
+      "sources": [{ "path": "docs/standalone-skill-guide.md", "line": 51, "end_line": 56 }]
     },
     {
       "id": "prepare",
@@ -87,7 +87,7 @@
       "label": "Host does the work",
       "sublabel": "its own tools",
       "tag": "agent-reported",
-      "sources": [{ "path": "docs/standalone-skill-guide.md", "line": 78, "end_line": 87 }]
+      "sources": [{ "path": "docs/standalone-skill-guide.md", "line": 84, "end_line": 88 }]
     },
     {
       "id": "record",
@@ -155,6 +155,15 @@
         "A project-local claim rejects a second preparation or step",
         "It does not coordinate with managed runs or older helpers",
         "Resume needs the earlier work confirmed stopped"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Mixed-origin bundles",
+      "items": [
+        "A bundle may carry pinned remote candidates and reviewed local skills",
+        "The builder verifies each local fingerprint before staging",
+        "The run path is unchanged: inspect, prepare, step, record"
       ]
     }
   ]

@@ -1,0 +1,50 @@
+# Example: GitHub Actions workflow for skill-review
+#
+# Copy this to .github/workflows/skill-review.yml in your repo.
+# Assumes the skill-review/ directory is at your repo root.
+# For other CI systems, adapt the same `npm run skill-review` command
+# with the appropriate --provider flag and env vars.
+
+name: Skill Review
+on:
+  pull_request:
+    paths:
+      - '**/SKILL.md'
+      - '.agents/skills/**'
+      - 'skills/**'
+      - '.opencode/skills/**'
+      - '.claude/skills/**'
+      - 'templates/skills/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  skill-review:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: skill-review
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: skill-review/package-lock.json
+
+      - run: npm ci
+
+      - name: Run skill review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx tsx scripts/skill-review.ts --provider github --min-score 1.5
+
+      - name: Fail on low-scoring skills (optional)
+        if: always()
+        run: npx tsx scripts/skill-review.ts --provider stdout --min-score 1.5 --fail-below

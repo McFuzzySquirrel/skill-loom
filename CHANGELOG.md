@@ -22,6 +22,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 - Documentation set: user, administrator, operations, scenario, standalone skill, and visual tour guides; ADR index and records; release notes; [known gaps](docs/current-gaps.md); and a [documentation archive](docs/archive/README.md) for retired plans.
 - Global install guidance for a locally packed tarball, including the npm 11 `allow-scripts` workaround for `file:` dependencies.
 - An extended documentation gate that checks relative links and anchors, documented npm scripts, retired vocabulary, ADR index dates, and checked-in skill mirrors.
+- An explicit per-gap authoring branch for discovery: proposals may mix existing skills, instruction-only steps, and new locally authored skills. `skill-creator` scaffolds into `.skill-loom-authored/`, `skill-review` audits only that package, and the new `authored-skill.mjs` helper validates, fingerprints, and installs without overwriting. Handoff bundles may include reviewed `localSkills` entries beside pinned candidates.
 
 ### Changed
 
@@ -32,6 +33,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 - Windows profile security prefers stable PowerShell 7 and retains Windows PowerShell 5.1 with .NET 4.7.2+ as an availability-only fallback.
 - Live discovery and execution probes accept stable OpenCode versions >=2.2.5, including 2.2.6, while retaining exact observed versions in evidence.
 - README, user, administrator, operations, release, and evidence documentation now distinguish supported behavior, blocked gates, and unpublished status.
+- The companion skill set now includes `skill-creator` and `skill-review`; both are packaged in `dist/skills/` and mirrored under `skill/` without their generated `node_modules`.
 
 ### Removed
 

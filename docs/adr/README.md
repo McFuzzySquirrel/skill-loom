@@ -32,6 +32,7 @@
 | [ADR-0026](0026-bounded-opt-in-workspace-evaluation.md) | Evaluate retained workspaces only with explicit bounded checks | Accepted | 2026-11-10 |
 | [ADR-0027](0027-cli-and-skill-driven-workflow.md) | Drive Skill Loom from the CLI and companion skills | Accepted | 2026-11-10 |
 | [ADR-0028](0028-single-purpose-chain-editor.md) | Limit the web UI to a visual chain editor | Accepted | 2026-11-10 |
+| [ADR-0029](0029-authored-skill-gap-flow.md) | Author missing skills through an explicit per-gap flow | Accepted | 2026-11-10 |
 
 ## Rules
 

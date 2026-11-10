@@ -47,6 +47,12 @@ function assertPackageContents(files) {
     'package/dist/skills/loom-chain-workflow.zip',
     'package/dist/skills/loom-chain-workflow/SKILL.md',
     'package/dist/skills/loom-chain-workflow/LICENSE',
+    'package/dist/skills/skill-creator.zip',
+    'package/dist/skills/skill-creator/SKILL.md',
+    'package/dist/skills/skill-creator/LICENSE',
+    'package/dist/skills/skill-review.zip',
+    'package/dist/skills/skill-review/SKILL.md',
+    'package/dist/skills/skill-review/LICENSE',
   ];
   for (const path of required) {
     if (!files.includes(path)) {

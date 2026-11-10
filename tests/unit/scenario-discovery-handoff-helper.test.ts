@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -184,5 +184,184 @@ describe('scenario-discovery standalone handoff helpers', () => {
     expect(build().status).toBe(0);
     const bundle = parseBundle(JSON.parse(await readFile(outputPath, 'utf8')));
     expect(bundle.skills[0]?.files.find((file) => file.path === 'SKILL.md')?.content).toBe(secondFiles[0]!.content);
+  });
+
+  it('builds a mixed bundle from handoff candidates and a reviewed local skill', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'loom-handoff-local-'));
+    roots.push(root);
+    const { handoff, handoffPath } = await fixture(root);
+    const candidate = handoff.candidates[0]!;
+    const localName = 'authored-review';
+    const localPath = join(root, '.skill-loom-authored', localName);
+    await mkdir(join(localPath, 'scripts'), { recursive: true });
+    await writeFile(
+      join(localPath, 'SKILL.md'),
+      `---\nname: ${localName}\ndescription: Authored fixture.\n---\nReview locally.\n`,
+    );
+    await writeFile(join(localPath, 'scripts', 'check.sh'), '#!/bin/sh\nprintf local\n', { mode: 0o755 });
+
+    const check = spawnSync(process.execPath, [
+      join(scripts, 'authored-skill.mjs'), 'check',
+      '--package', localPath, '--name', localName, '--project', root,
+    ], { encoding: 'utf8' });
+    expect(check.status).toBe(0);
+    const local = JSON.parse(check.stdout) as { fingerprint: string };
+
+    const manifestPath = join(root, 'approved.json');
+    await writeFile(manifestPath, JSON.stringify({
+      projectPath: root,
+      chain: {
+        name: 'Mixed review',
+        harness: 'opencode',
+        sessionMode: 'shared',
+        steps: [
+          { id: 'review', kind: 'skill', skillName: candidate.name, instruction: 'Review {{scope}}.' },
+          { id: 'local', kind: 'skill', skillName: localName, instruction: 'Apply the local review.' },
+        ],
+        inputs: [{ name: 'scope', label: 'Review scope', required: true }],
+      },
+      candidates: [{
+        sourceId: candidate.sourceId,
+        revision: candidate.revision,
+        repositoryPath: candidate.repositoryPath,
+        fingerprint: candidate.fingerprint,
+      }],
+      localSkills: [{ name: localName, packagePath: localPath, fingerprint: local.fingerprint }],
+    }));
+
+    const outputPath = join(root, 'mixed.loom.json');
+    const build = spawnSync(process.execPath, [
+      join(scripts, 'build-from-handoff.mjs'), '--handoff', handoffPath,
+      '--manifest', manifestPath, '--out', outputPath,
+    ], { encoding: 'utf8' });
+    expect(build.status).toBe(0);
+    const bundle = parseBundle(JSON.parse(await readFile(outputPath, 'utf8')));
+    expect(bundle.skills.map((skill) => skill.name).sort()).toEqual([candidate.name, localName].sort());
+    const localPackage = bundle.skills.find((skill) => skill.name === localName);
+    expect(localPackage?.files.find((file) => file.path === 'scripts/check.sh')).toMatchObject({
+      executable: true,
+      content: Buffer.from('#!/bin/sh\nprintf local\n').toString('base64'),
+    });
+  });
+
+  it('rejects a local skill whose fingerprint changed after review', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'loom-handoff-local-drift-'));
+    roots.push(root);
+    const { handoff, handoffPath } = await fixture(root);
+    const candidate = handoff.candidates[0]!;
+    const localName = 'authored-review';
+    const localPath = join(root, '.skill-loom-authored', localName);
+    await mkdir(localPath, { recursive: true });
+    await writeFile(
+      join(localPath, 'SKILL.md'),
+      `---\nname: ${localName}\ndescription: Authored fixture.\n---\nReview locally.\n`,
+    );
+    const manifestPath = join(root, 'approved.json');
+    await writeFile(manifestPath, JSON.stringify({
+      projectPath: root,
+      chain: {
+        name: 'Mixed review',
+        harness: 'opencode',
+        sessionMode: 'shared',
+        steps: [{
+          id: 'local', kind: 'skill', skillName: localName, instruction: 'Apply the local review.',
+        }],
+        inputs: [],
+      },
+      candidates: [],
+      localSkills: [{ name: localName, packagePath: localPath, fingerprint: '0'.repeat(64) }],
+    }));
+    const outputPath = join(root, 'mixed.loom.json');
+    const build = spawnSync(process.execPath, [
+      join(scripts, 'build-from-handoff.mjs'), '--handoff', handoffPath,
+      '--manifest', manifestPath, '--out', outputPath,
+    ], { encoding: 'utf8' });
+    expect(build.status).not.toBe(0);
+    expect(build.stderr).toMatch(/changed after review/i);
+    await expect(readFile(outputPath)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('requires projectPath for local skills and rejects a name collision', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'loom-handoff-local-invalid-'));
+    roots.push(root);
+    const { handoff, handoffPath } = await fixture(root);
+    const candidate = handoff.candidates[0]!;
+    const manifestPath = join(root, 'approved.json');
+    const base = {
+      chain: {
+        name: 'Invalid local',
+        harness: 'opencode',
+        sessionMode: 'shared',
+        steps: [{ id: 'review', kind: 'skill', skillName: candidate.name, instruction: 'Review.' }],
+        inputs: [],
+      },
+      candidates: [{
+        sourceId: candidate.sourceId,
+        revision: candidate.revision,
+        repositoryPath: candidate.repositoryPath,
+        fingerprint: candidate.fingerprint,
+      }],
+      localSkills: [{
+        name: candidate.name,
+        packagePath: join(root, '.skill-loom-authored', candidate.name),
+        fingerprint: 'a'.repeat(64),
+      }],
+    };
+    await writeFile(manifestPath, JSON.stringify(base));
+    const missingProject = spawnSync(process.execPath, [
+      join(scripts, 'build-from-handoff.mjs'), '--handoff', handoffPath,
+      '--manifest', manifestPath, '--out', join(root, 'out.loom.json'),
+    ], { encoding: 'utf8' });
+    expect(missingProject.status).not.toBe(0);
+    expect(missingProject.stderr).toMatch(/projectPath is required/i);
+
+    await writeFile(manifestPath, JSON.stringify({ ...base, projectPath: root }));
+    const collision = spawnSync(process.execPath, [
+      join(scripts, 'build-from-handoff.mjs'), '--handoff', handoffPath,
+      '--manifest', manifestPath, '--out', join(root, 'out.loom.json'),
+    ], { encoding: 'utf8' });
+    expect(collision.status).not.toBe(0);
+    expect(collision.stderr).toMatch(/ambiguous same-name package/i);
+  });
+
+  it('rejects more than three authored skills for one chain', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'loom-handoff-local-limit-'));
+    roots.push(root);
+    const { handoff, handoffPath } = await fixture(root);
+    const candidate = handoff.candidates[0]!;
+    const manifestPath = join(root, 'approved.json');
+    const locals = ['one', 'two', 'three', 'four'].map((name) => ({
+      name,
+      packagePath: join(root, '.skill-loom-authored', name),
+      fingerprint: 'a'.repeat(64),
+    }));
+    await writeFile(manifestPath, JSON.stringify({
+      projectPath: root,
+      chain: {
+        name: 'Too many local skills',
+        harness: 'opencode',
+        sessionMode: 'shared',
+        steps: [
+          { id: 'review', kind: 'skill', skillName: candidate.name, instruction: 'Review.' },
+          ...locals.map((local) => ({
+            id: local.name, kind: 'skill', skillName: local.name, instruction: 'Do work.',
+          })),
+        ],
+        inputs: [],
+      },
+      candidates: [{
+        sourceId: candidate.sourceId,
+        revision: candidate.revision,
+        repositoryPath: candidate.repositoryPath,
+        fingerprint: candidate.fingerprint,
+      }],
+      localSkills: locals,
+    }));
+    const build = spawnSync(process.execPath, [
+      join(scripts, 'build-from-handoff.mjs'), '--handoff', handoffPath,
+      '--manifest', manifestPath, '--out', join(root, 'out.loom.json'),
+    ], { encoding: 'utf8' });
+    expect(build.status).not.toBe(0);
+    expect(build.stderr).toMatch(/no more than 3 new skills/i);
   });
 });

@@ -3,20 +3,21 @@
 Skill Loom is a local owner process. The CLI and companion skills ask it to author chains, preflight them, and run one chain at a time under review.
 
 - The owner is the only process that writes project state or spawns a harness.
-- Every mutating start needs a review digest and explicit confirmations.
+- Every mutating start needs a review digest and explicit confirmations; an authored skill is staged and installed only after a separate approval.
 - One active run per profile; tails are bounded and recovery is explicit.
 - Harness differences live in adapters, not in routes or runners.
 
-@answer scope="Repository at 343fda3 · managed service and portable path"
-@meta locale=en quality_profile=showcase
+@answer scope="Repository at 122fdc85 · managed service, portable path, and per-gap authoring"
+@meta locale=en quality_profile=showcase repo_url=https://github.com/McFuzzySquirrel/skill-loom.git repo_revision=122fdc85ef24881d0e17c5165eb15f1a249775c1
 @source app title="Loopback host assertion" path=src/server/app.ts lines=185:196
 @source control title="Control request limits" path=src/server/control.ts lines=65:66
 @source orchestrator title="Run orchestration ownership" path=src/server/runs/orchestrator.ts lines=61:70
 @source model title="Run status vocabulary" path=src/server/runs/model.ts lines=31:55
 @source automatic title="Signal-driven automatic advancement" path=src/server/runs/automatic.ts lines=8:16
-@source blueprint title="Persistence locations" path=Project_Architecture_Blueprint.md lines=531:546
+@source blueprint title="Persistence locations" path=Project_Architecture_Blueprint.md lines=551:565
+@source gap title="Per-gap authoring policy" path=docs/adr/0029-authored-skill-gap-flow.md lines=20:32
 
-## What is the system made of? {#system}
+## What is the system made of? {#system span=12}
 
 The browser only edits chains. Everything else crosses the CLI or a companion skill, and the owner process holds the filesystem and process privileges.
 
@@ -34,6 +35,7 @@ The browser only edits chains. Everything else crosses the CLI or a companion sk
 | actor > skills | asks |
 | actor > editor | edit |
 | skills > cli | JSON |
+| skills > project | authored install |
 | skills > portable | |
 | editor > services | HTTP |
 | cli > services | protocol |
@@ -42,7 +44,7 @@ The browser only edits chains. Everything else crosses the CLI or a companion sk
 | services > harness | spawn |
 | portable > project | runs |
 
-## What happens from a folder to a finished run? {#journey-panel}
+## What happens from a folder to a finished run? {#journey-panel span=12}
 
 Each lane is a hand-off, not an automatic continuation. Validity, preflight, and the reviewed digest are separate gates, so a failure returns you to the lane that owns it.
 
@@ -65,7 +67,7 @@ Each lane is a hand-off, not an automatic continuation. Validity, preflight, and
 | share | Export or import bundle | backend | finish |
 | install > project | |
 | project > catalog | |
-| catalog > draft | |
+| catalog > draft | skills fit |
 | draft > edit | |
 | edit > validate | |
 | validate > preflight | valid |
@@ -74,6 +76,17 @@ Each lane is a hand-off, not an automatic continuation. Validity, preflight, and
 | start > execute | |
 | execute > done | last step |
 | done > share | bundle |
+
+## How does a missing skill become part of the chain? {#gap-panel}
+
+An optional branch closes one gap at a time. Existing steps stay valid, and an instruction-only step remains the fallback. The audit is advisory, not a safety gate; [ADR-0029](source:gap) records the policy.
+
+@steps id=gap-steps
+| gap | Record the gap | Name the step role, the sources searched, and why an instruction is not enough. |
+| stage | Stage with skill-creator | Scaffold at `<project>/.skill-loom-authored/<name>/`; at most three per chain. |
+| audit | Audit with skill-review | Scope the audit to the staged package; the score is advisory. |
+| install | Install after approval | Validate, fingerprint, and install without overwrite. |
+| resolve | Re-resolve the chain | Refresh the catalog and re-check every step name before packaging. |
 
 ## Where is each guard enforced when a run starts? {#run-start-panel}
 
@@ -99,7 +112,7 @@ The control server checks the token and request shape. The orchestrator then re-
 | orch | control | RunView and events | return |
 | control | cli | JSON response or events | return |
 
-## What can a run be, and how does it move? {#run-lifecycle-panel}
+## What can a run be, and how does it move? {#run-lifecycle-panel span=12}
 
 `starting` covers snapshot and claim. `awaiting-user` is the supervised hand-off after a step ends; automatic runs skip it. Recovery from `interrupted` writes a new `starting` state and never replays a completed step.
 
@@ -111,6 +124,7 @@ The control server checks the token and request shape. The orchestrator then re-
 | --- | --- | --- |
 | First install and owner start | `skill-loom --version`, `service start` | [CLI and owner](node:system-map.cli) |
 | Discover or copy a recipe | `scenario-discovery`, `chain draft create` | [chain authoring](node:journey.draft) |
+| Close a capability gap | `scenario-discovery`, `skill-creator`, `skill-review` | [gap procedure](#gap-panel) |
 | Edit a chain visually | `skill-loom edit --draft <id>` | [chain editor](node:system-map.editor) |
 | Supervised run | `run preflight`, `run review-start`, `run start` | [start path](route:run-start.control~orch) |
 | Automatic run | `run start` with signal-based advancement | [running state](node:run-lifecycle.running) |
@@ -127,6 +141,8 @@ The control server checks the token and request shape. The orchestrator then re-
 | Chain shape | The document does not parse or its version is unknown | Chain model |
 | Inputs | A required named input has no value | Orchestrator |
 | Skills | A named skill is missing, disabled, or ambiguous | Preflight |
+| Gap approval | The user did not choose authoring for that step role | Discovery workflow |
+| Authored package | The staged package is unsafe or changed after review | Authored-skill helper |
 | Harness | The executable is missing or the version is unsupported | Preflight and adapter |
 | Trust | The Copilot folder dialog has not been accepted | Trust session service |
 | Permissions | Automatic broad permissions were not opted in | Preflight |
@@ -140,6 +156,7 @@ The control server checks the token and request shape. The orchestrator then re-
 | `~/.config/loom/config.json` | Harness commands, sources, projects | Config store |
 | `~/.config/loom/drafts/*.json` | Project-independent drafts | Chain store |
 | `~/.config/loom/active-run.json` | The single active pointer | Run store |
+| `<project>/.skill-loom-authored/<name>/` | Staged authored skills | Authoring helper |
 | `<project>/.loom/chains/*.json` | Project chains | Chain store |
 | `<project>/.loom/runs/*.json` | Frozen runs and bounded tails | Run store |
 | `<project>/.loom/portable-runs/*.json` | Portable runs | Portable runtime |
@@ -165,6 +182,7 @@ The control server checks the token and request shape. The orchestrator then re-
 | Automatic OpenCode CLI starts remain blocked; one single-step probe passed on 2.2.6. |
 | Windows PowerShell 7 behavior is implemented but not verified. |
 | A portable run cannot prepare a bundle that selects a native agent. |
+| Managed discovery workspaces cannot carry locally authored skills. |
 
 ## What should I verify before trusting a run? {#checklist}
 
@@ -177,8 +195,8 @@ The control server checks the token and request shape. The orchestrator then re-
 
 ## What changed since the November 6 page? {#changes}
 
-That page predates the CLI and skill pivot in `cfbf981`. Its service-first framing still centers the server and editor. The current web surface is the chain editor only; projects, catalogs, discovery, workspaces, and runs are CLI- or skill-driven.
+That page predates the CLI and skill pivot in `cfbf981`. Its service-first framing still centers the server and editor. The current web surface is the chain editor only; projects, catalogs, discovery, workspaces, and runs are CLI- or skill-driven. Since `343fda3`, ADR-0029 adds the explicit per-gap authoring branch: `scenario-discovery` can hand one gap to `skill-creator`, scope `skill-review` to the staged package, and install only after approval.
 
 ## Where are the deeper views? {#deep-dives}
 
-The companion pages open beside this one. `chain-save-sequence.html` follows the editor save from `PUT` to atomic rename. `portable-handoff-workflow.html` follows a bundle that runs without the service. Both pages come from the same repository revision.
+The companion pages open beside this one. `chain-save-sequence.html` follows the editor save from `PUT` to atomic rename. `portable-handoff-workflow.html` follows a bundle that runs without the service, including bundles that mix pinned candidates and reviewed local skills. Both pages come from the same repository revision.

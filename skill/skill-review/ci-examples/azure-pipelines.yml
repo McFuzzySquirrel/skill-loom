@@ -1,0 +1,44 @@
+# Example: Azure DevOps pipeline for skill-review
+#
+# Copy this to azure-pipelines.yml in your repo root.
+# Assumes the skill-review/ directory is at your repo root.
+# For other CI systems, adapt the same `npm run skill-review` command
+# with the appropriate --provider flag and env vars.
+
+trigger: none
+
+pr:
+  paths:
+    include:
+      - '**/SKILL.md'
+      - '.agents/skills/**'
+      - 'skills/**'
+      - '.opencode/skills/**'
+      - '.claude/skills/**'
+      - 'templates/skills/**'
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+
+  - task: NodeTool@0
+    inputs:
+      versionSpec: '20'
+
+  - script: npm ci
+    displayName: Install dependencies
+    workingDirectory: skill-review
+
+  - script: npx tsx scripts/skill-review.ts --provider ado --min-score 1.5
+    displayName: Run skill review
+    workingDirectory: skill-review
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+  - script: npx tsx scripts/skill-review.ts --provider stdout --min-score 1.5 --fail-below
+    displayName: Fail on low-scoring skills
+    condition: always()
+    workingDirectory: skill-review
