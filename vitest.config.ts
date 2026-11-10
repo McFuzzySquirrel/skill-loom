@@ -9,6 +9,7 @@ export default defineConfig({
     include: [
       'tests/unit/**/*.test.ts',
       'tests/integration/**/*.test.ts',
+      'tests/web/**/*.test.ts',
     ],
     exclude: ['node_modules/**', 'dist/**'],
     restoreMocks: true,

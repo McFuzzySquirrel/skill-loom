@@ -67,9 +67,10 @@ export function useStatusAnnouncer(): StatusAnnouncer {
 }
 
 /**
- * The persistent aria-live region. It is mounted once by AppLayout so route
- * changes never replace the live nodes. It carries short transition messages
- * only; terminal output is never streamed through it.
+ * The persistent aria-live region. It is mounted once by App, outside the
+ * route boundary, so route changes and render failures never replace the live
+ * nodes. It carries short transition messages only; terminal output is never
+ * streamed through it.
  */
 export function StatusRegion() {
   const { messages } = useStatusContext();

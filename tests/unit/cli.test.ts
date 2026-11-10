@@ -343,4 +343,51 @@ describe('edit command', () => {
     expect(() => parseEditArgs(['--draft', 'd', '--chain', 'c'])).toThrow(CliUsageError);
     expect(() => parseEditArgs(['--draft'])).toThrow(CliUsageError);
   });
+
+  it('reuses the editor endpoint reported by the running owner', async () => {
+    const stdout = captureOutput();
+    const stderr = captureOutput();
+    let statusCalls = 0;
+
+    const code = await runCli(['edit', '--draft', 'draft one', '--no-open'], {
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      env: { LOOM_CONFIG_DIR: join(tmpdir(), 'loom-cli-edit-reuse') },
+      start: async () => {
+        throw Object.assign(new Error('Another process owns the profile.'), { code: 'PROFILE_IN_USE' });
+      },
+      controlCall: async () => {
+        statusCalls += 1;
+        return {
+          ok: true,
+          result: {
+            state: 'running',
+            httpEndpoint: { host: '127.0.0.1', port: 8123 },
+          },
+        };
+      },
+    });
+
+    expect(code).toBe(0);
+    expect(statusCalls).toBe(1);
+    expect(stderr.read()).toBe('');
+    expect(stdout.read()).toContain('URL: http://127.0.0.1:8123/drafts/draft%20one');
+  });
+
+  it('refuses to guess an editor URL the owner did not report', async () => {
+    const stderr = captureOutput();
+
+    const code = await runCli(['edit', '--draft', 'draft-one', '--no-open'], {
+      stdout: captureOutput().stream,
+      stderr: stderr.stream,
+      env: { LOOM_CONFIG_DIR: join(tmpdir(), 'loom-cli-edit-no-endpoint') },
+      start: async () => {
+        throw Object.assign(new Error('Another process owns the profile.'), { code: 'PROFILE_IN_USE' });
+      },
+      controlCall: async () => ({ ok: true, result: { state: 'running' } }),
+    });
+
+    expect(code).toBe(1);
+    expect(stderr.read()).toContain('did not report its editor endpoint');
+  });
 });

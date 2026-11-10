@@ -99,8 +99,13 @@ export function ChainEditorPage({ projectId, chainId }: ChainEditorPageProps) {
     setSaveError(null);
     try {
       const result = await save();
-      setSaved(true);
-      announce(`Saved chain ${result.name}.`);
+      if (result.superseded) {
+        setSaved(false);
+        announce(`Saved chain ${result.chain.name}. Newer edits remain unsaved.`);
+      } else {
+        setSaved(true);
+        announce(`Saved chain ${result.chain.name}.`);
+      }
     } catch (error) {
       const apiError = toApiClientError(error, 'An unexpected error prevented saving this chain.');
       setSaveError(apiError);
@@ -221,8 +226,13 @@ export function ChainEditorPage({ projectId, chainId }: ChainEditorPageProps) {
               steps={document_.steps}
               selectedStepId={selectedId}
               invalidStepIds={validation.invalidStepIds}
+              disabled={saving}
               onSelect={openStep}
-              onReorder={reorderStep}
+              onReorder={(draggedStepId, targetStepId) => {
+                if (!saving) {
+                  reorderStep(draggedStepId, targetStepId);
+                }
+              }}
             />
           </section>
 
@@ -231,14 +241,30 @@ export function ChainEditorPage({ projectId, chainId }: ChainEditorPageProps) {
             selectedStepId={selectedId}
             invalidStepIds={validation.invalidStepIds}
             stepIssueLabels={stepIssueLabels}
+            disabled={saving}
             onAddInstruction={() => {
+              if (saving) {
+                return;
+              }
               addInstruction();
               setEditorOpen(true);
             }}
             onSelect={openStep}
-            onMove={moveStep}
-            onRemove={removeStep}
-            onReorder={reorderStep}
+            onMove={(stepId, direction) => {
+              if (!saving) {
+                moveStep(stepId, direction);
+              }
+            }}
+            onRemove={(stepId) => {
+              if (!saving) {
+                removeStep(stepId);
+              }
+            }}
+            onReorder={(draggedStepId, targetStepId) => {
+              if (!saving) {
+                reorderStep(draggedStepId, targetStepId);
+              }
+            }}
           />
 
           <dialog
@@ -262,11 +288,12 @@ export function ChainEditorPage({ projectId, chainId }: ChainEditorPageProps) {
               position={position === 0 ? null : position}
               totalSteps={document_.steps.length}
               skillOptions={selectedStep !== null && selectedStep.kind !== 'instruction' ? [selectedStep.skillName] : []}
+              disabled={saving}
               placeholderIssues={validation.issues
                 .filter((issue) => issue.stepId === selectedId && issue.kind === 'placeholder')
                 .map((issue) => issue.message)}
               onChange={(patch) => {
-                if (selectedStep !== null) {
+                if (!saving && selectedStep !== null) {
                   updateStep(selectedStep.id, patch);
                 }
               }}

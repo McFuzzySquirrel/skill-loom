@@ -125,6 +125,7 @@ export async function startServer(options: BuildAppOptions & { enableControl?: b
         isStopping: () => app.loomLifecycle.state !== 'running',
         isFailed: () => app.loomLifecycle.state === 'failed',
         isReady: () => controlReady,
+        httpEndpoint: { host: settings.host, port: settings.port },
         prepareStop: async () => {
           if (!controlReady) {
             throw new ControlError('CONTROL_BUSY', 'The Skill Loom service is still starting.');

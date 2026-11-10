@@ -9,6 +9,8 @@ export interface StepListProps {
   invalidStepIds: ReadonlySet<string>;
   /** Per-step text label for a blocking issue; defaults to "Needs instruction". */
   stepIssueLabels?: ReadonlyMap<string, string>;
+  /** Blocks adding, moving, removing, and dragging while the editor is saving. */
+  disabled?: boolean;
   onAddInstruction: () => void;
   onSelect: (stepId: string) => void;
   onMove: (stepId: string, direction: 'up' | 'down') => void;
@@ -39,6 +41,7 @@ export function StepList({
   selectedStepId,
   invalidStepIds,
   stepIssueLabels,
+  disabled = false,
   onAddInstruction,
   onSelect,
   onMove,
@@ -86,11 +89,17 @@ export function StepList({
   }, [steps]);
 
   const handleMove = (stepId: string, direction: MoveDirection) => {
+    if (disabled) {
+      return;
+    }
     pendingMoveFocus.current = { stepId, action: direction };
     onMove(stepId, direction);
   };
 
   const handleRemove = (stepId: string) => {
+    if (disabled) {
+      return;
+    }
     const index = steps.findIndex((step) => step.id === stepId);
     const neighbor = steps[index + 1] ?? steps[index - 1] ?? null;
     pendingRemoveFocus.current = { stepId: neighbor?.id ?? null };
@@ -98,6 +107,10 @@ export function StepList({
   };
 
   const handleDragStart = (event: DragEvent<HTMLLIElement>, stepId: string) => {
+    if (disabled) {
+      event.preventDefault();
+      return;
+    }
     dragId.current = stepId;
     setDraggingId(stepId);
     setDropTargetId(null);
@@ -109,6 +122,9 @@ export function StepList({
 
   const handleDrop = (event: DragEvent<HTMLLIElement>, targetStepId: string) => {
     event.preventDefault();
+    if (disabled) {
+      return;
+    }
     const dragged =
       dragId.current ??
       (event.dataTransfer === null ? null : event.dataTransfer.getData('text/plain'));
@@ -140,6 +156,7 @@ export function StepList({
             type="button"
             className="button button--secondary button--small"
             onClick={onAddInstruction}
+            disabled={disabled}
             data-testid="chain-add-instruction"
           >
             Add instruction
@@ -178,7 +195,7 @@ export function StepList({
                     draggingId === step.id ? ' step-row--dragging' : ''
                   }${dropTarget ? ' step-row--drop-target' : ''}`}
                   key={step.id}
-                  draggable
+                  draggable={!disabled}
                   data-testid="step-row"
                   data-step-id={step.id}
                   data-skill-name={step.skillName}
@@ -187,6 +204,9 @@ export function StepList({
                   aria-setsize={steps.length}
                   onDragStart={(event) => handleDragStart(event, step.id)}
                   onDragOver={(event) => {
+                    if (disabled) {
+                      return;
+                    }
                     event.preventDefault();
                     if (event.dataTransfer !== null) {
                       event.dataTransfer.dropEffect = 'move';
@@ -205,7 +225,7 @@ export function StepList({
                     className="step-row__handle"
                     aria-hidden="true"
                     title="Drag to reorder"
-                    draggable
+                    draggable={!disabled}
                   >
                     ⠿
                   </span>
@@ -252,7 +272,7 @@ export function StepList({
                         }
                       }}
                       onClick={() => handleMove(step.id, 'up')}
-                      disabled={!canMoveUp}
+                      disabled={disabled || !canMoveUp}
                       aria-label={`Move up ${displayName}, step ${String(index + 1)}`}
                       data-testid="step-move-up"
                     >
@@ -269,7 +289,7 @@ export function StepList({
                         }
                       }}
                       onClick={() => handleMove(step.id, 'down')}
-                      disabled={!canMoveDown}
+                      disabled={disabled || !canMoveDown}
                       aria-label={`Move down ${displayName}, step ${String(index + 1)}`}
                       data-testid="step-move-down"
                     >
@@ -279,6 +299,7 @@ export function StepList({
                       type="button"
                       className="button button--secondary button--small button--danger"
                       onClick={() => handleRemove(step.id)}
+                      disabled={disabled}
                       aria-label={`Remove step ${String(index + 1)}: ${displayName} (${step.kind === 'instruction' ? 'Instruction' : step.skillName})`}
                       data-testid="step-remove"
                     >

@@ -212,10 +212,40 @@ export interface CliStartedServer {
 export interface RunCliDependencies {
   start?: (options: { logger?: boolean; env?: NodeJS.ProcessEnv; enableControl?: boolean }) => Promise<CliStartedServer>;
   openBrowser?: (url: string) => void;
+  /** Local control seam; defaults to the real control transport. */
+  controlCall?: (configDirectory: string, operation: string, input: unknown) => Promise<ControlStatusResponse>;
   stdout?: Pick<NodeJS.WriteStream, 'write' | 'isTTY'>;
   stderr?: Pick<NodeJS.WriteStream, 'write'>;
   env?: NodeJS.ProcessEnv;
   stdin?: Readable;
+}
+
+interface ControlStatusResponse {
+  ok: boolean;
+  result?: unknown;
+  error?: { code: string; message: string };
+}
+
+function readHttpEndpoint(result: unknown): { host: string; port: number } | null {
+  if (typeof result !== 'object' || result === null || !('httpEndpoint' in result)) {
+    return null;
+  }
+  const endpoint = (result as { httpEndpoint?: unknown }).httpEndpoint;
+  if (typeof endpoint !== 'object' || endpoint === null) {
+    return null;
+  }
+  const { host, port } = endpoint as { host?: unknown; port?: unknown };
+  if (
+    typeof host !== 'string' ||
+    host === '' ||
+    typeof port !== 'number' ||
+    !Number.isInteger(port) ||
+    port < 1 ||
+    port > 65_535
+  ) {
+    return null;
+  }
+  return { host, port };
 }
 
 export async function runCli(
@@ -325,6 +355,8 @@ export async function runCli(
     env.LOOM_CONFIG_DIR = options.configDir;
   }
 
+  const configDirectory = resolveConfigDir({ env });
+
   try {
     let baseUrl: string;
     try {
@@ -334,11 +366,25 @@ export async function runCli(
       const inUse = typeof error === 'object' && error !== null && 'code' in error &&
         (error as { code?: unknown }).code === 'PROFILE_IN_USE';
       if (editPath === undefined || !inUse) throw error;
-      // An already-running service owns the profile; point the editor at it.
-      baseUrl = `http://${env.LOOM_HOST ?? '127.0.0.1'}:${env.LOOM_PORT ?? String(DEFAULT_PORT)}`;
+      // Another process owns the profile. Ask the owner for the endpoint it is
+      // actually serving instead of assuming LOOM_PORT matches it.
+      const status = await (dependencies.controlCall ?? callControl)(configDirectory, 'status', {});
+      if (!status.ok) {
+        throw new ControlError(
+          status.error?.code ?? 'CONTROL_UNAVAILABLE',
+          status.error?.message ?? 'The running Skill Loom service rejected the status request.',
+        );
+      }
+      const endpoint = readHttpEndpoint(status.result);
+      if (endpoint === null) {
+        throw new ControlError(
+          'CONTROL_ENDPOINT_UNAVAILABLE',
+          'The running Skill Loom service did not report its editor endpoint. Retry, or pass the same --port the service uses.',
+        );
+      }
+      baseUrl = `http://${endpoint.host}:${String(endpoint.port)}`;
     }
     const url = editPath === undefined ? baseUrl : `${baseUrl}${editPath}`;
-    const configDirectory = resolveConfigDir({ env });
 
     stdout.write(
       `Skill Loom ${packageManifest.version}\nConfig: ${configDirectory}\nURL: ${url}\nPress Ctrl+C to stop.\n`,
@@ -397,6 +443,9 @@ function openBrowser(url: string): void {
 }
 
 function describeStartFailure(error: unknown): string {
+  if (error instanceof ControlError) {
+    return error.message;
+  }
   if (typeof error === 'object' && error !== null && 'code' in error) {
     const code = (error as { code?: unknown }).code;
     if (code === 'EADDRINUSE') {

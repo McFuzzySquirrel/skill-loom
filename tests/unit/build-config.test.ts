@@ -192,11 +192,12 @@ describe('build tooling contract', () => {
     expect(viteConfig).toMatch(/outDir:\s*'dist\/web'/);
   });
 
-  it('runs unit and integration suites with Vitest in Node', () => {
+  it('runs unit, integration, and web-logic suites with Vitest in Node', () => {
     const vitestConfig = read('vitest.config.ts');
 
     expect(vitestConfig).toContain("environment: 'node'");
     expect(vitestConfig).toContain('tests/unit/**/*.test.ts');
     expect(vitestConfig).toContain('tests/integration/**/*.test.ts');
+    expect(vitestConfig).toContain('tests/web/**/*.test.ts');
   });
 });

@@ -43,6 +43,9 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Fixed
 
+- The chain editor now blocks step, input, and reorder mutations while a save is in flight and keeps any newer edit if one still arrives, adopting only the server's identity fields instead of silently replacing newer work.
+- `skill-loom edit` now asks the running profile owner for its actual HTTP endpoint instead of guessing from `LOOM_PORT`; it fails with a clear message when the endpoint is unavailable.
+- The editor restores its skip-to-content link, and the render fallback returns to the editor landing page rather than the removed `/projects` route.
 - OpenCode OSC advancement now distinguishes root summary and child record IDs: child removal no longer erases root working, while root clear, matching-record clear, idle-only streams, and per-step reset retain their fail-closed behavior. Automatic CLI starts remain blocked pending managed multi-step acceptance.
 - Health reporting reads the existing run owner or persisted active-run pointer instead of always returning an inactive placeholder; invalid pointer files surface an error without being modified.
 - Chain bundle export no longer rejects a valid project package merely because another enabled package with the same name exists outside the project.

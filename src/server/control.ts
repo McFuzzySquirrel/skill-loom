@@ -748,6 +748,8 @@ export async function startControlServer(
     isStopping?: () => boolean;
     isFailed?: () => boolean;
     isReady?: () => boolean;
+    /** HTTP endpoint the owner serves, so the CLI can reuse it without guessing. */
+    httpEndpoint?: { host: string; port: number };
     services?: LoomServices;
     runOwner?: RunOwner;
     terminalManager?: TerminalManager;
@@ -857,12 +859,15 @@ export async function startControlServer(
           } finally {
             socket.removeListener('close', cancel);
           }
+          const statusEndpoint = options.httpEndpoint ?? null;
           response = { protocolVersion: VERSION, ok: true, result:
             parsedOperation === 'status' && options.isStopping?.() === true
-              ? { state: options.isFailed?.() === true ? 'failed' : 'stopping', applicationVersion: packageManifest.version }
+              ? { state: options.isFailed?.() === true ? 'failed' : 'stopping', applicationVersion: packageManifest.version, httpEndpoint: statusEndpoint }
               : parsedOperation === 'status' && options.isReady?.() === false
-                ? { state: 'starting', applicationVersion: packageManifest.version }
-                : result };
+                ? { state: 'starting', applicationVersion: packageManifest.version, httpEndpoint: statusEndpoint }
+                : parsedOperation === 'status' && typeof result === 'object' && result !== null
+                  ? { ...result, httpEndpoint: statusEndpoint }
+                  : result };
         } catch (error) {
           response = failure(error instanceof SyntaxError
             ? new ControlError('CONTROL_INVALID_REQUEST', 'The local control request is not valid.')

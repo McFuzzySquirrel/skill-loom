@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, type MouseEvent, type ReactElement } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { HelpPopoverProvider } from './components/HelpPopover';
 import { StatusAnnouncerProvider, StatusRegion } from './components/StatusRegion';
@@ -60,16 +60,29 @@ export function resolveScreen(pathname: string): Screen {
 function RoutedShell() {
   const { pathname } = useRouter();
   const screen = useMemo(() => resolveScreen(pathname), [pathname]);
+  const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     document.title = `${screen.title} · Skill Loom`;
   }, [screen.title]);
 
+  // Focusing the target explicitly works in every browser; the fragment alone
+  // only moves the sequential-focus starting point in some of them.
+  const handleSkip = (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    mainRef.current?.focus();
+  };
+
   return (
-    <main id="main-content" className="app-main" tabIndex={-1}>
-      <ErrorBoundary key={pathname}>{screen.element}</ErrorBoundary>
-      <StatusRegion />
-    </main>
+    <>
+      <a className="skip-link" href="#main-content" onClick={handleSkip}>
+        Skip to content
+      </a>
+      <main id="main-content" className="app-main" ref={mainRef} tabIndex={-1}>
+        <ErrorBoundary key={pathname}>{screen.element}</ErrorBoundary>
+        <StatusRegion />
+      </main>
+    </>
   );
 }
 

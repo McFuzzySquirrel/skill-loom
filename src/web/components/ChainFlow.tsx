@@ -5,6 +5,8 @@ export interface ChainFlowProps {
   steps: ChainStep[];
   selectedStepId: string | null;
   invalidStepIds: ReadonlySet<string>;
+  /** Blocks dragging while the editor is saving. Selection stays available. */
+  disabled?: boolean;
   onSelect: (stepId: string) => void;
   onReorder: (draggedStepId: string, targetStepId: string) => void;
 }
@@ -18,6 +20,7 @@ export function ChainFlow({
   steps,
   selectedStepId,
   invalidStepIds,
+  disabled = false,
   onSelect,
   onReorder,
 }: ChainFlowProps) {
@@ -34,16 +37,27 @@ export function ChainFlow({
             className={`chain-flow__node${step.id === selectedStepId ? ' chain-flow__node--selected' : ''}${
               invalidStepIds.has(step.id) ? ' chain-flow__node--invalid' : ''
             }`}
-            draggable
+            draggable={!disabled}
             aria-current={step.id === selectedStepId ? 'step' : undefined}
             onClick={() => onSelect(step.id)}
             onDragStart={(event) => {
+              if (disabled) {
+                event.preventDefault();
+                return;
+              }
               event.dataTransfer.setData('text/plain', step.id);
               event.dataTransfer.effectAllowed = 'move';
             }}
-            onDragOver={(event) => event.preventDefault()}
+            onDragOver={(event) => {
+              if (!disabled) {
+                event.preventDefault();
+              }
+            }}
             onDrop={(event) => {
               event.preventDefault();
+              if (disabled) {
+                return;
+              }
               const draggedId = event.dataTransfer.getData('text/plain');
               if (draggedId !== '' && draggedId !== step.id) {
                 onReorder(draggedId, step.id);

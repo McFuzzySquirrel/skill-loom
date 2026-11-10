@@ -1086,7 +1086,8 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
         ok: false, error: { code: 'CONTROL_RUN_ACTIVE' },
       });
       expect(started.app.loomLifecycle.state).toBe('running');
-      expect(await callControl(root, 'status', {})).toMatchObject({ ok: true });
+      expect(await callControl(root, 'status', {}))
+        .toMatchObject({ ok: true, result: { httpEndpoint: { host: '127.0.0.1', port } } });
       expect(orchestrator.shutdown).not.toHaveBeenCalled();
       expect(await callControl(root, 'run.abort', { runId: 'run-test' }))
         .toMatchObject({ ok: false, error: { code: 'CONTROL_INVALID_REQUEST' } });
