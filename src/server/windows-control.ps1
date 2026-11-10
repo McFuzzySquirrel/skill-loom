@@ -121,7 +121,8 @@ try {
             [System.Security.AccessControl.PropagationFlags]::None, [System.Security.AccessControl.AccessControlType]::Allow)
         $security.AddAccessRule($rule)
         if ($PSVersionTable.PSEdition -eq 'Core') {
-            $null = [System.IO.FileSystemAclExtensions]::CreateDirectory($security, $path)
+            $directoryInfo = [System.IO.DirectoryInfo]::new($path)
+            $null = [System.IO.FileSystemAclExtensions]::CreateDirectory($directoryInfo, $security)
         } else {
             $null = [System.IO.Directory]::CreateDirectory($path, $security)
         }
