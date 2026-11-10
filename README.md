@@ -6,7 +6,7 @@
 
 [![Node.js >=24](https://img.shields.io/badge/Node.js-%3E%3D24-339933?logo=nodedotjs&logoColor=white)](package.json)
 
-Skill Loom is a local workspace for discovering, designing, saving, and bundling reusable workflows built from agent skills and standalone instructions. Start with a goal: prepare a reviewed, project-independent discovery handoff, open a repository to build or run chains, or browse examples and saved work. Portable `.loom.json` bundles can be reviewed and moved into other repositories.
+Skill Loom is a local workspace for discovering, designing, saving, and bundling reusable workflows built from agent skills and standalone instructions. It is driven by a CLI (`skill-loom`) and companion Agent Skills that install the CLI when it is missing. The only web screen is a visual chain editor, opened with `skill-loom edit`. Portable `.loom.json` bundles can be reviewed and moved into other repositories.
 
 Skill Loom does not author skills and does not execute a skill as a callable command. Each chain step is sent to a local harness as a prompt; skills are **model-invoked** context. The chain order is prompt order, **not a guarantee** that a harness loads or fires a named skill. A harness may decline to load a skill even when preflight resolved it.
 
@@ -46,7 +46,7 @@ Agent CLIs such as OpenCode and GitHub Copilot can load installed skills, but tu
 
 The product promise is deliberately narrow:
 
-- **Portable workflow design.** Skill Loom organizes steps and named inputs into reusable chains, with a global library for templates and reviewable bundles for sharing.
+- **Portable workflow design.** Skill Loom organizes steps and named inputs into reusable chains, saved as drafts or project chains and shared as reviewable bundles.
 - **Deterministic prompt order.** When a chain is run, Skill Loom builds the prompt for each step and sends steps in the saved order.
 - **Model-invoked skills.** The harness decides whether to load a named skill. Skill Loom reports skill observation only when the harness exposes evidence, and never blocks a step on it.
 - **Local by construction.** The server binds to loopback, owns all filesystem and process access, and has no telemetry or hosted backend.
@@ -56,39 +56,28 @@ The product promise is deliberately narrow:
 
 | Capability | What it does |
 |---|---|
-| Global chain library | Keep reusable chain templates outside any project, then copy them into a project to adapt or test. |
-| Project-independent workflows | Select skills from already refreshed pinned snapshots, review complete package contents, and prepare a standalone discovery handoff for an existing compatible CLI session. Manual goal drafts remain a separate authoring path. |
-| Portable chain bundles | Export a saved chain with complete referenced skill packages as `.loom.json`; version 2 also preserves one selected native agent. Review, download, and move it into another repository or installation. |
-| Shared bundle library | Review and publish a locally selected bundle without a project, or browse, download, and explicitly import a shared bundle into a project. Publication never overwrites existing files. |
-| Start and library overview | Choose discovery, project work, or saved libraries from `/`; drafts, templates, shared bundles, and scenario examples remain distinct. |
-| Chain builder | Create a chain bound to one harness, add skill or standalone instruction steps, optionally select one exact remote native agent, reorder steps, and declare named inputs. |
-| Projects | Register existing folders or create new ones, browse the filesystem, optionally initialize Git, and keep a recent-project list. Removing a recent entry never deletes project files. |
-| Skill catalog | Discover OpenCode filesystem skills and Copilot CLI skills, read `SKILL.md` metadata, search, add extra global directories, and copy non-project packages into the shared `.agents/skills/` root. |
-| Remote repositories | Register HTTPS/SSH Git repositories, explicitly refresh pinned skill and native-agent snapshots, and inspect artifacts without checking out or running repository scripts. |
-| Workspace and appearance | Navigate project skills, chains, and details separately; choose system, light, or dark appearance. |
-| Scenario catalog | Browse illustrative starter chains for business, student, app developer, and game developer workflows; inspect pinned third-party skill sources, copy examples into the builder, and explicitly add bundled skills to a project when needed. See the [scenario chain guide](docs/scenario-chains.md). |
-| Optional local testing | Test a saved chain or project-independent draft in a fresh managed project directory, then inspect or explicitly remove retained workspaces; the directory is separate from the source project, not an OS security sandbox. |
-| Terminal and accessibility | Serve a server-owned PTY to xterm.js with screen-reader mode, Escape-to-leave focus, skip links, keyboard reordering, and polite/assertive status announcements. |
-| Local CLI | Run the packaged local design workspace as `skill-loom` with `--help`, `--version`, `--no-open`, `--port`, and `--config-dir`. |
+| Companion skills | `scenario-discovery`, `loom-chain-workflow`, and `loom-run-bundle` discover skills, coordinate testing and import, and run a bundle in the current agent session. The first two offer to install the CLI when `skill-loom` is missing. |
+| Visual chain editor | `skill-loom edit` opens a local editor to drag steps into a new order, edit instructions, manage `{{inputs}}`, and save back to the draft or project chain. It is the only web screen. |
+| Chain drafts and project chains | Create, validate, update, and remove project-independent drafts and project chains with `skill-loom chain`. |
+| Portable chain bundles | Export a chain with complete referenced skill packages as `.loom.json` (version 2 also preserves one native agent); inspect, review, and import it into another project. |
+| Skill catalog and remote repositories | Search local and pinned remote skill catalogs, and register HTTPS/SSH Git repositories that are refreshed only on explicit request and never executed. |
+| Discovery handoff | Prepare a reviewed, project-independent handoff from pinned snapshots for an agent session. |
+| Optional local testing | Test a chain in a managed disposable workspace (`skill-loom workspace`); it is separate from the source project, not an OS sandbox. |
+| Managed runs | Preflight, review, start, attach to, and recover supervised or automatic runs with `skill-loom run`. CLI starts are limited to reviewed instruction-only chains. |
+| Scenario examples | Illustrative starter chains for business, student, app developer, and game developer workflows. See the [scenario chain guide](docs/scenario-chains.md). |
+| Local service | `skill-loom service start`, `status`, and `stop` manage the shared owner, which owns the profile and active runs over a private socket (Unix) or mutually authenticated loopback TLS (Windows). |
 
-The CLI can also inspect a bundle without starting the workspace:
-`skill-loom bundle inspect --bundle /absolute/path/to/chain.loom.json`. Add
-`--project /absolute/path/to/project` to inspect installed-package conflicts.
-This read-only command emits JSON and does not install or run the bundle.
-`skill-loom catalog --help` describes commands for listing and refreshing Git
-sources and searching pinned snapshots or a registered project's local catalog.
-Start the shared owner without opening a browser with
-`skill-loom service start`; use
-`skill-loom service status` and `skill-loom service stop` to check and stop it.
-Unix uses a private socket; Windows uses mutually authenticated loopback TLS
-and requires a protected private profile on local NTFS/ReFS storage. The Windows
-helper prefers stable PowerShell 7 from its standard Program Files installation;
-when absent it uses Windows PowerShell 5.1 with .NET 4.7.2+. Unsafe existing Windows profiles are rejected,
-not silently reconfigured; see the administrator guide.
-The owner also supports project registration, draft creation and model
-validation, bundle export, and reviewed import without package reuse; see the
-[administrator guide](docs/admin-guide.md#cli-flags). Managed run start and
-other planned capabilities remain in the [tracked plan](docs/standalone-cli-plan.md).
+Typical commands (run `skill-loom --help` for the full surface; structured input is JSON on stdin and every command prints a JSON envelope):
+
+```sh
+skill-loom service start                      # shared owner; no browser
+skill-loom edit --draft <draft-id>            # visual chain editor
+skill-loom bundle inspect --bundle /absolute/path/chain.loom.json
+skill-loom catalog --help                     # list/refresh Git sources, search snapshots
+skill-loom run preflight                      # no model call
+```
+
+Unix uses a private socket; Windows uses mutually authenticated loopback TLS and requires a protected private profile on local NTFS/ReFS storage (PowerShell 7, or Windows PowerShell 5.1 with .NET 4.7.2+). Unsafe existing Windows profiles are rejected, not reconfigured; see the [administrator guide](docs/admin-guide.md#cli-flags). Remaining planned capabilities are in the [tracked plan](docs/standalone-cli-plan.md).
 
 ## Tech Stack
 
@@ -97,21 +86,21 @@ other planned capabilities remain in the [tracked plan](docs/standalone-cli-plan
 | Runtime | Node.js `>=24`; npm |
 | Server | Fastify `5.12.8`, `@fastify/websocket` `11.3.6`, `@fastify/static` `10.1.9`, `ws` `8.22.1` |
 | Language | TypeScript `7.0.2` (server and web project configs) |
-| Web UI | React `19.3.1`, React DOM `19.3.1`, Vite `8.3.5`, `@vitejs/plugin-react` `6.2.1` |
-| Terminal | `@xterm/xterm` `6.0.0`, fit/unicode/web-links addons, `node-pty` `1.1.0` |
+| Chain editor | React `19.3.1`, React DOM `19.3.1`, Vite `8.3.5`, `@vitejs/plugin-react` `6.2.1` |
+| Terminal | `node-pty` `1.1.0` (server-owned PTY; `run attach` streams it to the CLI) |
 | Validation and data | Zod `4.6.7`, `yaml` `2.9.1` |
-| Tests | Vitest `5.1.0`, Playwright `1.64.1`, `tsx` `4.23.15` |
+| Tests | Vitest `5.1.0`, `tsx` `4.23.15` |
 | Native build | Python 3, `make`, and a C++ compiler for `node-pty` |
 
 Versions are pinned in `package.json` and `package-lock.json`.
 
 ## Architecture
 
-The browser is a typed API and terminal client. Every filesystem, persistence, process, and PTY operation happens in the server, which is mounted through one Fastify composition root. Harness-specific behavior lives behind adapters rather than in routes or run orchestration.
+The CLI and the chain editor are typed API clients. Every filesystem, persistence, process, and PTY operation happens in the server, which is mounted through one Fastify composition root. Harness-specific behavior lives behind adapters rather than in routes or run orchestration.
 
 ```mermaid
 flowchart LR
-  Browser["React SPA<br/>Projects · Chain builder · Run terminal"]
+  Browser["skill-loom CLI · Companion skills<br/>Chain editor (React SPA)"]
   API["Fastify server<br/>127.0.0.1:7373"]
   Routes["Typed HTTP + WebSocket routes"]
   Services["Config · Projects · Catalog<br/>Chains · Preflight · Runs"]
@@ -129,7 +118,7 @@ flowchart LR
   PTY --> Copilot
 ```
 
-A one-page [end-to-end explainer](docs/skill-loom-end-to-end.html) walks through the components, the folder-to-run journey, the step request path, and the OpenCode/Copilot differences.
+A one-page [end-to-end explainer](docs/skill-loom-end-to-end.html) walks through the components, the folder-to-run journey, the step request path, and the OpenCode/Copilot differences. It predates the CLI-driven pivot: read its "Browser" participant as the `skill-loom` CLI or the chain editor, and its project and builder screens as CLI commands.
 
 Key boundaries and the decisions behind them:
 
@@ -142,7 +131,7 @@ Key boundaries and the decisions behind them:
 - One active run is enforced globally with explicit interruption recovery — [ADR-0006](docs/adr/0006-single-active-run-and-interrupt-recovery.md).
 - Automatic runs rely on explicit signals, not output quiescence — [ADR-0007](docs/adr/0007-explicit-advancement-signals.md).
 - Copilot trust is read-only and broad permissions need an opt-in — [ADR-0009](docs/adr/0009-read-only-copilot-trust-and-explicit-permissions.md).
-- The global library stores independent snapshots — [ADR-0010](docs/adr/0010-global-chain-library-snapshots.md).
+- The product is CLI- and skill-driven with one chain editor screen — [ADR-0027](docs/adr/0027-cli-and-skill-driven-workflow.md) and [ADR-0028](docs/adr/0028-single-purpose-chain-editor.md).
 - Processes are spawned without a shell and PTYs are server-owned — [ADR-0011](docs/adr/0011-shell-free-process-and-pty-transport.md).
 - New project skill copies share `.agents/skills/`, with legacy OpenCode discovery preserved — [ADR-0012](docs/adr/0012-shared-project-skill-installation-root.md).
 - Bundle export prefers one project-local package and rejects remaining ambiguity — [ADR-0013](docs/adr/0013-deterministic-chain-bundle-skill-resolution.md).
@@ -154,10 +143,9 @@ The full decision directory is in [docs/adr/README.md](docs/adr/README.md).
 - `src/server/` — Fastify composition root, routes, config, projects, catalog, chains, preflight, harness adapters, runs, and PTY transport.
 - `src/server/chains/scenario-skills/` — pinned third-party scenario skill snapshots and provenance notices, copied only on explicit project action.
 - `src/shared/` — Shared API and terminal message contracts.
-- `src/web/` — React application: router, layout, route screens, components, hooks, and API clients.
+- `src/web/` — React chain editor: router, editor route, flow and step components, and API clients.
 - `tests/unit/` — Vitest unit suites for models, stores, adapters, preflight, runners, PTY, CLI, and documentation gates.
 - `tests/integration/` — Fastify composition-root suites for routes, WebSocket transport, and run orchestration.
-- `tests/e2e/` — Playwright browser journeys against an isolated app instance.
 - `scripts/` — Documentation gate, package smoke test, and live harness probes.
 - `docs/` — User, administrator, and operations guides, ADRs, release notes, support ownership, and live evidence.
 - `.github/skills/` — Project-maintained Copilot skills and their references.
@@ -165,7 +153,7 @@ The full decision directory is in [docs/adr/README.md](docs/adr/README.md).
 - `skill/loom-chain-workflow/` — Mirrored CLI workflow skill that coordinates discovery, optional workspace testing, reviewed import, and current-session execution using the companion skills.
 - `.opencode/agents/` and `.opencode/skills/` — OpenCode agent definitions and mirrored project skills.
 - `<project>/.agents/skills/` — Shared destination for new project skill copies and bundle imports; OpenCode also discovers legacy `.opencode/skills/`.
-- `dist/` — Build output for the server and web UI; generated, not source.
+- `dist/` — Build output for the server and chain editor; generated, not source.
 
 ## Getting Started
 
@@ -178,7 +166,7 @@ npm install
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173` for the development UI. For a production build, use `npm run build` then `npm start` and open `http://127.0.0.1:7373`.
+Open `http://127.0.0.1:5173` for the development editor (it needs a draft route such as `/drafts/<id>`). For a production build, use `npm run build` then `npm start`, or use `skill-loom edit`.
 
 The [administrator guide](docs/admin-guide.md#installation) covers the native toolchain, packaged tarball, configuration directory, backups, and upgrades. The sections below are the repository's exact command contract.
 
@@ -190,7 +178,6 @@ The [administrator guide](docs/admin-guide.md#installation) covers the native to
 - **Stable OpenCode CLI 2.2.5 or newer** for OpenCode chains, installed and authenticated. Live signal verification is still required for automatic advancement.
 - **GitHub Copilot CLI 1.0.105** for Copilot chains, installed and authenticated.
 - Git, optional but used for the `git init` option and the dirty-tree preflight warning.
-- A Chromium browser for Playwright e2e; install it once with `npx playwright install chromium`.
 
 ## Install
 
@@ -208,7 +195,7 @@ Harness CLIs are deliberately not installed by this project. Install stable Open
 npm run dev
 ```
 
-This starts the Fastify API on `http://127.0.0.1:7373` and the Vite dev server on `http://127.0.0.1:5173`. Open the Vite URL in a browser. Vite proxies `/api` (including WebSocket upgrades) to the API server. Both processes bind to loopback only.
+This starts the Fastify API on `http://127.0.0.1:7373` and the Vite dev server on `http://127.0.0.1:5173`. Vite proxies `/api` (including WebSocket upgrades) to the API server. Both processes bind to loopback only.
 
 ## Build and run
 
@@ -217,7 +204,7 @@ npm run build
 npm start
 ```
 
-`npm run build` builds the React UI into `dist/web` and compiles the server into `dist/src`. `npm start` runs the compiled server, which serves both the API and the built UI from the single loopback origin `http://127.0.0.1:7373`. The production server does not use the Vite dev proxy.
+`npm run build` builds the React UI into `dist/web` and compiles the server into `dist/src`. `npm start` runs the compiled server, which serves both the API and the built chain editor from the single loopback origin `http://127.0.0.1:7373`. The production server does not use the Vite dev proxy.
 
 ## Run from a package
 
@@ -252,7 +239,7 @@ The packed package contains `dist/src`, `dist/web`, the compiled package metadat
 | Capability | Command | Notes |
 |------------|---------|-------|
 | Install dependencies | `npm install` | Native `node-pty` build requires the toolchain above. |
-| Development | `npm run dev` | API on 7373, Vite UI on 5173. |
+| Development | `npm run dev` | API on 7373, Vite editor on 5173. |
 | Build | `npm run build` | Web then server. |
 | Bundled skill modes | `npm run update:scenario-modes` | Regenerate the content-bound manifest from current files and Git index modes after changing bundled scenario packages. |
 | Start built app | `npm start` | Serves `dist/web` and the API on 7373. |
@@ -270,14 +257,11 @@ The default live probes exercise real OpenCode and Copilot CLIs. They fail with 
 
 ## First run
 
-1. Start the development app with `npm run dev` and open `http://127.0.0.1:5173`, or build and run production with `npm run build && npm start` and open `http://127.0.0.1:7373`.
-2. On the Projects screen, open an existing folder or create a new project. Registering a project records it in the recent-projects list; removing a recent entry does not delete project files.
-3. Open **Project skills**, choose the harness, and search or expand a skill's `SKILL.md`. You can add extra skill directories in the settings dialog. A skill from a personal, plugin, custom, or extra source can be copied into the project with **Copy into this project**; new copies for either harness go to `.agents/skills/`. OpenCode also discovers legacy `.opencode/skills/` packages, while Copilot discovery remains authoritative through its CLI.
-4. Create a chain, add at least one step, choose the harness, optionally select a compatible native agent from a remote source, give every step an instruction, declare any named inputs, and save. A saved chain is stored under `<project>/.loom/chains/`. **Save and run** saves the chain and opens its run-start screen.
-5. On run start, choose supervised or automatic mode, provide required inputs, and run preflight. Preflight never makes a model call.
-6. Resolve every blocking finding and acknowledge every required warning, then choose **Start run**. Skill Loom creates the run through `POST /api/projects/<projectId>/runs`, re-runs the blocking preflight on the server, and opens the dedicated terminal page at `/runs/<runId>/terminal`.
-7. The terminal page keeps xterm and the compact run controls together without scrolling past step details; **Run details** opens `/runs/<runId>` for the step rail, full controls, and recovery guidance. A run never advances because of terminal output, a timer, or a page load. A chain card's **Run** action returns to the run-start screen, and the project screen links to any active run.
-8. To reuse a recipe, choose **Save copy to library** in the builder. The global library at `/chains` stores independent snapshots; importing one into another project copies it with a new chain id.
+1. Install and start: `npm run build`, then `skill-loom service start` (or let a companion skill install the CLI and start it).
+2. Ask an agent to use `scenario-discovery` to propose a workflow, or create a draft yourself with `skill-loom chain draft create` (JSON on stdin) and check it with `chain draft validate`.
+3. Open `skill-loom edit --draft <draft-id>` to reorder steps, edit instructions, and manage inputs; **Save chain** writes the changes back.
+4. Share it with `skill-loom bundle create`, review a received bundle with `bundle inspect` and `bundle review`, and install it with `bundle import` (exact review digest plus confirmation).
+5. Run it in your current agent session with the `loom-run-bundle` skill, or under a managed harness with `skill-loom run preflight`, `run review-start`, `run start`, and `run attach`. Preflight never makes a model call. A run never advances because of terminal output or a timer.
 
 The full workflow, run controls, statuses, recovery, accessibility, and privacy behavior are in the [user guide](docs/user-guide.md).
 
@@ -288,7 +272,7 @@ The full workflow, run controls, statuses, recovery, accessibility, and privacy 
 | `LOOM_CONFIG_DIR` | `~/.config/loom` | Global config, recent projects, active-run pointer, and global chain templates. |
 | `LOOM_HOST` | `127.0.0.1` | Loopback bind host. Any non-loopback value aborts startup. |
 | `LOOM_PORT` | `7373` | TCP port from 1 to 65535. |
-| `LOOM_WEB_ROOT` | discovered `dist/web` | Optional built-UI directory override for controlled deployments and tests. |
+| `LOOM_WEB_ROOT` | discovered `dist/web` | Optional built-editor directory override for controlled deployments and tests. |
 
 The versioned config document contains `version`, `harnessCommands`, `extraSkillDirectories`, `recentProjects`, and `uiPreferences`. `harnessCommands` may override the executable name or absolute path for `opencode` or `copilot`; a missing entry resolves from `PATH`. The schema is strict: credential-like fields such as `apiKey`, `token`, or `secret` are invalid and are never stored. Configuration writes use an atomic temporary-file replacement; a corrupt or unsupported-version config is reported rather than silently rewritten.
 
@@ -316,7 +300,7 @@ There is no `CONTRIBUTING.md` yet. The working agreement is:
 
 1. Install with `npm install`, develop with `npm run dev`, and run `npm run check`, `npm run typecheck`, and `npm test` before proposing a change.
 2. Keep harness-specific behavior inside `src/server/harness/`, keep routes thin, and preserve the loopback-only and shell-free boundaries described in the ADRs.
-3. Add or update a test for behavior changes; use the unit, integration, and Playwright suites as appropriate.
+3. Add or update a test for behavior changes; use the unit and integration suites as appropriate.
 4. Route work through the ownership table in [docs/SUPPORT.md](docs/SUPPORT.md). Cross-module or product decisions go to the support lead; the human maintainer owns scope and release decisions.
 5. Do not add a dependency, a remote service, or a new persisted field without checking the security and persistence ADRs.
 
@@ -337,7 +321,7 @@ Skill Loom is licensed under the [MIT License](LICENSE). The npm package remains
 
 ## Acknowledgements
 
-Skill Loom builds on Fastify, React, Vite, TypeScript, Zod, YAML, `ws`, `node-pty`, xterm.js, Vitest, Playwright, and `tsx`. It integrates with OpenCode and GitHub Copilot CLI, whose own licenses and terms govern those tools. The live evidence and support workflow were produced by the project's agent team, documented in [docs/SUPPORT.md](docs/SUPPORT.md).
+Skill Loom builds on Fastify, React, Vite, TypeScript, Zod, YAML, `ws`, `node-pty`, Vitest, and `tsx`. It integrates with OpenCode and GitHub Copilot CLI, whose own licenses and terms govern those tools. The live evidence and support workflow were produced by the project's agent team, documented in [docs/SUPPORT.md](docs/SUPPORT.md).
 
 ## Author
 
@@ -346,7 +330,7 @@ Maintained by **McFuzzySquirrel** ([GitHub](https://github.com/McFuzzySquirrel))
 ## Operations guide
 
 - [Visual tour](docs/visual-tour.md) — the visual chain editor.
-- [End-to-end explainer](docs/skill-loom-end-to-end.html) — one-page visual tour of the components, run journey, step path, and harness differences.
+- [End-to-end explainer](docs/skill-loom-end-to-end.html) — one-page visual tour of the components, run journey, step path, and harness differences (predates the CLI-driven pivot).
 - [User guide](docs/user-guide.md) — build, preflight, run, recover, accessibility, and privacy.
 - [Administrator guide](docs/admin-guide.md) — install, configure, back up, upgrade, monitor, and harden.
 - [Operations guide](docs/OPERATIONS.md) — the full operator contract: data locations, harness prerequisites, Copilot trust, permissions, fork behavior, and troubleshooting.

@@ -9,7 +9,7 @@ requirements and execution tooling have been retired.
 |---|---|---|
 | support-lead | triage, release, cross-module | priority, routing, release, architecture |
 | backend-engineer | `src/server/**`, `src/shared/**`, `tests/unit/**`, `tests/integration/**` | server routes, config, persistence, catalog, preflight, PTY, runs |
-| frontend-engineer | `src/web/**`, `tests/e2e/**` | UI, accessibility, keyboard, browser tests |
+| frontend-engineer | `src/web/**` | Chain editor UI, accessibility, keyboard |
 | integration-engineer | `scripts/live-discovery.ts`, `scripts/live-execution.ts`, `docs/evidence/**` | real OpenCode and Copilot CLI behaviour |
 | platform-engineer | `package.json`, `tsconfig*.json`, `vite.config.ts`, `vitest.config.ts`, `playwright.config.ts`, `scripts/check-docs.mjs`, `README.md`, `CHANGELOG.md`, `docs/OPERATIONS.md`, `docs/user-guide.md`, `docs/admin-guide.md`, `docs/adr/**`, `docs/releases/**` | build, tooling, dependency pins, docs gate |
 

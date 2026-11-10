@@ -1,6 +1,6 @@
 # Standalone Skill Guide
 
-*How to discover, review, and run Skill Loom chains using only the companion Agent Skills inside your own agent session. Skill Loom's server, browser UI, and CLI are not required.*
+*How to discover, review, and run Skill Loom chains using only the companion Agent Skills inside your own agent session. Skill Loom's server, chain editor, and CLI are not required.*
 
 ## Who This Is For
 
@@ -30,9 +30,7 @@ Limits of the skill-only path:
 
 ## Install the Skills
 
-1. Obtain the packages by one of these routes:
-   - Download **Download reusable runner skill** (export dialog or shared library) and **Download scenario-discovery v1** (Discover workflows page) from a running Skill Loom, or
-   - From a checkout, run `npm run build:portable-skill` and use `dist/skills/loom-run-bundle/`, `dist/skills/scenario-discovery/`, and `dist/skills/loom-chain-workflow/` (ZIP archives sit beside them), or copy the checked-in `skill/` directories.
+1. From a checkout, run `npm run build:portable-skill` and use `dist/skills/loom-run-bundle/`, `dist/skills/scenario-discovery/`, and `dist/skills/loom-chain-workflow/` (ZIP archives sit beside them), or copy the checked-in `skill/` directories.
 2. Copy each directory into the target project's `.agents/skills/`. Do not merge over an existing package.
 3. Refresh or restart the host so it discovers them.
 

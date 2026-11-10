@@ -9,6 +9,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 ### Changed
 
 - Skill Loom is now CLI- and skill-driven. The web app is reduced to a single visual chain editor (flow overview, drag reordering, step instructions, inputs) opened with `skill-loom edit --draft <id>` or `skill-loom edit --project <id> --chain <id>`; saves write back to the chain. The `loom-chain-workflow` and `scenario-discovery` skills now install the CLI (with user approval) when it is missing.
+- Pruned unused CSS (about 70% smaller), removed the unused xterm.js dependencies, and rewrote the user guide, visual tour, README, administrator and operations guides, scenario guide, and standalone skill guide for the CLI- and skill-driven workflow. Added [ADR-0027](docs/adr/0027-cli-and-skill-driven-workflow.md) and [ADR-0028](docs/adr/0028-single-purpose-chain-editor.md); earlier UI ADRs are marked superseded in part.
 
 ### Removed
 

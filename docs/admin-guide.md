@@ -8,11 +8,11 @@ Skill Loom is a **single-user local web application**. The administrator is usua
 
 At runtime:
 
-- A Fastify server on `127.0.0.1:7373` serves the JSON/WebSocket API and the built React UI.
-- A Vite dev server on `127.0.0.1:5173` serves the UI during development and proxies `/api` and WebSocket upgrades to Fastify.
+- A Fastify server on `127.0.0.1:7373` serves the JSON/WebSocket API and the built chain editor (the only web screen, opened with `skill-loom edit`).
+- A Vite dev server on `127.0.0.1:5173` serves the chain editor during development and proxies `/api` and WebSocket upgrades to Fastify.
 - The server owns configuration, project registration, filesystem browsing, skill discovery, chain and run persistence, preflight, PTY transport, and run orchestration.
 - Harness CLIs are spawned as child processes or PTYs with an executable and argument array, never a shell string.
-- The browser is a typed API/terminal client; it cannot spawn processes or choose executables.
+- The `skill-loom` CLI and the chain editor are typed API clients; neither can spawn processes or choose executables.
 
 See [Architecture decisions](adr/README.md) for the durable choices behind this shape, especially [ADR-0001](adr/0001-loopback-only-single-user-server.md) and [ADR-0011](adr/0011-shell-free-process-and-pty-transport.md).
 
@@ -23,7 +23,7 @@ See [Architecture decisions](adr/README.md) for the durable choices behind this 
 - **A native build toolchain for `node-pty`:** Python 3, `make`, and a C++ compiler. Debian/Ubuntu: `sudo apt install build-essential python3`. macOS: Xcode Command Line Tools.
 - **Stable OpenCode CLI 2.2.5 or newer** for OpenCode chains, installed and authenticated. The minimum does not establish automatic signal compatibility.
 - **GitHub Copilot CLI 1.0.105** for Copilot chains, installed and authenticated.
-- **A desktop browser.** The application uses xterm.js and a desktop-oriented layout.
+- **A desktop browser**, only if you use the chain editor (`skill-loom edit`). Everything else is CLI and skill driven.
 - **Git**, optional. It is used for the `git init` option and the dirty-tree preflight warning.
 - **Disk access** to the project folders you register. Run records can contain terminal output and should be treated as sensitive local data.
 
@@ -41,7 +41,7 @@ npm run build
 npm start
 ```
 
-`npm install` compiles `node-pty`; a failure there is a native toolchain failure, not a hidden success. `npm run build` builds the React UI into `dist/web` and the server into `dist/src`. `npm start` runs the compiled server and serves the API and UI from `http://127.0.0.1:7373`.
+`npm install` compiles `node-pty`; a failure there is a native toolchain failure, not a hidden success. `npm run build` builds the chain editor into `dist/web` and the server into `dist/src`. `npm start` runs the compiled server and serves the API and UI from `http://127.0.0.1:7373`.
 
 For development:
 
@@ -78,7 +78,7 @@ The server reads configuration from the environment on each operation and from `
 | `LOOM_CONFIG_DIR` | `~/.config/loom` | Overrides the global config, recent-project, active-run pointer, and global chain template directory. A relative value is resolved against the server working directory. |
 | `LOOM_HOST` | `127.0.0.1` | Bind host. Only `127.0.0.0/8`, `::1`, and `localhost` are accepted; anything else aborts startup. `localhost` is normalized to `127.0.0.1`. |
 | `LOOM_PORT` | `7373` | TCP port from 1 to 65535. |
-| `LOOM_WEB_ROOT` | discovered `dist/web` | Optional built-UI directory override for controlled deployments and tests. |
+| `LOOM_WEB_ROOT` | discovered `dist/web` | Optional built-editor directory override for controlled deployments and tests. |
 
 The config document is versioned and strict:
 
@@ -98,11 +98,11 @@ The config document is versioned and strict:
 
 - `harnessCommands` optionally overrides the executable name or absolute path. A missing entry resolves from `PATH`. A broken override is a block; Skill Loom does not silently fall back to the default name.
 - On Windows, PATH lookup for an extensionless name also checks for a native `.exe` in each directory. It does not search for `.cmd` or `.bat` wrappers or invoke them through a shell; configure an appropriate native executable instead. This does not imply Windows managed-run support.
-- `extraSkillDirectories` is the global extra-skill search list managed from the catalog settings dialog.
+- `extraSkillDirectories` is the global extra-skill search list stored in the config file; there is no editor for it, so change it while the service is stopped.
 - `remoteSkillSources` stores validated HTTPS/SSH Git URLs and optional refs for skill packages and supported native agents. Pinned snapshots live under `<LOOM_CONFIG_DIR>/catalog-sources/`; credentials are never stored.
 - `remoteCatalogLimits` controls finite Git staging, output, timeout, snapshot,
-  and per-package budgets. The **Remote skill repositories** page edits global
-  defaults and optional per-source overrides. Older version 1 configs are read
+  and per-package budgets. `skill-loom catalog limits set` edits global
+  defaults and `catalog limits source` sets optional per-source overrides. Older version 1 configs are read
   with the original default budgets and are written as version 2 on the next
   update; older Skill Loom versions cannot read version 2 configs.
 - `recentProjects` stores the canonical path, display name, derived id, and last-opened time.
@@ -114,12 +114,10 @@ Configuration writes use an atomic same-directory temporary-file replacement. A 
 The original default budgets remain 100 skill packages, 100 native agents,
 2,000 files, 20 MiB per package and per snapshot, 128 MiB / 10,000 entries
 of Git staging, and 2 MiB of Git command output. To refresh a larger catalog,
-expand **Remote catalog limits** on **Remote skill repositories** (collapsed
-initially) and raise the appropriate budgets together; for
+use `skill-loom catalog limits show` and `catalog limits set` to raise the appropriate budgets together; for
 example, a 1,000-package, 20,000-file source also needs sufficient Git output,
 staging, total snapshot size, and timeouts. Each setting has a finite maximum.
-The UI edits and displays sizes in decimal MB (1 MB = 1,000,000 bytes);
-configuration and API values remain integer bytes, with no change to budgets.
+Configuration and CLI values are integer bytes.
 Refresh uses a depth-one, no-checkout clone with blobs included. This avoids
 partial-clone lazy fetches for individual package files, which can add a
 network round trip per file. Git staging still includes the whole fetched
@@ -187,7 +185,7 @@ narrow the query for stable paging. Snapshot results are observations, not
 locks on project files; revalidate selections before later actions.
 `discovery handoff` accepts JSON on stdin containing `goal`, `harness`, and
 `candidates` with exact `sourceId`, `revision`, `repositoryPath`, and
-`fingerprint` values. It returns the same handoff as the UI inside the JSON
+`fingerprint` values. It returns the handoff inside the JSON
 envelope's `result` and does not write a file or run any candidate. The
 response contains complete candidate content: protect stdout and any saved
 artifact, review the content and redistribution rights separately, and extract
@@ -197,10 +195,10 @@ control requests are limited to 64 KiB.
 
 `skill-loom service start` starts the same profile-owning
 server without opening a browser; it still binds the normal loopback HTTP
-listener. A UI-started server also exposes the local control endpoint. Use
+listener. A server started by `skill-loom` or `skill-loom edit` also exposes the local control endpoint. Use
 `service status` and `service stop` against the same `--config-dir`; normal
 stop refuses an active managed run or an in-progress run operation. Finish or
-abort the run in the UI first. Catalog source add/remove/refresh and limit
+abort the run with `run abort` first. Catalog source add/remove/refresh and limit
 updates use the shared owner and require the service to be running. Their JSON
 payloads are supplied on stdin; use `skill-loom catalog --help` for shapes.
 `skill-loom project --help` and `skill-loom chain --help` describe
@@ -208,7 +206,7 @@ registered project and draft commands. Draft validation checks the model only,
 not source availability, conflicts, permissions, or harness readiness.
 `chain project list` reads `{"projectId":"..."}` from stdin and returns the
 registered project's chains and any corrupt-file warnings. `chain project show`
-also requires `"chainId"` and reads the same saved chain as the UI. These and
+also requires `"chainId"` and reads the saved chain. These and
 the draft commands require the running owner. Each show/create/update result
 includes a `revision`; list results include a `revisions` map keyed by chain
 ID. `chain project create` accepts `{"projectId":"...","draft":{...}}`.
@@ -217,7 +215,7 @@ Project and draft `update` accept their IDs, a `draft`, and the last observed
 and `confirmed: true`. A changed chain returns `CHAIN_STALE`; reload and review
 it rather than retrying with a new revision blindly.
 
-The UI supplies revision preconditions for its edits and deletions. Project
+The chain editor supplies revision preconditions for its edits. Project
 chain and draft HTTP update/delete requests must include the last observed
 revision in `x-loom-chain-revision`; callers that previously omitted it must
 load the resource first. Missing headers return `CHAIN_REVISION_REQUIRED`
@@ -225,7 +223,7 @@ load the resource first. Missing headers return `CHAIN_REVISION_REQUIRED`
 filesystem writes are not coordinated by the owner.
 `skill-loom bundle create --draft <id> --output /absolute/file` exports a
 draft bundle without replacing an existing file. To export a saved project
-chain using the same service as the UI, use `bundle create --project <id>
+chain use `bundle create --project <id>
 --chain <id> --output /absolute/file` instead.
 
 To review an import, send `{"projectId":"...","bundlePath":"/absolute/file"}`
@@ -250,7 +248,7 @@ all existing packages is bounded to 2,000 files, 20 MiB, 66,000 entries and
 These checks do not lock external filesystem edits. Import does not launch a
 harness or approve execution.
 
-`skill-loom run preflight` accepts the same preflight fields as the UI,
+`skill-loom run preflight` accepts the preflight fields,
 including `projectId` and `chainId`, as JSON on stdin. It returns the shared
 preflight report; it does not start a run. Preflight can invoke local harness
 authentication/version and Git checks without sending a model prompt.
@@ -337,7 +335,7 @@ fails explicitly; reconnect to obtain a new snapshot. Interrupting the client
 only unsubscribes and does not stop or retry the run.
 `run attach --run <id>` requires interactive TTYs for stdin and stdout and
 attaches to the existing live run terminal. Press Ctrl-] to detach without
-stopping the run; Ctrl-C is forwarded to the harness. Only one browser or CLI
+stopping the run; Ctrl-C is forwarded to the harness. Only one CLI
 terminal subscriber is allowed at a time. Terminal output is untrusted and may
 contain terminal control sequences.
 
@@ -424,14 +422,11 @@ claim state, bounded run-record summaries, and a review digest. It initializes
 the database and ignore rule if needed but does not change run records or
 resolve ownership. Its `executionCoordinated: false` result means the review
 itself is not a lock or proof that all processes participate.
-In the project page, expand **Project details** and select **Review
-coordination** to inspect the same evidence. Nonparticipating run writers can
-change records during or after review; neither review is a lock, confirmation
+Nonparticipating run writers can
+change records during or after review; the review is not a lock, confirmation
 that work has stopped, or an authorization to start a run.
 
-After review, use **Enable coordination**, **Adopt reviewed run**, **Mark claimed
-managed run interrupted**, **Abandon interrupted managed run**, or **Clear
-reviewed claim** as applicable. Each action requires a fresh review digest and
+After review, use `project coordination-action` with `enable`, `adopt`, `interrupt`, `abandon`, or `clear` as applicable. Each action requires a fresh review digest and
 explicit confirmations that older clients and prior work, including descendants,
 have stopped. Abandonment requires an additional choice and never replays.
 Resolve an unfinished portable run with its helper before clearing. The service
@@ -536,11 +531,11 @@ If you need multi-user or remote access, this project does not provide it. Treat
 
 | Path | Contents | Notes |
 |---|---|---|
-| `~/.config/loom/config.json` | Global config, executable overrides, extra skill directories, remote sources, recent projects, managed-workspace ownership, and UI preferences. | Override the directory with `LOOM_CONFIG_DIR`. POSIX creation requests owner-only permissions; Windows service startup requires a verified protected private profile. |
+| `~/.config/loom/config.json` | Global config, executable overrides, extra skill directories, remote sources, recent projects, managed-workspace ownership, and UI preferences (unused by the chain editor). | Override the directory with `LOOM_CONFIG_DIR`. POSIX creation requests owner-only permissions; Windows service startup requires a verified protected private profile. |
 | `~/.config/loom/drafts/*.json` | Project-independent chain drafts. | Separate from templates and project chains; back up with the config directory. |
-| Browser download location (`*.loom-discovery.json`) | A user-prepared discovery handoff containing the goal and exact selected candidate packages. | Not retained by the server. It can contain private or redistribution-restricted content; protect or remove it according to your local policy. |
-| `~/.config/loom/test-workspaces/<uuid>/` | Managed disposable projects created by **Test in disposable workspace**. | Retained until explicit cleanup from **Test workspaces**. Cleanup refuses the workspace holding the global active run. |
-| `~/.config/loom/discovery-workspaces/<uuid>/` | Reviewed handoff, bundled `scenario-discovery` package, managed project, result file, and run state for interactive scenario discovery. | Retained until explicit cleanup from **Discover workflows**. Cleanup refuses the workspace holding the global active run. |
+| Caller-chosen file (`*.loom-discovery.json`) | A user-prepared discovery handoff containing the goal and exact selected candidate packages. | Not retained by the server. It can contain private or redistribution-restricted content; protect or remove it according to your local policy. |
+| `~/.config/loom/test-workspaces/<uuid>/` | Managed disposable projects created by `skill-loom workspace create`. | Retained until explicit `workspace remove`. Cleanup refuses the workspace holding the global active run. |
+| `~/.config/loom/discovery-workspaces/<uuid>/` | Reviewed handoff, bundled `scenario-discovery` package, managed project, result file, and run state for interactive scenario discovery (HTTP API only; no CLI or UI screen). | Retained until explicit cleanup. Cleanup refuses the workspace holding the global active run. |
 | `~/.config/loom/active-run.json` | Single global active-run pointer. | Holds the active run's project path, run id, and status. Do not edit while a run is live. |
 | `~/.config/loom/profile-owner.sqlite` | Profile ownership lock. | One server may own a profile at a time. Do not remove or replace this file while the server is running; the operating system releases the lock on process exit. Store the profile on a filesystem that supports SQLite locking. |
 | `~/.config/loom/control.json` | Temporary local control endpoint and bearer capability; Windows also includes client TLS credentials. | Private to the profile owner; do not share, commit, back up, or remove while the server is running. |
@@ -549,7 +544,7 @@ If you need multi-user or remote access, this project does not provide it. Treat
 | `<project>/.loom/runs/*.json` | Run snapshots, statuses, actions, and bounded tails. | At most 200 lines or 32 KiB per step. Never a full transcript. This repository git-ignores `.loom/runs/`. |
 | `<project>/.agents/skills/` | Newly copied and bundle-imported skill packages for either harness. | Independent project files; deleting a chain does not remove them. Include these in recipe backups when needed. Existing packages are not migrated. |
 | `<project>/.opencode/agents/` and `<project>/.github/agents/` | Explicitly copied remote native agent definitions for the corresponding harness. | Copy never overwrites; chain preflight verifies the selected definition fingerprint. These are harness-specific and are not translated. |
-| Browser download location (`*.loom.json`) | Portable chain and skill bundles. | Version 1 contains skills; version 2 can also contain one selected native agent and its pinned identity. No run history or input defaults; review package contents and redistribution rights before sharing. Not a complete backup. |
+| Caller-chosen file (`*.loom.json`) | Portable chain and skill bundles. | Version 1 contains skills; version 2 can also contain one selected native agent and its pinned identity. No run history or input defaults; review package contents and redistribution rights before sharing. Not a complete backup. |
 | Configured shared bundle directory | Immutable published `.loom.json` files. | Must be an existing absolute directory visible to the server and support same-directory hard links. Publication never replaces an existing file; the directory is local or mounted storage, not a hosted service. On Windows, directory fsync can be unsupported, so a successful publication does not guarantee its directory entry survives a sudden power loss. |
 | `~/.copilot/config.json` | Copilot's own folder-trust configuration. | Skill Loom only reads `trustedFolders`; it never writes this file. |
 
@@ -566,7 +561,7 @@ Restore by stopping the server, replacing the config or chain directory, and sta
 
 Managed test and discovery workspaces are working directories, not security sandboxes. They use the normal harness permissions and authentication available to the server process. Discovery workspaces persist candidate package contents and goals until explicit cleanup; protect the configured Skill Loom storage directory accordingly. Keep disk usage under review and use the UI's explicit cleanup; do not remove a directory while its run is active.
 
-The **Shared bundles** page stores the configured server-side directory in global config. Configure it only to a directory whose access policy and backups are appropriate for the bundles it will contain. Publishing from a project chain or a locally selected `.loom.json` requires review confirmations for bundle contents and redistribution rights; local-file upload does not require a project or accept a server path from the browser. The server validates the upload, checks the reviewed fingerprint, then atomically creates a new file without clobbering another. Skill Loom does not harvest license files or independently establish redistribution rights. A mounted share that does not support hard links fails visibly rather than falling back to an overwrite-prone write.
+The shared-bundle HTTP API (no CLI or UI screen) stores the configured server-side directory in global config. Configure it only to a directory whose access policy and backups are appropriate for the bundles it will contain. Publishing from a project chain or a locally selected `.loom.json` requires review confirmations for bundle contents and redistribution rights; local-file upload does not require a project or accept a server path from the browser. The server validates the upload, checks the reviewed fingerprint, then atomically creates a new file without clobbering another. Skill Loom does not harvest license files or independently establish redistribution rights. A mounted share that does not support hard links fails visibly rather than falling back to an overwrite-prone write.
 
 ### Portable bundle administration
 
@@ -586,7 +581,7 @@ On Windows, a remote package is unavailable if its Git executable-mode index is 
 
 Portable bundle version 2 includes the selected agent's source id, commit, repository-relative path, native path, fingerprint, and bytes; it omits the repository URL and all local filesystem paths. The current portable helper inspects v2 agents but refuses to prepare a selected-agent chain because it cannot switch the current host conversation's agent. Use Loom's managed run path for selected native agents. Persisted chain version 3 includes exact remote skill bindings and optional pinned agent identity; valid version 1 and 2 chain records migrate on read. Older application builds that understand only chain version 2 or below will reject version 3 chains.
 
-The **Discover workflows** page prepares a separate `skill-loom-discovery-handoff` v1 artifact from exact identities in retained pinned snapshots. Preparation is project-independent, performs no automatic fetch, and stores no handoff on the server. It is bounded to 100 packages, 2,000 files, 20 MiB decoded content, and 30 MiB JSON. The standalone `scenario-discovery-v1.zip` contains the offline handoff validator and bundle builder; the host must support Node.js 24+ and structured process arguments. It proposes scenarios for review and creates a normal v1 chain bundle only after explicit approval. It does not import, install, or execute the result. Handoff artifacts are not chain bundles and are rejected by chain import APIs.
+`skill-loom discovery handoff` prepares a separate `skill-loom-discovery-handoff` v1 artifact from exact identities in retained pinned snapshots. Preparation is project-independent, performs no automatic fetch, and stores no handoff on the server. It is bounded to 100 packages, 2,000 files, 20 MiB decoded content, and 30 MiB JSON. The standalone `scenario-discovery-v1.zip` contains the offline handoff validator and bundle builder; the host must support Node.js 24+ and structured process arguments. It proposes scenarios for review and creates a normal v1 chain bundle only after explicit approval. It does not import, install, or execute the result. Handoff artifacts are not chain bundles and are rejected by chain import APIs.
 
 `npm run build:portable-skill` synchronizes the canonical `.github/skills/` definitions into the checked-in `skill/` mirror and generates both versioned downloadable skill archives under `dist/skills/`. Review the generated output after changing either skill and run the package smoke test before distributing a packed application.
 
@@ -628,7 +623,7 @@ Upgrade procedure for a checkout:
 2. Back up `~/.config/loom` and each project's `.loom/chains/`.
 3. Fetch or replace the checkout with the new version.
 4. Run `npm install` (the native `node-pty` build may need to rerun) and `npm run build`.
-5. Start the server, open the UI, and call `/api/health`.
+5. Start the server, open `skill-loom edit` for a chain, and call `/api/health`.
 6. Run `npm run check`, `npm run typecheck`, and `npm test` if you are validating the build.
 7. Run a small supervised chain against each harness before relying on it.
 
@@ -655,16 +650,9 @@ Config, chain, run, and active-run documents carry explicit versions. Unknown ve
 
 ## Troubleshooting
 
-### Remote settings still show byte inputs or are not collapsed
+### The chain editor looks stale or behaves like an older version
 
-The current UI uses MB for size inputs and their maximums, with **Remote catalog
-limits** collapsed initially. API/config byte values are intentional. A running
-owner serves the built application, not changes made to source files. Finish
-or abort active runs, stop the owner using your normal UI/CLI shutdown path,
-update the checkout, run `npm run build`, and restart it. For a tarball install,
-rebuild/repack and reinstall the updated package instead. Reload the browser
-after restarting, and check that you are using the expected owner/profile.
-Do not delete configuration or change budgets to fix a stale UI.
+A running owner serves the built application, not changes made to source files. Finish or abort active runs, run `skill-loom service stop`, update the checkout, run `npm run build`, and restart. For a tarball install, rebuild/repack and reinstall the updated package instead. Reload the editor page after restarting, and check that you are using the expected owner/profile. Do not delete configuration to fix a stale editor.
 
 ### The server refuses to start with a host error
 

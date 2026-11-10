@@ -1,5 +1,7 @@
 # Standalone CLI and agent-driven chains: end-to-end plan
 
+> **Historical.** This plan predates the CLI- and skill-driven pivot ([ADR-0027](adr/0027-cli-and-skill-driven-workflow.md), [ADR-0028](adr/0028-single-purpose-chain-editor.md)). The web screens it describes were removed; only the chain editor remains. See the [user guide](user-guide.md) for current behavior.
+
 ## Problem and outcome
 
 Skill Loom needs a CLI-first companion to the existing UI: users and agents can configure local and remote catalogs, discover and review skills, author chains, validate and optionally live-test them in a retained temporary workspace, import reviewed bundles into a repository, and run and recover them without opening a browser. The UI remains supported and shares the same behavior and data.
