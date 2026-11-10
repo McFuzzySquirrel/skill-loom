@@ -3,7 +3,6 @@ import { createConnection } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { buildApp } from '../../src/server/app.js';
 import { listRemoteSkillSnapshots, refreshRemoteSkillSource } from '../../src/server/catalog/remote.js';
 import { createConfigStore } from '../../src/server/config/store.js';
 import { startControlServer } from '../../src/server/control.js';
@@ -86,15 +85,14 @@ describe('remote Git process cleanup', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
-  it.skipIf(process.platform !== 'linux').each(['http', 'control'])(
-    'cancels a refresh when the %s client disconnects',
-    async (transport) => {
+  it.skipIf(process.platform !== 'linux')(
+    'cancels a refresh when the control client disconnects',
+    async () => {
       const root = await mkdtemp(join(tmpdir(), 'loom-refresh-disconnect-'));
       const executable = join(root, 'git');
       const pidPath = join(root, 'git.pid');
       const oldPath = process.env.PATH;
       const oldPidPath = process.env.LOOM_TEST_CHILD_PID;
-      let app: Awaited<ReturnType<typeof buildApp>> | undefined;
       let server: Awaited<ReturnType<typeof startControlServer>> | undefined;
       try {
         await writeFile(executable, `#!${process.execPath}
@@ -111,16 +109,7 @@ setInterval(() => {}, 1000);
           remoteCatalogLimits: { cloneTimeoutMs: 10_000 },
         });
         let disconnect: () => void;
-        let response: Promise<unknown> | undefined;
-        if (transport === 'http') {
-          app = await buildApp({ env: {}, serveStatic: false, configStore: store });
-          const address = await app.listen({ host: '127.0.0.1', port: 0 });
-          const controller = new AbortController();
-          response = fetch(`${address}/api/settings/remote-skill-sources/disconnect/refresh`, {
-            method: 'POST', signal: controller.signal,
-          }).catch((error: unknown) => error);
-          disconnect = () => controller.abort();
-        } else {
+        {
           server = await startControlServer(store);
           const metadata = JSON.parse(await readFile(join(store.getConfigDir(), 'control.json'), 'utf8')) as {
             socket: string; token: string;
@@ -141,12 +130,10 @@ setInterval(() => {}, 1000);
           expect(pid).toBeGreaterThan(0);
         }, { timeout: 5_000 });
         disconnect();
-        await response;
         await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow(), { timeout: 5_000 });
         expect(await listRemoteSkillSnapshots(store.getConfigDir(), 'disconnect')).toEqual([]);
       } finally {
         await server?.close();
-        await app?.close();
         if (oldPath === undefined) delete process.env.PATH;
         else process.env.PATH = oldPath;
         if (oldPidPath === undefined) delete process.env.LOOM_TEST_CHILD_PID;

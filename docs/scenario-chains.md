@@ -6,7 +6,7 @@ Skill Loom curates the example sequences and their original orchestration instru
 
 ## Browse, adapt, and copy
 
-The scenario catalog has no web screen. Read the examples below, or read the catalog JSON from a running service with `curl http://127.0.0.1:7373/api/chain-presets`. Skill Loom is CLI- and skill-driven; see the [user guide](user-guide.md).
+The scenario catalog has no web screen or API; read the examples below. Skill Loom is CLI- and skill-driven; see the [user guide](user-guide.md).
 
 1. Pick a variant and review its ordered steps, named inputs, example outputs, prerequisites, and third-party sources.
 2. Create your own copy as a draft: send a chain draft object with the example's steps and inputs to `skill-loom chain draft create` (JSON on stdin), and check it with `chain draft validate`. Ask an agent with the `scenario-discovery` skill to do this for you if you prefer.

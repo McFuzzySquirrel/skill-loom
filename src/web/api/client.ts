@@ -171,3 +171,14 @@ export function createApiClient(fetchImpl: FetchLike = fetch): ApiClient {
 
 /** Same-origin client; Vite proxies /api in development. */
 export const apiClient = createApiClient();
+
+/** Coerce an unknown thrown value into the shared typed client error. */
+export function toApiClientError(
+  error: unknown,
+  fallbackMessage = 'An unexpected error prevented the request.',
+): ApiClientError {
+  if (error instanceof ApiClientError) {
+    return error;
+  }
+  return new ApiClientError(fallbackMessage, { code: 'UNKNOWN_ERROR', status: 0 });
+}

@@ -8,8 +8,8 @@ Skill Loom is a **single-user local web application**. The administrator is usua
 
 At runtime:
 
-- A Fastify server on `127.0.0.1:7373` serves the JSON/WebSocket API and the built chain editor (the only web screen, opened with `skill-loom edit`).
-- A Vite dev server on `127.0.0.1:5173` serves the chain editor during development and proxies `/api` and WebSocket upgrades to Fastify.
+- A Fastify server on `127.0.0.1:7373` serves the minimal JSON API (health, lifecycle, and draft/chain read and save) and the built chain editor (the only web screen, opened with `skill-loom edit`).
+- A Vite dev server on `127.0.0.1:5173` serves the chain editor during development and proxies `/api` to Fastify.
 - The server owns configuration, project registration, filesystem browsing, skill discovery, chain and run persistence, preflight, PTY transport, and run orchestration.
 - Harness CLIs are spawned as child processes or PTYs with an executable and argument array, never a shell string.
 - The `skill-loom` CLI and the chain editor are typed API clients; neither can spawn processes or choose executables.
@@ -49,7 +49,7 @@ For development:
 npm run dev
 ```
 
-This starts the API on `127.0.0.1:7373` and Vite on `127.0.0.1:5173`. Open the Vite URL; Vite proxies `/api` and WebSocket upgrades to the API.
+This starts the API on `127.0.0.1:7373` and Vite on `127.0.0.1:5173`. Open the Vite URL; Vite proxies `/api` to the API.
 
 ### From a packed package
 
@@ -535,7 +535,7 @@ If you need multi-user or remote access, this project does not provide it. Treat
 | `~/.config/loom/drafts/*.json` | Project-independent chain drafts. | Separate from templates and project chains; back up with the config directory. |
 | Caller-chosen file (`*.loom-discovery.json`) | A user-prepared discovery handoff containing the goal and exact selected candidate packages. | Not retained by the server. It can contain private or redistribution-restricted content; protect or remove it according to your local policy. |
 | `~/.config/loom/test-workspaces/<uuid>/` | Managed disposable projects created by `skill-loom workspace create`. | Retained until explicit `workspace remove`. Cleanup refuses the workspace holding the global active run. |
-| `~/.config/loom/discovery-workspaces/<uuid>/` | Reviewed handoff, bundled `scenario-discovery` package, managed project, result file, and run state for interactive scenario discovery (HTTP API only; no CLI or UI screen). | Retained until explicit cleanup. Cleanup refuses the workspace holding the global active run. |
+| `~/.config/loom/discovery-workspaces/<uuid>/` | Reviewed handoff, bundled `scenario-discovery` package, managed project, result file, and run state for interactive scenario discovery (managed through the CLI control channel). | Retained until explicit cleanup. Cleanup refuses the workspace holding the global active run. |
 | `~/.config/loom/active-run.json` | Single global active-run pointer. | Holds the active run's project path, run id, and status. Do not edit while a run is live. |
 | `~/.config/loom/profile-owner.sqlite` | Profile ownership lock. | One server may own a profile at a time. Do not remove or replace this file while the server is running; the operating system releases the lock on process exit. Store the profile on a filesystem that supports SQLite locking. |
 | `~/.config/loom/control.json` | Temporary local control endpoint and bearer capability; Windows also includes client TLS credentials. | Private to the profile owner; do not share, commit, back up, or remove while the server is running. |
@@ -545,7 +545,6 @@ If you need multi-user or remote access, this project does not provide it. Treat
 | `<project>/.agents/skills/` | Newly copied and bundle-imported skill packages for either harness. | Independent project files; deleting a chain does not remove them. Include these in recipe backups when needed. Existing packages are not migrated. |
 | `<project>/.opencode/agents/` and `<project>/.github/agents/` | Explicitly copied remote native agent definitions for the corresponding harness. | Copy never overwrites; chain preflight verifies the selected definition fingerprint. These are harness-specific and are not translated. |
 | Caller-chosen file (`*.loom.json`) | Portable chain and skill bundles. | Version 1 contains skills; version 2 can also contain one selected native agent and its pinned identity. No run history or input defaults; review package contents and redistribution rights before sharing. Not a complete backup. |
-| Configured shared bundle directory | Immutable published `.loom.json` files. | Must be an existing absolute directory visible to the server and support same-directory hard links. Publication never replaces an existing file; the directory is local or mounted storage, not a hosted service. On Windows, directory fsync can be unsupported, so a successful publication does not guarantee its directory entry survives a sudden power loss. |
 | `~/.copilot/config.json` | Copilot's own folder-trust configuration. | Skill Loom only reads `trustedFolders`; it never writes this file. |
 
 Stop the service before backing up the configuration and recipes, so the
@@ -561,7 +560,6 @@ Restore by stopping the server, replacing the config or chain directory, and sta
 
 Managed test and discovery workspaces are working directories, not security sandboxes. They use the normal harness permissions and authentication available to the server process. Discovery workspaces persist candidate package contents and goals until explicit cleanup; protect the configured Skill Loom storage directory accordingly. Keep disk usage under review and use the UI's explicit cleanup; do not remove a directory while its run is active.
 
-The shared-bundle HTTP API (no CLI or UI screen) stores the configured server-side directory in global config. Configure it only to a directory whose access policy and backups are appropriate for the bundles it will contain. Publishing from a project chain or a locally selected `.loom.json` requires review confirmations for bundle contents and redistribution rights; local-file upload does not require a project or accept a server path from the browser. The server validates the upload, checks the reviewed fingerprint, then atomically creates a new file without clobbering another. Skill Loom does not harvest license files or independently establish redistribution rights. A mounted share that does not support hard links fails visibly rather than falling back to an overwrite-prone write.
 
 ### Portable bundle administration
 
@@ -585,7 +583,6 @@ Portable bundle version 2 includes the selected agent's source id, commit, repos
 
 `npm run build:portable-skill` synchronizes the canonical `.github/skills/` definitions into the checked-in `skill/` mirror and generates both versioned downloadable skill archives under `dist/skills/`. Review the generated output after changing either skill and run the package smoke test before distributing a packed application.
 
-The same-origin API exposes `GET /api/projects/:projectId/chains/:chainId/bundle`, `POST /api/projects/:projectId/chain-bundles/preview`, and `POST /api/projects/:projectId/chain-bundles/import`. POST bodies contain `bundle`; preview is read-only and returns a `reviewDigest`. Import requires `confirmed: true` and that digest, plus optional `reuseSkills` and `differingReuseConfirmed` fields. Existing HTTP import callers must preview again and send the returned digest. Import rechecks review evidence and rolls back newly installed packages and agent definitions if chain persistence fails. A bundle does not install harness CLIs or external skill dependencies.
 
 Standalone instruction steps use `kind: "instruction"` and contain `id`, `instruction`, and an optional `label`, with no `skillName`. Existing skill steps remain valid without a `kind`; explicit `kind: "skill"` is also supported. Both persist under versioned chain format 3. Older application builds that do not understand instruction steps or chain version 3 will reject such chains; use a compatible build on the receiving installation.
 

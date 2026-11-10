@@ -18,10 +18,9 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      // Development only: the server owns /api, including WebSocket upgrades.
+      // Development only: the server owns /api.
       '/api': {
         target: 'http://127.0.0.1:7373',
-        ws: true,
       },
     },
   },

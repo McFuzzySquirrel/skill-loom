@@ -5,7 +5,7 @@ import type {
   SkillSnapshotBinding,
 } from '../../shared/chain';
 import { isAbortError, type ApiClientError } from '../api/client';
-import type { SkillEntry } from '../api/catalog';
+import type { SkillEntry } from '../api/skills';
 import {
   CHAIN_HARNESSES,
   CHAIN_INPUT_NAME_PATTERN,

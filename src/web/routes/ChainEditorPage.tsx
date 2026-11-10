@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { DRAFT_CATALOG_ID } from '../api/catalog';
 import type { ApiClientError } from '../api/client';
 import { toApiClientError } from '../api/chains';
-import { globalDraftChainsApi } from '../api/drafts';
+import { DRAFT_CATALOG_ID, globalDraftChainsApi } from '../api/drafts';
 import { ChainFlow } from '../components/ChainFlow';
 import { InlineError } from '../components/InlineError';
 import { InputsEditor } from '../components/InputsEditor';

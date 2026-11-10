@@ -3,7 +3,6 @@ import { isIP } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fastifyStatic from '@fastify/static';
-import fastifyWebsocket from '@fastify/websocket';
 import Fastify, {
   type FastifyError,
   type FastifyInstance,
@@ -16,7 +15,6 @@ import {
   type ActiveRunSummary,
 } from '../shared/api.js';
 import type { CatalogService } from './catalog/merge.js';
-import type { GlobalChainService } from './chains/library.js';
 import type { ChainService } from './chains/service.js';
 import { createConfigStore, type ConfigStore } from './config/store.js';
 import type { HarnessRegistry } from './harness/registry.js';
@@ -105,8 +103,6 @@ export interface BuildAppOptions {
   catalogService?: CatalogService;
   /** Injected chain service. Defaults to the filesystem-backed service. */
   chainService?: ChainService;
-  /** Injected global chain template service. */
-  globalChainService?: GlobalChainService;
   /** Injected package version. Defaults to the root package.json version. */
   version?: string;
   /** Fastify logger configuration. Tests pass `false`. */
@@ -327,7 +323,6 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     );
   });
 
-  await app.register(fastifyWebsocket);
 
   // Fastify closes listener sockets and WebSocket upgrades before this hook.
   // Terminating every PTY here covers graceful SIGINT/SIGTERM shutdown too.
@@ -413,9 +408,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(routes, {
     configStore,
     projectRegistry,
-    catalogService,
     chainService,
-    runOwner,
     getDraftService: services.getDraftService,
     version: options.version ?? LOOM_VERSION,
     host,
@@ -425,58 +418,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       'http://127.0.0.1:5173',
       'http://localhost:5173',
     ],
-    terminalManager,
     getActiveRun: options.getActiveRun ?? (async () => {
       const orchestrator = await runOwner.getIfInitialized();
       if (orchestrator === null) return undefined;
       const active = await orchestrator.getActiveRun();
       return { active: active.active, runId: active.runId, status: active.status };
     }),
-    ...(options.projectGitInit === undefined ? {} : { gitInit: options.projectGitInit }),
-    ...(options.globalChainService === undefined
-      ? {}
-      : { globalChainService: options.globalChainService }),
-    ...(options.harnessRegistry === undefined ? {} : { harnessRegistry: options.harnessRegistry }),
-    ...(options.preflightCommandRunner === undefined
-      ? {}
-      : { preflightCommandRunner: options.preflightCommandRunner }),
-    ...(options.preflightReadFileText === undefined
-      ? {}
-      : { preflightReadFileText: options.preflightReadFileText }),
-    ...(options.preflightHomeDirectory === undefined
-      ? {}
-      : { preflightHomeDirectory: options.preflightHomeDirectory }),
-    preflightEnv: options.preflightEnv ?? env,
-    ...(options.preflightAuthStrategies === undefined
-      ? {}
-      : { preflightAuthStrategies: options.preflightAuthStrategies }),
-    preflightProvider: services.preflightProvider,
-    testWorkspaceService: services.testWorkspaceService,
-    ...(options.trustSessionService === undefined
-      ? {}
-      : { trustSessionService: options.trustSessionService }),
-    ...(options.runOrchestrator === undefined
-      ? {}
-      : { runOrchestrator: options.runOrchestrator }),
-    ...(options.runRecoverOnStartup === undefined
-      ? {}
-      : { runRecoverOnStartup: options.runRecoverOnStartup }),
-    ...(options.runNow === undefined ? {} : { runNow: options.runNow }),
-    ...(options.runCreateSessionId === undefined
-      ? {}
-      : { runCreateSessionId: options.runCreateSessionId }),
-    ...(options.runCreateRunId === undefined
-      ? {}
-      : { runCreateRunId: options.runCreateRunId }),
-    ...(options.runCreateSupervisedPty === undefined
-      ? {}
-      : { runCreateSupervisedPty: options.runCreateSupervisedPty }),
-    ...(options.runCreateAutomaticSpawner === undefined
-      ? {}
-      : { runCreateAutomaticSpawner: options.runCreateAutomaticSpawner }),
-    ...(options.runStepTimeoutMs === undefined
-      ? {}
-      : { runStepTimeoutMs: options.runStepTimeoutMs }),
   });
 
   await runOwner.recoverIfConfigured().catch((error: unknown) => {

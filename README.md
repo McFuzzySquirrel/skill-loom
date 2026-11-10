@@ -102,14 +102,14 @@ The CLI and the chain editor are typed API clients. Every filesystem, persistenc
 flowchart LR
   Browser["skill-loom CLI · Companion skills<br/>Chain editor (React SPA)"]
   API["Fastify server<br/>127.0.0.1:7373"]
-  Routes["Typed HTTP + WebSocket routes"]
+  Routes["Minimal HTTP routes (health, lifecycle, draft/chain save)"]
   Services["Config · Projects · Catalog<br/>Chains · Preflight · Runs"]
   Store["Versioned JSON<br/>~/.config/loom · project/.loom"]
   PTY["Server-owned PTY and child processes"]
   OpenCode["OpenCode 2.2.5"]
   Copilot["GitHub Copilot CLI 1.0.105"]
 
-  Browser -->|"JSON / WebSocket"| API
+  Browser -->|"JSON"| API
   API --> Routes
   Routes --> Services
   Services --> Store
@@ -145,7 +145,7 @@ The full decision directory is in [docs/adr/README.md](docs/adr/README.md).
 - `src/shared/` — Shared API and terminal message contracts.
 - `src/web/` — React chain editor: router, editor route, flow and step components, and API clients.
 - `tests/unit/` — Vitest unit suites for models, stores, adapters, preflight, runners, PTY, CLI, and documentation gates.
-- `tests/integration/` — Fastify composition-root suites for routes, WebSocket transport, and run orchestration.
+- `tests/integration/` — Fastify composition-root suites for routes, the control channel, and run orchestration.
 - `scripts/` — Documentation gate, package smoke test, and live harness probes.
 - `docs/` — User, administrator, and operations guides, ADRs, release notes, support ownership, and live evidence.
 - `.github/skills/` — Project-maintained Copilot skills and their references.
@@ -195,7 +195,7 @@ Harness CLIs are deliberately not installed by this project. Install stable Open
 npm run dev
 ```
 
-This starts the Fastify API on `http://127.0.0.1:7373` and the Vite dev server on `http://127.0.0.1:5173`. Vite proxies `/api` (including WebSocket upgrades) to the API server. Both processes bind to loopback only.
+This starts the Fastify API on `http://127.0.0.1:7373` and the Vite dev server on `http://127.0.0.1:5173`. Vite proxies `/api` to the API server. Both processes bind to loopback only.
 
 ## Build and run
 
@@ -282,7 +282,7 @@ The CLI flags `--port` and `--config-dir` set `LOOM_PORT` and `LOOM_CONFIG_DIR`.
 
 Skill Loom is **loopback-only**. The server binds to `127.0.0.1` by default, refuses any non-loopback `LOOM_HOST`, and has **no authentication** because there is no remote access. Never expose the port through a reverse proxy, tunnel, container port publish, or remote host.
 
-The server owns all filesystem traversal, persistence, process spawning, and PTY handling. The browser performs no shell execution and receives only typed API and WebSocket data. Skill Loom sends no telemetry, crash reports, or remote logs. Git network access occurs only when a user explicitly refreshes a registered repository; user-invoked harness CLIs and package installation may also use the network. Harness credentials are not persisted or logged. Local control uses a separate, temporary bearer capability in a private profile file; Windows also stores temporary client TLS credentials there. See the [administrator guide](docs/admin-guide.md#identity-secrets-and-tls).
+The server owns all filesystem traversal, persistence, process spawning, and PTY handling. The browser performs no shell execution and receives only typed JSON API data. Skill Loom sends no telemetry, crash reports, or remote logs. Git network access occurs only when a user explicitly refreshes a registered repository; user-invoked harness CLIs and package installation may also use the network. Harness credentials are not persisted or logged. Local control uses a separate, temporary bearer capability in a private profile file; Windows also stores temporary client TLS credentials there. See the [administrator guide](docs/admin-guide.md#identity-secrets-and-tls).
 
 Harness children are spawned with an executable plus an argument array, never a shell command string. Project paths are canonicalized, path traversal outside the intended data directory is rejected, and harness, skill, and run content is rendered as escaped text or raw terminal text, never as HTML.
 

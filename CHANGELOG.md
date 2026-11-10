@@ -13,6 +13,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Removed
 
+- The HTTP API surface the CLI never used: project, catalog, discovery, filesystem, preflight, run, test-workspace, shared-bundle library, global template, scenario-preset, portable-skill, and bundle routes, plus the WebSocket terminal and the `@fastify/websocket` and `ws` dependencies. Only health, lifecycle, and draft/chain read and save routes remain for the chain editor; the CLI uses the authenticated control channel. The shared-bundle library and global chain templates have no remaining interface.
 - Web screens for projects, catalogs, discovery, libraries, test workspaces, runs, and the terminal, along with their browser tests (Playwright) and the `docs:capture` and `test:e2e` scripts. The server API and CLI commands remain. User-guide and visual-tour pages describing those screens are outdated.
 
 ### Added

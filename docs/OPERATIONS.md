@@ -128,7 +128,6 @@ The reusable runner skill (`loom-run-bundle`) is a separate artifact and contain
 
 The discovery handoff is a different artifact from `skill-loom-chain` and is not accepted by chain import or execution APIs. `skill-loom discovery handoff` accepts only goal, harness, and immutable candidate identities; it resolves and verifies files from retained snapshots and rejects stale or unsafe packages. No artifact is retained server-side. The CLI helper treats the goal and package content as untrusted input, never executes package files, and writes the generated bundle exclusively. Native-agent selection is outside handoff v1; use the managed designer and run path for selected native agents.
 
-The shared-bundle HTTP API (no CLI or UI screen) can preview and publish a locally selected `.loom.json` without a project. The caller sends the bounded bundle content, never a server-side path. The server validates the strict bundle format and reviewed fingerprint, then uses the existing atomic, exclusive no-overwrite publisher. Library entries can be reviewed and downloaded without a project; importing remains a separate explicit project-scoped action. Publication does not install or execute content and does not establish redistribution rights.
 
 Copilot CLI and OpenCode project skills both use `.agents/skills/` in Skill Loom's current adapter contract. This does not establish that every host version exposes subagents, isolated sessions, native forks, or skill reload. The runner must verify capabilities in the active host and block unsupported behavior; a shared-session fallback or handoff requires explicit user consent. Host-reported completion is not guaranteed work verification.
 
@@ -176,7 +175,7 @@ Cleanup behavior:
 - **Delete a chain:** removes only that chain's file under `<project>/.loom/chains/`. `skill-loom chain project remove` requires `expectedRevision` and `"confirmed":true`; it cannot be undone.
 - **Remove a global template:** removes only its file under `~/.config/loom/chains/`. Imported project copies are independent and are not affected.
 - **Delete run history:** with no active run, remove individual files under `<project>/.loom/runs/`, or the directory. Do not delete `active-run.json` while a run is live; let Skill Loom release it, or restart the server so startup recovery marks the stale run interrupted.
-- **Stop the server:** run `skill-loom service stop` (refused while a run is active) or let `SIGINT`/`SIGTERM` shut down PTYs, WebSocket subscribers, and child processes. Do not kill harness children manually and then resume the run.
+- **Stop the server:** run `skill-loom service stop` (refused while a run is active) or let `SIGINT`/`SIGTERM` shut down PTYs, control-channel clients, and child processes. Do not kill harness children manually and then resume the run.
 - **Reset all Skill Loom state for a test profile:** use a temporary `LOOM_CONFIG_DIR` and project directory; never point test tooling at your real `~/.config/loom`.
 
 ## Skill firing limitation

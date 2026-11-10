@@ -68,13 +68,8 @@ async function buildTestApp(chainService?: ChainService): Promise<FastifyInstanc
 
 async function registerProject(app: FastifyInstance, directory: string): Promise<string> {
   await mkdir(directory, { recursive: true });
-  const response = await app.inject({
-    method: 'POST',
-    url: '/api/projects',
-    payload: { mode: 'open', path: directory },
-  });
-  expect(response.statusCode).toBe(200);
-  return response.json<{ project: { id: string } }>().project.id;
+  const registration = await app.loomServices.projectRegistry.openProject(directory);
+  return registration.id;
 }
 
 function chainUrl(projectId: string, chainId?: string, suffix = ''): string {
@@ -220,7 +215,7 @@ function sequenceIds(prefix = 'chain'): (name: string) => string {
 }
 
 describe('chain CRUD through src/server/app.ts', () => {
-  it('requires a current revision for HTTP update and deletion', async () => {
+  it('requires a current revision for HTTP updates', async () => {
     const app = await buildTestApp();
     const projectId = await registerProject(app, join(root, 'revision-project'));
     const created = await createChain(app, projectId, baseDraft());
@@ -228,42 +223,26 @@ describe('chain CRUD through src/server/app.ts', () => {
     const url = chainUrl(projectId, chain.id);
     const original = await app.inject({ method: 'GET', url });
     const revision = original.json<{ revision: string }>().revision;
-    for (const method of ['PUT', 'DELETE'] as const) {
-      const response = await app.inject({
-        method, url, ...(method === 'PUT' ? { payload: baseDraft({ name: 'Unexpected' }) } : {}),
-      });
-      expect(response.statusCode).toBe(428);
-      expect(response.json()).toMatchObject({ error: { code: 'CHAIN_REVISION_REQUIRED' } });
-    }
+    const missingRevision = await app.inject({ method: 'PUT', url, payload: baseDraft({ name: 'Unexpected' }) });
+    expect(missingRevision.statusCode).toBe(428);
+    expect(missingRevision.json()).toMatchObject({ error: { code: 'CHAIN_REVISION_REQUIRED' } });
     const updated = await app.inject({
       method: 'PUT', url, headers: { 'x-loom-chain-revision': revision },
       payload: baseDraft({ name: 'Reviewed change' }),
     });
     expect(updated.statusCode).toBe(200);
     const stale = await app.inject({
-      method: 'DELETE', url, headers: { 'x-loom-chain-revision': revision },
+      method: 'PUT', url, headers: { 'x-loom-chain-revision': revision },
+      payload: baseDraft({ name: 'Stale change' }),
     });
     expect(stale.statusCode).toBe(409);
     expect(stale.json()).toMatchObject({ error: { code: 'CHAIN_STALE' } });
     const current = await app.inject({ method: 'GET', url });
     expect(current.json<{ chain: Chain }>().chain.name).toBe('Reviewed change');
-    const staleCopy = await app.inject({
-      method: 'POST', url: `${url}/duplicate`, headers: { 'x-loom-chain-revision': revision },
-      payload: { harness: 'copilot' },
-    });
-    expect(staleCopy.statusCode).toBe(409);
-    expect(staleCopy.json()).toMatchObject({ error: { code: 'CHAIN_STALE' } });
     expect(chainsOf((await listChains(app, projectId)).body)).toHaveLength(1);
-    const currentCopy = await app.inject({
-      method: 'POST', url: `${url}/duplicate`,
-      headers: { 'x-loom-chain-revision': current.json<{ revision: string }>().revision },
-      payload: { harness: 'copilot' },
-    });
-    expect(currentCopy.statusCode).toBe(201);
-    expect(chainOf(currentCopy.json()).harness).toBe('copilot');
   });
 
-  it('persists and duplicates an exact native-agent selection', async () => {
+  it('persists an exact native-agent selection', async () => {
     const app = await buildTestApp();
     const projectId = await registerProject(app, join(root, 'project-agent-chain'));
     const agent = {
@@ -281,25 +260,6 @@ describe('chain CRUD through src/server/app.ts', () => {
     const chain = chainOf(created.body);
     expect(chain.agent).toEqual(agent);
 
-    const duplicated = await duplicateChain(app, projectId, chain.id);
-    expect(duplicated.statusCode).toBe(201);
-    expect(chainOf(duplicated.body).agent).toEqual(agent);
-
-    const sameHarness = await duplicateChain(app, projectId, chain.id, { harness: 'opencode' });
-    expect(sameHarness.statusCode).toBe(201);
-    expect(chainOf(sameHarness.body).agent).toEqual(agent);
-
-    const differentHarness = await duplicateChain(app, projectId, chain.id, { harness: 'copilot' });
-    expect(differentHarness.statusCode).toBe(201);
-    const copy = chainOf(differentHarness.body);
-    expect(copy).toMatchObject({ harness: 'copilot', steps: chain.steps, inputs: chain.inputs });
-    expect(copy).not.toHaveProperty('agent');
-    expect(chainOf((await getChain(app, projectId, chain.id)).body).agent).toEqual(agent);
-
-    const invalidHarness = await duplicateChain(app, projectId, chain.id, { harness: 'unknown' });
-    expect(invalidHarness.statusCode).toBe(422);
-    expect(chainsOf((await listChains(app, projectId)).body)).toHaveLength(4);
-
     const updated = await updateChain(app, projectId, chain.id, {
       ...chain,
       harness: 'copilot',
@@ -307,7 +267,7 @@ describe('chain CRUD through src/server/app.ts', () => {
     expect(updated.statusCode).toBe(422);
   });
 
-  it('creates, reads, lists, updates, duplicates, and deletes a chain', async () => {
+  it('creates, reads, lists, and updates a chain', async () => {
     const app = await buildTestApp();
     const project = join(root, 'project-crud');
     const projectId = await registerProject(app, project);
@@ -360,30 +320,7 @@ describe('chain CRUD through src/server/app.ts', () => {
       Date.parse(chain.updatedAt),
     );
 
-    const duplicated = await duplicateChain(app, projectId, chain.id);
-    expect(duplicated.statusCode).toBe(201);
-    const copy = chainOf(duplicated.body);
-    expect(copy.id).not.toBe(chain.id);
-    expect(copy.id).toMatch(CHAIN_ID_PATTERN);
-    expect(copy.name).toBe('Renamed release chain copy');
-    expect(copy.harness).toBe(chain.harness);
-    expect(copy.sessionMode).toBe(chain.sessionMode);
-    expect(copy.steps).toEqual(updatedChain.steps);
-    expect(copy.inputs).toEqual(updatedChain.inputs);
-
-    const afterDuplicate = await getChain(app, projectId, chain.id);
-    expect(afterDuplicate.statusCode).toBe(200);
-    expect(chainOf(afterDuplicate.body)).toEqual(updatedChain);
-
-    const removed = await deleteChain(app, projectId, chain.id);
-    expect(removed.statusCode).toBe(200);
-    expect(removed.body).toEqual({ chainId: chain.id, deleted: true });
-    expect(await exists(storedPath)).toBe(false);
-
-    const afterDelete = await listChains(app, projectId);
-    expect(chainsOf(afterDelete.body).map((entry) => entry.id)).toEqual([copy.id]);
-
-    const missing = await getChain(app, projectId, chain.id);
+    const missing = await getChain(app, projectId, 'does-not-exist');
     expect(missing.statusCode).toBe(404);
     expect(envelope(missing.body).error.code).toBe('CHAIN_NOT_FOUND');
   });
@@ -429,29 +366,7 @@ describe('chain CRUD through src/server/app.ts', () => {
     expect(listed.map((chain) => chain.id)).toEqual(['ordered-3', 'ordered-2', 'ordered-1']);
   });
 
-  it('duplicates with a distinct name and leaves the source untouched', async () => {
-    const app = await buildTestApp();
-    const project = join(root, 'project-duplicate');
-    const projectId = await registerProject(app, project);
-    const source = chainOf((await createChain(app, projectId, baseDraft())).body);
-    const sourcePath = join(chainsDirectoryFor(project), `${source.id}.json`);
-    const sourceBytes = await readFile(sourcePath, 'utf8');
-
-    const first = chainOf((await duplicateChain(app, projectId, source.id)).body);
-    const second = chainOf((await duplicateChain(app, projectId, source.id)).body);
-    expect(first.name).toBe('Release chain copy');
-    expect(second.name).toBe('Release chain copy 2');
-    expect(new Set([source.id, first.id, second.id]).size).toBe(3);
-
-    const named = await duplicateChain(app, projectId, source.id, { name: 'Variant' });
-    expect(named.statusCode).toBe(201);
-    expect(chainOf(named.body).name).toBe('Variant');
-
-    expect(await readFile(sourcePath, 'utf8')).toBe(sourceBytes);
-    expect(chainOf((await getChain(app, projectId, source.id)).body)).toEqual(source);
-  });
-
-  it('returns 409 when uniqueness is requested for an existing name', async () => {
+    it('returns 409 when uniqueness is requested for an existing name', async () => {
     const app = await buildTestApp();
     const projectId = await registerProject(app, join(root, 'project-unique'));
     const first = chainOf((await createChain(app, projectId, baseDraft({ name: 'Shared' }))).body);
@@ -487,16 +402,6 @@ describe('chain CRUD through src/server/app.ts', () => {
     );
     expect(updateConflict.statusCode).toBe(409);
     expect(envelope(updateConflict.body).error.code).toBe('CHAIN_NAME_EXISTS');
-
-    const duplicateConflict = await duplicateChain(
-      app,
-      projectId,
-      second.id,
-      { name: first.name },
-      '?uniqueName=true',
-    );
-    expect(duplicateConflict.statusCode).toBe(409);
-    expect(envelope(duplicateConflict.body).error.code).toBe('CHAIN_NAME_EXISTS');
 
     expect(chainsOf((await listChains(app, projectId)).body)).toHaveLength(2);
   });
@@ -688,21 +593,15 @@ describe('chain request validation', () => {
     expect(chainOf((await getChain(app, projectId, chain.id)).body)).toEqual(chain);
   });
 
-  it('rejects malformed query and duplicate payloads with 422', async () => {
+  it('rejects a malformed uniqueName query with 422', async () => {
     const app = await buildTestApp();
     const projectId = await registerProject(app, join(root, 'project-query-validation'));
-    const chain = chainOf((await createChain(app, projectId, baseDraft())).body);
+    await createChain(app, projectId, baseDraft());
 
     const badQuery = await createChain(app, projectId, baseDraft(), '?uniqueName=maybe');
     expect(badQuery.statusCode).toBe(422);
     expect(issuesOf(badQuery.body)).toContainEqual(
       expect.objectContaining({ path: 'uniqueName' }),
-    );
-
-    const badDuplicateName = await duplicateChain(app, projectId, chain.id, { name: 42 });
-    expect(badDuplicateName.statusCode).toBe(422);
-    expect(issuesOf(badDuplicateName.body)).toContainEqual(
-      expect.objectContaining({ path: 'name' }),
     );
   });
 

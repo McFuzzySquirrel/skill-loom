@@ -114,17 +114,6 @@ export interface ChainRequestOptions {
   expectedRevision?: string;
 }
 
-export interface DuplicateChainOptions extends ChainRequestOptions {
-  /** Optional explicit copy name; the server otherwise uses "<name> copy". */
-  name?: string;
-  harness?: ChainHarness;
-}
-
-export interface DeleteChainResult {
-  chainId: string;
-  deleted: true;
-}
-
 export interface ChainsApi {
   listChains: (
     projectId: string,
@@ -146,16 +135,6 @@ export interface ChainsApi {
     draft: ChainUpdateDraft,
     options?: ChainRequestOptions,
   ) => Promise<Chain>;
-  duplicateChain: (
-    projectId: string,
-    chainId: string,
-    options?: DuplicateChainOptions,
-  ) => Promise<Chain>;
-  deleteChain: (
-    projectId: string,
-    chainId: string,
-    options?: Pick<ChainRequestOptions, 'signal' | 'expectedRevision'>,
-  ) => Promise<DeleteChainResult>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -560,53 +539,11 @@ export function createChainsApi(fetchImpl: FetchLike = fetch): ChainsApi {
         fetchImpl,
       );
       return decodeChainResponse(value, 'updated chain');
-    },
-
-    async duplicateChain(projectId, chainId, options = {}): Promise<Chain> {
-      const body: Record<string, unknown> = {};
-      if (options.name !== undefined) {
-        body.name = options.name;
-      }
-      if (options.harness !== undefined) {
-        body.harness = options.harness;
-      }
-      const value = await requestJson<unknown>(
-        withUniqueName(`${chainPath(projectId, chainId)}/duplicate`, options.uniqueName),
-        {
-          method: 'POST',
-          body,
-          headers: revisionHeader(options.expectedRevision),
-          ...optionsFor(options.signal),
-        },
-        fetchImpl,
-      );
-      return decodeChainResponse(value, 'duplicated chain');
-    },
-
-    async deleteChain(projectId, chainId, options = {}): Promise<DeleteChainResult> {
-      const value = await requestJson<unknown>(
-        chainPath(projectId, chainId),
-        {
-          method: 'DELETE',
-          headers: revisionHeader(options.expectedRevision),
-          ...optionsFor(options.signal),
-        },
-        fetchImpl,
-      );
-      if (
-        !isRecord(value) ||
-        !isNonEmptyString(value.chainId) ||
-        value.deleted !== true
-      ) {
-        throw invalidResponse('chain deletion');
-      }
-      return { chainId: value.chainId, deleted: true };
-    },
+    }
   };
 }
 
-/** Convert an unknown thrown value into the typed client error. */
-export { toApiClientError } from './projects';
+export { toApiClientError } from './client';
 
 /** Same-origin client; Vite proxies /api in development. */
 export const chainsApi = createChainsApi();

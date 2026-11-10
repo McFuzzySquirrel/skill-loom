@@ -11,7 +11,6 @@ import {
   type Chain,
   type ChainDraft,
   type ChainListResult,
-  type ChainRequestOptions,
   type ChainUpdateDraft,
   type ChainsApi,
 } from './chains';
@@ -110,52 +109,10 @@ export function createGlobalDraftChainsApi(fetchImpl: FetchLike = fetch): Chains
       );
       return decodeChainResponse(value, 'updated chain draft');
     },
-
-    async duplicateChain(
-      _projectId,
-      _draftId,
-      _options?: ChainRequestOptions,
-    ): Promise<Chain> {
-      throw new ApiClientError('Global drafts cannot be duplicated through this action.', {
-        code: 'DRAFT_ACTION_UNSUPPORTED',
-        status: 400,
-      });
-    },
-
-    async deleteChain(_projectId, draftId, options = {}) {
-      const value = await requestJson<unknown>(
-        chainPath(draftId),
-        {
-          method: 'DELETE',
-          headers: revisionHeader(options.expectedRevision),
-          ...optionsFor(options.signal),
-        },
-        fetchImpl,
-      );
-      if (!isRecord(value) || value.deleted !== true) {
-        throw invalidResponse('draft deletion');
-      }
-      return { chainId: draftId, deleted: true };
-    },
   };
 }
+
+/** Pseudo project id the editor uses for project-independent drafts. */
+export const DRAFT_CATALOG_ID = '__global_drafts__';
 
 export const globalDraftChainsApi = createGlobalDraftChainsApi();
-
-export interface GlobalDraftsApi {
-  list: (options?: { signal?: AbortSignal }) => Promise<ChainListResult>;
-  remove: (draftId: string, options?: { signal?: AbortSignal; expectedRevision?: string }) => Promise<void>;
-}
-
-export function createGlobalDraftsApi(fetchImpl: FetchLike = fetch): GlobalDraftsApi {
-  const chains = createGlobalDraftChainsApi(fetchImpl);
-  return {
-    list: (options = {}) => chains.listChains('', options),
-    async remove(draftId, options = {}) {
-      const result = await chains.deleteChain('', draftId, options);
-      if (!result.deleted) throw invalidResponse('draft deletion');
-    },
-  };
-}
-
-export const globalDraftsApi = createGlobalDraftsApi();

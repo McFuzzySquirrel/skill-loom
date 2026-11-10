@@ -47,13 +47,11 @@
   },
   "dependencies": {
     "@fastify/static": "10.1.9",
-    "@fastify/websocket": "11.3.6",
     "fastify": "5.12.8",
     "node-pty": "1.1.0",
     "react-markdown": "10.1.0",
     "rehype-slug": "6.0.0",
     "remark-gfm": "4.0.1",
-    "ws": "8.22.1",
     "yaml": "2.9.1",
     "zod": "4.6.7"
   },

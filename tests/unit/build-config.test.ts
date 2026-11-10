@@ -43,8 +43,6 @@ const verifiedVersions: Record<string, string> = {
   '@vitejs/plugin-react': '6.2.1',
   fastify: '5.12.8',
   '@fastify/static': '10.1.9',
-  '@fastify/websocket': '11.3.6',
-  ws: '8.22.1',
   'node-pty': '1.1.0',
   zod: '4.6.7',
   yaml: '2.9.1',
