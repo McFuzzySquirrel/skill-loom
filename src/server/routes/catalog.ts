@@ -29,10 +29,14 @@ import {
 import {
   REMOTE_SOURCE_ERROR_CODES,
   RemoteSourceError,
+  getRemoteCatalogSettings,
   listRemoteSkillSnapshots,
+  listRemoteSnapshotPage,
   listRemoteSkillSources,
   refreshRemoteSkillSource,
   registerRemoteSkillSource,
+  setRemoteCatalogLimits,
+  setRemoteSourceLimits,
   unregisterRemoteSkillSource,
 } from '../catalog/remote.js';
 import {
@@ -48,6 +52,7 @@ import {
   scenarioSkillPackagePath,
 } from '../chains/presets.js';
 import { ConfigError } from '../config/store.js';
+import { RemoteCatalogLimitOverridesSchema } from '../config/schema.js';
 import type { ConfigStore } from '../config/store.js';
 import {
   FolderPathError,
@@ -87,6 +92,8 @@ const remoteSourceBodySchema = z.strictObject({
   repository: z.string().min(1).max(2_048),
   ref: z.string().min(1).max(255).optional(),
 });
+const remoteLimitsBodySchema = z.strictObject({ limits: RemoteCatalogLimitOverridesSchema });
+const remoteSourceLimitsBodySchema = z.strictObject({ limits: RemoteCatalogLimitOverridesSchema.nullable() });
 
 const bundledSkillCopyBodySchema = z.strictObject({
   harness: z.enum(SKILL_HARNESSES),
@@ -155,6 +162,7 @@ const STATUS_BY_REMOTE_SOURCE_CODE: Record<string, number> = {
   [REMOTE_SOURCE_ERROR_CODES.DUPLICATE]: 409,
   [REMOTE_SOURCE_ERROR_CODES.CLONE_FAILED]: 502,
   [REMOTE_SOURCE_ERROR_CODES.TIMEOUT]: 504,
+  [REMOTE_SOURCE_ERROR_CODES.CANCELLED]: 409,
   [REMOTE_SOURCE_ERROR_CODES.TOO_LARGE]: 413,
   [REMOTE_SOURCE_ERROR_CODES.INVALID_PACKAGE]: 422,
   [REMOTE_SOURCE_ERROR_CODES.SNAPSHOT_CORRUPT]: 500,
@@ -583,6 +591,49 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRoutesOptions> = async (
     },
   );
 
+    app.get('/api/settings/remote-catalog-limits', async (_request, reply) => {
+      try {
+        return reply.send(await getRemoteCatalogSettings(options.configStore));
+      } catch (error) {
+        return sendCatalogFailure(reply, error);
+      }
+    });
+
+    app.put<{ Body: unknown }>('/api/settings/remote-catalog-limits', async (request, reply) => {
+      const parsed = remoteLimitsBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(422).send(createApiErrorEnvelope(
+          API_ERROR_CODES.VALIDATION_ERROR,
+          'The remote catalog limits are not valid.',
+          { issues: toValidationIssues(parsed.error.issues) },
+        ));
+      }
+      try {
+        return reply.send(await setRemoteCatalogLimits(options.configStore, parsed.data.limits));
+      } catch (error) {
+        return sendCatalogFailure(reply, error);
+      }
+    });
+
+    app.put<{ Params: { sourceId: string }; Body: unknown }>(
+      '/api/settings/remote-skill-sources/:sourceId/limits',
+      async (request, reply) => {
+        const parsed = remoteSourceLimitsBodySchema.safeParse(request.body);
+        if (!parsed.success) {
+          return reply.code(422).send(createApiErrorEnvelope(
+            API_ERROR_CODES.VALIDATION_ERROR,
+            'The remote source limits are not valid.',
+            { issues: toValidationIssues(parsed.error.issues) },
+          ));
+        }
+        try {
+          return reply.send({ source: await setRemoteSourceLimits(options.configStore, request.params.sourceId, parsed.data.limits) });
+        } catch (error) {
+          return sendCatalogFailure(reply, error);
+        }
+      },
+    );
+
     app.get('/api/settings/remote-skill-sources', async (_request, reply) => {
       try {
         return reply.code(200).send({
@@ -645,17 +696,58 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRoutesOptions> = async (
       },
     );
 
-    app.post<{ Params: { sourceId: string } }>(
+    app.get<{
+      Params: { sourceId: string; revision: string };
+      Querystring: { kind?: string; search?: string; offset?: string; limit?: string };
+    }>('/api/settings/remote-skill-sources/:sourceId/snapshots/:revision/entries', async (request, reply) => {
+      const query = z.strictObject({
+        kind: z.enum(['skill', 'agent']),
+        search: z.string().max(500).optional(),
+        offset: z.coerce.number().int().min(0).optional(),
+        limit: z.coerce.number().int().min(1).max(100).optional(),
+      }).safeParse(request.query);
+      if (!query.success) {
+        return reply.code(422).send(createApiErrorEnvelope(API_ERROR_CODES.VALIDATION_ERROR, 'The remote snapshot page request is not valid.'));
+      }
+      try {
+        return reply.send(await listRemoteSnapshotPage(
+          options.configStore.getConfigDir(),
+          request.params.sourceId,
+          request.params.revision,
+          query.data,
+        ));
+      } catch (error) {
+        return sendCatalogFailure(reply, error);
+      }
+    });
+
+    app.post<{ Params: { sourceId: string }; Body: unknown }>(
       '/api/settings/remote-skill-sources/:sourceId/refresh',
       async (request, reply) => {
+        const parsed = z.strictObject({
+          revision: z.string().regex(/^[a-f0-9]{40,64}$/).optional(),
+        }).safeParse(request.body ?? {});
+        if (!parsed.success) {
+          return reply.code(422).send(createApiErrorEnvelope(API_ERROR_CODES.VALIDATION_ERROR, 'The remote snapshot refresh request is not valid.'));
+        }
+        const controller = new AbortController();
+        const cancel = (): void => { controller.abort(); };
+        const onClose = (): void => { if (!reply.raw.writableFinished) cancel(); };
+        request.raw.once('aborted', cancel);
+        reply.raw.once('close', onClose);
+        if (request.raw.aborted || reply.raw.destroyed) cancel();
         try {
           const snapshot = await refreshRemoteSkillSource(
             options.configStore,
             request.params.sourceId,
+            { signal: controller.signal, ...(parsed.data.revision === undefined ? {} : { revision: parsed.data.revision }) },
           );
           return reply.code(201).send({ snapshot });
         } catch (error) {
           return sendCatalogFailure(reply, error);
+        } finally {
+          request.raw.removeListener('aborted', cancel);
+          reply.raw.removeListener('close', onClose);
         }
       },
     );

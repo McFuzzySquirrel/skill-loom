@@ -16,9 +16,11 @@
     "dist/web",
     "dist/skills",
     "dist/package.json",
+    "install/ensure-pty-helper.mjs",
     "docs/OPERATIONS.md"
   ],
   "scripts": {
+    "postinstall": "node install/ensure-pty-helper.mjs",
     "predev": "npm run build:portable-skill",
     "dev": "node scripts/dev-supervisor.mjs",
     "dev:server": "tsx watch src/server/index.ts",
@@ -27,6 +29,7 @@
     "build:web": "vite build",
     "build:server": "tsc -p tsconfig.server.json && node scripts/copy-scenario-skills.mjs",
     "build:portable-skill": "node scripts/build-portable-skill.mjs",
+    "update:scenario-modes": "tsx scripts/update-scenario-modes.ts",
     "prepack": "npm run build",
     "start": "node dist/src/server/index.js",
     "typecheck": "npm run typecheck:server && npm run typecheck:web",
@@ -41,6 +44,7 @@
     "docs:capture": "node scripts/capture-tour.mjs",
     "test:live:discovery": "tsx scripts/live-discovery.ts",
     "test:live:execution": "tsx scripts/live-execution.ts",
+    "test:live:managed": "tsx scripts/live-managed-opencode.ts",
     "check": "node scripts/check-docs.mjs"
   },
   "dependencies": {

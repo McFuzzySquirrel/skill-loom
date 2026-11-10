@@ -14,6 +14,7 @@ import { parseBundle, MAX_BUNDLE_REQUEST_BYTES } from '../chains/bundle.js';
 import { createGlobalDraftService } from '../chains/drafts.js';
 import type { DiscoveryWorkspaceRecord } from '../config/schema.js';
 import type { ConfigStore } from '../config/store.js';
+import { canonicalConfigRoot } from '../config/canonical-root.js';
 import type { ChainService } from '../chains/service.js';
 import { prepareDiscoveryHandoff } from '../catalog/discovery-handoff.js';
 import { projectSkillRootFor } from '../catalog/copy.js';
@@ -111,28 +112,9 @@ export function createDiscoveryWorkspaceService(
 }
 
 const importQueues = new Map<string, Promise<{ draftId: string; imported: true }>>();
-const workspaceLifecycleLocks = new Map<string, Promise<void>>();
-
-export async function withDiscoveryWorkspaceLock<T>(
-  projectId: string,
-  operation: () => Promise<T>,
-): Promise<T> {
-  const previous = workspaceLifecycleLocks.get(projectId) ?? Promise.resolve();
-  let release!: () => void;
-  const current = new Promise<void>((resolveLock) => {
-    release = resolveLock;
-  });
-  workspaceLifecycleLocks.set(projectId, current);
-  await previous;
-  try {
-    return await operation();
-  } finally {
-    release();
-    if (workspaceLifecycleLocks.get(projectId) === current) {
-      workspaceLifecycleLocks.delete(projectId);
-    }
-  }
-}
+export { withWorkspaceLifecycleLock as withDiscoveryWorkspaceLock } from './workspace-lock.js';
+import { withWorkspaceLifecycleLock as withDiscoveryWorkspaceLock } from './workspace-lock.js';
+import { removeRetiredWorkspace, WorkspaceRemovalError } from './workspace-removal.js';
 
 async function createWorkspace(
   input: Parameters<DiscoveryWorkspaceService['create']>[0],
@@ -660,8 +642,18 @@ async function listWorkspaces(
   options: DiscoveryWorkspaceServiceOptions,
 ): Promise<DiscoveryWorkspace[]> {
   const configDirectory = resolve(options.configStore.getConfigDir());
-  const root = join(configDirectory, WORKSPACE_DIRECTORY);
   const config = await options.configStore.get();
+  let root: string;
+  try {
+    root = join(await canonicalConfigRoot(configDirectory), WORKSPACE_DIRECTORY);
+  } catch (error) {
+    throw new DiscoveryWorkspaceError(
+      DISCOVERY_WORKSPACE_ERROR_CODES.INVALID,
+      'The managed discovery storage directory is unavailable or unsafe.',
+      {},
+      { cause: error },
+    );
+  }
   return config.discoveryWorkspaces.map((record) => ({
     ...record,
     path: join(root, record.id),
@@ -736,9 +728,14 @@ async function removeWorkspaceLocked(
       if (!info.isDirectory() || info.isSymbolicLink() || await realpath(expectedPath) !== expectedPath) {
         throw new Error('unsafe workspace');
       }
-      await rm(expectedPath, { recursive: true });
-      workspaceExists = false;
     }
+    await removeRetiredWorkspace(workspaceRoot, id, {
+      configStore: options.configStore,
+      kind: 'discovery',
+      projectId: record.projectId,
+      ...(record.retirement === undefined ? {} : { evidence: record.retirement }),
+    });
+    workspaceExists = false;
     await options.configStore.update((current) => ({
       discoveryWorkspaces: current.discoveryWorkspaces.filter((candidate) => candidate.id !== id),
       recentProjects: current.recentProjects.filter((candidate) => candidate.id !== record.projectId),
@@ -746,6 +743,9 @@ async function removeWorkspaceLocked(
     return { id, removed: true };
   } catch (error) {
     if (error instanceof DiscoveryWorkspaceError) throw error;
+    if (error instanceof WorkspaceRemovalError && error.code === 'ACTIVE') {
+      throw new DiscoveryWorkspaceError(DISCOVERY_WORKSPACE_ERROR_CODES.ACTIVE, error.message, { id }, { cause: error });
+    }
     throw new DiscoveryWorkspaceError(
       DISCOVERY_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
       workspaceExists
@@ -848,14 +848,17 @@ async function copySkill(source: string, projectPath: string, harness: 'opencode
 
 async function ensureWorkspaceRoot(configDirectory: string): Promise<string> {
   await mkdir(configDirectory, { recursive: true, mode: 0o700 });
-  const configInfo = await lstat(configDirectory);
-  if (!configInfo.isDirectory() || configInfo.isSymbolicLink() || await realpath(configDirectory) !== configDirectory) {
+  let root: string;
+  try {
+    root = join(await canonicalConfigRoot(configDirectory), WORKSPACE_DIRECTORY);
+  } catch (error) {
     throw new DiscoveryWorkspaceError(
       DISCOVERY_WORKSPACE_ERROR_CODES.INVALID,
       'The managed discovery storage directory is unavailable or unsafe.',
+      {},
+      { cause: error },
     );
   }
-  const root = join(configDirectory, WORKSPACE_DIRECTORY);
   await mkdir(root, { recursive: true, mode: 0o700 });
   const rootInfo = await lstat(root);
   if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink() || await realpath(root) !== root) {

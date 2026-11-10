@@ -35,6 +35,8 @@ import type {
   RunSupervisedPtyContext,
 } from './runs/orchestrator.js';
 import type { SupervisedPty } from './runs/supervised.js';
+import { createRunOwner, reportRunRecoveryWarning, type RunOwner } from './runs/owner.js';
+import { createLoomServices, type LoomServices } from './services.js';
 import { routes } from './routes/index.js';
 import {
   createTerminalManager,
@@ -114,7 +116,7 @@ export interface BuildAppOptions {
   /** Overrides the resolved `dist/web` directory. Used by integration tests. */
   webRoot?: string;
   /** Run-state seam consumed by the health endpoint. */
-  getActiveRun?: () => ActiveRunSummary;
+  getActiveRun?: () => ActiveRunSummary | Promise<ActiveRunSummary>;
   /** Injected PTY registry. Defaults to a fresh manager owned by this app. */
   terminalManager?: TerminalManager;
   /** Git initializer seam used by the project registry. */
@@ -283,11 +285,34 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   const lifecycle = new ServerLifecycle();
   const terminalManager = options.terminalManager ?? createTerminalManager();
+  const configStore = options.configStore ?? createConfigStore({ env });
+  const services = createLoomServices({
+    ...options,
+    configStore,
+    preflightEnv: options.preflightEnv ?? env,
+    ...(options.projectGitInit === undefined ? {} : { gitInit: options.projectGitInit }),
+    ...(options.catalogService === undefined ? {} : { catalogService: options.catalogService }),
+    ...(options.chainService === undefined ? {} : { chainService: options.chainService }),
+  });
+  const { projectRegistry, catalogService, chainService } = services;
+  const runOwner = createRunOwner({
+    ...options,
+    onRunRecoveryWarning: reportRunRecoveryWarning,
+    configStore,
+    projectRegistry,
+    catalogService,
+    chainService,
+    preflightProvider: services.preflightProvider,
+    terminalManager,
+    preflightEnv: options.preflightEnv ?? env,
+  });
 
   app.decorate('loomSettings', { host, port });
   app.decorate('loomVersion', options.version ?? LOOM_VERSION);
   app.decorate('loomTerminalManager', terminalManager);
   app.decorate('loomLifecycle', lifecycle);
+  app.decorate('loomRunOwner', runOwner);
+  app.decorate('loomServices', services);
 
   app.addHook('onRequest', (request, reply, done) => {
     if (
@@ -309,6 +334,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.addHook('onClose', async () => {
     await terminalManager.shutdown();
   });
+  app.addHook('onClose', () => runOwner.shutdown());
 
   let staticEnabled = false;
   if (options.serveStatic ?? true) {
@@ -385,7 +411,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
 
   await app.register(routes, {
-    configStore: options.configStore ?? createConfigStore({ env }),
+    configStore,
+    projectRegistry,
+    catalogService,
+    chainService,
+    runOwner,
+    getDraftService: services.getDraftService,
     version: options.version ?? LOOM_VERSION,
     host,
     port,
@@ -395,10 +426,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       'http://localhost:5173',
     ],
     terminalManager,
-    ...(options.getActiveRun === undefined ? {} : { getActiveRun: options.getActiveRun }),
+    getActiveRun: options.getActiveRun ?? (async () => {
+      const orchestrator = await runOwner.getIfInitialized();
+      if (orchestrator === null) return undefined;
+      const active = await orchestrator.getActiveRun();
+      return { active: active.active, runId: active.runId, status: active.status };
+    }),
     ...(options.projectGitInit === undefined ? {} : { gitInit: options.projectGitInit }),
-    ...(options.catalogService === undefined ? {} : { catalogService: options.catalogService }),
-    ...(options.chainService === undefined ? {} : { chainService: options.chainService }),
     ...(options.globalChainService === undefined
       ? {}
       : { globalChainService: options.globalChainService }),
@@ -416,9 +450,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     ...(options.preflightAuthStrategies === undefined
       ? {}
       : { preflightAuthStrategies: options.preflightAuthStrategies }),
-    ...(options.preflightEngine === undefined
-      ? {}
-      : { preflightEngine: options.preflightEngine }),
+    preflightProvider: services.preflightProvider,
+    testWorkspaceService: services.testWorkspaceService,
     ...(options.trustSessionService === undefined
       ? {}
       : { trustSessionService: options.trustSessionService }),
@@ -446,6 +479,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       : { runStepTimeoutMs: options.runStepTimeoutMs }),
   });
 
+  await runOwner.recoverIfConfigured().catch((error: unknown) => {
+    app.log.error({ err: error }, 'Run startup recovery failed.');
+  });
+
   return app;
 }
 
@@ -455,5 +492,7 @@ declare module 'fastify' {
     loomVersion: string;
     loomTerminalManager: TerminalManager;
     loomLifecycle: ServerLifecycle;
+    loomRunOwner: RunOwner;
+    loomServices: LoomServices;
   }
 }

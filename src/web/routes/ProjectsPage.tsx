@@ -15,6 +15,7 @@ import { ChainList } from '../components/ChainList';
 import { FolderBrowser } from '../components/FolderBrowser';
 import { InlineError } from '../components/InlineError';
 import { NewProjectForm } from '../components/NewProjectForm';
+import { ProjectCoordinationReview } from '../components/ProjectCoordinationReview';
 import { RecentProjects } from '../components/RecentProjects';
 import { SkillCatalog } from '../components/SkillCatalog';
 import { useStatusAnnouncer } from '../components/StatusRegion';
@@ -440,6 +441,7 @@ export function ProjectPage({
           </dd>
         </div>
         </dl>
+        <ProjectCoordinationReview key={summary.id} projectId={summary.id} />
       </details>
 
       {view === 'chains' ? (

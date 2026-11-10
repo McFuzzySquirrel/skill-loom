@@ -1,0 +1,143 @@
+name: Cross-platform verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Runner platform
+        type: choice
+        default: all
+        options: [all, ubuntu-latest, macos-latest, windows-latest]
+      suite:
+        description: Test scope
+        type: choice
+        default: full
+        options: [full, claims, portable, portable-no-follow, portable-claim-race, chain-bundles, skill-install, windows-control, windows-baseline, remote-copy, catalog, catalog-collision, git-batch, profile-alias, snapshot-modes, macos-baseline, macos-native-boundary, macos-native-identity, linux-native-scope, windows-native-scope, preflight, filesystem, harness-exe, cli, automatic, run-routes, run-routes-stress, workspaces, library, package, mode-probe, containment-probe, descendant-cleanup, terminal, terminal-macos-helper]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: ${{ matrix.os }} / Node 24
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.platform == 'all' && '["ubuntu-latest","macos-latest","windows-latest"]' || format('["{0}"]', inputs.platform)) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run check
+      - if: inputs.suite == 'full'
+        run: npm test
+      - if: inputs.suite == 'claims'
+        run: npx vitest run tests/unit/project-claim.test.ts
+      - if: inputs.suite == 'portable'
+        run: npx vitest run tests/unit/portable-runtime.test.ts
+      - if: inputs.suite == 'portable-no-follow'
+        run: npx vitest run tests/unit/portable-runtime.test.ts -t "refuses oversized or linked|rejects a linked bundle|corrupt or unsafe sibling"
+      - if: inputs.suite == 'portable-claim-race'
+        run: npx vitest run tests/unit/portable-runtime.test.ts -t "reports underlying errors during repeated cross-process claim races"
+      - if: inputs.suite == 'chain-bundles'
+        run: npx vitest run tests/unit/git-file-modes.test.ts tests/integration/chain-bundles.test.ts
+      - if: inputs.suite == 'skill-install'
+        run: npx vitest run tests/unit/installed-modes.test.ts tests/unit/bundled-modes.test.ts tests/unit/install-skill.test.ts tests/unit/catalog-copy-publication.test.ts tests/unit/catalog-copy.test.ts tests/unit/portable-runtime.test.ts tests/integration/chain-bundles.test.ts tests/integration/catalog-routes.test.ts tests/integration/presets-routes.test.ts
+      - if: inputs.suite == 'windows-baseline'
+        run: npx vitest run tests/unit/chain-store.test.ts tests/unit/config.test.ts tests/unit/run-store.test.ts tests/unit/catalog-copy.test.ts tests/unit/harness-registry.test.ts tests/integration/server.test.ts
+      - if: inputs.suite == 'windows-control'
+        env:
+          LOOM_TEST_WINDOWS_CROSS_USER: '1'
+        run: npx vitest run tests/unit/profile-owner.test.ts tests/integration/windows-control.test.ts tests/integration/control.test.ts tests/integration/server-routes.test.ts
+      - if: inputs.suite == 'remote-copy'
+        run: npx vitest run tests/unit/catalog-copy.test.ts tests/unit/catalog-remote.test.ts tests/integration/catalog-routes.test.ts tests/integration/discovery-routes.test.ts tests/integration/chain-bundles.test.ts
+      - if: inputs.suite == 'catalog'
+        run: npx vitest run tests/unit/catalog-remote.test.ts tests/integration/discovery-routes.test.ts
+      - if: inputs.suite == 'catalog-collision'
+        run: npx vitest run tests/unit/catalog-remote.test.ts -t "reuses an existing snapshot"
+      - if: inputs.suite == 'git-batch'
+        run: npx vitest run tests/unit/git-batch.test.ts
+      - if: inputs.suite == 'profile-alias'
+        run: npx vitest run tests/unit/test-workspaces.test.ts tests/integration/test-workspace-routes.test.ts tests/integration/drafts-routes.test.ts tests/integration/global-chains-routes.test.ts -t "using a alias|symbolic link"
+      - if: inputs.suite == 'profile-alias' && runner.os != 'Windows'
+        run: npx vitest run tests/integration/discovery-routes.test.ts -t "using a alias config path"
+      - if: inputs.suite == 'snapshot-modes'
+        run: npx vitest run tests/unit/catalog-remote.test.ts tests/integration/discovery-routes.test.ts tests/unit/scenario-discovery-handoff-helper.test.ts tests/unit/portable-runtime.test.ts -t "binds versioned Git|exports fingerprint-bound|prepares exact pinned|validates a complete handoff|prepares executable bundle installation|using a alias config path"
+      - if: inputs.suite == 'macos-baseline'
+        run: npx vitest run tests/integration/catalog-routes.test.ts tests/integration/chain-bundles.test.ts tests/integration/control.test.ts tests/integration/presets-routes.test.ts tests/unit/agent-copy.test.ts tests/unit/catalog-opencode.test.ts tests/unit/catalog-merge.test.ts tests/unit/chain-store.test.ts tests/unit/cli.test.ts tests/unit/portable-runtime.test.ts tests/unit/project-registry.test.ts tests/unit/run-store.test.ts
+      - if: inputs.suite == 'preflight'
+        run: npx vitest run tests/unit/preflight-engine.test.ts tests/unit/manual-command.test.ts tests/integration/preflight-routes.test.ts
+      - if: inputs.suite == 'filesystem'
+        run: npx vitest run tests/unit/projects-paths.test.ts tests/integration/fs-routes.test.ts tests/unit/catalog-opencode.test.ts
+      - if: inputs.suite == 'harness-exe'
+        run: npx vitest run tests/unit/harness-registry.test.ts -t "finds and launches a native Windows|bare override is missing|injected executable probe"
+      - if: inputs.suite == 'cli'
+        run: npx vitest run tests/unit/cli.test.ts
+      - if: inputs.suite == 'automatic'
+        run: npx vitest run tests/unit/automatic-runner.test.ts
+      - if: inputs.suite == 'run-routes'
+        run: npx vitest run tests/unit/automatic-runner.test.ts tests/integration/run-routes.test.ts
+      - if: inputs.suite == 'run-routes-stress'
+        shell: pwsh
+        run: |
+          for ($i = 1; $i -le 20; $i++) {
+            Write-Host "Managed claim completion iteration $i"
+            npx vitest run tests/integration/run-routes.test.ts -t "retains a managed claim across automatic transitions and completion"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+      - if: inputs.suite == 'descendant-cleanup'
+        run: npx vitest run tests/unit/headless-process.test.ts
+      - if: inputs.suite == 'macos-native-boundary'
+        shell: bash
+        env:
+          LOOM_TEST_MACOS_BOUNDARY: '1'
+        run: |
+          node -e "if (process.platform !== 'darwin') throw Error('This probe requires macOS');"
+          npx vitest run tests/integration/macos-native-boundary.test.ts
+      - if: inputs.suite == 'macos-native-identity'
+        shell: bash
+        env:
+          LOOM_TEST_PRIVILEGED_NATIVE: '1'
+        run: |
+          node -e "if (process.platform !== 'darwin') throw Error('This probe requires macOS');"
+          npx vitest run tests/integration/macos-native-identity.test.ts
+      - if: inputs.suite == 'linux-native-scope'
+        shell: bash
+        env:
+          LOOM_TEST_PRIVILEGED_NATIVE: '1'
+        run: |
+          node -e "if (process.platform !== 'linux') throw Error('This probe requires Linux');"
+          npx vitest run tests/integration/linux-native-scope.test.ts
+      - if: inputs.suite == 'windows-native-scope'
+        shell: bash
+        env:
+          LOOM_TEST_PRIVILEGED_NATIVE: '1'
+        run: |
+          node -e "if (process.platform !== 'win32') throw Error('This probe requires Windows');"
+          npx vitest run tests/integration/windows-native-scope.test.ts
+      - if: inputs.suite == 'workspaces'
+        run: npx vitest run tests/unit/test-workspaces.test.ts tests/integration/test-workspace-routes.test.ts
+      - if: inputs.suite == 'library'
+        run: npx vitest run tests/unit/shared-library.test.ts tests/unit/shared-library-sync.test.ts
+      - if: inputs.suite == 'package'
+        run: npm run test:package
+      - if: inputs.suite == 'mode-probe'
+        run: |
+          node -e "const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path'); const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'loom-mode-probe-')); const file = path.join(dir, 'file'); try { fs.writeFileSync(file, 'fixture', {mode: 0o644}); const before = fs.statSync(file).mode & 0o777; fs.chmodSync(file, 0o755); const after = fs.statSync(file).mode & 0o777; console.log(JSON.stringify({platform: process.platform, before: before.toString(8), after: after.toString(8)})); } finally { fs.unlinkSync(file); fs.rmdirSync(dir); }"
+      - if: inputs.suite == 'containment-probe'
+        run: |
+          node -e "const fs = require('node:fs'); const path = require('node:path'); const { spawnSync } = require('node:child_process'); if (process.platform !== 'linux') throw Error('This probe requires Linux'); const root = '/sys/fs/cgroup'; const self = fs.readFileSync('/proc/self/cgroup', 'utf8').trim(); const match = /^0::(\/.*)$/.exec(self); const current = match ? path.join(root, match[1]) : null; const canAccess = (p, flags) => { try { fs.accessSync(p, flags); return true; } catch { return false; } }; console.log(JSON.stringify({cgroupV2: fs.existsSync(root + '/cgroup.controllers'), rootWritable: canAccess(root, fs.constants.W_OK), currentWritable: current !== null && canAccess(current, fs.constants.W_OK), self, controllers: fs.existsSync(root + '/cgroup.controllers') ? fs.readFileSync(root + '/cgroup.controllers', 'utf8').trim() : null, kvmUsable: canAccess('/dev/kvm', fs.constants.R_OK | fs.constants.W_OK), qemuInstalled: spawnSync('qemu-system-x86_64', ['--version']).status === 0}));"
+      - if: (inputs.suite == 'terminal' || inputs.suite == 'terminal-macos-helper') && runner.os == 'macOS'
+        run: |
+          node -e "const fs = require('node:fs'); for (const p of ['node_modules/node-pty/build/Release/spawn-helper', 'node_modules/node-pty/prebuilds/darwin-' + process.arch + '/spawn-helper']) { if (fs.existsSync(p)) { const s = fs.statSync(p); let executable = true; try { fs.accessSync(p, fs.constants.X_OK); } catch { executable = false; } console.log(JSON.stringify({path: p, mode: (s.mode & 0o777).toString(8), executable})); } }"
+      - if: inputs.suite == 'terminal-macos-helper'
+        run: |
+          node -e "if (process.platform !== 'darwin') throw Error('This probe requires macOS'); const fs = require('node:fs'); const p = 'node_modules/node-pty/prebuilds/darwin-' + process.arch + '/spawn-helper'; const s = fs.lstatSync(p); if (!s.isFile() || s.isSymbolicLink()) throw Error('Unsafe helper'); fs.chmodSync(p, s.mode | 0o100);"
+      - if: inputs.suite == 'terminal' || inputs.suite == 'terminal-macos-helper'
+        run: npx vitest run tests/unit/pty.test.ts tests/unit/pty-install.test.ts tests/unit/pty-platform.test.ts tests/unit/supervised-runner.test.ts tests/integration/terminal-ws.test.ts

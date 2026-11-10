@@ -81,6 +81,9 @@
 - Record the Copilot home mode and whether trust was established.
 - Record cleanup even when the run fails.
 - A missing harness records a blocked check, not a pass.
+- OpenCode `signal.records` retains at most 64 recognized events with `state`
+  and `recordId` (`null` for root). `recordsTruncated` flags omitted events.
+  Inspect record IDs rather than assuming every `clear` clears root status.
 
 ## Review commands
 

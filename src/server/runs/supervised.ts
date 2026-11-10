@@ -112,6 +112,7 @@ export const SUPERVISED_RUNNER_ERROR_CODES = {
   PROMPT_FAILED: 'SUPERVISED_PROMPT_FAILED',
   COMMAND_FAILED: 'SUPERVISED_COMMAND_FAILED',
   SPAWN_FAILED: 'SUPERVISED_SPAWN_FAILED',
+  PROCESS_TERMINATION_FAILED: 'SUPERVISED_PROCESS_TERMINATION_FAILED',
   PTY_FAILED: 'SUPERVISED_PTY_FAILED',
   PERSIST_FAILED: 'SUPERVISED_PERSIST_FAILED',
 } as const;
@@ -162,6 +163,7 @@ export interface SupervisedActionRequest {
 export const SUPERVISED_EVENT_TYPES = [
   'started',
   'step-started',
+  'process-started',
   'output',
   'process-exit',
   'awaiting-user',
@@ -199,6 +201,7 @@ export const SUPERVISED_STEP_REASONS = {
   SPAWN_FAILED: 'SPAWN_FAILED',
   PROMPT_FAILED: 'PROMPT_FAILED',
   COMMAND_FAILED: 'COMMAND_FAILED',
+  PERSIST_FAILED: 'PERSIST_FAILED',
   ABORTED_BY_USER: 'ABORTED_BY_USER',
   PTY_CREATE_FAILED: 'PTY_CREATE_FAILED',
 } as const;
@@ -227,6 +230,8 @@ export interface SupervisedRunnerOptions {
   readonly maxTailBytes?: number | undefined;
   /** Optional atomic persistence callback owned by the orchestrator/store. */
   readonly persist?: ((run: Run) => void | Promise<void>) | undefined;
+  /** Serialize process-exit updates with project coordination. */
+  readonly coordinate?: (<T>(task: () => Promise<T>) => Promise<T>) | undefined;
   /** Event listener for the live terminal and step-state stream. */
   readonly onEvent?: ((event: SupervisedRunEvent) => void) | undefined;
 }
@@ -283,6 +288,7 @@ export class SupervisedRunner {
   private readonly maxTailLines: number;
   private readonly maxTailBytes: number;
   private readonly persistHook: ((run: Run) => void | Promise<void>) | undefined;
+  private readonly coordinate: <T>(task: () => Promise<T>) => Promise<T>;
   private readonly listeners = new Set<(event: SupervisedRunEvent) => void>();
 
   private pty: SupervisedPty | null = null;
@@ -364,6 +370,7 @@ export class SupervisedRunner {
       'maxTailBytes',
     );
     this.persistHook = options.persist;
+    this.coordinate = options.coordinate ?? (async (task) => task());
 
     if (options.onEvent !== undefined) {
       if (typeof options.onEvent !== 'function') {
@@ -645,7 +652,7 @@ export class SupervisedRunner {
       );
     }
 
-    this.detachCurrent({ kill: true });
+    await this.stopCurrent();
     const nextIndex = this.runValue.currentStepIndex + 1;
 
     if (nextIndex >= this.runValue.steps.length) {
@@ -682,7 +689,7 @@ export class SupervisedRunner {
       );
     }
 
-    this.detachCurrent({ kill: true });
+    await this.stopCurrent();
     this.runValue.reason = null;
     this.runValue.updatedAt = this.timestamp();
     await this.startCurrentStep('retry');
@@ -705,11 +712,9 @@ export class SupervisedRunner {
 
     const step = this.currentStepOrNull();
     this.finishObservation();
-    // Record an already-exited child's code before detaching. A child that is
-    // still live is killed and its exit is best-effort because the run is
-    // ending and no listener should outlive it.
+    // Record an already-exited child's code before waiting for termination.
     this.terminateProcess();
-    this.detachCurrent({ kill: true });
+    await this.stopCurrent();
 
     const timestamp = this.timestamp();
     const bounded = truncateReason(
@@ -780,8 +785,8 @@ export class SupervisedRunner {
   }
 
   async shutdown(): Promise<void> {
-    const process = this.current?.process ?? null;
-    await disposeAndWait(process, () => this.dispose());
+    await this.stopCurrent();
+    this.dispose();
   }
 
   private async startCurrentStep(mode: 'start' | 'retry'): Promise<void> {
@@ -836,13 +841,25 @@ export class SupervisedRunner {
 
     // Never reuse a live TUI across steps. A prior process is killed and its
     // listeners detached before the next spawn, including on retry.
-    this.detachCurrent({ kill: true });
+    await this.stopCurrent();
 
     const timestamp = this.timestamp();
     this.resetStepForRun(step, planned, timestamp);
     this.runValue.status = 'running';
     this.runValue.updatedAt = timestamp;
-    this.emit('step-started', step, { reason: mode });
+    try {
+      await this.emitAndPersist('step-started', step, { reason: mode });
+    } catch (error) {
+      const failedAt = this.timestamp();
+      step.status = 'failed';
+      step.finishedAt = failedAt;
+      step.reason = SUPERVISED_STEP_REASONS.PERSIST_FAILED;
+      this.runValue.status = 'paused';
+      this.runValue.reason = step.reason;
+      this.runValue.updatedAt = failedAt;
+      this.emit('run-paused', step, { reason: step.reason });
+      throw error;
+    }
 
     if (this.pty === null) {
       throw new SupervisedRunnerError(
@@ -872,6 +889,7 @@ export class SupervisedRunner {
     }
 
     this.attachProcess(process, index);
+    this.emit('process-started', step);
 
     const exit = process.getExit();
     if (exit !== null) {
@@ -1015,6 +1033,16 @@ export class SupervisedRunner {
     token: symbol | null,
     event: TerminalExit,
   ): void {
+    void this.coordinate(() => this.handleCoordinatedExit(stepIndex, token, event)).catch(() => {
+      console.error(`Skill Loom could not record the process exit for run ${this.runValue.id}; review project ownership and storage.`);
+    });
+  }
+
+  private async handleCoordinatedExit(
+    stepIndex: number,
+    token: symbol | null,
+    event: TerminalExit,
+  ): Promise<void> {
     if (this.disposedValue) {
       return;
     }
@@ -1051,7 +1079,7 @@ export class SupervisedRunner {
     if (step.status === 'running' && event.exitCode !== 0) {
       this.emit('run-paused', step, { reason: step.reason });
     }
-    void this.persistQuietly();
+    if (this.persistHook !== undefined) await this.persistHook(this.getRun());
   }
 
   private finishObservation(): void {
@@ -1101,6 +1129,32 @@ export class SupervisedRunner {
     }
   }
 
+  private async stopCurrent(): Promise<void> {
+    const current = this.current;
+    if (current === null) return;
+    try {
+      await disposeAndWait(current.process, () => {
+        current.unsubscribeData();
+        current.unsubscribeExit();
+        if (current.process.isRunning()) {
+          try {
+            current.process.kill('SIGTERM');
+          } catch (error) {
+            if (current.process.isRunning()) throw error;
+          }
+        }
+      });
+    } catch (error) {
+      throw new SupervisedRunnerError(
+        SUPERVISED_RUNNER_ERROR_CODES.PROCESS_TERMINATION_FAILED,
+        'The harness process could not be terminated; no later step was started.',
+        { runId: this.runValue.id, stepIndex: current.stepIndex },
+        { cause: error },
+      );
+    }
+    if (this.current === current) this.current = null;
+  }
+
   private closePty(): void {
     const pty = this.pty;
     this.pty = null;
@@ -1115,7 +1169,7 @@ export class SupervisedRunner {
 
   private async failBeforeSpawn(step: RunStepRecord, reason: string): Promise<void> {
     this.finishObservation();
-    this.detachCurrent({ kill: true });
+    await this.stopCurrent();
     const timestamp = this.timestamp();
     step.status = 'failed';
     step.finishedAt = timestamp;
@@ -1124,18 +1178,6 @@ export class SupervisedRunner {
     this.runValue.reason = reason;
     this.runValue.updatedAt = timestamp;
     await this.emitAndPersist('step-failed', step, { reason });
-  }
-
-  private async persistQuietly(): Promise<void> {
-    if (this.persistHook === undefined) {
-      return;
-    }
-    try {
-      await this.persistHook(this.getRun());
-    } catch {
-      // Live output persistence is best-effort; transition actions surface
-      // persistence failures through emitAndPersist instead.
-    }
   }
 
   private async emitAndPersist(

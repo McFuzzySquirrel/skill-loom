@@ -175,7 +175,9 @@ export function ChainList({ projectId, api = chainsApi }: ChainListProps) {
     setMutationFailure(null);
     setBusy({ chainId: chain.id, action: 'duplicate' });
     try {
-      const copy = await api.duplicateChain(projectId, chain.id);
+      const copy = await api.duplicateChain(projectId, chain.id, {
+        ...(chain.revision === undefined ? {} : { expectedRevision: chain.revision }),
+      });
       setFocusChainId(copy.id);
       await reload();
       announce(`Duplicated ${chain.name} as ${copy.name}.`);
@@ -195,7 +197,9 @@ export function ChainList({ projectId, api = chainsApi }: ChainListProps) {
     setMutationFailure(null);
     setBusy({ chainId: chain.id, action: 'delete' });
     try {
-      await api.deleteChain(projectId, chain.id);
+      await api.deleteChain(projectId, chain.id, {
+        ...(chain.revision === undefined ? {} : { expectedRevision: chain.revision }),
+      });
       await reload();
       focusLibraryHeading.current = true;
       setConfirmingId(null);

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { RemoteCatalogLimits } from '../../shared/remote-catalog.js';
+export type { RemoteCatalogLimits } from '../../shared/remote-catalog.js';
 
 /**
  * Current on-disk global configuration version.
@@ -7,7 +9,7 @@ import { z } from 'zod';
  * document whose shape it does not understand. A deliberate migration is the
  * only way to move this value forward.
  */
-export const CONFIG_VERSION = 1;
+export const CONFIG_VERSION = 2;
 
 export const CONFIG_FILE_NAME = 'config.json';
 
@@ -41,6 +43,13 @@ export const RecentProjectSchema = z.strictObject({
 });
 export type RecentProject = z.infer<typeof RecentProjectSchema>;
 
+export const WorkspaceRetirementEvidenceSchema = z.strictObject({
+  version: z.literal(1),
+  projectDevice: z.string().regex(/^[0-9]+$/),
+  projectInode: z.string().regex(/^[0-9]+$/),
+});
+export type WorkspaceRetirementEvidence = z.infer<typeof WorkspaceRetirementEvidenceSchema>;
+
 export const TestWorkspaceRecordSchema = z.strictObject({
   id: z.uuid(),
   projectId: NonEmptyStringSchema,
@@ -49,6 +58,7 @@ export const TestWorkspaceRecordSchema = z.strictObject({
   sourceDraftId: NonEmptyStringSchema.optional(),
   chainId: NonEmptyStringSchema,
   createdAt: z.iso.datetime({ offset: true }),
+  retirement: WorkspaceRetirementEvidenceSchema.optional(),
 }).superRefine((record, context) => {
   const projectSource = record.sourceProjectId !== undefined && record.sourceChainId !== undefined;
   const draftSource = record.sourceDraftId !== undefined;
@@ -78,6 +88,7 @@ export const DiscoveryWorkspaceRecordSchema = z.strictObject({
   runId: NonEmptyStringSchema.optional(),
   resultFingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   importedDraftId: NonEmptyStringSchema.optional(),
+  retirement: WorkspaceRetirementEvidenceSchema.optional(),
 });
 export type DiscoveryWorkspaceRecord = z.infer<typeof DiscoveryWorkspaceRecordSchema>;
 
@@ -113,10 +124,55 @@ const GitRefSchema = z.string().trim().min(1).max(255).refine((value) =>
   !value.split('/').some((part) => part.endsWith('.lock')),
 'Use a branch, tag, or full commit hash.');
 
-export const RemoteSkillSourceSchema = z.strictObject({
+export const REMOTE_CATALOG_DEFAULT_LIMITS = {
+  maxPackages: 100,
+  maxAgents: 100,
+  maxFiles: 2_000,
+  maxPackageBytes: 20 * 1024 * 1024,
+  maxSnapshotBytes: 20 * 1024 * 1024,
+  maxStagingBytes: 128 * 1024 * 1024,
+  maxStagingEntries: 10_000,
+  maxCommandOutputBytes: 2 * 1024 * 1024,
+  cloneTimeoutMs: 120_000,
+  commandTimeoutMs: 15_000,
+} as const;
+
+export const REMOTE_CATALOG_HARD_LIMITS = {
+  maxPackages: 10_000,
+  maxAgents: 10_000,
+  maxFiles: 200_000,
+  maxPackageBytes: 256 * 1024 * 1024,
+  maxSnapshotBytes: 1024 * 1024 * 1024,
+  maxStagingBytes: 4 * 1024 * 1024 * 1024,
+  maxStagingEntries: 500_000,
+  maxCommandOutputBytes: 64 * 1024 * 1024,
+  cloneTimeoutMs: 30 * 60_000,
+  commandTimeoutMs: 30 * 60_000,
+} as const;
+
+const limitField = (maximum: number) => z.number().int().min(1).max(maximum);
+const remoteLimitFields = {
+  maxPackages: limitField(REMOTE_CATALOG_HARD_LIMITS.maxPackages),
+  maxAgents: limitField(REMOTE_CATALOG_HARD_LIMITS.maxAgents),
+  maxFiles: limitField(REMOTE_CATALOG_HARD_LIMITS.maxFiles),
+  maxPackageBytes: limitField(REMOTE_CATALOG_HARD_LIMITS.maxPackageBytes),
+  maxSnapshotBytes: limitField(REMOTE_CATALOG_HARD_LIMITS.maxSnapshotBytes),
+  maxStagingBytes: limitField(REMOTE_CATALOG_HARD_LIMITS.maxStagingBytes),
+  maxStagingEntries: limitField(REMOTE_CATALOG_HARD_LIMITS.maxStagingEntries),
+  maxCommandOutputBytes: limitField(REMOTE_CATALOG_HARD_LIMITS.maxCommandOutputBytes),
+  cloneTimeoutMs: limitField(REMOTE_CATALOG_HARD_LIMITS.cloneTimeoutMs),
+  commandTimeoutMs: limitField(REMOTE_CATALOG_HARD_LIMITS.commandTimeoutMs),
+};
+export const RemoteCatalogLimitOverridesSchema = z.strictObject(remoteLimitFields).partial();
+export const RemoteCatalogLimitsSchema = z.strictObject(remoteLimitFields) satisfies z.ZodType<RemoteCatalogLimits>;
+
+const RemoteSkillSourceV1Schema = z.strictObject({
   id: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),
   repository: GitRemoteSchema,
   ref: GitRefSchema.optional(),
+});
+export const RemoteSkillSourceSchema = RemoteSkillSourceV1Schema.extend({
+  limits: RemoteCatalogLimitOverridesSchema.optional(),
 });
 export type RemoteSkillSource = z.infer<typeof RemoteSkillSourceSchema>;
 
@@ -136,16 +192,31 @@ export type UiPreferences = z.infer<typeof UiPreferencesSchema>;
  * keys also surface as a corrupt document instead of silently disappearing on
  * the next write.
  */
-export const LoomConfigSchema = z.strictObject({
-  version: z.literal(CONFIG_VERSION),
+const commonConfigFields = {
   harnessCommands: HarnessCommandsSchema.default({}),
   extraSkillDirectories: z.array(NonEmptyStringSchema).default([]),
-  remoteSkillSources: z.array(RemoteSkillSourceSchema).default([]),
   sharedBundleDirectory: NonEmptyStringSchema.optional(),
   recentProjects: z.array(RecentProjectSchema).default([]),
   testWorkspaces: z.array(TestWorkspaceRecordSchema).default([]),
   discoveryWorkspaces: z.array(DiscoveryWorkspaceRecordSchema).default([]),
   uiPreferences: UiPreferencesSchema.default({}),
+};
+export const LoomConfigV1Schema = z.strictObject({
+  version: z.literal(1),
+  ...commonConfigFields,
+  remoteSkillSources: z.array(RemoteSkillSourceV1Schema).default([]),
+});
+export const LoomConfigSchema = z.strictObject({
+  version: z.literal(CONFIG_VERSION),
+  harnessCommands: commonConfigFields.harnessCommands,
+  extraSkillDirectories: commonConfigFields.extraSkillDirectories,
+  remoteSkillSources: z.array(RemoteSkillSourceSchema).default([]),
+  remoteCatalogLimits: RemoteCatalogLimitsSchema.default(REMOTE_CATALOG_DEFAULT_LIMITS),
+  sharedBundleDirectory: commonConfigFields.sharedBundleDirectory,
+  recentProjects: commonConfigFields.recentProjects,
+  testWorkspaces: commonConfigFields.testWorkspaces,
+  discoveryWorkspaces: commonConfigFields.discoveryWorkspaces,
+  uiPreferences: commonConfigFields.uiPreferences,
 });
 export type LoomConfig = z.infer<typeof LoomConfigSchema>;
 
@@ -158,6 +229,7 @@ export const ConfigUpdateSchema = z.strictObject({
   harnessCommands: HarnessCommandsSchema.optional(),
   extraSkillDirectories: z.array(NonEmptyStringSchema).optional(),
   remoteSkillSources: z.array(RemoteSkillSourceSchema).optional(),
+  remoteCatalogLimits: RemoteCatalogLimitOverridesSchema.optional(),
   sharedBundleDirectory: NonEmptyStringSchema.nullable().optional(),
   recentProjects: z.array(RecentProjectSchema).optional(),
   testWorkspaces: z.array(TestWorkspaceRecordSchema).optional(),
@@ -177,6 +249,7 @@ export const CONFIG_TOP_LEVEL_FIELDS = [
   'harnessCommands',
   'extraSkillDirectories',
   'remoteSkillSources',
+  'remoteCatalogLimits',
   'sharedBundleDirectory',
   'recentProjects',
   'testWorkspaces',

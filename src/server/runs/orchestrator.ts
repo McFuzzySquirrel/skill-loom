@@ -1,7 +1,8 @@
-import { spawn as spawnChild } from 'node:child_process';
-import type { ChildProcess } from 'node:child_process';
-import { stat } from 'node:fs/promises';
-import type { ChainService } from '../chains/service.js';
+import { createHash } from 'node:crypto';
+import { realpath, stat } from 'node:fs/promises';
+import { withProjectClaimTransaction } from '../../shared/project-claim.js';
+import { beginCoordinatedProjectRun, withCoordinatedProjectRun } from '../../shared/project-coordination.js';
+import { chainRevision, type ChainService } from '../chains/service.js';
 import type { HarnessRegistry } from '../harness/registry.js';
 import type { HarnessAdapter } from '../harness/types.js';
 import { HarnessError } from '../harness/types.js';
@@ -26,7 +27,6 @@ import {
   isFinalRunStatus,
   markRunInterrupted,
   toTimestamp,
-  trimTail,
   truncateReason,
   type Run,
   type RunMode,
@@ -54,7 +54,8 @@ import {
   type SupervisedPtyProcess,
   type SupervisedRunEvent,
 } from './supervised.js';
-import type { TerminalExit, TerminalManager, TerminalSession } from '../terminal/pty.js';
+import type { TerminalManager, TerminalSession } from '../terminal/pty.js';
+import { createChildProcessAdapter } from './headless-process.js';
 
 /**
  * Run orchestration.
@@ -124,12 +125,14 @@ export const RUN_ORCHESTRATOR_ERROR_CODES = {
   ACTION_INVALID: 'RUN_ACTION_INVALID',
   ACTION_MODE_MISMATCH: 'RUN_ACTION_MODE_MISMATCH',
   ACTION_NOT_ALLOWED: 'RUN_ACTION_NOT_ALLOWED',
+  STALE: 'RUN_STALE',
   NOT_LIVE: 'RUN_NOT_LIVE',
   RECOVERY_REQUIRED: 'RUN_RECOVERY_REQUIRED',
   RECOVERY_NOT_AVAILABLE: 'RUN_RECOVERY_NOT_AVAILABLE',
   RECOVERY_STEP_INVALID: 'RUN_RECOVERY_STEP_INVALID',
   RECOVERY_NO_PENDING: 'RUN_RECOVERY_NO_PENDING',
   START_FAILED: 'RUN_START_FAILED',
+  COORDINATION_REQUIRED: 'RUN_COORDINATION_REQUIRED',
 } as const;
 export type RunOrchestratorErrorCode =
   (typeof RUN_ORCHESTRATOR_ERROR_CODES)[keyof typeof RUN_ORCHESTRATOR_ERROR_CODES];
@@ -200,11 +203,32 @@ export interface CreateRunRequest {
   readonly mode?: string | undefined;
   readonly inputs?: unknown;
   readonly acknowledgements?: unknown;
+  readonly expectedStart?: {
+    chainRevision: string;
+    preflightDigest: string;
+    projectPath: string;
+    projectDevice: string;
+    projectInode: string;
+  };
 }
 
 export interface RunActionRequest {
   readonly action: string;
   readonly reason?: string | undefined;
+  readonly expectedRevision?: string | undefined;
+  readonly expectedProject?: {
+    path: string;
+    device: string;
+    inode: string;
+  };
+  readonly expectedPreflight?: {
+    digest: string;
+    acknowledgements?: unknown;
+  };
+}
+
+export function runRevision(run: Run): string {
+  return createHash('sha256').update(JSON.stringify(run)).digest('hex');
 }
 
 export interface RunActionResult {
@@ -336,6 +360,8 @@ export interface RunOrchestrator {
   getRunView(runId: string): Promise<RunView>;
   /** Current global active-run summary. */
   getActiveRun(): Promise<RunActiveState>;
+  /** True until all owned processes and finalization for this project are finished. */
+  hasLiveProject(projectPath: string): boolean;
   /** Apply one action with mode-appropriate validation. */
   applyAction(runId: string, request: RunActionRequest): Promise<RunActionResult>;
   /**
@@ -353,7 +379,6 @@ export interface RunOrchestrator {
 }
 
 const DEFAULT_RECONNECT_BUFFER_SIZE = 256;
-const MAX_PROCESS_BUFFER_BYTES = 64 * 1024;
 
 interface Subscription {
   readonly listener: (message: RunStreamMessage) => void;
@@ -372,8 +397,10 @@ class RunOrchestratorService implements RunOrchestrator {
   private readonly runLocations = new Map<string, string>();
   private readonly sequences = new Map<string, number>();
   private readonly finalized = new Set<string>();
+  private readonly finalizationQueues = new Map<string, Promise<void>>();
   private readonly subscribers = new Map<string, Set<Subscription>>();
   private readonly persistQueues = new Map<string, Promise<void>>();
+  private readonly actionQueues = new Map<string, Promise<void>>();
   private readonly reconnectBufferSize: number;
   private shuttingDown = false;
   private registryPromise: Promise<HarnessRegistry> | null = null;
@@ -397,6 +424,10 @@ class RunOrchestratorService implements RunOrchestrator {
     this.assertRunning();
     const projectPath = await this.resolveProjectPath(request.projectId);
     const chain = await this.options.chainService.get(projectPath, request.chainId);
+    if (request.expectedStart !== undefined &&
+        (projectPath !== request.expectedStart.projectPath || chainRevision(chain) !== request.expectedStart.chainRevision)) {
+      throw new RunOrchestratorError(RUN_ORCHESTRATOR_ERROR_CODES.STALE, 'The project or chain changed since review.');
+    }
 
     // Check for an active run before preflight so a second start is a clean
     // conflict even when the request would also fail preflight.
@@ -415,6 +446,21 @@ class RunOrchestratorService implements RunOrchestrator {
     };
 
     const report = await engine.run(preflightRequest);
+    if (request.expectedStart !== undefined) {
+      let info;
+      let canonicalPath;
+      try {
+        canonicalPath = await realpath(projectPath);
+        info = await stat(projectPath, { bigint: true });
+      } catch {
+        throw new RunOrchestratorError(RUN_ORCHESTRATOR_ERROR_CODES.STALE, 'The reviewed project is no longer available.');
+      }
+      if (canonicalPath !== projectPath || !info.isDirectory() || String(info.dev) !== request.expectedStart.projectDevice ||
+          String(info.ino) !== request.expectedStart.projectInode ||
+          createHash('sha256').update(JSON.stringify(report)).digest('hex') !== request.expectedStart.preflightDigest) {
+        throw new RunOrchestratorError(RUN_ORCHESTRATOR_ERROR_CODES.STALE, 'The project or preflight evidence changed since review.');
+      }
+    }
     if (!report.startAllowed || report.status === 'blocked') {
       throw new RunOrchestratorError(
         RUN_ORCHESTRATOR_ERROR_CODES.PREFLIGHT_BLOCKED,
@@ -438,26 +484,22 @@ class RunOrchestratorService implements RunOrchestrator {
       now: this.now(),
     });
 
-    const store = this.storeFor(projectPath);
-    try {
-      await store.create(run);
-    } catch (error) {
-      if (isRunStoreCode(error, RUN_STORE_ERROR_CODES.ACTIVE_CONFLICT)) {
-        throw this.conflictFromStoreError(error);
+    return beginCoordinatedProjectRun(projectPath, 'managed', run.id, async () => {
+      const store = this.storeFor(projectPath);
+      try {
+        await store.create(run);
+      } catch (error) {
+        if (isRunStoreCode(error, RUN_STORE_ERROR_CODES.ACTIVE_CONFLICT)) {
+          throw this.conflictFromStoreError(error);
+        }
+        throw error;
       }
-      throw error;
-    }
 
-    this.runLocations.set(run.id, projectPath);
-    this.finalized.delete(run.id);
+      this.runLocations.set(run.id, projectPath);
+      this.finalized.delete(run.id);
 
-    try {
       return await this.startRun(run, projectPath);
-    } catch (error) {
-      // startRun already recorded a failed state and released the pointer when
-      // it could. Re-throw the typed failure for the route to map.
-      throw error;
-    }
+    });
   }
 
   async getRun(runId: string): Promise<Run> {
@@ -469,12 +511,33 @@ class RunOrchestratorService implements RunOrchestrator {
     const located = await this.locateRun(runId);
     const live = this.liveRuns.get(located.run.id);
     const run = live?.runner.getRun() ?? located.run;
+    let recovery = this.recoveryFor(run);
+    if (recovery !== null) {
+      const availableRecovery = recovery;
+      recovery = await withProjectClaimTransaction(located.projectPath, async (tx) => {
+        const protocol = tx.protocol();
+        const claim = tx.read();
+        if (protocol === null && claim === null) return availableRecovery;
+        const matches = protocol !== null && claim?.kind === 'managed' && claim.runId === run.id;
+        return {
+          retry: matches && availableRecovery.retry,
+          continue: matches && availableRecovery.continue,
+          restart: false,
+        };
+      });
+    }
+    const actions = this.availableActions(run);
+    if (recovery !== null) {
+      actions.retry = recovery.retry;
+      actions.continue = recovery.continue;
+      actions.restart = recovery.restart;
+    }
     return {
       run,
       projectPath: located.projectPath,
       terminalId: this.liveTerminalId(run.id),
-      actions: this.availableActions(run),
-      recovery: this.recoveryFor(run),
+      actions,
+      recovery,
     };
   }
 
@@ -482,7 +545,7 @@ class RunOrchestratorService implements RunOrchestrator {
     const pointer = await this.readPointerOrNull();
     if (pointer !== null) {
       const live = this.liveRuns.get(pointer.runId);
-      const run = live?.runner.getRun() ?? (await this.tryReadRun(pointer.projectPath, pointer.runId));
+      const run = live?.runner.getRun() ?? (await this.tryReadPointerRun(pointer));
       if (run !== null && isActiveRunStatus(run.status)) {
         return this.activeState(run);
       }
@@ -506,13 +569,90 @@ class RunOrchestratorService implements RunOrchestrator {
     };
   }
 
+  hasLiveProject(projectPath: string): boolean {
+    return [...this.liveRuns.values()].some((entry) => entry.projectPath === projectPath);
+  }
+
   async applyAction(runId: string, request: RunActionRequest): Promise<RunActionResult> {
+    const previous = this.actionQueues.get(runId) ?? Promise.resolve();
+    const act = async (): Promise<RunActionResult> => {
+      const located = await this.locateRun(runId);
+      const live = this.liveRuns.get(runId);
+      if (live?.mode === 'automatic') {
+        const result = await live.runner.withSerializedTransition(
+          () => this.applyActionUnlocked(runId, request, true),
+        );
+        if (isFinalRunStatus(result.run.status)) await this.finalizeRunAsync(runId);
+        return { ...result, run: this.currentRun(runId) ?? result.run };
+      }
+      return withCoordinatedProjectRun(located.projectPath, { kind: 'managed', runId }, async (claim) => {
+        return this.applyActionUnlocked(runId, request, false, claim !== null);
+      });
+    };
+    const result = previous.then(act, act);
+    const settled = result.then(() => undefined, () => undefined);
+    this.actionQueues.set(runId, settled);
+    void settled.then(() => {
+      if (this.actionQueues.get(runId) === settled) this.actionQueues.delete(runId);
+    });
+    return result;
+  }
+
+  private async applyActionUnlocked(
+    runId: string,
+    request: RunActionRequest,
+    automaticTransition = false,
+    coordinated = false,
+  ): Promise<RunActionResult> {
     this.assertRunning();
     const action = assertActionName(request.action);
     const located = await this.locateRun(runId);
+    if (request.expectedPreflight !== undefined) {
+      const preflightRun = this.liveRuns.get(runId)?.runner.getRun() ?? located.run;
+      const report = await (await this.preflightEngine()).run({
+        chain: preflightRun.chainSnapshot, projectPath: located.projectPath,
+        mode: preflightRun.mode, inputs: preflightRun.resolvedInputs,
+        ...(request.expectedPreflight.acknowledgements === undefined ? {} :
+          { acknowledgements: request.expectedPreflight.acknowledgements }),
+      });
+      if (createHash('sha256').update(JSON.stringify(report)).digest('hex') !== request.expectedPreflight.digest) {
+        throw new RunOrchestratorError(RUN_ORCHESTRATOR_ERROR_CODES.STALE, 'Preflight evidence changed since review.');
+      }
+      if (!report.startAllowed || report.status === 'blocked') {
+        throw new RunOrchestratorError(RUN_ORCHESTRATOR_ERROR_CODES.PREFLIGHT_BLOCKED, 'Preflight blocks this action.', { report });
+      }
+    }
+    if (request.expectedProject !== undefined) {
+      try {
+        const canonical = await realpath(located.projectPath);
+        const info = await stat(located.projectPath, { bigint: true });
+        if (canonical !== located.projectPath || located.projectPath !== request.expectedProject.path ||
+            !info.isDirectory() || String(info.dev) !== request.expectedProject.device ||
+            String(info.ino) !== request.expectedProject.inode) {
+          throw new RunOrchestratorError(RUN_ORCHESTRATOR_ERROR_CODES.STALE, 'The reviewed project changed.');
+        }
+      } catch (error) {
+        if (error instanceof RunOrchestratorError) throw error;
+        throw new RunOrchestratorError(RUN_ORCHESTRATOR_ERROR_CODES.STALE, 'The reviewed project is no longer available.');
+      }
+    }
+    const current = this.liveRuns.get(runId)?.runner.getRun() ?? located.run;
+    if (request.expectedRevision !== undefined && runRevision(current) !== request.expectedRevision) {
+      throw new RunOrchestratorError(
+        RUN_ORCHESTRATOR_ERROR_CODES.STALE,
+        'The run changed since the action was reviewed. Review the current state again.',
+        { runId },
+      );
+    }
 
     if (located.run.status === 'interrupted') {
-      return this.applyRecoveryAction(located.run, located.projectPath, action, request.reason);
+      if (coordinated && action === 'restart') {
+        throw new RunOrchestratorError(
+          RUN_ORCHESTRATOR_ERROR_CODES.COORDINATION_REQUIRED,
+          'Abandon and clear the reviewed claim before restarting this chain as a new run.',
+        );
+      }
+      return this.applyRecoveryAction(located.run, located.projectPath, action, request.reason, request.expectedRevision);
     }
 
     if (
@@ -552,11 +692,11 @@ class RunOrchestratorService implements RunOrchestrator {
       run = await entry.runner.applyAction({
         action,
         ...(request.reason === undefined ? {} : { reason: request.reason }),
-      });
+      }, !automaticTransition);
     }
 
-    if (isFinalRunStatus(run.status)) {
-      this.finalizeRun(runId);
+    if (isFinalRunStatus(run.status) && !automaticTransition) {
+      await this.finalizeRunAsync(runId);
     }
 
     return { run: this.currentRun(runId) ?? run, restartedFrom: null };
@@ -620,29 +760,6 @@ class RunOrchestratorService implements RunOrchestrator {
     let clearedActiveRun = false;
 
     const pointer = await this.readPointerOrNull();
-    if (pointer === null) {
-      // A corrupt pointer is treated as recoverable: remove it and continue.
-      try {
-        await readActiveRunPointerFile({
-          configDirectory: this.options.configDirectory,
-        });
-      } catch (error) {
-        if (isActivePointerCorrupt(error)) {
-          warnings.push({
-            code: RUN_STORE_WARNING_CODES.ACTIVE_POINTER_CORRUPT,
-            message: 'The active-run pointer was corrupt and has been removed.',
-            path: activeRunPathFor(this.options.configDirectory),
-            reason: 'CORRUPT',
-          });
-          clearedActiveRun =
-            (await clearActiveRunPointerFile({
-              configDirectory: this.options.configDirectory,
-            })) || clearedActiveRun;
-        } else {
-          throw error;
-        }
-      }
-    }
 
     const recent = await this.options.projectRegistry.listKnownProjects();
     const targets: string[] = [];
@@ -706,9 +823,32 @@ class RunOrchestratorService implements RunOrchestrator {
     // pointer that would block every future start.
     const remaining = await this.readPointerOrNull();
     if (remaining !== null) {
-      const run = await this.tryReadRun(remaining.projectPath, remaining.runId);
+      const run = await this.tryReadPointerRun(remaining);
       if (run === null || !isActiveRunStatus(run.status)) {
-        clearedActiveRun = (await this.clearPointerQuietly()) || clearedActiveRun;
+        const wasClaimed = warnings.some((warning) =>
+          warning.code === RUN_STORE_WARNING_CODES.RECOVERY_CLAIMED &&
+          warning.projectPath === remaining.projectPath && warning.runId === remaining.runId);
+        if (!wasClaimed) {
+          await withProjectClaimTransaction(remaining.projectPath, async (tx) => {
+            const pointer = await this.readPointerOrNull();
+            if (pointer === null || pointer.projectPath !== remaining.projectPath || pointer.runId !== remaining.runId) return;
+            if (tx.read() !== null || tx.protocol() !== null) {
+              warnings.push({
+                code: RUN_STORE_WARNING_CODES.RECOVERY_CLAIMED,
+                message: 'Project coordination requires explicit review; startup left the run and active pointer unchanged.',
+                path: activeRunPathFor(this.options.configDirectory),
+                runId: pointer.runId,
+                projectPath: pointer.projectPath,
+                reason: 'PROJECT_RECONCILIATION_REQUIRED',
+              });
+              return;
+            }
+            const current = await this.tryReadPointerRun(pointer);
+            if (current === null || !isActiveRunStatus(current.status)) {
+              clearedActiveRun = (await this.clearPointerQuietly()) || clearedActiveRun;
+            }
+          });
+        }
       }
     }
 
@@ -721,42 +861,43 @@ class RunOrchestratorService implements RunOrchestrator {
     const failures: unknown[] = [];
 
     for (const [runId, entry] of entries) {
-      this.finalized.add(runId);
-      this.liveRuns.delete(runId);
-      this.subscribers.delete(runId);
-
       try {
+        const finalizing = this.finalizationQueues.get(runId);
+        if (finalizing !== undefined) {
+          await finalizing;
+          continue;
+        }
         await entry.runner.shutdown();
         this.options.terminalManager.closeSession(entry.terminalId);
-        await this.awaitPersistQueue(runId);
-        const latest = await entry.store.read(runId);
-        if (isActiveRunStatus(latest.status)) {
-          const interrupted = markRunInterrupted(
-            latest,
-            this.timestamp(),
-            'SERVER_SHUTDOWN',
-          );
-          await entry.store.update(interrupted);
+        await withCoordinatedProjectRun(entry.projectPath, { kind: 'managed', runId }, async () => {
+          await this.awaitPersistQueue(runId);
+          const latest = await entry.store.read(runId);
+          if (isActiveRunStatus(latest.status)) {
+            const interrupted = markRunInterrupted(
+              latest,
+              this.timestamp(),
+              'SERVER_SHUTDOWN',
+            );
+            await entry.store.update(interrupted);
+          }
           await entry.store.releaseActiveRun(runId);
-        }
+          this.finalized.add(runId);
+          this.liveRuns.delete(runId);
+          this.subscribers.delete(runId);
+        });
       } catch (error) {
         failures.push(error);
       }
     }
 
     await Promise.all(this.persistQueues.values());
-    this.liveRuns.clear();
-    this.subscribers.clear();
     if (failures.length > 0) {
       throw new AggregateError(failures, 'One or more active runs could not be shut down cleanly.');
     }
+    this.subscribers.clear();
   }
 
   private async startRun(run: Run, projectPath: string): Promise<Run> {
-    this.assertRunning();
-    const registry = await this.harnessRegistry();
-    this.assertRunning();
-    const adapter = registry.get(run.harness);
     const store = this.storeFor(projectPath);
     const terminalId = runTerminalIdFor(run.id);
     const persist = (next: Run): Promise<void> => this.persistRun(projectPath, next);
@@ -765,6 +906,10 @@ class RunOrchestratorService implements RunOrchestrator {
     };
 
     try {
+      this.assertRunning();
+      const registry = await this.harnessRegistry();
+      this.assertRunning();
+      const adapter = registry.get(run.harness);
       if (run.mode === 'supervised') {
         const createPty = this.options.createSupervisedPty ?? ((context) =>
           createManagedSupervisedPty(this.options.terminalManager, context));
@@ -784,6 +929,7 @@ class RunOrchestratorService implements RunOrchestrator {
           ...(this.options.createSessionId === undefined
             ? {}
             : { createSessionId: this.options.createSessionId }),
+          coordinate: (task) => withCoordinatedProjectRun(projectPath, { kind: 'managed', runId: run.id }, task),
           persist,
           onEvent,
         });
@@ -818,6 +964,7 @@ class RunOrchestratorService implements RunOrchestrator {
           ...(this.options.stepTimeoutMs === undefined
             ? {}
             : { stepTimeoutMs: this.options.stepTimeoutMs }),
+          coordinate: (task) => withCoordinatedProjectRun(projectPath, { kind: 'managed', runId: run.id }, task),
           persist,
           onEvent,
         });
@@ -832,10 +979,23 @@ class RunOrchestratorService implements RunOrchestrator {
         await runner.start();
       }
     } catch (error) {
+      const live = this.liveRuns.get(run.id);
+      if (live !== undefined) {
+        try {
+          await live.runner.shutdown();
+        } catch (cleanupError) {
+          throw new RunOrchestratorError(
+            RUN_ORCHESTRATOR_ERROR_CODES.START_FAILED,
+            'The run could not start and its harness could not be terminated. The run remains active.',
+            { runId: run.id },
+            { cause: new AggregateError([error, cleanupError], 'Run start and cleanup failed.') },
+          );
+        }
+      }
       await this.awaitPersistQueue(run.id);
       await this.failStartingRun(store, run.id);
-      await store.releaseActiveRun(run.id).catch(() => undefined);
-      this.finalizeRun(run.id);
+      await store.releaseActiveRun(run.id);
+      await this.finalizeRunAsync(run.id);
       if (
         error instanceof RunOrchestratorError ||
         error instanceof SupervisedRunnerError ||
@@ -861,6 +1021,7 @@ class RunOrchestratorService implements RunOrchestrator {
     projectPath: string,
     action: RunActionName,
     reason: string | undefined,
+    expectedRevision?: string,
   ): Promise<RunActionResult> {
     if (!(RUN_RECOVERY_ACTIONS as readonly string[]).includes(action)) {
       throw new RunOrchestratorError(
@@ -875,12 +1036,13 @@ class RunOrchestratorService implements RunOrchestrator {
     }
 
     if (action === 'restart') {
-      return this.restartRun(run, projectPath);
+      return this.restartRun(run, projectPath, expectedRevision);
     }
 
     await this.assertNoActiveRun(run.id);
     await this.finalizeRunAsync(run.id);
     await this.awaitPersistQueue(run.id);
+    await this.assertRecoveryRevision(projectPath, run.id, expectedRevision);
 
     if (action === 'retry') {
       const step = run.steps[run.currentStepIndex];
@@ -936,10 +1098,11 @@ class RunOrchestratorService implements RunOrchestrator {
     return { run: started, restartedFrom: null };
   }
 
-  private async restartRun(run: Run, projectPath: string): Promise<RunActionResult> {
+  private async restartRun(run: Run, projectPath: string, expectedRevision?: string): Promise<RunActionResult> {
     await this.assertNoActiveRun(run.id);
     await this.finalizeRunAsync(run.id);
     await this.awaitPersistQueue(run.id);
+    await this.assertRecoveryRevision(projectPath, run.id, expectedRevision);
 
     const fresh = createRunRecord({
       ...(this.options.createRunId === undefined ? {} : { id: this.options.createRunId() }),
@@ -964,6 +1127,14 @@ class RunOrchestratorService implements RunOrchestrator {
     this.finalized.delete(fresh.id);
     const started = await this.startRun(fresh, projectPath);
     return { run: started, restartedFrom: run.id };
+  }
+
+  private async assertRecoveryRevision(projectPath: string, runId: string, expectedRevision?: string): Promise<void> {
+    if (expectedRevision === undefined) return;
+    const current = await this.storeFor(projectPath).read(runId);
+    if (runRevision(current) !== expectedRevision) {
+      throw new RunOrchestratorError(RUN_ORCHESTRATOR_ERROR_CODES.STALE, 'The interrupted run changed since review.');
+    }
   }
 
   private persistRun(projectPath: string, run: Run): Promise<void> {
@@ -1009,14 +1180,26 @@ class RunOrchestratorService implements RunOrchestrator {
     }
   }
 
+  private assertLegacyManagedCoordination(protocol: unknown, claim: unknown): void {
+    if (protocol !== null || claim !== null) {
+      throw new RunOrchestratorError(
+        RUN_ORCHESTRATOR_ERROR_CODES.COORDINATION_REQUIRED,
+        'Managed execution is not yet available for a coordinated project. Review the project before proceeding.',
+      );
+    }
+  }
+
   private handleRunnerEvent(runId: string, event: OrchestratedRunEvent): void {
     const entry = this.liveRuns.get(runId);
     if (entry !== undefined) {
       this.runLocations.set(runId, entry.projectPath);
     }
     this.broadcast(runId, event);
-    if (isFinalRunStatus(event.run.status)) {
-      this.finalizeRun(runId);
+    if (isFinalRunStatus(event.run.status) && event.type !== 'disposed' &&
+        !this.finalizationQueues.has(runId)) {
+      void this.finalizeRunAsync(runId).catch(() => {
+        console.error(`Skill Loom could not finish cleanup for run ${runId}; stop the service to retry.`);
+      });
     }
   }
 
@@ -1151,39 +1334,28 @@ class RunOrchestratorService implements RunOrchestrator {
     return entry.runner.state.surface === 'pty' ? entry.terminalId : null;
   }
 
-  private finalizeRun(runId: string): void {
-    if (this.finalized.has(runId)) {
-      return;
-    }
-    this.finalized.add(runId);
+  private finalizeRunAsync(runId: string): Promise<void> {
+    const pending = this.finalizationQueues.get(runId);
+    if (pending !== undefined) return pending;
     const entry = this.liveRuns.get(runId);
-    if (entry === undefined) {
-      return;
-    }
-    this.liveRuns.delete(runId);
-    try {
-      entry.runner.dispose();
-    } catch {
-      // Disposal is idempotent and must never mask the terminal transition.
-    }
-    try {
-      this.options.terminalManager.closeSession(entry.terminalId);
-    } catch {
-      // A PTY that already exited may no longer be registered.
-    }
-  }
+    if (entry === undefined || this.finalized.has(runId)) return Promise.resolve();
 
-  private async finalizeRunAsync(runId: string): Promise<void> {
-    this.finalizeRun(runId);
+    const finalizing = (async () => {
+      await entry.runner.shutdown();
+      this.options.terminalManager.closeSession(entry.terminalId);
+      this.finalized.add(runId);
+      this.liveRuns.delete(runId);
+    })();
+    this.finalizationQueues.set(runId, finalizing);
+    void finalizing.then(
+      () => { if (this.finalizationQueues.get(runId) === finalizing) this.finalizationQueues.delete(runId); },
+      () => { if (this.finalizationQueues.get(runId) === finalizing) this.finalizationQueues.delete(runId); },
+    );
+    return finalizing;
   }
 
   private async failStartingRun(store: RunStore, runId: string): Promise<void> {
-    let latest: Run;
-    try {
-      latest = await store.read(runId);
-    } catch {
-      return;
-    }
+    const latest = await store.read(runId);
     if (!isActiveRunStatus(latest.status)) {
       return;
     }
@@ -1196,7 +1368,7 @@ class RunOrchestratorService implements RunOrchestrator {
       finishedAt: timestamp,
       reason: truncateReason('START_FAILED'),
     };
-    await store.update(failed).catch(() => undefined);
+    await store.update(failed);
   }
 
   private assertActionAllowed(
@@ -1224,17 +1396,17 @@ class RunOrchestratorService implements RunOrchestrator {
         continue;
       }
       const live = entry.runner.getRun();
-      if (isActiveRunStatus(live.status)) {
-        throw new RunOrchestratorError(
-          RUN_ORCHESTRATOR_ERROR_CODES.ACTIVE_CONFLICT,
-          'Another run is already active.',
-          {
-            runId: live.id,
-            projectId: live.projectId,
-            status: live.status,
-          },
-        );
-      }
+      throw new RunOrchestratorError(
+        RUN_ORCHESTRATOR_ERROR_CODES.ACTIVE_CONFLICT,
+        isActiveRunStatus(live.status)
+          ? 'Another run is already active.'
+          : 'A previous run has not finished cleanup. Stop the service to retry cleanup.',
+        {
+          runId: live.id,
+          projectId: live.projectId,
+          status: live.status,
+        },
+      );
     }
 
     const pointer = await this.readPointerOrNull();
@@ -1245,7 +1417,7 @@ class RunOrchestratorService implements RunOrchestrator {
       return;
     }
 
-    const run = await this.tryReadRun(pointer.projectPath, pointer.runId);
+    const run = await this.tryReadPointerRun(pointer);
     if (run !== null && isActiveRunStatus(run.status)) {
       throw new RunOrchestratorError(
         RUN_ORCHESTRATOR_ERROR_CODES.ACTIVE_CONFLICT,
@@ -1257,6 +1429,9 @@ class RunOrchestratorService implements RunOrchestrator {
         },
       );
     }
+    await withProjectClaimTransaction(pointer.projectPath, async (tx) => {
+      this.assertLegacyManagedCoordination(tx.protocol(), tx.read());
+    });
   }
 
   private conflictFromStoreError(error: RunStoreError): RunOrchestratorError {
@@ -1304,7 +1479,7 @@ class RunOrchestratorService implements RunOrchestrator {
 
     const pointer = await this.readPointerOrNull();
     if (pointer !== null && pointer.runId === runId) {
-      const run = await this.tryReadRun(pointer.projectPath, runId);
+      const run = await this.tryReadPointerRun(pointer);
       if (run !== null) {
         this.runLocations.set(runId, pointer.projectPath);
         return { run, projectPath: pointer.projectPath };
@@ -1350,17 +1525,20 @@ class RunOrchestratorService implements RunOrchestrator {
     }
   }
 
-  private async readPointerOrNull(): Promise<ActiveRunPointer | null> {
+  private async tryReadPointerRun(pointer: ActiveRunPointer): Promise<Run | null> {
     try {
-      return await readActiveRunPointerFile({
-        configDirectory: this.options.configDirectory,
-      });
+      return await this.storeFor(pointer.projectPath).read(pointer.runId);
     } catch (error) {
-      if (isActivePointerCorrupt(error)) {
+      if (isRunStoreCode(error, RUN_STORE_ERROR_CODES.NOT_FOUND) ||
+          isRunStoreCode(error, RUN_STORE_ERROR_CODES.PROJECT_NOT_FOUND)) {
         return null;
       }
       throw error;
     }
+  }
+
+  private async readPointerOrNull(): Promise<ActiveRunPointer | null> {
+    return readActiveRunPointerFile({ configDirectory: this.options.configDirectory });
   }
 
   private async clearPointerQuietly(): Promise<boolean> {
@@ -1529,110 +1707,6 @@ function createManagedAutomaticSpawner(
   };
 }
 
-/**
- * Process-exit surface used by adapters whose declared advancement is a
- * headless process exit. The executable and argument array are passed to
- * `spawn` with `shell: false`; no user text is ever interpreted by a shell.
- */
-function createChildProcessAdapter(spec: AutomaticSpawnSpec): AutomaticProcess {
-  const dataListeners = new Set<(chunk: string) => void>();
-  const exitListeners = new Set<(event: TerminalExit) => void>();
-  let dataSubscribed = false;
-  let buffered = '';
-  let exitEvent: TerminalExit | null = null;
-
-  const child: ChildProcess = spawnChild(spec.executable, [...spec.args], {
-    cwd: spec.cwd,
-    env: process.env,
-    shell: false,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
-  });
-
-  const append = (chunk: string): void => {
-    if (chunk === '') {
-      return;
-    }
-    if (dataSubscribed) {
-      for (const listener of [...dataListeners]) {
-        listener(chunk);
-      }
-      return;
-    }
-    buffered += chunk;
-    if (Buffer.byteLength(buffered, 'utf8') > MAX_PROCESS_BUFFER_BYTES) {
-      buffered = trimTail(buffered);
-    }
-  };
-
-  child.stdout?.on('data', (chunk: Buffer | string) => {
-    append(chunk.toString());
-  });
-  child.stderr?.on('data', (chunk: Buffer | string) => {
-    append(chunk.toString());
-  });
-
-  const finish = (event: TerminalExit): void => {
-    if (exitEvent !== null) {
-      return;
-    }
-    exitEvent = event;
-    for (const listener of [...exitListeners]) {
-      listener(event);
-    }
-    exitListeners.clear();
-  };
-
-  child.once('error', () => {
-    finish({ exitCode: -1 });
-  });
-  child.once('exit', (code) => {
-    finish({ exitCode: code ?? -1 });
-  });
-
-  return {
-    pid: child.pid ?? -1,
-    onData(listener) {
-      dataListeners.add(listener);
-      if (!dataSubscribed) {
-        dataSubscribed = true;
-        const pending = buffered;
-        buffered = '';
-        if (pending !== '') {
-          listener(pending);
-        }
-      }
-      return () => {
-        dataListeners.delete(listener);
-      };
-    },
-    onExit(listener) {
-      if (exitEvent !== null) {
-        const event = exitEvent;
-        queueMicrotask(() => listener(event));
-        return () => undefined;
-      }
-      exitListeners.add(listener);
-      return () => {
-        exitListeners.delete(listener);
-      };
-    },
-    kill(signal) {
-      try {
-        child.kill(signal as NodeJS.Signals | undefined);
-      } catch {
-        // A process that exits between the check and the kill is already gone.
-      }
-    },
-    isRunning() {
-      return exitEvent === null;
-    },
-    getExit() {
-      return exitEvent;
-    },
-  };
-}
-
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
@@ -1743,10 +1817,6 @@ function isProjectIdString(value: unknown): value is string {
 
 function isRunStoreCode(error: unknown, code: string): error is RunStoreError {
   return error instanceof RunStoreError && error.code === code;
-}
-
-function isActivePointerCorrupt(error: unknown): error is RunStoreError {
-  return isRunStoreCode(error, RUN_STORE_ERROR_CODES.ACTIVE_POINTER_CORRUPT);
 }
 
 function isRecoverableRecoveryError(error: unknown): boolean {

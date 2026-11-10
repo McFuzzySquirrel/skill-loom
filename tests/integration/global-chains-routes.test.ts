@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -14,7 +14,7 @@ let configDirectory: string;
 let apps: FastifyInstance[];
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'loom-global-chains-'));
+  root = await realpath(await mkdtemp(join(tmpdir(), 'loom-global-chains-')));
   configDirectory = join(root, 'config');
   apps = [];
 });
@@ -84,7 +84,12 @@ function chainOf(body: unknown): Chain {
 }
 
 describe('global chain template routes', () => {
-  it('saves a project chain as a snapshot and imports it into another project', async () => {
+  it.each(['canonical', 'alias'] as const)('saves and imports a global template using a %s config path', async (pathKind) => {
+    if (pathKind === 'alias') {
+      const alias = join(root, 'alias');
+      await symlink(root, alias, process.platform === 'win32' ? 'junction' : 'dir');
+      configDirectory = join(alias, 'config');
+    }
     const app = await buildTestApp();
     const sourceProject = await registerProject(app, 'source-project');
     const targetProject = await registerProject(app, 'target-project');

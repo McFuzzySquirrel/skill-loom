@@ -7,7 +7,9 @@ import {
   DEFAULT_MAX_TAIL_LINES,
   TerminalInvalidSpecError,
   TerminalOutputBuffer,
+  TerminalSpawnError,
   createTerminalSession,
+  createTerminalManager,
   trimTerminalOutput,
   type TerminalExit,
   type TerminalSession,
@@ -88,6 +90,10 @@ const RESIZE_SCRIPT = `
   process.on('SIGWINCH', () => {
     process.stdout.write('SIZE:' + process.stdout.columns + 'x' + process.stdout.rows + '\\r\\n');
   });
+  if (process.stdin.isTTY) process.stdin.setRawMode(true);
+  process.stdin.on('data', () => {
+    process.stdout.write('SIZE:' + process.stdout.columns + 'x' + process.stdout.rows + '\\r\\n');
+  });
   setInterval(() => {}, 1000);
 `;
 
@@ -111,6 +117,43 @@ const LONG_OUTPUT_SCRIPT = `
 `;
 
 describe('PTY session transport', () => {
+  it('rejects a duplicate session id before validating or spawning a replacement', async () => {
+    const manager = createTerminalManager();
+    const directory = await mkdtemp(join(tmpdir(), 'loom-duplicate-pty-'));
+    temporaryDirectories.push(directory);
+    try {
+      const original = manager.createSession({
+        executable: process.execPath,
+        args: ['-e', 'setInterval(() => {}, 1000)'],
+      }, { id: 'terminal-existing' });
+      expect(() => manager.createSession({
+        executable: process.execPath,
+        args: [],
+        cwd: join(directory, 'missing'),
+      }, { id: 'terminal-existing' })).toThrow('Terminal session id is already in use.');
+      expect(manager.getSession('terminal-existing')).toBe(original);
+      expect(original.isRunning()).toBe(true);
+    } finally {
+      await manager.shutdown();
+    }
+  });
+
+  it('does not terminate a replacement session when an old attachment closes late', async () => {
+    const manager = createTerminalManager();
+    try {
+      const spec = { executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'] };
+      manager.createSession(spec, { id: 'terminal-reused' });
+      const old = manager.attach('terminal-reused', { send() {}, close() {} });
+      manager.closeSession('terminal-reused');
+      const replacement = manager.createSession(spec, { id: 'terminal-reused' });
+      old.detach({ terminate: true });
+      expect(manager.getSession('terminal-reused')).toBe(replacement);
+      expect(replacement.isRunning()).toBe(true);
+    } finally {
+      await manager.shutdown();
+    }
+  });
+
   it('spawns a node process with an executable and args and observes stdout', async () => {
     const session = start("process.stdout.write('hello from pty\\r\\n'); setInterval(()=>{}, 1000);");
     const output = outputOf(session);
@@ -142,6 +185,7 @@ describe('PTY session transport', () => {
     await waitFor(() => output.text().includes('INIT:100x30'), 'Child did not report initial size.');
 
     session.resize(132, 41);
+    session.write('size?\n');
 
     await waitFor(() => output.text().includes('SIZE:132x41'), 'Child did not observe the resize.');
     expect(session.cols).toBe(132);
@@ -174,10 +218,17 @@ describe('PTY session transport', () => {
     session.kill('SIGTERM');
 
     const event = await exit;
-    expect(event.exitCode).toBeGreaterThanOrEqual(0);
+    expect(Number.isInteger(event.exitCode)).toBe(true);
     expect(session.isRunning()).toBe(false);
     expect(session.getExit()).not.toBeNull();
     output.stop();
+  });
+
+  it('records termination requested before the child produces output', async () => {
+    const session = start("setTimeout(() => process.stdout.write('READY\\r\\n'), 300); setInterval(() => {}, 1000);");
+    session.kill('SIGTERM');
+    await waitFor(() => !session.isRunning(), 'The early termination request did not complete.', 8_000);
+    expect(session.getExit()).not.toBeNull();
   });
 
   it('rejects invalid geometry and working directories', async () => {
@@ -200,11 +251,16 @@ describe('PTY session transport', () => {
     const directory = await mkdtemp(join(tmpdir(), 'loom-pty-cwd-'));
     temporaryDirectories.push(directory);
 
-    const session = createTerminalSession({
+    const spec = {
       executable: 'loom-definitely-not-an-installed-command',
       args: [],
       cwd: directory,
-    });
+    };
+    if (process.platform === 'win32') {
+      expect(() => createTerminalSession(spec)).toThrow(TerminalSpawnError);
+      return;
+    }
+    const session = createTerminalSession(spec);
     sessions.push(session);
 
     const exit = await new Promise<TerminalExit>((resolveExit) => {

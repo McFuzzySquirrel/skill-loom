@@ -1,10 +1,13 @@
-import { access, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
 import type { AddressInfo } from 'node:net';
 import type { FastifyInstance } from 'fastify';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
+import { runCli } from '../../src/server/cli.js';
 import type {
   CatalogResponse,
   CatalogService,
@@ -16,7 +19,9 @@ import {
   type SkillSource,
 } from '../../src/server/catalog/types.js';
 import type { Chain } from '../../src/server/chains/model.js';
+import { chainRevision } from '../../src/server/chains/service.js';
 import { createConfigStore, type ConfigStore } from '../../src/server/config/store.js';
+import { callControl, startControlServer } from '../../src/server/control.js';
 import {
   createHarnessRegistry,
   type HarnessRegistry,
@@ -31,6 +36,7 @@ import type {
   RunStreamMessage,
   RunView,
 } from '../../src/server/runs/orchestrator.js';
+import { createRunOrchestrator, runRevision } from '../../src/server/runs/orchestrator.js';
 import type { Run } from '../../src/server/runs/model.js';
 import { createRunStore } from '../../src/server/runs/store.js';
 import { createProjectRegistry } from '../../src/server/projects/registry.js';
@@ -45,6 +51,10 @@ import {
   isApiErrorEnvelope,
   type ApiErrorEnvelope,
 } from '../../src/shared/api.js';
+import {
+  adoptReviewedLegacyRun, clearReviewedProjectClaim, enableReviewedProjectProtocol, reviewProjectCoordination,
+} from '../../src/shared/project-coordination.js';
+import { withProjectClaimTransaction } from '../../src/shared/project-claim.js';
 
 const CREATED_AT = '2026-11-04T12:00:00.000Z';
 const RUN_ID_PATTERN = /^run-test-\d+$/;
@@ -303,10 +313,10 @@ interface AppHarness {
   configStore: ConfigStore;
 }
 
-async function buildTestApp(options: { extraEnv?: NodeJS.ProcessEnv } = {}): Promise<AppHarness> {
+async function buildTestApp(options: { extraEnv?: NodeJS.ProcessEnv; configDirectory?: string } = {}): Promise<AppHarness> {
   const runner = createRunner();
   const configStore = createConfigStore({
-    env: { LOOM_CONFIG_DIR: configDirectory },
+    env: { LOOM_CONFIG_DIR: options.configDirectory ?? configDirectory },
     homeDirectory: () => home,
   });
   const app = await buildApp({
@@ -636,6 +646,432 @@ afterEach(async () => {
 });
 
 describe('POST /api/projects/:projectId/runs', () => {
+  it.skipIf(process.platform === 'win32')('runs an instruction-only chain end to end through reviewed CLI commands', async () => {
+    const harness = await buildTestApp();
+    const chain = await createChain(harness.app, harness.projectId, {
+      steps: [
+        { id: 'one', kind: 'instruction', instruction: 'Review {{task}}.' },
+        { id: 'two', kind: 'instruction', instruction: 'Summarize {{task}}.' },
+      ],
+    });
+    const control = await startControlServer(harness.configStore, {
+      services: harness.app.loomServices, runOwner: harness.app.loomRunOwner,
+    });
+    try {
+      const cli = async (command: string, input: unknown): Promise<Record<string, unknown>> => {
+        let output = '';
+        let error = '';
+        const code = await runCli(['run', command, '--config-dir', configDirectory], {
+          env: {}, stdin: Readable.from([JSON.stringify(input)]),
+          stdout: { write: (chunk) => { output += String(chunk); return true; }, isTTY: false },
+          stderr: { write: (chunk) => { error += String(chunk); return true; } },
+        });
+        expect({ code, error }).toEqual({ code: 0, error: '' });
+        return (JSON.parse(output) as { result: Record<string, unknown> }).result;
+      };
+      const request = { projectId: harness.projectId, chainId: chain.id, inputs: { task: 'the change' } };
+      const review = await cli('review-start', request);
+      const started = await cli('start', { ...request, reviewDigest: review.reviewDigest, confirmed: true });
+      const runId = (started.run as Run).id;
+      for (let index = 0; index < 2; index += 1) {
+        const done = { runId, action: 'done' };
+        const doneReview = await cli('review-action', done);
+        const marked = await cli('action', { ...done, reviewDigest: doneReview.reviewDigest, confirmed: true });
+        expect((marked.run as Run).currentStepIndex).toBe(index);
+        const next = { runId, action: 'next' };
+        const nextReview = await cli('review-action', next);
+        const advanced = await cli('action', {
+          ...next, reviewDigest: nextReview.reviewDigest, confirmed: true, executionConfirmed: true,
+        });
+        expect((advanced.run as Run).status).toBe(index === 1 ? 'completed' : 'awaiting-user');
+      }
+      expect((await getActiveRun(harness.app)).body).toMatchObject({ active: false });
+    } finally {
+      await control.close();
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('rejects a chain changed between start re-review and orchestrator creation', async () => {
+    const harness = await buildTestApp();
+    const draft = {
+      name: 'Instructions only', harness: 'opencode', sessionMode: 'shared',
+      steps: [{ id: 'one', kind: 'instruction', instruction: 'Review {{task}}.' }],
+      inputs: [{ name: 'task', required: true }], automaticPermissionOptIn: false,
+    };
+    const chain = await createChain(harness.app, harness.projectId, draft);
+    const provider = harness.app.loomServices.preflightProvider;
+    const engine = await provider.preflightEngine();
+    let calls = 0;
+    vi.spyOn(provider, 'preflightEngine').mockResolvedValue({
+      run: async (request) => {
+        const report = await engine.run(request);
+        calls += 1;
+        if (calls === 2) {
+          const updated = await harness.app.inject({
+            method: 'PUT', url: `/api/projects/${harness.projectId}/chains/${chain.id}`,
+            headers: { 'x-loom-chain-revision': chainRevision(chain) },
+            payload: { ...draft, name: 'Changed during start' },
+          });
+          expect(updated.statusCode).toBe(200);
+        }
+        return report;
+      },
+    });
+    const control = await startControlServer(harness.configStore, {
+      services: harness.app.loomServices, runOwner: harness.app.loomRunOwner,
+    });
+    try {
+      const request = { projectId: harness.projectId, chainId: chain.id, inputs: { task: 'the change' } };
+      const review = await callControl(configDirectory, 'run.start.review', request);
+      if (!review.ok) throw new Error('Review failed.');
+      const digest = (review.result as { reviewDigest: string }).reviewDigest;
+      expect(await callControl(configDirectory, 'run.start', { ...request, reviewDigest: digest, confirmed: true }))
+        .toMatchObject({ ok: false, error: { code: 'RUN_STALE' } });
+      expect(terminal.sessions.size).toBe(0);
+      expect((await getActiveRun(harness.app)).body).toMatchObject({ active: false });
+    } finally {
+      await control.close();
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('requires separate live-test approval for a retained workspace', async () => {
+    const harness = await buildTestApp();
+    const chain = await createChain(harness.app, harness.projectId, {
+      steps: [{ id: 'one', kind: 'instruction', instruction: 'Review {{task}}.' }],
+    });
+    const workspace = await harness.app.loomServices.testWorkspaceService.create({
+      sourceProjectId: harness.projectId, sourceChainId: chain.id,
+    });
+    const control = await startControlServer(harness.configStore, {
+      services: harness.app.loomServices, runOwner: harness.app.loomRunOwner,
+    });
+    try {
+      const request = { projectId: workspace.projectId, chainId: workspace.chainId, inputs: { task: 'the change' } };
+      const review = await callControl(configDirectory, 'run.start.review', request);
+      expect(review).toMatchObject({ ok: true, result: { evidence: { testWorkspaceId: workspace.id } } });
+      if (!review.ok) throw new Error('Review failed.');
+      const digest = (review.result as { reviewDigest: string }).reviewDigest;
+      expect(await callControl(configDirectory, 'run.start', { ...request, reviewDigest: digest, confirmed: true }))
+        .toMatchObject({ ok: false, error: { code: 'RUN_LIVE_TEST_CONFIRMATION_REQUIRED' } });
+      const started = await callControl(configDirectory, 'run.start', {
+        ...request, reviewDigest: digest, confirmed: true, liveTestConfirmed: true,
+      });
+      expect(started).toMatchObject({ ok: true, result: { run: { projectId: workspace.projectId } } });
+      if (!started.ok) throw new Error('Live test start failed.');
+      const runId = (started.result as { run: Run }).run.id;
+      expect((await postAction(harness.app, runId, { action: 'done' })).statusCode).toBe(200);
+      const next = { runId, action: 'next' };
+      const nextReview = await callControl(configDirectory, 'run.action.review', next);
+      if (!nextReview.ok) throw new Error('Next review failed.');
+      const nextDigest = (nextReview.result as { reviewDigest: string }).reviewDigest;
+      expect(await callControl(configDirectory, 'run.action', {
+        ...next, reviewDigest: nextDigest, confirmed: true, executionConfirmed: true,
+      })).toMatchObject({ ok: false, error: { code: 'RUN_LIVE_TEST_CONFIRMATION_REQUIRED' } });
+      expect(await callControl(configDirectory, 'run.action', {
+        ...next, reviewDigest: nextDigest, confirmed: true, executionConfirmed: true, liveTestConfirmed: true,
+      })).toMatchObject({ ok: true, result: { run: { status: 'completed' } } });
+    } finally {
+      await control.close();
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('starts only reviewed supervised instruction chains through local control', async () => {
+    const harness = await buildTestApp();
+    const skillChain = await createChain(harness.app, harness.projectId);
+    const chain = await createChain(harness.app, harness.projectId, {
+      name: 'Instructions only',
+      steps: [{ id: 'one', kind: 'instruction', instruction: 'Review {{task}}.' }],
+    });
+    const control = await startControlServer(harness.configStore, {
+      services: harness.app.loomServices, runOwner: harness.app.loomRunOwner,
+    });
+    try {
+      const input = {
+        projectId: harness.projectId, chainId: chain.id, mode: 'supervised', inputs: { task: 'the change' },
+      };
+      expect(await callControl(configDirectory, 'run.start.review', { ...input, chainId: skillChain.id }))
+        .toMatchObject({ ok: false, error: { code: 'RUN_START_UNSUPPORTED' } });
+      expect(await callControl(configDirectory, 'run.start.review', { ...input, mode: 'automatic' }))
+        .toMatchObject({ ok: false, error: { code: 'RUN_START_UNSUPPORTED' } });
+      let reviewOutput = '';
+      expect(await runCli(['run', 'review-start', '--config-dir', configDirectory], {
+        env: {}, stdin: Readable.from([JSON.stringify(input)]),
+        stdout: { write: (chunk) => { reviewOutput += String(chunk); return true; }, isTTY: false },
+      })).toBe(0);
+      const review = JSON.parse(reviewOutput) as Awaited<ReturnType<typeof callControl>>;
+      expect(review).toMatchObject({ ok: true, result: { evidence: {
+        chain: { id: chain.id }, preflight: { startAllowed: true }, testWorkspaceId: null,
+      } } });
+      if (!review.ok) throw new Error('Review failed.');
+      const digest = (review.result as { reviewDigest: string }).reviewDigest;
+      expect(await callControl(configDirectory, 'run.start', { ...input, reviewDigest: digest }))
+        .toMatchObject({ ok: false, error: { code: 'CONTROL_INVALID_REQUEST' } });
+      expect(await callControl(configDirectory, 'run.start', {
+        ...input, inputs: { task: 'another change' }, reviewDigest: digest, confirmed: true,
+      })).toMatchObject({ ok: false, error: { code: 'RUN_STALE' } });
+      let startOutput = '';
+      expect(await runCli(['run', 'start', '--config-dir', configDirectory], {
+        env: {}, stdin: Readable.from([JSON.stringify({ ...input, reviewDigest: digest, confirmed: true })]),
+        stdout: { write: (chunk) => { startOutput += String(chunk); return true; }, isTTY: false },
+      })).toBe(0);
+      const started = JSON.parse(startOutput) as Awaited<ReturnType<typeof callControl>>;
+      expect(started).toMatchObject({ ok: true, result: { run: {
+        mode: 'supervised', chainId: chain.id, status: 'awaiting-user',
+      } } });
+      if (!started.ok) throw new Error('Start failed.');
+      const runId = (started.result as { run: Run }).run.id;
+      expect(terminal.sessions.get(terminalIdFor(runId))?.isRunning()).toBe(true);
+      expect((await postAction(harness.app, runId, { action: 'abort' })).statusCode).toBe(200);
+    } finally {
+      await control.close();
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('requires separate automatic and permission approvals for process-exit starts', async () => {
+    const callsPath = join(root, 'automatic-calls.jsonl');
+    await writeFile(COPILOT(), `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(callsPath)}, JSON.stringify(process.argv.slice(2)) + '\\n');\n`, { mode: 0o755 });
+    const harness = await buildTestApp({ extraEnv: { GH_TOKEN: 'test-token' } });
+    const chain = await createChain(harness.app, harness.projectId, {
+      harness: 'copilot', automaticPermissionOptIn: true,
+      steps: [
+        { id: 'one', kind: 'instruction', instruction: 'Review {{task}}.' },
+        { id: 'two', kind: 'instruction', instruction: 'Summarize {{task}}.' },
+      ],
+    });
+    const control = await startControlServer(harness.configStore, {
+      services: harness.app.loomServices, runOwner: harness.app.loomRunOwner,
+    });
+    try {
+      const noOptIn = await createChain(harness.app, harness.projectId, {
+        harness: 'copilot', automaticPermissionOptIn: false,
+        steps: [{ id: 'one', kind: 'instruction', instruction: 'Review {{task}}.' }],
+      });
+      const blockedRequest = { projectId: harness.projectId, chainId: noOptIn.id, mode: 'automatic', inputs: { task: 'the change' } };
+      const blockedReview = await callControl(configDirectory, 'run.start.review', blockedRequest);
+      expect(blockedReview).toMatchObject({ ok: true, result: { evidence: { preflight: { startAllowed: false } } } });
+      if (!blockedReview.ok) throw new Error('Blocked review failed.');
+      expect(await callControl(configDirectory, 'run.start', {
+        ...blockedRequest, reviewDigest: (blockedReview.result as { reviewDigest: string }).reviewDigest,
+        confirmed: true, automaticConfirmed: true, broadPermissionsConfirmed: true,
+      })).toMatchObject({ ok: false, error: { code: 'RUN_PREFLIGHT_BLOCKED' } });
+      const request = { projectId: harness.projectId, chainId: chain.id, mode: 'automatic', inputs: { task: 'the change' } };
+      let output = '';
+      expect(await runCli(['run', 'review-start', '--config-dir', configDirectory], {
+        env: {}, stdin: Readable.from([JSON.stringify(request)]),
+        stdout: { write: (chunk) => { output += String(chunk); return true; }, isTTY: false },
+      })).toBe(0);
+      const review = JSON.parse(output) as Awaited<ReturnType<typeof callControl>>;
+      expect(review).toMatchObject({ ok: true, result: { evidence: {
+        request: { mode: 'automatic' }, preflight: { startAllowed: true, permissions: { required: true } },
+      } } });
+      if (!review.ok) throw new Error('Review failed.');
+      const reviewDigest = (review.result as { reviewDigest: string }).reviewDigest;
+      const start = { ...request, reviewDigest, confirmed: true };
+      expect(await callControl(configDirectory, 'run.start', { ...start, mode: 'supervised' }))
+        .toMatchObject({ ok: false, error: { code: 'RUN_STALE' } });
+      expect(await callControl(configDirectory, 'run.start', start))
+        .toMatchObject({ ok: false, error: { code: 'RUN_AUTOMATIC_CONFIRMATION_REQUIRED' } });
+      expect(await callControl(configDirectory, 'run.start', { ...start, automaticConfirmed: true }))
+        .toMatchObject({ ok: false, error: { code: 'RUN_PERMISSIONS_CONFIRMATION_REQUIRED' } });
+      await expect(access(callsPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      output = '';
+      expect(await runCli(['run', 'start', '--config-dir', configDirectory], {
+        env: {}, stdin: Readable.from([JSON.stringify({ ...start, automaticConfirmed: true, broadPermissionsConfirmed: true })]),
+        stdout: { write: (chunk) => { output += String(chunk); return true; }, isTTY: false },
+      })).toBe(0);
+      const started = JSON.parse(output) as Awaited<ReturnType<typeof callControl>>;
+      expect(started).toMatchObject({ ok: true, result: { run: { mode: 'automatic' } } });
+      if (!started.ok) throw new Error('Automatic start failed.');
+      const runId = (started.result as { run: Run }).run.id;
+      const run = await waitForRunStatus(harness.app, runId, 'completed');
+      expect(run.steps.map((step) => step.status)).toEqual(['done', 'done']);
+      const calls = (await readFile(callsPath, 'utf8')).trim().split('\n').map((line) => JSON.parse(line) as string[]);
+      expect(calls).toHaveLength(2);
+      expect(calls.every((args) => args.includes('--allow-all-paths') && args.includes('--allow-all-tools'))).toBe(true);
+    } finally {
+      await control.close();
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('reviews automatic resume and requires renewed execution and permission approvals', async () => {
+    await writeFile(COPILOT(), `#!${process.execPath}\nsetInterval(() => {}, 1000);\n`, { mode: 0o755 });
+    const harness = await buildTestApp({ extraEnv: { GH_TOKEN: 'test-token' } });
+    const chain = await createChain(harness.app, harness.projectId, {
+      harness: 'copilot', automaticPermissionOptIn: true,
+      steps: [{ id: 'one', kind: 'instruction', instruction: 'Review {{task}}.' }],
+    });
+    const control = await startControlServer(harness.configStore, {
+      services: harness.app.loomServices, runOwner: harness.app.loomRunOwner,
+    });
+    try {
+      const request = { projectId: harness.projectId, chainId: chain.id, mode: 'automatic', inputs: { task: 'the change' } };
+      const review = await callControl(configDirectory, 'run.start.review', request);
+      if (!review.ok) throw new Error('Review failed.');
+      const started = await callControl(configDirectory, 'run.start', {
+        ...request, reviewDigest: (review.result as { reviewDigest: string }).reviewDigest,
+        confirmed: true, automaticConfirmed: true, broadPermissionsConfirmed: true,
+      });
+      if (!started.ok) throw new Error('Automatic start failed.');
+      const runId = (started.result as { run: Run }).run.id;
+      const pause = { runId, action: 'pause' };
+      const pauseReview = await callControl(configDirectory, 'run.action.review', pause);
+      if (!pauseReview.ok) throw new Error('Pause review failed.');
+      expect(await callControl(configDirectory, 'run.action', {
+        ...pause, reviewDigest: (pauseReview.result as { reviewDigest: string }).reviewDigest, confirmed: true,
+      })).toMatchObject({ ok: true, result: { run: { status: 'paused' } } });
+
+      const resume = { runId, action: 'resume' };
+      const resumeReview = await callControl(configDirectory, 'run.action.review', resume);
+      expect(resumeReview).toMatchObject({ ok: true, result: { evidence: {
+        preflight: { mode: 'automatic', permissions: { required: true } },
+      } } });
+      if (!resumeReview.ok) throw new Error('Resume review failed.');
+      const action = { ...resume, reviewDigest: (resumeReview.result as { reviewDigest: string }).reviewDigest, confirmed: true };
+      expect(await callControl(configDirectory, 'run.action', action))
+        .toMatchObject({ ok: false, error: { code: 'RUN_EXECUTION_CONFIRMATION_REQUIRED' } });
+      expect(await callControl(configDirectory, 'run.action', { ...action, executionConfirmed: true }))
+        .toMatchObject({ ok: false, error: { code: 'RUN_AUTOMATIC_CONFIRMATION_REQUIRED' } });
+      expect(await callControl(configDirectory, 'run.action', { ...action, executionConfirmed: true, automaticConfirmed: true }))
+        .toMatchObject({ ok: false, error: { code: 'RUN_PERMISSIONS_CONFIRMATION_REQUIRED' } });
+      expect(await callControl(configDirectory, 'run.action', {
+        ...action, executionConfirmed: true, automaticConfirmed: true, broadPermissionsConfirmed: true,
+      })).toMatchObject({ ok: true, result: { run: { status: 'running' } } });
+      expect((await postAction(harness.app, runId, { action: 'abort' })).statusCode).toBe(200);
+    } finally {
+      await control.close();
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('does not retry a failed automatic step without separate replay approval', async () => {
+    const callsPath = join(root, 'retry-calls');
+    await writeFile(COPILOT(), `#!${process.execPath}\nconst fs = require('node:fs');\nconst seen = fs.existsSync(${JSON.stringify(callsPath)});\nfs.appendFileSync(${JSON.stringify(callsPath)}, 'x');\nprocess.exit(seen ? 0 : 1);\n`, { mode: 0o755 });
+    const harness = await buildTestApp({ extraEnv: { GH_TOKEN: 'test-token' } });
+    const chain = await createChain(harness.app, harness.projectId, {
+      harness: 'copilot', automaticPermissionOptIn: true,
+      steps: [{ id: 'one', kind: 'instruction', instruction: 'Review {{task}}.' }],
+    });
+    const control = await startControlServer(harness.configStore, {
+      services: harness.app.loomServices, runOwner: harness.app.loomRunOwner,
+    });
+    try {
+      const request = { projectId: harness.projectId, chainId: chain.id, mode: 'automatic', inputs: { task: 'the change' } };
+      const review = await callControl(configDirectory, 'run.start.review', request);
+      if (!review.ok) throw new Error('Review failed.');
+      const started = await callControl(configDirectory, 'run.start', {
+        ...request, reviewDigest: (review.result as { reviewDigest: string }).reviewDigest,
+        confirmed: true, automaticConfirmed: true, broadPermissionsConfirmed: true,
+      });
+      if (!started.ok) throw new Error('Automatic start failed.');
+      const runId = (started.result as { run: Run }).run.id;
+      const paused = await waitForRunStatus(harness.app, runId, 'paused');
+      expect(paused.steps[0]?.status).toBe('failed');
+      const retry = { runId, action: 'retry' };
+      const retryReview = await callControl(configDirectory, 'run.action.review', retry);
+      if (!retryReview.ok) throw new Error('Retry review failed.');
+      const action = {
+        ...retry, reviewDigest: (retryReview.result as { reviewDigest: string }).reviewDigest,
+        confirmed: true, executionConfirmed: true, automaticConfirmed: true, broadPermissionsConfirmed: true,
+      };
+      expect(await callControl(configDirectory, 'run.action', action))
+        .toMatchObject({ ok: false, error: { code: 'RUN_REPLAY_CONFIRMATION_REQUIRED' } });
+      expect(await readFile(callsPath, 'utf8')).toBe('x');
+      expect(await callControl(configDirectory, 'run.action', { ...action, replayConfirmed: true })).toMatchObject({ ok: true });
+      await waitForRunStatus(harness.app, runId, 'completed');
+      expect(await readFile(callsPath, 'utf8')).toBe('xx');
+    } finally {
+      await control.close();
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('keeps an automatic run paused after skip until an approved run-next', async () => {
+    const callsPath = join(root, 'skip-calls');
+    await writeFile(COPILOT(), `#!${process.execPath}\nconst fs = require('node:fs');\nconst seen = fs.existsSync(${JSON.stringify(callsPath)});\nfs.appendFileSync(${JSON.stringify(callsPath)}, 'x');\nif (!seen) process.exit(1);\nsetInterval(() => {}, 1000);\n`, { mode: 0o755 });
+    const harness = await buildTestApp({ extraEnv: { GH_TOKEN: 'test-token' } });
+    const chain = await createChain(harness.app, harness.projectId, {
+      harness: 'copilot', automaticPermissionOptIn: true,
+      steps: [
+        { id: 'one', kind: 'instruction', instruction: 'Review {{task}}.' },
+        { id: 'two', kind: 'instruction', instruction: 'Summarize {{task}}.' },
+      ],
+    });
+    const control = await startControlServer(harness.configStore, {
+      services: harness.app.loomServices, runOwner: harness.app.loomRunOwner,
+    });
+    try {
+      const request = { projectId: harness.projectId, chainId: chain.id, mode: 'automatic', inputs: { task: 'the change' } };
+      const review = await callControl(configDirectory, 'run.start.review', request);
+      if (!review.ok) throw new Error('Review failed.');
+      const started = await callControl(configDirectory, 'run.start', {
+        ...request, reviewDigest: (review.result as { reviewDigest: string }).reviewDigest,
+        confirmed: true, automaticConfirmed: true, broadPermissionsConfirmed: true,
+      });
+      if (!started.ok) throw new Error('Automatic start failed.');
+      const runId = (started.result as { run: Run }).run.id;
+      await waitForRunStatus(harness.app, runId, 'paused');
+      const skip = { runId, action: 'skip', reason: 'Reviewed and skipped' };
+      const skipReview = await callControl(configDirectory, 'run.action.review', skip);
+      if (!skipReview.ok) throw new Error('Skip review failed.');
+      expect(await callControl(configDirectory, 'run.action', {
+        ...skip, reviewDigest: (skipReview.result as { reviewDigest: string }).reviewDigest, confirmed: true,
+      })).toMatchObject({ ok: true, result: { run: { status: 'paused', currentStepIndex: 0 } } });
+      const next = { runId, action: 'run-next' };
+      const nextReview = await callControl(configDirectory, 'run.action.review', next);
+      if (!nextReview.ok) throw new Error('Run-next review failed.');
+      const action = {
+        ...next, reviewDigest: (nextReview.result as { reviewDigest: string }).reviewDigest,
+        confirmed: true, executionConfirmed: true, automaticConfirmed: true,
+      };
+      expect(await callControl(configDirectory, 'run.action', action))
+        .toMatchObject({ ok: false, error: { code: 'RUN_PERMISSIONS_CONFIRMATION_REQUIRED' } });
+      expect(await readFile(callsPath, 'utf8')).toBe('x');
+      expect(await callControl(configDirectory, 'run.action', { ...action, broadPermissionsConfirmed: true }))
+        .toMatchObject({ ok: true, result: { run: { currentStepIndex: 1 } } });
+      await waitFor(async () => (await readFile(callsPath, 'utf8')) === 'xx', 'the second automatic process');
+      expect((await postAction(harness.app, runId, { action: 'abort' })).statusCode).toBe(200);
+    } finally {
+      await control.close();
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('requires live-test approval independently of automatic permissions', async () => {
+    await writeFile(COPILOT(), `#!${process.execPath}\nsetInterval(() => {}, 1000);\n`, { mode: 0o755 });
+    const harness = await buildTestApp({ extraEnv: { GH_TOKEN: 'test-token' } });
+    const chain = await createChain(harness.app, harness.projectId, {
+      harness: 'copilot', automaticPermissionOptIn: true,
+      steps: [{ id: 'one', kind: 'instruction', instruction: 'Review {{task}}.' }],
+    });
+    const workspace = await harness.app.loomServices.testWorkspaceService.create({
+      sourceProjectId: harness.projectId, sourceChainId: chain.id,
+    });
+    const workspaceProject = await harness.app.loomServices.projectRegistry.findRecentProject(workspace.projectId);
+    if (workspaceProject === undefined) throw new Error('Workspace project missing.');
+    trustConfig = JSON.stringify({ trustedFolders: [workspaceProject.canonicalPath] });
+    const control = await startControlServer(harness.configStore, {
+      services: harness.app.loomServices, runOwner: harness.app.loomRunOwner,
+    });
+    try {
+      const request = { projectId: workspace.projectId, chainId: workspace.chainId, mode: 'automatic', inputs: { task: 'the change' } };
+      const review = await callControl(configDirectory, 'run.start.review', request);
+      expect(review).toMatchObject({ ok: true, result: { evidence: {
+        testWorkspaceId: workspace.id, preflight: { startAllowed: true },
+      } } });
+      if (!review.ok) throw new Error('Review failed.');
+      const start = {
+        ...request, reviewDigest: (review.result as { reviewDigest: string }).reviewDigest,
+        confirmed: true, automaticConfirmed: true, broadPermissionsConfirmed: true,
+      };
+      expect(await callControl(configDirectory, 'run.start', start))
+        .toMatchObject({ ok: false, error: { code: 'RUN_LIVE_TEST_CONFIRMATION_REQUIRED' } });
+      const started = await callControl(configDirectory, 'run.start', { ...start, liveTestConfirmed: true });
+      expect(started).toMatchObject({ ok: true });
+      if (!started.ok) throw new Error('Automatic live test start failed.');
+      const runId = (started.result as { run: Run }).run.id;
+      expect((await postAction(harness.app, runId, { action: 'abort' })).statusCode).toBe(200);
+    } finally {
+      await control.close();
+    }
+  });
+
   it('refuses automatic execution for a managed discovery chain', async () => {
     const { app, projectId, configStore } = await buildTestApp();
     const chain = await createChain(app, projectId);
@@ -688,6 +1124,23 @@ describe('POST /api/projects/:projectId/runs', () => {
     expect(envelope(done.body)).toMatchObject({
       error: { code: 'DISCOVERY_RESULT_REVIEW_REQUIRED' },
     });
+    if (process.platform !== 'win32') {
+      const control = await startControlServer(configStore, {
+        services: app.loomServices, runOwner: app.loomRunOwner,
+      });
+      try {
+        const request = { runId: run.id, action: 'done' };
+        const reviewed = await callControl(configDirectory, 'run.action.review', request);
+        expect(reviewed.ok).toBe(true);
+        if (!reviewed.ok) throw new Error('Review failed.');
+        const digest = (reviewed.result as { reviewDigest: string }).reviewDigest;
+        expect(await callControl(configDirectory, 'run.action', {
+          ...request, reviewDigest: digest, confirmed: true,
+        })).toMatchObject({ ok: false, error: { code: 'DISCOVERY_RESULT_REVIEW_REQUIRED' } });
+      } finally {
+        await control.close();
+      }
+    }
     const current = await getRunRecord(app, run.id);
     expect(current.statusCode).toBe(200);
     expect((current.body as { run: Run }).run.steps[0]?.status).toBe('running');
@@ -767,6 +1220,7 @@ describe('POST /api/projects/:projectId/runs', () => {
     const edited = await harness.app.inject({
       method: 'PUT',
       url: `/api/projects/${encodeURIComponent(harness.projectId)}/chains/${encodeURIComponent(chain.id)}`,
+      headers: { 'x-loom-chain-revision': chainRevision(chain) },
       payload: {
         name: 'Edited chain',
         harness: 'opencode',
@@ -902,13 +1356,268 @@ describe('POST /api/projects/:projectId/runs', () => {
     expect(await store.getActiveRun()).toBeNull();
     expect(terminal.closed).toContain(terminalIdFor(run.id));
   });
+
+  it('retains a failed shutdown for retry without interrupting or releasing the run', async () => {
+    const harness = await buildTestApp();
+    const chain = await createChain(harness.app, harness.projectId);
+    const run = await createRun(harness.app, harness.projectId, chain);
+    const store = createRunStore({ projectPath: harness.projectPath, configDirectory });
+    const session = terminal.getSession(terminalIdFor(run.id))!;
+    const kill = vi.spyOn(session, 'kill').mockImplementation(() => { throw new Error('termination failed'); });
+    const owner = harness.app.loomRunOwner;
+
+    try {
+      await expect(owner.shutdown()).rejects.toThrow('could not be shut down cleanly');
+      expect(session.isRunning()).toBe(true);
+      expect((await store.read(run.id)).status).not.toBe('interrupted');
+      expect((await store.getActiveRun())?.runId).toBe(run.id);
+      expect(terminal.closed).not.toContain(terminalIdFor(run.id));
+      await expect(owner.get()).rejects.toThrow('shutting down');
+      await expect(owner.withMutation(async () => undefined)).rejects.toThrow('stopping');
+    } finally {
+      kill.mockRestore();
+    }
+
+    await owner.shutdown();
+    expect(session.isRunning()).toBe(false);
+    expect((await store.read(run.id)).status).toBe('interrupted');
+    expect(await store.getActiveRun()).toBeNull();
+  });
+
+  it('keeps ownership when a post-spawn start failure cannot terminate its process', async () => {
+    const harness = await buildTestApp();
+    const chain = await createChain(harness.app, harness.projectId);
+    const store = createRunStore({ projectPath: harness.projectPath, configDirectory });
+    const update = store.update.bind(store);
+    const persist = vi.spyOn(store, 'update').mockImplementation(async (run) => {
+      if (run.status === 'awaiting-user') throw new Error('simulated persistence failure');
+      return update(run);
+    });
+    const services = harness.app.loomServices;
+    const orchestrator = createRunOrchestrator({
+      configDirectory,
+      projectRegistry: services.projectRegistry,
+      chainService: services.chainService,
+      harnessRegistry: services.preflightProvider.harnessRegistry,
+      preflightEngine: services.preflightProvider.preflightEngine,
+      terminalManager: terminal as unknown as TerminalManager,
+      createRunId: () => 'run-start-failure',
+      createSessionId: () => 'ses_start_failure',
+      runStoreFor: () => store,
+    });
+    const createSession = terminal.createSession.bind(terminal);
+    let session: FakeTerminalSession | undefined;
+    const create = vi.spyOn(terminal, 'createSession').mockImplementation((spec, options) => {
+      session = createSession(spec, options) as FakeTerminalSession;
+      vi.spyOn(session, 'kill').mockImplementation(() => { throw new Error('termination failed'); });
+      return session;
+    });
+
+    try {
+      await expect(orchestrator.createRun({
+        projectId: harness.projectId, chainId: chain.id, inputs: { task: 'release' },
+      })).rejects.toMatchObject({ code: 'RUN_START_FAILED' });
+      expect(session?.isRunning()).toBe(true);
+      expect((await store.getActiveRun())?.runId).toBe('run-start-failure');
+      expect((await store.read('run-start-failure')).status).not.toBe('failed');
+    } finally {
+      create.mockRestore();
+      persist.mockRestore();
+      if (session !== undefined) vi.mocked(session.kill).mockRestore();
+      await orchestrator.shutdown();
+    }
+    expect(session?.isRunning()).toBe(false);
+    expect((await store.read('run-start-failure')).status).toBe('interrupted');
+    expect(await store.getActiveRun()).toBeNull();
+  });
+
+  it('retains a final run and blocks another start until failed terminal cleanup succeeds', async () => {
+    const harness = await buildTestApp();
+    const chain = await createChain(harness.app, harness.projectId);
+    const run = await createRun(harness.app, harness.projectId, chain);
+    const owner = harness.app.loomRunOwner;
+    const orchestrator = await owner.get();
+    const close = vi.spyOn(terminal, 'closeSession').mockImplementation(() => { throw new Error('close failed'); });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    try {
+      await expect(orchestrator.applyAction(run.id, { action: 'abort' })).rejects.toThrow('close failed');
+      expect((await orchestrator.getRun(run.id)).status).toBe('aborted');
+      await expect(orchestrator.createRun({
+        projectId: harness.projectId, chainId: chain.id, inputs: { task: 'release' },
+      })).rejects.toMatchObject({ code: 'RUN_ACTIVE_CONFLICT' });
+      expect(terminal.hasSession(terminalIdFor(run.id))).toBe(true);
+      expect(log).toHaveBeenCalled();
+    } finally {
+      close.mockRestore();
+      log.mockRestore();
+    }
+
+    await owner.shutdown();
+    expect(terminal.hasSession(terminalIdFor(run.id))).toBe(false);
+  });
+
+  it('retains failed cleanup after an automatic completion without a caller awaiting it', async () => {
+    const harness = await buildTestApp();
+    const chain = await createChain(harness.app, harness.projectId, {
+      steps: [{ id: 'one', kind: 'instruction', instruction: 'Review {{task}}.' }],
+    });
+    const run = await createRun(harness.app, harness.projectId, chain, { mode: 'automatic' });
+    const owner = harness.app.loomRunOwner;
+    const orchestrator = await owner.get();
+    const session = terminal.getSession(terminalIdFor(run.id))!;
+    const close = vi.spyOn(terminal, 'closeSession').mockImplementation(() => { throw new Error('close failed'); });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      session.emitData(OSC_WORKING + OSC_IDLE);
+      await vi.waitFor(() => expect(log).toHaveBeenCalled());
+      expect((await orchestrator.getRun(run.id)).status).toBe('completed');
+      await expect(orchestrator.createRun({
+        projectId: harness.projectId, chainId: chain.id, inputs: { task: 'release' },
+      })).rejects.toMatchObject({ code: 'RUN_ACTIVE_CONFLICT' });
+      expect(terminal.hasSession(terminalIdFor(run.id))).toBe(true);
+    } finally {
+      close.mockRestore();
+      log.mockRestore();
+    }
+
+    await owner.shutdown();
+    expect(terminal.hasSession(terminalIdFor(run.id))).toBe(false);
+  });
 });
 
 describe('GET /api/runs and POST /api/runs/:runId/actions', () => {
+  it.skipIf(process.platform === 'win32')('requires reviewed execution and replay decisions for supervised next and retry', async () => {
+    const harness = await buildTestApp();
+    const chain = await createChain(harness.app, harness.projectId, {
+      steps: [
+        { id: 'one', kind: 'instruction', instruction: 'Review {{task}}.' },
+        { id: 'two', kind: 'instruction', instruction: 'Summarize {{task}}.' },
+      ],
+    });
+    const run = await createRun(harness.app, harness.projectId, chain);
+    const control = await startControlServer(harness.configStore, {
+      services: harness.app.loomServices, runOwner: harness.app.loomRunOwner,
+    });
+    try {
+      expect((await postAction(harness.app, run.id, { action: 'done' })).statusCode).toBe(200);
+      const next = { runId: run.id, action: 'next' };
+      const nextReview = await callControl(configDirectory, 'run.action.review', next);
+      expect(nextReview).toMatchObject({ ok: true, result: { evidence: {
+        destination: { path: harness.projectPath }, action: 'next',
+      } } });
+      if (!nextReview.ok) throw new Error('Next review failed.');
+      const nextDigest = (nextReview.result as { reviewDigest: string }).reviewDigest;
+      const orchestrator = await harness.app.loomRunOwner.get();
+      const beforeNext = await orchestrator.getRunView(run.id);
+      await expect(orchestrator.applyAction(run.id, {
+        action: 'next', expectedRevision: runRevision(beforeNext.run),
+        expectedProject: { path: harness.projectPath, device: '-1', inode: '-1' },
+      })).rejects.toMatchObject({ code: 'RUN_STALE' });
+      expect((await orchestrator.getRunView(run.id)).run.currentStepIndex).toBe(0);
+      expect(await callControl(configDirectory, 'run.action', {
+        ...next, reviewDigest: nextDigest, confirmed: true,
+      })).toMatchObject({ ok: false, error: { code: 'RUN_EXECUTION_CONFIRMATION_REQUIRED' } });
+      const advanced = await callControl(configDirectory, 'run.action', {
+        ...next, reviewDigest: nextDigest, confirmed: true, executionConfirmed: true,
+      });
+      expect(advanced).toMatchObject({ ok: true, result: { run: { currentStepIndex: 1 } } });
+      expect((await postAction(harness.app, run.id, { action: 'failed', reason: 'needs retry' })).statusCode).toBe(200);
+      const retry = { runId: run.id, action: 'retry' };
+      const retryReview = await callControl(configDirectory, 'run.action.review', retry);
+      if (!retryReview.ok) throw new Error('Retry review failed.');
+      const retryDigest = (retryReview.result as { reviewDigest: string }).reviewDigest;
+      expect(await callControl(configDirectory, 'run.action', {
+        ...retry, reviewDigest: retryDigest, confirmed: true, executionConfirmed: true,
+      })).toMatchObject({ ok: false, error: { code: 'RUN_REPLAY_CONFIRMATION_REQUIRED' } });
+      const retried = await callControl(configDirectory, 'run.action', {
+        ...retry, reviewDigest: retryDigest, confirmed: true, executionConfirmed: true, replayConfirmed: true,
+      });
+      expect(retried).toMatchObject({ ok: true, result: { run: { currentStepIndex: 1, status: 'awaiting-user' } } });
+      expect((await postAction(harness.app, run.id, { action: 'abort' })).statusCode).toBe(200);
+    } finally {
+      await control.close();
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('reviews CLI outcomes against the live run before applying them', async () => {
+    const harness = await buildTestApp();
+    const chain = await createChain(harness.app, harness.projectId);
+    const run = await createRun(harness.app, harness.projectId, chain);
+    const control = await startControlServer(harness.configStore, {
+      services: harness.app.loomServices, runOwner: harness.app.loomRunOwner,
+    });
+    try {
+      const request = { runId: run.id, action: 'skip', reason: 'Reviewed skip' };
+      expect(await callControl(configDirectory, 'run.action.review', { runId: run.id, action: 'skip' }))
+        .toMatchObject({ ok: false, error: { code: 'CONTROL_INVALID_REQUEST' } });
+      expect(await callControl(configDirectory, 'run.action.review', { runId: run.id, action: 'pause' }))
+        .toMatchObject({ ok: false, error: { code: 'RUN_ACTION_NOT_ALLOWED' } });
+      const reviewed = await callControl(configDirectory, 'run.action.review', request);
+      expect(reviewed).toMatchObject({ ok: true, result: { evidence: { ...request } } });
+      if (!reviewed.ok) throw new Error('Review failed.');
+      const digest = (reviewed.result as { reviewDigest: string }).reviewDigest;
+      expect(await callControl(configDirectory, 'run.action', { ...request, reviewDigest: digest }))
+        .toMatchObject({ ok: false, error: { code: 'CONTROL_INVALID_REQUEST' } });
+      expect(await callControl(configDirectory, 'run.action', {
+        ...request, reason: 'Changed reason', reviewDigest: digest, confirmed: true,
+      })).toMatchObject({ ok: false, error: { code: 'RUN_STALE' } });
+      expect(await callControl(configDirectory, 'run.action', {
+        ...request, action: 'failed', reviewDigest: digest, confirmed: true,
+      })).toMatchObject({ ok: false, error: { code: 'RUN_STALE' } });
+      terminal.sessions.get(terminalIdFor(run.id))?.emitData('New output since review');
+      await waitFor(async () => {
+        const view = await callControl(configDirectory, 'run.show', { runId: run.id });
+        if (!view.ok) return null;
+        const current = (view.result as { run: Run }).run;
+        return current.steps[0]?.tail.includes('New output since review') ? current : null;
+      }, 'new terminal output to reach the run');
+      expect(await callControl(configDirectory, 'run.action', {
+        ...request, reviewDigest: digest, confirmed: true,
+      })).toMatchObject({ ok: false, error: { code: 'RUN_STALE' } });
+      const updatedReview = await callControl(configDirectory, 'run.action.review', request);
+      if (!updatedReview.ok) throw new Error('Updated review failed.');
+      const updatedDigest = (updatedReview.result as { reviewDigest: string }).reviewDigest;
+      const applied = await callControl(configDirectory, 'run.action', { ...request, reviewDigest: updatedDigest, confirmed: true });
+      expect(applied).toMatchObject({
+        ok: true, result: { run: { currentStepIndex: 0, steps: expect.arrayContaining([
+          expect.objectContaining({ id: 'step-plan', status: 'skipped' }),
+        ]) } },
+      });
+      expect(await callControl(configDirectory, 'run.action.review', { runId: run.id, action: 'next' }))
+        .toMatchObject({ ok: false, error: { code: 'RUN_ACTION_NOT_ALLOWED' } });
+      const orchestrator = await harness.app.loomRunOwner.get();
+      const before = await orchestrator.getRunView(run.id);
+      await postAction(harness.app, run.id, { action: 'next' });
+      await expect(orchestrator.applyAction(run.id, {
+        action: 'done', expectedRevision: runRevision(before.run),
+      })).rejects.toMatchObject({ code: 'RUN_STALE' });
+      await postAction(harness.app, run.id, { action: 'abort' });
+    } finally {
+      await control.close();
+    }
+  });
+
   it('applies explicit supervised outcomes and cleans up the PTY on completion', async () => {
     const harness = await buildTestApp();
     const chain = await createChain(harness.app, harness.projectId);
     const run = await createRun(harness.app, harness.projectId, chain);
+    const healthDuring = await harness.app.inject({ method: 'GET', url: '/api/health' });
+    expect(healthDuring.json()).toMatchObject({
+      activeRun: { active: true, runId: run.id, status: 'awaiting-user' },
+    });
+    const pointerPath = join(configDirectory, 'active-run.json');
+    const originalPointer = await readFile(pointerPath, 'utf8');
+    const pointer = JSON.parse(originalPointer) as Record<string, unknown>;
+    await writeFile(pointerPath, JSON.stringify({ ...pointer, status: 'paused' }));
+    try {
+      const liveHealth = await harness.app.inject({ method: 'GET', url: '/api/health' });
+      expect(liveHealth.json()).toMatchObject({
+        activeRun: { active: true, runId: run.id, status: 'awaiting-user' },
+      });
+    } finally {
+      await writeFile(pointerPath, originalPointer);
+    }
 
     const done = await postAction(harness.app, run.id, { action: 'done' });
     expect(done.statusCode).toBe(200);
@@ -943,6 +1652,10 @@ describe('GET /api/runs and POST /api/runs/:runId/actions', () => {
     expect(terminal.sessions.has(terminalIdFor(run.id))).toBe(false);
     const active = (await getActiveRun(harness.app)).body as RunActiveState;
     expect(active.active).toBe(false);
+    const healthAfter = await harness.app.inject({ method: 'GET', url: '/api/health' });
+    expect(healthAfter.json()).toMatchObject({
+      activeRun: { active: false, runId: null, status: null },
+    });
 
     const stored = await getRunRecord(harness.app, run.id);
     expect((stored.body as { run: Run }).run.status).toBe('completed');
@@ -1020,6 +1733,8 @@ describe('GET /api/runs and POST /api/runs/:runId/actions', () => {
       expect(afterNext.type).toBe('step-advanced');
       const stepStarted = await socket.next();
       expect(stepStarted.type).toBe('step-started');
+      const processStarted = await socket.next();
+      expect(processStarted.type).toBe('process-started');
       const awaiting = await socket.next();
       expect(awaiting.type).toBe('awaiting-user');
     } finally {
@@ -1095,17 +1810,446 @@ describe('GET /api/runs and POST /api/runs/:runId/actions', () => {
     const active = (await getActiveRun(harness.app)).body as RunActiveState;
     expect(active.active).toBe(false);
   });
+
+  it.skipIf(process.platform === 'win32')('pauses an automatic run through a reviewed CLI action without advancing', async () => {
+    const harness = await buildTestApp();
+    const chain = await createChain(harness.app, harness.projectId);
+    const run = await createRun(harness.app, harness.projectId, chain, { mode: 'automatic' });
+    const control = await startControlServer(harness.configStore, {
+      services: harness.app.loomServices, runOwner: harness.app.loomRunOwner,
+    });
+    try {
+      const request = { runId: run.id, action: 'pause', reason: 'Pause after this step' };
+      expect(await callControl(configDirectory, 'run.action.review', { runId: run.id, action: 'done' }))
+        .toMatchObject({ ok: false, error: { code: 'RUN_ACTION_NOT_ALLOWED' } });
+      const reviewed = await callControl(configDirectory, 'run.action.review', request);
+      expect(reviewed.ok).toBe(true);
+      if (!reviewed.ok) throw new Error('Review failed.');
+      const digest = (reviewed.result as { reviewDigest: string }).reviewDigest;
+      expect(await callControl(configDirectory, 'run.action', {
+        ...request, reviewDigest: digest, confirmed: true,
+      })).toMatchObject({ ok: true, result: { run: { status: 'paused', currentStepIndex: 0 } } });
+      const session = terminal.sessions.get(terminalIdFor(run.id));
+      expect(session?.isRunning()).toBe(true);
+      session?.emitData(OSC_WORKING);
+      session?.emitData(OSC_IDLE);
+      const paused = await waitFor(async () => {
+        const response = await getRunRecord(harness.app, run.id);
+        const current = (response.body as { run: Run }).run;
+        return current.steps[0]?.status === 'done' ? current : null;
+      }, 'the paused automatic step to finish');
+      expect(paused.status).toBe('paused');
+      expect(paused.currentStepIndex).toBe(0);
+      expect(paused.steps[1]?.status).toBe('pending');
+      expect(await callControl(configDirectory, 'run.action.review', { runId: run.id, action: 'run-next' }))
+        .toMatchObject({ ok: false, error: { code: 'RUN_ACTION_NOT_ALLOWED' } });
+      expect((await postAction(harness.app, run.id, { action: 'abort' })).statusCode).toBe(200);
+    } finally {
+      await control.close();
+    }
+  });
 });
 
 describe('interrupted run recovery', () => {
-  async function simulateRestart(): Promise<{
+  it('reconciles an interrupted legacy run through separately reviewed actions', async () => {
+    const first = await buildTestApp();
+    const chain = await createChain(first.app, first.projectId);
+    const run = await createRun(first.app, first.projectId, chain);
+    apps.splice(apps.indexOf(first.app), 1);
+    await first.app.close();
+    const second = await buildTestApp();
+    const url = `/api/projects/${second.projectId}/coordination-action`;
+    const confirmations = { stoppedConfirmed: true, oldClientsStoppedConfirmed: true };
+    const apply = async (payload: Record<string, unknown>) => {
+      const response = await second.app.inject({ method: 'POST', url, payload });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ applied: true });
+    };
+    let review = await reviewProjectCoordination(project);
+    await apply({ action: 'enable', reviewDigest: review.reviewDigest, ...confirmations });
+    review = await reviewProjectCoordination(project);
+    await apply({ action: 'adopt', reviewDigest: review.reviewDigest, kind: 'managed', runId: run.id, ...confirmations });
+    review = await reviewProjectCoordination(project);
+    expect(review.claim).toMatchObject({ kind: 'managed', runId: run.id });
+    await apply({ action: 'interrupt', reviewDigest: review.reviewDigest, runId: run.id, ...confirmations });
+    review = await reviewProjectCoordination(project);
+    await apply({ action: 'abandon', reviewDigest: review.reviewDigest, runId: run.id, abandonConfirmed: true, ...confirmations });
+    review = await reviewProjectCoordination(project);
+    expect(review.records).toEqual([expect.objectContaining({ runId: run.id, status: 'aborted', unresolved: false })]);
+    expect(review.claim).not.toBeNull();
+    await apply({ action: 'clear', reviewDigest: review.reviewDigest, ...confirmations });
+    expect((await reviewProjectCoordination(project)).claim).toBeNull();
+    expect(terminal.spawns).toHaveLength(1);
+  });
+
+  it.skipIf(process.platform === 'win32')('accepts reviewed coordination actions through the CLI', async () => {
+    const harness = await buildTestApp();
+    const control = await startControlServer(harness.configStore, {
+      services: harness.app.loomServices, runOwner: harness.app.loomRunOwner,
+    });
+    try {
+      const reviewed = await callControl(configDirectory, 'project.coordination.review', { projectId: harness.projectId });
+      if (!reviewed.ok) throw new Error('Review failed.');
+      const digest = (reviewed.result as { review: { reviewDigest: string } }).review.reviewDigest;
+      let output = '';
+      let error = '';
+      const code = await runCli(['project', 'coordination-action', '--config-dir', configDirectory], {
+        env: {}, stdin: Readable.from([JSON.stringify({
+          projectId: harness.projectId,
+          request: { action: 'enable', reviewDigest: digest, stoppedConfirmed: true, oldClientsStoppedConfirmed: true },
+        })]),
+        stdout: { write: (chunk) => { output += String(chunk); return true; }, isTTY: false },
+        stderr: { write: (chunk) => { error += String(chunk); return true; } },
+      });
+      expect(code).toBe(0);
+      expect(error).toBe('');
+      expect(JSON.parse(output)).toMatchObject({ ok: true, result: { applied: true } });
+      expect((await reviewProjectCoordination(project)).protocol).not.toBeNull();
+    } finally {
+      await control.close();
+    }
+  });
+
+  it('refuses coordination changes while this service owns a live run', async () => {
+    const harness = await buildTestApp();
+    const chain = await createChain(harness.app, harness.projectId);
+    const run = await createRun(harness.app, harness.projectId, chain);
+    const review = await reviewProjectCoordination(project);
+    const response = await harness.app.inject({
+      method: 'POST', url: `/api/projects/${harness.projectId}/coordination-action`,
+      payload: {
+        action: 'enable', reviewDigest: review.reviewDigest,
+        stoppedConfirmed: true, oldClientsStoppedConfirmed: true,
+      },
+    });
+    expect(response.statusCode).toBe(409);
+    expect(envelope(response.json()).error.code).toBe('PROJECT_COORDINATION_BUSY');
+    expect((await reviewProjectCoordination(project)).protocol).toBeNull();
+    expect(terminal.sessions.get(terminalIdFor(run.id))?.isRunning()).toBe(true);
+    expect((await postAction(harness.app, run.id, { action: 'abort' })).statusCode).toBe(200);
+  });
+
+  it('does not auto-advance when protocol enablement wins the transition race', async () => {
+    const harness = await buildTestApp();
+    const chain = await createChain(harness.app, harness.projectId);
+    const run = await createRun(harness.app, harness.projectId, chain, { mode: 'automatic' });
+    const file = join(project, '.loom', 'runs', `${run.id}.json`);
+    const before = await readFile(file, 'utf8');
+    let enter!: () => void;
+    let release!: () => void;
+    const entered = new Promise<void>((resolve) => { enter = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const enabling = withProjectClaimTransaction(project, async (tx) => {
+      enter();
+      await gate;
+      tx.enableProtocol(CREATED_AT);
+    });
+    await entered;
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const session = terminal.sessions.get(terminalIdFor(run.id));
+      expect(session).toBeDefined();
+      session?.emitData(OSC_WORKING);
+      session?.emitData(OSC_IDLE);
+      release();
+      await enabling;
+      await waitFor(async () => log.mock.calls.length > 0 ? true : null, 'blocked automatic transition to pause');
+      expect(session?.isRunning()).toBe(false);
+      expect(terminal.spawns).toHaveLength(1);
+      expect(await readFile(file, 'utf8')).toBe(before);
+      expect(log).toHaveBeenCalledWith(expect.stringContaining('paused automatic run'));
+      apps.splice(apps.indexOf(harness.app), 1);
+      await expect(harness.app.close()).rejects.toThrow('could not be shut down cleanly');
+      expect(await readFile(file, 'utf8')).toBe(before);
+    } finally {
+      release();
+      await enabling;
+      log.mockRestore();
+    }
+  });
+
+  it('retains a managed claim through abort in an enabled project', async () => {
+    const harness = await buildTestApp();
+    const chain = await createChain(harness.app, harness.projectId);
+    const review = await reviewProjectCoordination(project);
+    await enableReviewedProjectProtocol(project, review.reviewDigest, true);
+    const run = await createRun(harness.app, harness.projectId, chain);
+    const claimed = await reviewProjectCoordination(project);
+    expect(claimed.claim).toMatchObject({ kind: 'managed', runId: run.id });
+    expect(claimed.records).toEqual([expect.objectContaining({ runId: run.id, unresolved: true })]);
+    expect((await postAction(harness.app, run.id, { action: 'abort' })).statusCode).toBe(200);
+    const after = await reviewProjectCoordination(project);
+    expect(after.claim).toEqual(claimed.claim);
+    expect(after.records).toEqual([expect.objectContaining({ runId: run.id, unresolved: false })]);
+    const response = await postRun(harness.app, harness.projectId, {
+      chainId: chain.id, inputs: { task: 'ship it' },
+    });
+    expect(response.statusCode).toBe(409);
+    expect(envelope(response.body).error.code).toBe('PROJECT_CLAIM_CONFLICT');
+  });
+
+  it('blocks another profile from starting a managed run in a claimed project', async () => {
+    const first = await buildTestApp();
+    const chain = await createChain(first.app, first.projectId);
+    const review = await reviewProjectCoordination(project);
+    await enableReviewedProjectProtocol(project, review.reviewDigest, true);
+    const run = await createRun(first.app, first.projectId, chain);
+    const before = terminal.spawns.length;
+    const second = await buildTestApp({ configDirectory: join(root, 'second-claim-profile') });
+    const response = await postRun(second.app, second.projectId, {
+      chainId: chain.id, inputs: { task: 'ship it' },
+    });
+    expect(response.statusCode).toBe(409);
+    expect(envelope(response.body).error.code).toBe('PROJECT_CLAIM_CONFLICT');
+    expect(terminal.spawns).toHaveLength(before);
+    expect((await reviewProjectCoordination(project)).claim).toMatchObject({ kind: 'managed', runId: run.id });
+    expect((await postAction(first.app, run.id, { action: 'abort' })).statusCode).toBe(200);
+  });
+
+  it('prevents managed and separate-process portable runs from claiming the same project', async () => {
+    const harness = await buildTestApp();
+    const chain = await createChain(harness.app, harness.projectId);
+    const initial = await reviewProjectCoordination(project);
+    await enableReviewedProjectProtocol(project, initial.reviewDigest, true);
+    const bundlePath = join(root, 'portable-race.loom.json');
+    await writeFile(bundlePath, JSON.stringify({
+      format: 'skill-loom-chain', version: 1,
+      chain: {
+        name: 'Portable test', harness: 'opencode', sessionMode: 'shared',
+        steps: [{ id: 'one', kind: 'instruction', instruction: 'Review.' }], inputs: [],
+      },
+      skills: [],
+    }));
+    const helper = (args: string[], input?: unknown) => new Promise<{ code: number | null; output: string; error: string }>((resolve, reject) => {
+      const child = spawn(process.execPath, [
+        '--disable-warning=ExperimentalWarning',
+        join(process.cwd(), '.github', 'skills', 'loom-run-bundle', 'scripts', 'loom-bundle.mjs'),
+        ...args,
+      ], { stdio: ['pipe', 'pipe', 'pipe'] });
+      let output = '';
+      let error = '';
+      child.stdout.on('data', (chunk: Buffer) => { output += chunk.toString(); });
+      child.stderr.on('data', (chunk: Buffer) => { error += chunk.toString(); });
+      child.once('error', reject);
+      child.once('close', (code) => resolve({ code, output, error }));
+      child.stdin.end(input === undefined ? '' : JSON.stringify(input));
+    });
+    const inspect = await helper(['inspect', '--bundle', bundlePath, '--project', project]);
+    expect(inspect.code, inspect.error).toBe(0);
+    const reviewDigest = (JSON.parse(inspect.output) as { reviewDigest: string }).reviewDigest;
+    const prepareInput = {
+      reviewDigest, installConfirmed: true, actualHost: 'opencode', progression: 'supervised', inputs: {},
+      sessionDecision: {
+        requested: 'shared', mechanism: 'current-conversation', description: 'Current conversation.', confirmed: true,
+      },
+    };
+    const prepared = await helper(['prepare', '--bundle', bundlePath, '--project', project], prepareInput);
+    expect(prepared.code, prepared.error).toBe(0);
+    const portableRun = JSON.parse(prepared.output) as { runId: string; revision: number };
+    const before = terminal.spawns.length;
+    const blockedManaged = await postRun(harness.app, harness.projectId, {
+      chainId: chain.id, inputs: { task: 'ship it' },
+    });
+    expect(blockedManaged.statusCode).toBe(409);
+    expect(envelope(blockedManaged.body).error.code).toBe('PROJECT_CLAIM_CONFLICT');
+    expect(terminal.spawns).toHaveLength(before);
+    const aborted = await helper(['record', '--project', project, '--run-id', portableRun.runId], {
+      revision: portableRun.revision, action: 'abort',
+    });
+    expect(aborted.code, aborted.error).toBe(0);
+    const portableReview = await reviewProjectCoordination(project);
+    expect(portableReview.claim).toMatchObject({ kind: 'portable', runId: portableRun.runId });
+    await clearReviewedProjectClaim(project, portableReview.reviewDigest, true, true);
+    const managedRun = await createRun(harness.app, harness.projectId, chain);
+    const newInspect = await helper(['inspect', '--bundle', bundlePath, '--project', project]);
+    expect(newInspect.code, newInspect.error).toBe(0);
+    const blockedPortable = await helper(['prepare', '--bundle', bundlePath, '--project', project], {
+      ...prepareInput, reviewDigest: (JSON.parse(newInspect.output) as { reviewDigest: string }).reviewDigest,
+    });
+    expect(blockedPortable.code).toBe(1);
+    expect(JSON.parse(blockedPortable.error)).toMatchObject({ error: { code: 'PROJECT_CLAIM_CONFLICT' } });
+    expect((await reviewProjectCoordination(project)).claim).toMatchObject({ kind: 'managed', runId: managedRun.id });
+    expect((await postAction(harness.app, managedRun.id, { action: 'abort' })).statusCode).toBe(200);
+  });
+
+  it('retains a managed claim across automatic transitions and completion', async () => {
+    const harness = await buildTestApp();
+    const chain = await createChain(harness.app, harness.projectId);
+    const review = await reviewProjectCoordination(project);
+    await enableReviewedProjectProtocol(project, review.reviewDigest, true);
+    const run = await createRun(harness.app, harness.projectId, chain, { mode: 'automatic' });
+    const claimed = (await reviewProjectCoordination(project)).claim;
+    expect(claimed).toMatchObject({ kind: 'managed', runId: run.id });
+    const first = terminal.sessions.get(terminalIdFor(run.id));
+    expect(first).toBeDefined();
+    first?.emitData(OSC_WORKING);
+    first?.emitData(OSC_IDLE);
+    const second = await waitFor(async () => {
+      const session = terminal.sessions.get(terminalIdFor(run.id));
+      return session !== undefined && session !== first && session.isRunning() ? session : null;
+    }, 'coordinated second step');
+    expect((await reviewProjectCoordination(project)).claim).toEqual(claimed);
+    second.emitData(OSC_WORKING);
+    second.emitData(OSC_IDLE);
+    const completed = await waitForRunStatus(harness.app, run.id, 'completed');
+    expect(completed.steps.map((step) => step.status)).toEqual(['done', 'done']);
+    const after = await waitFor(async () => {
+      const state = await reviewProjectCoordination(project);
+      return state.records.length === 1 && state.records[0]?.unresolved === false ? state : null;
+    }, 'the completed managed run to be persisted');
+    expect(after.claim).toEqual(claimed);
+    expect(after.records).toEqual([expect.objectContaining({ runId: run.id, unresolved: false })]);
+  });
+
+  it('retains a managed claim when harness startup fails', async () => {
+    const harness = await buildTestApp();
+    const chain = await createChain(harness.app, harness.projectId);
+    const review = await reviewProjectCoordination(project);
+    await enableReviewedProjectProtocol(project, review.reviewDigest, true);
+    const spawn = vi.spyOn(terminal, 'createSession').mockImplementationOnce(() => {
+      throw new Error('injected terminal failure');
+    });
+    try {
+      const response = await postRun(harness.app, harness.projectId, {
+        chainId: chain.id, inputs: { task: 'ship it' },
+      });
+      expect(response.statusCode).not.toBe(201);
+      const after = await reviewProjectCoordination(project);
+      expect(after.claim).toMatchObject({ kind: 'managed' });
+      expect(after.records).toEqual([expect.objectContaining({
+        kind: 'managed', runId: after.claim?.runId,
+      })]);
+      expect(terminal.spawns).toHaveLength(0);
+    } finally {
+      spawn.mockRestore();
+    }
+  });
+
+  it('retains the claim through shutdown and explicitly retries the interrupted run', async () => {
+    const first = await buildTestApp();
+    const chain = await createChain(first.app, first.projectId);
+    const review = await reviewProjectCoordination(project);
+    await enableReviewedProjectProtocol(project, review.reviewDigest, true);
+    const run = await createRun(first.app, first.projectId, chain);
+    const claim = (await reviewProjectCoordination(project)).claim;
+    apps.splice(apps.indexOf(first.app), 1);
+    await first.app.close();
+    expect((await reviewProjectCoordination(project)).claim).toEqual(claim);
+
+    const second = await buildTestApp();
+    const view = runView((await getRunRecord(second.app, run.id)).body);
+    expect(view.run.status).toBe('interrupted');
+    expect(view.recovery).toMatchObject({ retry: true, restart: false });
+    const restart = await postAction(second.app, run.id, { action: 'restart' });
+    expect(restart.statusCode).toBe(409);
+    expect(envelope(restart.body).error.code).toBe('RUN_COORDINATION_REQUIRED');
+    expect((await postAction(second.app, run.id, { action: 'retry' })).statusCode).toBe(200);
+    expect((await reviewProjectCoordination(project)).claim).toEqual(claim);
+    expect((await postAction(second.app, run.id, { action: 'abort' })).statusCode).toBe(200);
+  });
+
+  it('retains a stale pointer to a terminal run when coordination requires review', async () => {
+    const first = await buildTestApp();
+    const chain = await createChain(first.app, first.projectId);
+    const run = await createRun(first.app, first.projectId, chain);
+    const pointer = await readFile(join(configDirectory, 'active-run.json'), 'utf8');
+    expect((await postAction(first.app, run.id, { action: 'abort' })).statusCode).toBe(200);
+    const review = await reviewProjectCoordination(project);
+    await enableReviewedProjectProtocol(project, review.reviewDigest, true);
+
+    const otherConfigDirectory = join(root, 'terminal-claimed-profile');
+    const otherConfig = createConfigStore({
+      env: { LOOM_CONFIG_DIR: otherConfigDirectory },
+      homeDirectory: () => home,
+    });
+    await createProjectRegistry({ configStore: otherConfig }).openProject(project);
+    await writeFile(join(otherConfigDirectory, 'active-run.json'), pointer);
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      await buildTestApp({ configDirectory: otherConfigDirectory });
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('RUN_RECOVERY_CLAIMED'));
+      expect(await readFile(join(otherConfigDirectory, 'active-run.json'), 'utf8')).toBe(pointer);
+    } finally {
+      warning.mockRestore();
+    }
+  });
+
+  it('reports a claimed run and preserves it when another profile has a matching pointer', async () => {
+    const first = await buildTestApp();
+    const chain = await createChain(first.app, first.projectId);
+    const run = await createRun(first.app, first.projectId, chain);
+    const otherConfigDirectory = join(root, 'claimed-profile');
+    const otherConfig = createConfigStore({
+      env: { LOOM_CONFIG_DIR: otherConfigDirectory },
+      homeDirectory: () => home,
+    });
+    await createProjectRegistry({ configStore: otherConfig }).openProject(project);
+    const pointer = await readFile(join(configDirectory, 'active-run.json'), 'utf8');
+    await writeFile(join(otherConfigDirectory, 'active-run.json'), pointer);
+    const beforeEnable = await reviewProjectCoordination(project);
+    await enableReviewedProjectProtocol(project, beforeEnable.reviewDigest, true);
+    const beforeAdoption = await reviewProjectCoordination(project);
+    await adoptReviewedLegacyRun(project, { kind: 'managed', runId: run.id }, beforeAdoption.reviewDigest, true, true);
+    const file = join(project, '.loom', 'runs', `${run.id}.json`);
+    const original = await readFile(file, 'utf8');
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      await buildTestApp({ configDirectory: otherConfigDirectory });
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('RUN_RECOVERY_CLAIMED'));
+      expect(await readFile(file, 'utf8')).toBe(original);
+      expect(await readFile(join(otherConfigDirectory, 'active-run.json'), 'utf8')).toBe(pointer);
+      expect((await getActiveRun(first.app)).body).toMatchObject({ active: true, runId: run.id });
+      expect((await postAction(first.app, run.id, { action: 'abort' })).statusCode).toBe(200);
+    } finally {
+      warning.mockRestore();
+    }
+  });
+
+  it('does not interrupt a live run when a different profile starts with the same project', async () => {
+    const first = await buildTestApp();
+    const chain = await createChain(first.app, first.projectId);
+    const run = await createRun(first.app, first.projectId, chain);
+    const file = join(project, '.loom', 'runs', `${run.id}.json`);
+    const original = await readFile(file, 'utf8');
+
+    const otherConfigDirectory = join(root, 'other-profile');
+    const otherConfig = createConfigStore({
+      env: { LOOM_CONFIG_DIR: otherConfigDirectory },
+      homeDirectory: () => home,
+    });
+    await createProjectRegistry({ configStore: otherConfig }).openProject(project);
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const second = await buildTestApp({ configDirectory: otherConfigDirectory });
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('RUN_RECOVERY_AMBIGUOUS'));
+      expect(await readFile(file, 'utf8')).toBe(original);
+      expect((await getActiveRun(first.app)).body).toMatchObject({
+        active: true, runId: run.id,
+      });
+      expect((await getRunRecord(second.app, run.id)).body).toMatchObject({
+        run: { id: run.id, status: 'awaiting-user' },
+      });
+      expect((await postAction(second.app, run.id, { action: 'done' })).statusCode).toBe(409);
+      expect((await postAction(first.app, run.id, { action: 'done' })).statusCode).toBe(200);
+      expect((await postAction(first.app, run.id, { action: 'abort' })).statusCode).toBe(200);
+    } finally {
+      warning.mockRestore();
+    }
+  });
+
+  async function simulateRestart(instructionOnly = false): Promise<{
     first: AppHarness;
     second: AppHarness;
     chain: Chain;
     run: Run;
   }> {
     const first = await buildTestApp();
-    const chain = await createChain(first.app, first.projectId);
+    const chain = await createChain(first.app, first.projectId, instructionOnly ? {
+      steps: [
+        { id: 'one', kind: 'instruction', instruction: 'Review {{task}}.' },
+        { id: 'two', kind: 'instruction', instruction: 'Summarize {{task}}.' },
+      ],
+    } : {});
     const run = await createRun(first.app, first.projectId, chain);
 
     // Close the first server without aborting the record. The next buildApp
@@ -1120,6 +2264,104 @@ describe('interrupted run recovery', () => {
     const recovered = await waitForRunStatus(second.app, run.id, 'interrupted');
     return { first, second, chain, run: recovered };
   }
+
+  it.skipIf(process.platform === 'win32')('requires reviewed execution and replay approval for interrupted retry', async () => {
+    const { second, run } = await simulateRestart(true);
+    const control = await startControlServer(second.configStore, {
+      services: second.app.loomServices, runOwner: second.app.loomRunOwner,
+    });
+    try {
+      const request = { runId: run.id, action: 'retry' };
+      const review = await callControl(configDirectory, 'run.action.review', request);
+      expect(review).toMatchObject({ ok: true, result: { evidence: {
+        preflight: { startAllowed: true }, action: 'retry',
+      } } });
+      if (!review.ok) throw new Error('Review failed.');
+      const digest = (review.result as { reviewDigest: string }).reviewDigest;
+      expect(await callControl(configDirectory, 'run.action', {
+        ...request, reviewDigest: digest, confirmed: true, executionConfirmed: true,
+      })).toMatchObject({ ok: false, error: { code: 'RUN_REPLAY_CONFIRMATION_REQUIRED' } });
+      expect((await getActiveRun(second.app)).body).toMatchObject({ active: false });
+      expect(await callControl(configDirectory, 'run.action', {
+        ...request, reviewDigest: digest, confirmed: true, executionConfirmed: true, replayConfirmed: true,
+      })).toMatchObject({ ok: true, result: { run: { id: run.id, status: 'awaiting-user', currentStepIndex: 0 } } });
+      expect((await postAction(second.app, run.id, { action: 'abort' })).statusCode).toBe(200);
+    } finally {
+      await control.close();
+    }
+  });
+
+  it.skipIf(process.platform === 'win32').each(['continue', 'restart'] as const)(
+    'reviews interrupted %s without implicit replay',
+    async (action) => {
+      const { second, run } = await simulateRestart(true);
+      const control = await startControlServer(second.configStore, {
+        services: second.app.loomServices, runOwner: second.app.loomRunOwner,
+      });
+      try {
+        const request = { runId: run.id, action };
+        const review = await callControl(configDirectory, 'run.action.review', request);
+        if (!review.ok) throw new Error('Review failed.');
+        const digest = (review.result as { reviewDigest: string }).reviewDigest;
+        if (action === 'restart') {
+          expect(await callControl(configDirectory, 'run.action', {
+            ...request, reviewDigest: digest, confirmed: true, executionConfirmed: true,
+          })).toMatchObject({ ok: false, error: { code: 'RUN_REPLAY_CONFIRMATION_REQUIRED' } });
+        }
+        const resumed = await callControl(configDirectory, 'run.action', {
+          ...request, reviewDigest: digest, confirmed: true, executionConfirmed: true,
+          ...(action === 'restart' ? { replayConfirmed: true } : {}),
+        });
+        expect(resumed).toMatchObject({ ok: true, result: {
+          run: { status: 'awaiting-user', currentStepIndex: action === 'continue' ? 1 : 0 },
+          restartedFrom: action === 'restart' ? run.id : null,
+        } });
+        if (!resumed.ok) throw new Error('Recovery failed.');
+        const resumedId = (resumed.result as { run: Run }).run.id;
+        expect((await postAction(second.app, resumedId, { action: 'abort' })).statusCode).toBe(200);
+      } finally {
+        await control.close();
+      }
+    },
+  );
+
+  it('allows only one concurrent interrupted retry to start a harness', async () => {
+    const { second, run } = await simulateRestart(true);
+    const previousSpawns = terminal.spawns.length;
+    const responses = await Promise.all([
+      postAction(second.app, run.id, { action: 'retry' }),
+      postAction(second.app, run.id, { action: 'retry' }),
+    ]);
+    expect(responses.filter((response) => response.statusCode === 200)).toHaveLength(1);
+    expect(responses.filter((response) => response.statusCode !== 200)).toHaveLength(1);
+    expect(terminal.spawns.length - previousSpawns).toBe(1);
+    expect((await postAction(second.app, run.id, { action: 'abort' })).statusCode).toBe(200);
+  });
+
+  it.skipIf(process.platform === 'win32')('does not replay twice when UI and reviewed CLI recovery race', async () => {
+    const { second, run } = await simulateRestart(true);
+    const control = await startControlServer(second.configStore, {
+      services: second.app.loomServices, runOwner: second.app.loomRunOwner,
+    });
+    try {
+      const request = { runId: run.id, action: 'retry' };
+      const review = await callControl(configDirectory, 'run.action.review', request);
+      if (!review.ok) throw new Error('Review failed.');
+      const digest = (review.result as { reviewDigest: string }).reviewDigest;
+      const before = terminal.spawns.length;
+      const [cli, ui] = await Promise.all([
+        callControl(configDirectory, 'run.action', {
+          ...request, reviewDigest: digest, confirmed: true, executionConfirmed: true, replayConfirmed: true,
+        }),
+        postAction(second.app, run.id, { action: 'retry' }),
+      ]);
+      expect([cli.ok, ui.statusCode === 200].filter(Boolean)).toHaveLength(1);
+      expect(terminal.spawns.length - before).toBe(1);
+      expect((await postAction(second.app, run.id, { action: 'abort' })).statusCode).toBe(200);
+    } finally {
+      await control.close();
+    }
+  });
 
   it('offers retry, continue, and restart for an interrupted run without auto-replay', async () => {
     const scenario = await simulateRestart();

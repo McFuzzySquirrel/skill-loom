@@ -5,6 +5,11 @@ import {
   createApiErrorEnvelope,
   type ApiValidationIssue,
 } from '../../shared/api.js';
+import { ProjectClaimError } from '../../shared/project-claim.js';
+import { ProjectCoordinationError, reviewProjectCoordination } from '../../shared/project-coordination.js';
+import { ProjectRunRecordsError } from '../../shared/project-run-records.js';
+import { coordinationActionSchema, executeCoordinationAction, ProjectCoordinationActionError } from '../projects/coordination.js';
+import type { RunOwner } from '../runs/owner.js';
 import { ConfigError } from '../config/store.js';
 import type { ConfigStore } from '../config/store.js';
 import type { RecentProject } from '../config/schema.js';
@@ -41,6 +46,7 @@ export interface ProjectRoutesOptions {
   configStore: ConfigStore;
   /** Injected registry; defaults to the filesystem-backed implementation. */
   projectRegistry?: ProjectRegistry;
+  runOwner?: RunOwner;
   /** Git initializer seam forwarded to the default registry. */
   gitInit?: GitInitRunner;
   /** Clock seam forwarded to the default registry. */
@@ -149,6 +155,48 @@ export const projectRoutes: FastifyPluginAsync<ProjectRoutesOptions> = async (
     }
   });
 
+  app.post<{ Params: ProjectRouteParams }>(
+    '/api/projects/:projectId/coordination-review',
+    async (request, reply) => {
+      try {
+        const project = await registry.findRecentProject(request.params.projectId);
+        if (project === undefined) {
+          return reply.code(404).send(createApiErrorEnvelope('PROJECT_NOT_FOUND', 'The project is not registered.'));
+        }
+        return reply.send({
+          review: await reviewProjectCoordination(project.canonicalPath),
+          executionCoordinated: false,
+        });
+      } catch (error) {
+        return sendProjectFailure(reply, error);
+      }
+    },
+  );
+
+  app.post<{ Params: ProjectRouteParams }>(
+    '/api/projects/:projectId/coordination-action',
+    async (request, reply) => {
+      const body = coordinationActionSchema.safeParse(request.body);
+      if (!body.success) {
+        return reply.code(422).send(createApiErrorEnvelope('PROJECT_COORDINATION_INVALID', 'The coordination action or confirmations are invalid.'));
+      }
+      if (options.runOwner === undefined) {
+        return reply.code(503).send(createApiErrorEnvelope('PROJECT_COORDINATION_UNAVAILABLE', 'Run ownership is unavailable.'));
+      }
+      try {
+        const project = await registry.findRecentProject(request.params.projectId);
+        if (project === undefined) {
+          return reply.code(404).send(createApiErrorEnvelope('PROJECT_NOT_FOUND', 'The project is not registered.'));
+        }
+        return reply.send(await executeCoordinationAction(
+          project.canonicalPath, options.configStore.getConfigDir(), options.runOwner, body.data,
+        ));
+      } catch (error) {
+        return sendProjectFailure(reply, error);
+      }
+    },
+  );
+
   app.delete<{ Params: ProjectRouteParams }>(
     '/api/projects/recent/:projectId',
     async (request, reply) => {
@@ -171,6 +219,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function sendProjectFailure(reply: FastifyReply, error: unknown): FastifyReply {
+  if (error instanceof ProjectCoordinationActionError) {
+    return reply.code(409).send(createApiErrorEnvelope(error.code, error.message));
+  }
+  if (error instanceof ProjectClaimError || error instanceof ProjectCoordinationError ||
+      error instanceof ProjectRunRecordsError) {
+    const status = error instanceof ProjectClaimError && error.code === 'PROJECT_CLAIM_BUSY' ? 409 : 422;
+    return reply.code(status).send(createApiErrorEnvelope(error.code, error.message));
+  }
   if (error instanceof ProjectRegistryError) {
     return reply
       .code(STATUS_BY_PROJECT_CODE[error.code] ?? 500)

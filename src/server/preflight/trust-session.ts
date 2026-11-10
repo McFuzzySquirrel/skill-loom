@@ -14,6 +14,7 @@ import {
   type TrustReason,
   type TrustState,
 } from './trust.js';
+import { renderManualCommand } from './manual-command.js';
 
 /**
  * Copilot folder-trust session lifecycle.
@@ -335,21 +336,6 @@ export function createTrustSessionService(
       }
     },
   };
-}
-
-/**
- * Render the manual fallback for display only. The returned string is never
- * executed; spawning always uses `executable` plus the argument array.
- */
-export function renderManualCommand(command: HarnessTrustCommand): string {
-  return [command.executable, ...command.args].map(quoteShellArgument).join(' ');
-}
-
-function quoteShellArgument(value: string): string {
-  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(value)) {
-    return value;
-  }
-  return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
 function sessionKey(projectPath: string, harness: string): string {

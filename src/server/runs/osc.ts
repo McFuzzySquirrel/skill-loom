@@ -5,7 +5,8 @@
  * `id=ses_...` parameter. The signal arrives on the PTY byte stream, so it can
  * be split at any position across chunks and surrounded by unrelated ANSI
  * output. A completion may only be reported after `working` was observed in
- * the same step; `clear` resets that observation.
+ * the same step and status record. Root `clear` resets observation; child
+ * `clear` resets only a matching child observation.
  *
  * This module contains no timers, clocks, or output-quiescence logic. Quiet
  * terminal output is not a completion signal (EXEC-02).
@@ -64,7 +65,7 @@ export interface Osc7501ParserOptions {
 /**
  * Parse the parameter text of one OSC 7501 sequence.
  *
- * Parameters are semicolon-separated `key=value` pairs. `state` is required
+ * Parameters are semicolon- or colon-separated `key=value` pairs. `state` is required
  * and must be one of the documented values; a sequence with an unknown or
  * absent state is ignored. `id` is optional and only retained when it looks
  * like a safe token.
@@ -77,7 +78,7 @@ export function parseOsc7501Params(params: string): Osc7501Event | null {
   let state: Osc7501State | null = null;
   let sessionId: string | null = null;
 
-  for (const field of params.split(';')) {
+  for (const field of params.split(/;|:(?=[A-Za-z][A-Za-z0-9_-]*=)/)) {
     const separator = field.indexOf('=');
     if (separator <= 0) {
       continue;
@@ -87,6 +88,7 @@ export function parseOsc7501Params(params: string): Osc7501Event | null {
     const value = field.slice(separator + 1).trim();
 
     if (key === OSC7501_PARAM_STATE) {
+      if (state !== null) return null;
       const candidate = value.toLowerCase();
       if ((OSC7501_STATES as readonly string[]).includes(candidate)) {
         state = candidate as Osc7501State;
@@ -146,7 +148,7 @@ export function parseOsc7501Chunk(
       // which is safer than unbounded memory growth.
       return {
         events,
-        remainder: buffer.length <= maxBufferBytes ? buffer : '',
+        remainder: Buffer.byteLength(buffer, 'utf8') <= maxBufferBytes ? buffer : '',
       };
     }
 
@@ -224,7 +226,7 @@ export interface OscStateChange {
   readonly advanced: boolean;
   /** True when this event reported `working`. */
   readonly working: boolean;
-  /** True when this event reported `clear` and reset the observation. */
+  /** True when this event reported `clear` (possibly for a child record). */
   readonly cleared: boolean;
 }
 
@@ -234,14 +236,17 @@ export interface OscStateMachineOptions extends Osc7501ParserOptions {}
  * Per-step working/idle state machine.
  *
  * The only way `completed` becomes true is an `idle` event after a `working`
- * event in this instance. An idle-only stream is ignored, and `clear` resets
- * both the working observation and the completion flag. Call `reset()` before
- * every new step so a previous step can never advance the next one.
+ * event for the same record in this instance. An idle-only stream is ignored,
+ * and `clear` resets observation and completion for that record. Prefer
+ * the root summary over child records: OpenCode clears completed children
+ * before reporting root idle. Call `reset()` before every new step so a
+ * previous step can never advance the next one.
  */
 export class Osc7501StateMachine {
   private readonly parser: Osc7501Parser;
   private phaseValue: OscPhase = 'unknown';
   private sawWorkingValue = false;
+  private workingRecordId: string | null = null;
   private completedValue = false;
   private sessionIdValue: string | null = null;
 
@@ -264,6 +269,10 @@ export class Osc7501StateMachine {
       }
 
       if (event.state === 'working') {
+        // Once observed, the root summary owns advancement for this step.
+        if (!this.sawWorkingValue || this.workingRecordId !== null || event.sessionId === null) {
+          this.workingRecordId = event.sessionId;
+        }
         this.sawWorkingValue = true;
         this.completedValue = false;
         this.phaseValue = 'working';
@@ -278,7 +287,7 @@ export class Osc7501StateMachine {
       }
 
       if (event.state === 'idle') {
-        if (!this.sawWorkingValue) {
+        if (!this.sawWorkingValue || event.sessionId !== this.workingRecordId) {
           // Idle without working in the same step is not a completion. Leave
           // the phase and all flags exactly as they were.
           continue;
@@ -297,9 +306,12 @@ export class Osc7501StateMachine {
         continue;
       }
 
-      // clear
-      this.sawWorkingValue = false;
-      this.completedValue = false;
+      // Child removal does not clear a working root summary.
+      if (event.sessionId === null || event.sessionId === this.workingRecordId) {
+        this.sawWorkingValue = false;
+        this.completedValue = false;
+        this.workingRecordId = null;
+      }
       this.phaseValue = 'clear';
       changes.push({
         state: 'clear',
@@ -345,6 +357,7 @@ export class Osc7501StateMachine {
     this.parser.reset();
     this.phaseValue = 'unknown';
     this.sawWorkingValue = false;
+    this.workingRecordId = null;
     this.completedValue = false;
     this.sessionIdValue = null;
   }

@@ -3,11 +3,14 @@ import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
   CONFIG_FILE_NAME,
   CONFIG_VERSION,
   ConfigUpdateSchema,
   LoomConfigSchema,
+  LoomConfigV1Schema,
+  RemoteCatalogLimitsSchema,
   createDefaultConfig,
   type ConfigUpdate,
   type HarnessCommands,
@@ -144,6 +147,13 @@ export function parseConfigDocument(raw: unknown, configPath: string): LoomConfi
     throw new ConfigCorruptError(configPath, [{ path: 'version', code: 'invalid_type' }]);
   }
 
+  if (raw.version === 1) {
+    const previous = LoomConfigV1Schema.safeParse(raw);
+    if (!previous.success) {
+      throw new ConfigCorruptError(configPath, normalizeIssues(previous.error.issues));
+    }
+    return LoomConfigSchema.parse({ ...previous.data, version: CONFIG_VERSION });
+  }
   if (raw.version !== CONFIG_VERSION) {
     throw new ConfigUnsupportedVersionError(configPath, raw.version);
   }
@@ -162,7 +172,11 @@ export interface AtomicWriteDependencies {
   unlinkFile?: typeof unlink;
   makeTempId?: () => string;
   processId?: number;
+  platform?: NodeJS.Platform;
+  delay?: (milliseconds: number) => Promise<void>;
 }
+
+const WINDOWS_RENAME_RETRY_DELAYS_MS = [10, 25, 50, 100, 200] as const;
 
 /**
  * Write JSON through a temporary file in the target directory, fsync it, then
@@ -192,7 +206,19 @@ export async function atomicWriteJson(
     await handle.sync();
     await handle.close();
     handle = undefined;
-    await renameFile(temporary, target);
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await renameFile(temporary, target);
+        break;
+      } catch (error) {
+        const retryDelay = WINDOWS_RENAME_RETRY_DELAYS_MS[attempt];
+        if ((dependencies.platform ?? process.platform) !== 'win32' || errnoCode(error) !== 'EPERM' ||
+            retryDelay === undefined) {
+          throw error;
+        }
+        await (dependencies.delay ?? delay)(retryDelay);
+      }
+    }
     await syncDirectory(directory);
   } catch (error) {
     if (handle) {
@@ -319,6 +345,11 @@ export function createConfigStore(options: ConfigStoreOptions = {}): ConfigStore
   return new FileConfigStore(options);
 }
 
+/** Read the current profile without creating a config file when it is absent. */
+export async function readConfigSnapshot(options: ConfigPathOptions = {}): Promise<LoomConfig> {
+  return (await readExistingConfig(resolveConfigPath(options))) ?? createDefaultConfig();
+}
+
 let defaultStore: ConfigStore | undefined;
 
 /** Process-wide store used by feature services. Paths are resolved per call. */
@@ -380,6 +411,10 @@ function applyUpdate(current: LoomConfig, patch: ConfigUpdate): LoomConfig {
     harnessCommands,
     extraSkillDirectories: patch.extraSkillDirectories ?? current.extraSkillDirectories,
     remoteSkillSources: patch.remoteSkillSources ?? current.remoteSkillSources,
+    remoteCatalogLimits: RemoteCatalogLimitsSchema.parse({
+      ...current.remoteCatalogLimits,
+      ...Object.fromEntries(Object.entries(patch.remoteCatalogLimits ?? {}).filter(([, value]) => value !== undefined)),
+    }),
     ...(patch.sharedBundleDirectory === null
       ? {}
       : {

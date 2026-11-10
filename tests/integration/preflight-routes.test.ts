@@ -606,7 +606,11 @@ describe('POST /api/projects/:projectId/trust', () => {
       args: ['-C', canonicalProject],
       cwd: canonicalProject,
     });
-    expect(verified.manualCommandText).toBe(`${COPILOT()} -C ${canonicalProject}`);
+    expect(verified.manualCommandText).toBe(
+      process.platform === 'win32'
+        ? `& '${COPILOT().replaceAll("'", "''")}' '-C' '${canonicalProject.replaceAll("'", "''")}'`
+        : `${COPILOT()} -C ${canonicalProject}`,
+    );
 
     expect(terminal.closed).toEqual([]);
     expect(terminal.getSession(started.sessionId)).toBeDefined();

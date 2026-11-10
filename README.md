@@ -14,7 +14,7 @@ Skill Loom does not author skills and does not execute a skill as a callable com
 
 See the [visual tour](docs/visual-tour.md) for captions and full-size screenshots.
 
-Start with the [user guide](docs/user-guide.md) to design and share a workflow, or the [administrator guide](docs/admin-guide.md) to install, configure, back up, and upgrade the application.
+Start with the [user guide](docs/user-guide.md) to design and share a workflow, or the [administrator guide](docs/admin-guide.md) to install, configure, back up, and upgrade the application. To run chains with only the companion Agent Skills and no Skill Loom server, see the [standalone skill guide](docs/standalone-skill-guide.md).
 
 ## Table of Contents
 
@@ -71,6 +71,24 @@ The product promise is deliberately narrow:
 | Optional local testing | Test a saved chain or project-independent draft in a fresh managed project directory, then inspect or explicitly remove retained workspaces; the directory is separate from the source project, not an OS security sandbox. |
 | Terminal and accessibility | Serve a server-owned PTY to xterm.js with screen-reader mode, Escape-to-leave focus, skip links, keyboard reordering, and polite/assertive status announcements. |
 | Local CLI | Run the packaged local design workspace as `skill-loom` with `--help`, `--version`, `--no-open`, `--port`, and `--config-dir`. |
+
+The CLI can also inspect a bundle without starting the workspace:
+`skill-loom bundle inspect --bundle /absolute/path/to/chain.loom.json`. Add
+`--project /absolute/path/to/project` to inspect installed-package conflicts.
+This read-only command emits JSON and does not install or run the bundle.
+`skill-loom catalog --help` describes commands for listing and refreshing Git
+sources and searching pinned snapshots or a registered project's local catalog.
+Start the shared owner without opening a browser with
+`skill-loom service start`; use
+`skill-loom service status` and `skill-loom service stop` to check and stop it.
+Unix uses a private socket; Windows uses mutually authenticated loopback TLS
+and requires a protected private profile on local NTFS/ReFS storage, Windows
+PowerShell 5.1 and .NET 4.7.2+. Unsafe existing Windows profiles are rejected,
+not silently reconfigured; see the administrator guide.
+The owner also supports project registration, draft creation and model
+validation, bundle export, and reviewed import without package reuse; see the
+[administrator guide](docs/admin-guide.md#cli-flags). Managed run start and
+other planned capabilities remain in the [tracked plan](docs/standalone-cli-plan.md).
 
 ## Tech Stack
 
@@ -144,6 +162,7 @@ The full decision directory is in [docs/adr/README.md](docs/adr/README.md).
 - `docs/` — User, administrator, and operations guides, ADRs, release notes, support ownership, and live evidence.
 - `.github/skills/` — Project-maintained Copilot skills and their references.
 - `skill/scenario-discovery/` — Mirrored standalone project-independent discovery skill and helpers.
+- `skill/loom-chain-workflow/` — Mirrored CLI workflow skill that coordinates discovery, optional workspace testing, reviewed import, and current-session execution using the companion skills.
 - `.opencode/agents/` and `.opencode/skills/` — OpenCode agent definitions and mirrored project skills.
 - `<project>/.agents/skills/` — Shared destination for new project skill copies and bundle imports; OpenCode also discovers legacy `.opencode/skills/`.
 - `dist/` — Build output for the server and web UI; generated, not source.
@@ -168,7 +187,7 @@ The [administrator guide](docs/admin-guide.md#installation) covers the native to
 - **Node.js 24 or newer** (`package.json` declares `>=24`; the validation recorded for 0.1.0 ran on Node 26.13.0, while Node 24.22.2 was used earlier in development).
 - npm.
 - A native build toolchain for `node-pty`: Python 3, `make`, and a C++ compiler. On Debian/Ubuntu install `build-essential` and `python3`; on macOS install the Xcode Command Line Tools.
-- **OpenCode CLI 2.2.5** for OpenCode chains, installed and authenticated.
+- **Stable OpenCode CLI 2.2.5 or newer** for OpenCode chains, installed and authenticated. Live signal verification is still required for automatic advancement.
 - **GitHub Copilot CLI 1.0.105** for Copilot chains, installed and authenticated.
 - Git, optional but used for the `git init` option and the dirty-tree preflight warning.
 - A Chromium browser for Playwright e2e; install it once with `npx playwright install chromium`.
@@ -181,7 +200,7 @@ npm install
 
 `node-pty` compiles native code during installation. If the install fails at that step, install the native toolchain above and run `npm install` again (or `npm rebuild node-pty`). Skill Loom does not hide a native build failure behind a generic install success message.
 
-Harness CLIs are deliberately not installed by this project. Install OpenCode 2.2.5 and/or GitHub Copilot CLI 1.0.105 with their own installers, then confirm they are on `PATH`; alternatively set `harnessCommands.opencode` or `harnessCommands.copilot` in the Skill Loom config.
+Harness CLIs are deliberately not installed by this project. Install stable OpenCode 2.2.5 or newer and/or GitHub Copilot CLI 1.0.105 with their own installers, then confirm they are on `PATH`; alternatively set `harnessCommands.opencode` or `harnessCommands.copilot` in the Skill Loom config.
 
 ## Development
 
@@ -226,7 +245,7 @@ npm exec --package ./skill-loom-cli-0.1.0.tgz -- skill-loom --help
 
 The CLI starts the same production server and prints the loopback URL and config directory. It opens the default browser only when stdout is a TTY; `--no-open` and `CI` disable that. Once the package is published, the command becomes `npx skill-loom-cli`.
 
-The packed package contains only `dist/src`, `dist/web`, the compiled package metadata, `docs/OPERATIONS.md`, and the package manifest. It excludes source, tests, build scripts, and the other documentation files. The native `node-pty` toolchain is still required when npm installs the package.
+The packed package contains `dist/src`, `dist/web`, the compiled package metadata, a cross-platform PTY installation helper, `docs/OPERATIONS.md`, and the package manifest. It excludes source, tests, build scripts, and the other documentation files. The native `node-pty` toolchain may still be required when npm installs the package. The helper repairs the macOS spawn-helper owner-execute permission and applies a hash-bound Windows `node-pty` 1.1.0 natural-exit resource cleanup fix; unknown dependency bytes fail installation rather than receiving an unverified patch.
 
 ## Commands
 
@@ -235,6 +254,7 @@ The packed package contains only `dist/src`, `dist/web`, the compiled package me
 | Install dependencies | `npm install` | Native `node-pty` build requires the toolchain above. |
 | Development | `npm run dev` | API on 7373, Vite UI on 5173. |
 | Build | `npm run build` | Web then server. |
+| Bundled skill modes | `npm run update:scenario-modes` | Regenerate the content-bound manifest from current files and Git index modes after changing bundled scenario packages. |
 | Start built app | `npm start` | Serves `dist/web` and the API on 7373. |
 | Typecheck | `npm run typecheck` | Runs server and web project checks. |
 | Unit tests | `npm run test:unit` | Vitest, Node environment. |
@@ -244,12 +264,13 @@ The packed package contains only `dist/src`, `dist/web`, the compiled package me
 | Package smoke test | `npm run test:package` | Packs, inspects, and starts the packaged CLI on a spare loopback port. |
 | Live discovery probe | `npm run test:live:discovery` | Requires real harness CLIs. |
 | Live execution probe | `npm run test:live:execution` | Requires real harness CLIs and may make paid model calls. |
+| Managed OpenCode acceptance | `npm run test:live:managed -- --confirm-live` | Checkout-only; uses the production managed runner, makes paid calls and grants temporary-project read/edit permissions. See the [procedure](docs/OPERATIONS.md#managed-opencode-acceptance). |
 | Documentation gate | `npm run check` | Runs `scripts/check-docs.mjs`. |
 | Capture docs visuals | `npm run docs:capture` | Builds the app, captures the visual-tour screenshots, and assembles the slow README GIF under `docs/assets/`. |
 
 Playwright never reads or writes your real Skill Loom or harness state. `npm run test:e2e` builds the app, starts it with a temporary `LOOM_CONFIG_DIR`, a temporary `HOME`, a temporary project area, and an isolated harness `PATH`; it never attaches to an already-running developer instance.
 
-The live probes exercise real OpenCode and Copilot CLIs. They fail with a clear diagnostic when a required CLI is absent; they do not silently skip. Run them only when you intend to use the installed harnesses and credentials.
+The default live probes exercise real OpenCode and Copilot CLIs. They fail with a clear diagnostic when a required CLI is absent; they do not silently skip. Run them only when you intend to use the installed harnesses and credentials. For an OpenCode-only execution probe, see the [verification guide](docs/OPERATIONS.md#opencode-only-live-verification); it does not invoke Copilot and writes separate evidence.
 
 ## First run
 
@@ -281,7 +302,7 @@ The CLI flags `--port` and `--config-dir` set `LOOM_PORT` and `LOOM_CONFIG_DIR`.
 
 Skill Loom is **loopback-only**. The server binds to `127.0.0.1` by default, refuses any non-loopback `LOOM_HOST`, and has **no authentication** because there is no remote access. Never expose the port through a reverse proxy, tunnel, container port publish, or remote host.
 
-The server owns all filesystem traversal, persistence, process spawning, and PTY handling. The browser performs no shell execution and receives only typed API and WebSocket data. Skill Loom sends no telemetry, crash reports, or remote logs. Git network access occurs only when a user explicitly refreshes a registered repository; user-invoked harness CLIs and package installation may also use the network. Credentials and tokens are never read into Skill Loom, persisted, or logged.
+The server owns all filesystem traversal, persistence, process spawning, and PTY handling. The browser performs no shell execution and receives only typed API and WebSocket data. Skill Loom sends no telemetry, crash reports, or remote logs. Git network access occurs only when a user explicitly refreshes a registered repository; user-invoked harness CLIs and package installation may also use the network. Harness credentials are not persisted or logged. Local control uses a separate, temporary bearer capability in a private profile file; Windows also stores temporary client TLS credentials there. See the [administrator guide](docs/admin-guide.md#identity-secrets-and-tls).
 
 Harness children are spawned with an executable plus an argument array, never a shell command string. Project paths are canonicalized, path traversal outside the intended data directory is rejected, and harness, skill, and run content is rendered as escaped text or raw terminal text, never as HTML.
 
@@ -309,9 +330,8 @@ Skill Loom is released under the [MIT License](LICENSE). Contributions are accep
 
 There is no committed roadmap. These are known gaps and possible follow-up work, not shipped behavior:
 
-- Fix the OpenCode `OSC 7501` parser to accept the live colon-separated parameter form and handle the live `clear` ordering, then rerun the live execution probe before claiming automatic OpenCode advancement.
-- Wire live active-run state into `GET /api/health` (currently a placeholder in production) or remove the field in favor of `GET /api/runs/active`.
-- Expand live evidence beyond Linux ARM64 and the pinned OpenCode 2.2.5 / Copilot CLI 1.0.105 versions.
+- Verify a managed multi-step automatic OpenCode journey before enabling the blocked CLI path. The record-aware parser passed the [user-supplied OpenCode 2.2.6 live probe](docs/evidence/live-execution-2026-11-10-opencode-2.2.6-passed.json), including advancement, recall and cleanup.
+- Expand live evidence beyond the recorded Linux ARM64 and Linux x64 setups; the latest execution probe uses OpenCode 2.2.6 and Copilot CLI 1.0.107.
 - Decide whether to publish `skill-loom-cli`; add repository/release metadata and a published upgrade path.
 - Consider per-step model or harness selection only as a new product decision; it is not supported today.
 

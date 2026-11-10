@@ -14,12 +14,18 @@ const discoverySource = join(root, '.github', 'skills', 'scenario-discovery');
 const discoveryMirror = join(root, 'skill', 'scenario-discovery');
 const discoveryOutput = join(root, 'dist', 'skills', 'scenario-discovery');
 const discoveryArchive = join(root, 'dist', 'skills', 'scenario-discovery-v1.zip');
+const workflowSource = join(root, '.github', 'skills', 'loom-chain-workflow');
+const workflowMirror = join(root, 'skill', 'loom-chain-workflow');
+const workflowOutput = join(root, 'dist', 'skills', 'loom-chain-workflow');
+const workflowArchive = join(root, 'dist', 'skills', 'loom-chain-workflow.zip');
 const fixedTime = new Date('2000-01-01T00:00:00.000Z');
 
 await rm(output, { recursive: true, force: true });
 await rm(archive, { force: true });
 await rm(discoveryOutput, { recursive: true, force: true });
 await rm(discoveryArchive, { force: true });
+await rm(workflowOutput, { recursive: true, force: true });
+await rm(workflowArchive, { force: true });
 await mkdir(join(output, 'scripts'), { recursive: true });
 await build({ configFile: join(root, 'vite.portable.config.ts'), root });
 await rename(join(output, 'scripts', 'loom-bundle.js'), join(output, 'scripts', 'loom-bundle.mjs'));
@@ -81,3 +87,18 @@ for (const path of await listFiles(discoveryOutput)) {
 }
 await writeFile(discoveryArchive, zipSync(discoveryFiles, { level: 9 }));
 console.log(`Built ${relative(root, discoveryOutput)} and ${relative(root, discoveryArchive)}.`);
+
+await rm(workflowMirror, { recursive: true, force: true });
+await cp(workflowSource, workflowMirror, { recursive: true });
+await cp(workflowSource, workflowOutput, { recursive: true });
+await cp(join(root, 'LICENSE'), join(workflowOutput, 'LICENSE'));
+const workflowFiles = {};
+for (const path of await listFiles(workflowOutput)) {
+  const relativePath = relative(workflowOutput, path).split('\\').join('/');
+  workflowFiles[`loom-chain-workflow/${relativePath}`] = [
+    new Uint8Array(await readFile(path)),
+    { mtime: fixedTime, os: 3, attrs: 0o100644 << 16 },
+  ];
+}
+await writeFile(workflowArchive, zipSync(workflowFiles, { level: 9 }));
+console.log(`Built ${relative(root, workflowOutput)} and ${relative(root, workflowArchive)}.`);

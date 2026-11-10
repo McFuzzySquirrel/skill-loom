@@ -91,6 +91,7 @@ describe('package contract', () => {
 
   it('wires the required scripts to the documented tools', () => {
     expect(pkg.scripts?.dev).toBe('node scripts/dev-supervisor.mjs');
+    expect(pkg.scripts?.postinstall).toBe('node install/ensure-pty-helper.mjs');
     expect(pkg.scripts?.build).toContain('build:web');
     expect(pkg.scripts?.build).toContain('build:server');
     expect(pkg.scripts?.['build:web']).toBe('vite build');
@@ -117,6 +118,7 @@ describe('package contract', () => {
       'dist/web',
       'dist/skills',
       'dist/package.json',
+      'install/ensure-pty-helper.mjs',
       'docs/OPERATIONS.md',
     ]);
   });

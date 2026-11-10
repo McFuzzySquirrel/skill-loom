@@ -4,6 +4,7 @@ import {
   type FetchLike,
   type RequestJsonOptions,
 } from './client';
+import { z } from 'zod';
 
 /**
  * Typed client for the project-workspace API surface.
@@ -68,6 +69,31 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
+const coordinationReviewSchema = z.object({
+  executionCoordinated: z.literal(false),
+  review: z.object({
+    identity: z.object({
+      projectPath: z.string(), projectDevice: z.string(), projectInode: z.string(),
+    }),
+    protocol: z.object({ enabledAt: z.string() }).nullable(),
+    claim: z.object({
+      kind: z.enum(['managed', 'portable']), runId: z.string(), createdAt: z.string(),
+    }).nullable(),
+    records: z.array(z.object({
+      kind: z.enum(['managed', 'portable']), runId: z.string(), status: z.string(),
+      unresolved: z.boolean(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    })).max(1_000),
+    reviewDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  }),
+});
+export type CoordinationReview = z.infer<typeof coordinationReviewSchema>;
+export type CoordinationAction =
+  | { action: 'enable'; reviewDigest: string; stoppedConfirmed: true; oldClientsStoppedConfirmed: true }
+  | { action: 'adopt'; reviewDigest: string; kind: 'managed' | 'portable'; runId: string; stoppedConfirmed: true; oldClientsStoppedConfirmed: true }
+  | { action: 'interrupt'; reviewDigest: string; runId: string; stoppedConfirmed: true; oldClientsStoppedConfirmed: true }
+  | { action: 'clear'; reviewDigest: string; stoppedConfirmed: true; oldClientsStoppedConfirmed: true }
+  | { action: 'abandon'; reviewDigest: string; runId: string; stoppedConfirmed: true; oldClientsStoppedConfirmed: true; abandonConfirmed: true };
+
 export interface ProjectsApi {
   listRecent: (options?: RequestOptions) => Promise<RecentProject[]>;
   removeRecent: (
@@ -80,6 +106,8 @@ export interface ProjectsApi {
     input: CreateProjectInput,
     options?: RequestOptions,
   ) => Promise<ProjectRegistration>;
+  coordinationReview: (projectId: string, options?: RequestOptions) => Promise<CoordinationReview>;
+  coordinationAction: (projectId: string, input: CoordinationAction, options?: RequestOptions) => Promise<void>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -233,6 +261,26 @@ export function recallProject(projectId: string): ProjectRegistration | undefine
 
 export function createProjectsApi(fetchImpl: FetchLike = fetch): ProjectsApi {
   return {
+    async coordinationReview(projectId: string, options: RequestOptions = {}): Promise<CoordinationReview> {
+      const value = await requestJson<unknown>(
+        `/api/projects/${encodeURIComponent(projectId)}/coordination-review`,
+        { method: 'POST', ...optionsFor(options.signal) },
+        fetchImpl,
+      );
+      const result = coordinationReviewSchema.safeParse(value);
+      if (!result.success) throw invalidResponse('project coordination review');
+      return result.data;
+    },
+
+    async coordinationAction(projectId: string, input: CoordinationAction, options: RequestOptions = {}): Promise<void> {
+      const value = await requestJson<unknown>(
+        `/api/projects/${encodeURIComponent(projectId)}/coordination-action`,
+        { method: 'POST', body: input, ...optionsFor(options.signal) },
+        fetchImpl,
+      );
+      if (!isRecord(value) || value.applied !== true) throw invalidResponse('project coordination action');
+    },
+
     async listRecent(options: RequestOptions = {}): Promise<RecentProject[]> {
       const value = await requestJson<unknown>(
         '/api/projects/recent',

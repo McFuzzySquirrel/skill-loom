@@ -25,7 +25,7 @@ opencode --version
 copilot --version
 ```
 
-Expect Node 24+, OpenCode 2.2.5, and Copilot CLI 1.0.105. If a CLI is missing, then exit non-zero with the install or upgrade command; do not skip the harness and still report a pass. If a version differs, then probe the flags before trusting them and record the observed version in evidence.
+Expect Node 24+, stable OpenCode >=2.2.5, and Copilot CLI 1.0.105. If a CLI is missing, then exit non-zero with the install or upgrade command; do not skip the harness and still report a pass. Record the exact observed version in evidence and verify the actual capabilities even when the version meets the minimum. Older or prerelease OpenCode versions warn and continue diagnostically, not as supported-version acceptance.
 
 Do not make a paid model call in the discovery probe. Authentication checks use local output, environment-token presence, and config-file evidence only.
 
@@ -144,7 +144,7 @@ npm run test:live:execution
 
 After completing the process, verify:
 
-- [ ] `opencode --version` reports 2.2.5 and `copilot --version` reports 1.0.105, or the difference is recorded with a probe result.
+- [ ] `opencode --version` reports a stable version >=2.2.5 and `copilot --version` reports 1.0.105, or the difference is recorded with a probe result.
 - [ ] The temporary project contains both `loom-live-probe` skills with matching frontmatter names.
 - [ ] OpenCode returns `PINEAPPLE`, emits `working` then `idle`, and recalls the token in a second process using the same `ses_` id.
 - [ ] Copilot resolves trust, returns `PINEAPPLE` headlessly with exit 0, and recalls the token in a second process using the same UUID.

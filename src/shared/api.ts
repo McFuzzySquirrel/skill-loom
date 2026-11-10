@@ -69,10 +69,7 @@ export function isApiErrorEnvelope(value: unknown): value is ApiErrorEnvelope {
   return typeof code === 'string' && code !== '' && typeof message === 'string';
 }
 
-/**
- * Summary of the single active run. No run feature exists yet, so the server
- * reports an explicit inactive placeholder rather than omitting the field.
- */
+/** Active-run summary from the existing owner or its persisted pointer. */
 export interface ActiveRunSummary {
   active: boolean;
   runId: string | null;
@@ -91,7 +88,7 @@ export interface HealthResponse {
   activeRun: ActiveRunSummary;
 }
 
-/** The inactive placeholder returned until run orchestration is implemented. */
+/** Empty summary when there is no active-run pointer. */
 export function createInactiveRunSummary(): ActiveRunSummary {
   return { active: false, runId: null, status: null };
 }

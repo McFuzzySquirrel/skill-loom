@@ -11,10 +11,13 @@ import type { CatalogService } from '../catalog/merge.js';
 import type { Chain } from '../chains/model.js';
 import type { ChainService } from '../chains/service.js';
 import type { ConfigStore } from '../config/store.js';
+import { canonicalConfigRoot } from '../config/canonical-root.js';
 import type { TestWorkspaceRecord } from '../config/schema.js';
 import type { ProjectRegistry } from '../projects/registry.js';
 import { readActiveRunPointerFile } from './store.js';
-import { exportBundle, importBundle } from '../chains/bundle.js';
+import { BundleError, exportBundle, importBundle } from '../chains/bundle.js';
+import { withWorkspaceLifecycleLock } from './workspace-lock.js';
+import { removeRetiredWorkspace, WorkspaceRemovalError } from './workspace-removal.js';
 
 const WORKSPACE_DIRECTORY = 'test-workspaces';
 
@@ -26,6 +29,8 @@ export const TEST_WORKSPACE_ERROR_CODES = {
   PATH_INVALID: 'TEST_WORKSPACE_PATH_INVALID',
   CREATE_FAILED: 'TEST_WORKSPACE_CREATE_FAILED',
   CLEANUP_FAILED: 'TEST_WORKSPACE_CLEANUP_FAILED',
+  INSPECT_FAILED: 'TEST_WORKSPACE_INSPECT_FAILED',
+  ARTIFACT_NOT_FOUND: 'TEST_WORKSPACE_ARTIFACT_NOT_FOUND',
 } as const;
 
 export type TestWorkspaceErrorCode =
@@ -151,7 +156,7 @@ async function createWorkspace(
       name: chain.name,
       harness: chain.harness,
       sessionMode: chain.sessionMode,
-      steps: chain.steps,
+      steps: imported.steps,
       inputs: chain.inputs,
       automaticPermissionOptIn: chain.automaticPermissionOptIn,
     };
@@ -194,16 +199,24 @@ async function createWorkspace(
 
     return { ...record, path: canonicalWorkspace };
   } catch (error) {
-    if (registeredProjectId !== null) {
-      await options.projectRegistry.removeRecentProject(registeredProjectId).catch(() => undefined);
-    }
-    if (workspaceCreated) {
-      await rm(workspacePath, { recursive: true, force: true }).catch(() => undefined);
+    const cleanup = await Promise.allSettled([
+      ...(registeredProjectId === null ? [] : [options.projectRegistry.removeRecentProject(registeredProjectId)]),
+      ...(workspaceCreated ? [rm(workspacePath, { recursive: true, force: true })] : []),
+    ]);
+    if (cleanup.some((result) => result.status === 'rejected')) {
+      throw new TestWorkspaceError(
+        TEST_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
+        'Workspace creation failed and cleanup could not be completed. Inspect the managed workspace directory and project registry.',
+        { id },
+        { cause: error },
+      );
     }
     if (error instanceof TestWorkspaceError) throw error;
     throw new TestWorkspaceError(
       TEST_WORKSPACE_ERROR_CODES.CREATE_FAILED,
-      'The disposable chain workspace could not be created.',
+      error instanceof BundleError
+        ? `The disposable chain workspace could not be created: ${error.message}`
+        : 'The disposable chain workspace could not be created.',
       projectSource
         ? { sourceProjectId: input.sourceProjectId, sourceChainId: input.sourceChainId }
         : { sourceDraftId: input.sourceDraftId },
@@ -258,8 +271,18 @@ async function resolveAgentPath(
 
 async function listWorkspaces(options: TestWorkspaceServiceOptions): Promise<TestWorkspace[]> {
   const configDirectory = resolve(options.configStore.getConfigDir());
-  const root = join(configDirectory, WORKSPACE_DIRECTORY);
   const config = await options.configStore.get();
+  let root: string;
+  try {
+    root = join(await canonicalConfigRoot(configDirectory), WORKSPACE_DIRECTORY);
+  } catch (error) {
+    throw new TestWorkspaceError(
+      TEST_WORKSPACE_ERROR_CODES.PATH_INVALID,
+      'The managed test-workspace storage directory is unavailable or unsafe.',
+      {},
+      { cause: error },
+    );
+  }
   return config.testWorkspaces.map((record) => ({
     ...record,
     path: join(root, record.id),
@@ -267,6 +290,17 @@ async function listWorkspaces(options: TestWorkspaceServiceOptions): Promise<Tes
 }
 
 async function removeWorkspace(
+  id: string,
+  options: TestWorkspaceServiceOptions,
+): Promise<{ id: string; removed: true }> {
+  const record = (await options.configStore.get()).testWorkspaces.find((candidate) => candidate.id === id);
+  if (record === undefined) {
+    throw new TestWorkspaceError(TEST_WORKSPACE_ERROR_CODES.NOT_FOUND, 'No managed test workspace matches that id.', { id });
+  }
+  return withWorkspaceLifecycleLock(record.projectId, () => removeWorkspaceLocked(id, options));
+}
+
+async function removeWorkspaceLocked(
   id: string,
   options: TestWorkspaceServiceOptions,
 ): Promise<{ id: string; removed: true }> {
@@ -312,11 +346,12 @@ async function removeWorkspace(
   }
 
   try {
-    const info = await lstat(expectedPath);
-    if (!info.isDirectory() || info.isSymbolicLink() || await realpath(expectedPath) !== expectedPath) {
-      throw new Error('unsafe workspace');
-    }
-    await rm(expectedPath, { recursive: true });
+    await removeRetiredWorkspace(workspaceRoot, id, {
+      configStore: options.configStore,
+      kind: 'test',
+      projectId: record.projectId,
+      ...(record.retirement === undefined ? {} : { evidence: record.retirement }),
+    });
     await options.configStore.update((current) => ({
       testWorkspaces: current.testWorkspaces.filter((candidate) => candidate.id !== id),
       recentProjects: current.recentProjects.filter((candidate) => candidate.id !== record.projectId),
@@ -324,6 +359,9 @@ async function removeWorkspace(
     return { id, removed: true };
   } catch (error) {
     if (error instanceof TestWorkspaceError) throw error;
+    if (error instanceof WorkspaceRemovalError && error.code === 'ACTIVE') {
+      throw new TestWorkspaceError(TEST_WORKSPACE_ERROR_CODES.ACTIVE, error.message, { id }, { cause: error });
+    }
     throw new TestWorkspaceError(
       TEST_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
       'The managed test workspace could not be safely removed.',
@@ -336,15 +374,7 @@ async function removeWorkspace(
 async function ensureWorkspaceRoot(configDirectory: string): Promise<string> {
   try {
     await mkdir(configDirectory, { recursive: true, mode: 0o700 });
-    const configInfo = await lstat(configDirectory);
-    if (
-      !configInfo.isDirectory() ||
-      configInfo.isSymbolicLink() ||
-      await realpath(configDirectory) !== configDirectory
-    ) {
-      throw new Error('unsafe config directory');
-    }
-    const root = join(configDirectory, WORKSPACE_DIRECTORY);
+    const root = join(await canonicalConfigRoot(configDirectory), WORKSPACE_DIRECTORY);
     await mkdir(root, { recursive: true, mode: 0o700 });
     const info = await lstat(root);
     if (!info.isDirectory() || info.isSymbolicLink() || await realpath(root) !== root) {

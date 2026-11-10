@@ -8,13 +8,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import { startServer } from '../../src/server/index.js';
 import { isApiErrorEnvelope } from '../../src/shared/api.js';
+import { verifyWindowsProfile } from '../../src/server/windows-control.js';
 
 let root: string;
+let temporaryRoot: string;
 let app: FastifyInstance;
 const stopHandler = vi.fn(async () => undefined);
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'loom-server-routes-'));
+  temporaryRoot = await mkdtemp(join(tmpdir(), 'loom-server-routes-'));
+  root = process.platform === 'win32' ? join(temporaryRoot, 'profile') : temporaryRoot;
+  if (process.platform === 'win32') await verifyWindowsProfile(root, 'prepare');
   app = await buildApp({
     serveStatic: false,
     env: { ...process.env, LOOM_CONFIG_DIR: root },
@@ -25,7 +29,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await app.close();
-  await rm(root, { recursive: true, force: true });
+  await rm(temporaryRoot, { recursive: true, force: true });
   stopHandler.mockClear();
 });
 
@@ -184,5 +188,37 @@ describe('server lifecycle routes', () => {
     } finally {
       await started.stop();
     }
-  });
+  }, process.platform === 'win32' ? 60_000 : 15_000);
+
+  it('rejects a second server for the same profile without disturbing the owner', async () => {
+    const reservation = createServer();
+    await new Promise<void>((resolve, reject) => {
+      reservation.once('error', reject);
+      reservation.listen(0, '127.0.0.1', resolve);
+    });
+    const address = reservation.address() as AddressInfo;
+    await new Promise<void>((resolve, reject) => {
+      reservation.close((error) =>
+        error === undefined || error === null ? resolve() : reject(error),
+      );
+    });
+    const options = {
+      host: '127.0.0.1',
+      port: address.port,
+      serveStatic: false,
+      env: { ...process.env, LOOM_CONFIG_DIR: root },
+      runRecoverOnStartup: false,
+    };
+    const started = await startServer(options);
+    try {
+      await expect(startServer(options)).rejects.toMatchObject({ code: 'PROFILE_IN_USE' });
+      const response = await fetch(`http://127.0.0.1:${String(address.port)}/api/server/lifecycle`);
+      expect(response.status).toBe(200);
+      expect((await response.json() as { state: string }).state).toBe('running');
+    } finally {
+      await started.stop();
+    }
+    const restarted = await startServer(options);
+    await restarted.stop();
+  }, process.platform === 'win32' ? 60_000 : 15_000);
 });

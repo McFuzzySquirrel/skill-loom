@@ -1,0 +1,1595 @@
+{
+  "version": 1,
+  "packages": [
+    {
+      "name": "data-storytelling",
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746",
+          "executable": false
+        },
+        {
+          "path": "references/details.md",
+          "sha256": "b3442d4692d4470091f3aee50a092aebae32df0c26ccc3526b1b2e3bfe614407",
+          "executable": false
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "0244a9ef6bca2df0762425b78912d27061b9b93f9b09987ad7bc074752a0cb50",
+          "executable": false
+        }
+      ]
+    },
+    {
+      "name": "fastapi-expert",
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "06dcddbb6908a0c6dd4a9e8ec822eea41d5a460a53089fecccc8a68049e99241",
+          "executable": false
+        },
+        {
+          "path": "references/async-sqlalchemy.md",
+          "sha256": "0369ed1d6306806afd7789efcdc48f4c50291a297940581b349dd71d07307cd7",
+          "executable": false
+        },
+        {
+          "path": "references/authentication.md",
+          "sha256": "43f13991ebd71da80f2b8b95d49fa8fbe0f8d2b030769527a828de24ef7fbbac",
+          "executable": false
+        },
+        {
+          "path": "references/endpoints-routing.md",
+          "sha256": "352d08a0e5880708c94d291f286b01630a070c7e7c68c76cc2a472b562b12adb",
+          "executable": false
+        },
+        {
+          "path": "references/migration-from-django.md",
+          "sha256": "fcbebd8ae96781dfb67c3752be2c4ea237aa8cadf5dc367de20bc0b62c3cb191",
+          "executable": false
+        },
+        {
+          "path": "references/pydantic-v2.md",
+          "sha256": "c0ab387018765b49238389445e8b0cd19b5ba512b8a8cc0f2b64dff41ed3783e",
+          "executable": false
+        },
+        {
+          "path": "references/testing-async.md",
+          "sha256": "7e748b65822431226bc0cd647a0a7b69224d0d5769c5fd88ae367067bb70811c",
+          "executable": false
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "aec3e59f351cdbafe1260dd65bfb23480918d2df1357b7fd7a9b7a32855e08d9",
+          "executable": false
+        }
+      ]
+    },
+    {
+      "name": "game-developer",
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "06dcddbb6908a0c6dd4a9e8ec822eea41d5a460a53089fecccc8a68049e99241",
+          "executable": false
+        },
+        {
+          "path": "references/ecs-patterns.md",
+          "sha256": "5ef2de275b32bcf78a215ac09e101e70c06d5bb64e2577dc61fba811950a49c6",
+          "executable": false
+        },
+        {
+          "path": "references/multiplayer-networking.md",
+          "sha256": "10c22a22749041b99f09a4e365dadbe6e58fc1b56c90407960bb466aa2de8611",
+          "executable": false
+        },
+        {
+          "path": "references/performance-optimization.md",
+          "sha256": "57ce6a6de9b66f4ab5b2b7bd7349fa6694e5eb641e5a94bcf80e1351ad4fd4ed",
+          "executable": false
+        },
+        {
+          "path": "references/unity-patterns.md",
+          "sha256": "0f8b0ffada2a9e997c7db40cc472babf30c670514f01441c3dbd2f25a573fefc",
+          "executable": false
+        },
+        {
+          "path": "references/unreal-cpp.md",
+          "sha256": "b41b68aa1dba6635924a909c4d749ae199bd6ac8fed263598163c9bbbce807e6",
+          "executable": false
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "de7140309b8cc2fbd6aaa7550744f7a26e05b4e45ac0bd714a80d27408e47091",
+          "executable": false
+        }
+      ]
+    },
+    {
+      "name": "godot-gdscript-patterns",
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746",
+          "executable": false
+        },
+        {
+          "path": "references/advanced-patterns.md",
+          "sha256": "659531834c96b493caeeba32303eeacafe0ed482439933beb0a1765af7288bec",
+          "executable": false
+        },
+        {
+          "path": "references/details.md",
+          "sha256": "f5ba3e068b89ff216f7de50862d8c02c7d7d4be02c76ff19c0f63973fa232bbc",
+          "executable": false
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "baee8a6df1556a517dcff9df8ebca0b763c3c8275752f12a146fd12eac994b55",
+          "executable": false
+        }
+      ]
+    },
+    {
+      "name": "literature-review",
+      "files": [
+        {
+          "path": "assets/review_template.md",
+          "sha256": "08671516976d01a7004f8ae7c944a50c253877504720c15d5fa24eed90889819",
+          "executable": false
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1",
+          "executable": false
+        },
+        {
+          "path": "references/citation_styles.md",
+          "sha256": "2a50e43b18c2fff781e04406deb66186ba8f91ed28af32004aba63c63dcc1789",
+          "executable": false
+        },
+        {
+          "path": "references/core_workflow.md",
+          "sha256": "4d63f1087c98efeec7c7bf622bed6e0456a9c7c3defe584995917f2de6f2c601",
+          "executable": false
+        },
+        {
+          "path": "references/database_strategies.md",
+          "sha256": "24b56cd88128a9016520ed6b5e2abb79e19dc9b86cbf064927e9056aa1504f48",
+          "executable": false
+        },
+        {
+          "path": "references/example_workflow.md",
+          "sha256": "86336c42f78ff282430a6cdd2282a99562cc9d5e46b62e70a33bd839f9ab726a",
+          "executable": false
+        },
+        {
+          "path": "references/search_and_citation.md",
+          "sha256": "f33d671351989ee86066b9a21bdbf630a1f60001ada92fda4c942006d37b74fe",
+          "executable": false
+        },
+        {
+          "path": "scripts/generate_pdf.py",
+          "sha256": "0ba1b16b196b64d4966e5f055a289f0c17e3579a84254abe47ff63be95b4f136",
+          "executable": false
+        },
+        {
+          "path": "scripts/generate_schematic_ai.py",
+          "sha256": "7316f2df92f442b8c60a5dd2bd8b504e17449d4be89352e5af24be2239700046",
+          "executable": false
+        },
+        {
+          "path": "scripts/generate_schematic.py",
+          "sha256": "0c81ce099d5ab9aa3d3c486aa9bd3e81ee1117e18a54db14bb0a68de61eaa4bc",
+          "executable": false
+        },
+        {
+          "path": "scripts/search_databases.py",
+          "sha256": "76f47fd18ca28df4985ffc6d30d5ad659e67c8058bb3de8f385c2443752f4eaf",
+          "executable": false
+        },
+        {
+          "path": "scripts/verify_citations.py",
+          "sha256": "4c8e8377718ddd47e9cd7cef706935b04910af5d13bfd920970dcf41d4ef3706",
+          "executable": false
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "16a9e85bcdcb9bb859e1646bf836e51b22900445ba2e367d8d75be05b5a5cba8",
+          "executable": false
+        }
+      ]
+    },
+    {
+      "name": "market-sizing-analysis",
+      "files": [
+        {
+          "path": "examples/saas-market-sizing.md",
+          "sha256": "96b0cdf809227e3173f7af537d6045ef5e63e06d8b645013431d43239a09dc56",
+          "executable": false
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746",
+          "executable": false
+        },
+        {
+          "path": "references/data-sources.md",
+          "sha256": "9e4a4543bab01311668e04d5f8db58e99fb7b4b8512d62e891673812140b76be",
+          "executable": false
+        },
+        {
+          "path": "references/details.md",
+          "sha256": "e38166143d09e52e08f2b2a3a94d029df569bd964a11578abccbcb04f472766f",
+          "executable": false
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "373c3f2089d5fa5228c3d24bf12ffacc6fefe04208d0df114ad75832c596e943",
+          "executable": false
+        }
+      ]
+    },
+    {
+      "name": "minimax-docx",
+      "files": [
+        {
+          "path": ".gitignore",
+          "sha256": "ec7f1104103454e8908002a0f9fed5219ccb795972350a2bf39cd13c1d55e932",
+          "executable": false
+        },
+        {
+          "path": "assets/styles/academic_styles.xml",
+          "sha256": "367341503b9ff77c8f8809f4a1eb3e351b654cbaea2209b4fe305d734f714d9b",
+          "executable": false
+        },
+        {
+          "path": "assets/styles/corporate_styles.xml",
+          "sha256": "d6216dce62323e626049172ea9c77447dfca2eb518fdf17c64d4f2239f1ef2b5",
+          "executable": false
+        },
+        {
+          "path": "assets/styles/default_styles.xml",
+          "sha256": "f77d90d5c9a255a4adc351e655d2248da76c1bc01e1af6b7323e3d0e37fcddfc",
+          "executable": false
+        },
+        {
+          "path": "assets/xsd/aesthetic-rules.xsd",
+          "sha256": "734888609265c327fd1f5d1a068957676b442ba65dcd79a6b735e0bae3d5e03e",
+          "executable": false
+        },
+        {
+          "path": "assets/xsd/business-rules.xsd",
+          "sha256": "ebf945da7561e2457ec0a9e2b9cd36f3c88fbd926d0c13c643d61c235bc8b056",
+          "executable": false
+        },
+        {
+          "path": "assets/xsd/common-types.xsd",
+          "sha256": "2cccc41a42855d6c10471b2e7e085c633c47d8344276b0be4d75d772b18839cd",
+          "executable": false
+        },
+        {
+          "path": "assets/xsd/wml-subset.xsd",
+          "sha256": "4c23b3cb324b85989f6c1a7bdcaa35c617289e47ccfed043464446dd06d75b7c",
+          "executable": false
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "8288840186d6d3d6a0b74395e17448c06160b38e796963c7745f579631b47b01",
+          "executable": false
+        },
+        {
+          "path": "LICENSE-REPOSITORY.txt",
+          "sha256": "eed4ccce37c2d24822da3bd9d5bee7bc12d494741de56ada513d0b97f537fcd0",
+          "executable": false
+        },
+        {
+          "path": "references/cjk_typography.md",
+          "sha256": "ddc0b9e0984d43101da24b67df3d0603236b67fe46c8d0ecbc3c6bea7983afcd",
+          "executable": false
+        },
+        {
+          "path": "references/cjk_university_template_guide.md",
+          "sha256": "986e44f5cf3ea4aa69b436c73581dca2d31ad130965269a934caf3838c9ff27d",
+          "executable": false
+        },
+        {
+          "path": "references/comments_guide.md",
+          "sha256": "fe9150b84734844f3010561927436f6bc787fe46c4cf4d621abb330835d1ba38",
+          "executable": false
+        },
+        {
+          "path": "references/design_good_bad_examples.md",
+          "sha256": "e2c9331ed35b211f1239ed283abbac444c2a15347c710f01a97c33d0e952a079",
+          "executable": false
+        },
+        {
+          "path": "references/design_principles.md",
+          "sha256": "e9fe196ad16fecce988671cf8a8fc9ec3403e792530ee4c665370ddbc266ed20",
+          "executable": false
+        },
+        {
+          "path": "references/openxml_element_order.md",
+          "sha256": "d9ab673ca87ffb2fc0586b77702bf339cdb3283edc540c2f450732746afe8ca1",
+          "executable": false
+        },
+        {
+          "path": "references/openxml_encyclopedia_part1.md",
+          "sha256": "598c5fbf357f536fd9f3bd1a1307be536f533495631981d9f7518751019490c9",
+          "executable": false
+        },
+        {
+          "path": "references/openxml_encyclopedia_part2.md",
+          "sha256": "c4adc5480fedaeee85e8963d09fd27914f731ce298b323df9133b9745679ecea",
+          "executable": false
+        },
+        {
+          "path": "references/openxml_encyclopedia_part3.md",
+          "sha256": "9e801e58c53b83f5988a23a533a0a5b0b3a80c6b3dea06b5a1ce902a685b2ba0",
+          "executable": false
+        },
+        {
+          "path": "references/openxml_namespaces.md",
+          "sha256": "be2ecd2f84e02b2ba492d9c68fb4cf6cac3d016cc583425b73d4105c5464d02d",
+          "executable": false
+        },
+        {
+          "path": "references/openxml_units.md",
+          "sha256": "ce480ab62cf78c045a04b0c8f9ef6400a5efaa33233ace8eb666f9cbe1f9acde",
+          "executable": false
+        },
+        {
+          "path": "references/scenario_a_create.md",
+          "sha256": "4be8e1f88b2993a43b74854a78533233b385a84d5b3c1510be86bed2f6af567e",
+          "executable": false
+        },
+        {
+          "path": "references/scenario_b_edit_content.md",
+          "sha256": "f04c35eec63b6e5df6b1b6d1a06a1feb26c920262686941ff705642c55e6cc4a",
+          "executable": false
+        },
+        {
+          "path": "references/scenario_c_apply_template.md",
+          "sha256": "3602c5cad48ef0f3e2ed08113be2a7ce36e9b8cadb5987bc9a5a9f06e2f6d335",
+          "executable": false
+        },
+        {
+          "path": "references/track_changes_guide.md",
+          "sha256": "57fa023f4a6db8b9225d56a7d5e17f3eb9fa05ddaac6f891033253f84f94b82f",
+          "executable": false
+        },
+        {
+          "path": "references/troubleshooting.md",
+          "sha256": "70382108dcd419fd46b7c66cee4dfad7da82d378afe4f3bed74c60ffdb9d1caa",
+          "executable": false
+        },
+        {
+          "path": "references/typography_guide.md",
+          "sha256": "835f3549972f24b94b89eb08a86df932e5f957f322337fcd75e24cb3b06c0738",
+          "executable": false
+        },
+        {
+          "path": "references/xsd_validation_guide.md",
+          "sha256": "de6c4285ffec5cbd5c80bbc1eff6afb9c7fc0757d957a1f069cd3eec277036be",
+          "executable": false
+        },
+        {
+          "path": "scripts/doc_to_docx.sh",
+          "sha256": "9966b21215c82094efdd07cbeb36975307ebc5e15170c4694e9fa2a0f3645e8f",
+          "executable": true
+        },
+        {
+          "path": "scripts/docx_preview.sh",
+          "sha256": "3960b1a02b73aad32efaca316f98239079caf7993307540ed4cf4b8039e70ccd",
+          "executable": true
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Cli/MiniMaxAIDocx.Cli.csproj",
+          "sha256": "d5ef8fdb094916f8e6d3cb4eff17069aec91e14683d8755175457bd3d9db000b",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Cli/Program.cs",
+          "sha256": "daae3bc20cbdc9b77d91cab3a74efb40f5b9af661384a8c87eb726405d13bddc",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Commands/AnalyzeCommand.cs",
+          "sha256": "b1d452ad764f4ea8ea106bb0e837adba53014e612c9166c71fb7aa9d72f0a019",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Commands/ApplyTemplateCommand.cs",
+          "sha256": "934bc17f239a9bf478596312447c048b001b459ddd2db70010ca0314aed23675",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Commands/CreateCommand.cs",
+          "sha256": "74382c607387fbf2036ee202696799f20b6bcf6a52a7670cc2fd0a01c4045449",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Commands/DiffCommand.cs",
+          "sha256": "218239b9325cde5b1955a6ce0237d1d6ac05ed6a006a340733767e59b575234f",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Commands/EditContentCommand.cs",
+          "sha256": "cc779ef7ddc364310ab942e231eb8cfc8c761beae8ae4e57b6134b8ce1702624",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Commands/FixOrderCommand.cs",
+          "sha256": "0bdfd163069211eb17594504f4b61f26773a96c00182cb84a028df0a096b73f0",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Commands/MergeRunsCommand.cs",
+          "sha256": "2dd5d519aa5e0cf9533448f63d89e6776b5b7019ffb34868a6c715741a389e66",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Commands/ValidateCommand.cs",
+          "sha256": "856697852a5254b977d97f301a759e42a03b893f690fe88ede2c46a30f336480",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/MiniMaxAIDocx.Core.csproj",
+          "sha256": "6f87fe7e0b6b2e8c7d4a068ebfb7d6709d932e2f11294afc5613f63327377829",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/OpenXml/CommentSynchronizer.cs",
+          "sha256": "a4454a6a493f011857a5d634a918e9e9a398556644d6706e57ac8eb4078de7f0",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/OpenXml/ElementOrder.cs",
+          "sha256": "01620be46ba0dc6a7ae113c800181367b1da02070f661252d80187b051273c11",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/OpenXml/NamespaceConstants.cs",
+          "sha256": "8d8099f70cac3e8976b47ef34fec224b4bc92ee9ff8286483ef7315cfedeb467",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/OpenXml/RunMerger.cs",
+          "sha256": "6d90be5f4427c29eabd92a5709bbe7a0b0f6ab8177347575bc5e197a350e13c8",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/OpenXml/StyleAnalyzer.cs",
+          "sha256": "8d45627608eaef19b7844c1bd8e6d8c8796bc0cbf5f9c50a47d85b45b61f8985",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/OpenXml/TrackChangesHelper.cs",
+          "sha256": "a95da32c428f58d6fb76090de47679f0dc3ee0b9e9d1821cea7e778e0d3cccb3",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/OpenXml/UnitConverter.cs",
+          "sha256": "045038a1865d21cb11e32c74b7dc5152e03905e969ca892743c256840f2a1ee7",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Samples/AestheticRecipeSamples_Batch1.cs",
+          "sha256": "e5b478f71abe1892064b5baec9c5d3d91b8e9e14e21a5ee98bdca7f543510cb6",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Samples/AestheticRecipeSamples_Batch2.cs",
+          "sha256": "f984ed0493762c12706e88295504fa2cced700d230a0de030d80e28cbc7e650f",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Samples/AestheticRecipeSamples_Batch3.cs",
+          "sha256": "e2e4ff1ecefcd9e984af4ac2b82c6cfda2b01e842812eb420c377a4921fb6f92",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Samples/AestheticRecipeSamples_Batch4.cs",
+          "sha256": "6c0c370a2dc5b06e6ceb4f09333d15f043bb4314673740bd150d2d34fb13454f",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Samples/AestheticRecipeSamples.cs",
+          "sha256": "12e6921d53b8e4b7f71f499c7d06a9c169e16a80b9666bd6a17e27503bc9c651",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Samples/CharacterFormattingSamples.cs",
+          "sha256": "95458b9de60a381e14461a6224aa2d660266de4344800870bbc1530511818075",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Samples/DocumentCreationSamples.cs",
+          "sha256": "f6d567f68f624c455549040629c3419fdc0591e5a45ba5b9abe79fb84c7ab425",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Samples/FieldAndTocSamples.cs",
+          "sha256": "138652396d18836cc2252a82fcd2528a949ea32db1c3d74c47d14c3440ccdf8d",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Samples/FootnoteAndCommentSamples.cs",
+          "sha256": "aace21251fd6a4aa5aa7b754d3eab3d291419641c1dad2350278ae64dc5e842c",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Samples/HeaderFooterSamples.cs",
+          "sha256": "12f51f5a2befe41ff299c342eedfa5c0549cfe2fe53df69533009c2f7479cf92",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Samples/ImageSamples.cs",
+          "sha256": "0fe5bbb7c810b6c99313c11829f72d01cc896d9c6e01909edcd1431b8e7c690e",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Samples/ListAndNumberingSamples.cs",
+          "sha256": "2e696c491f4d95cdb1bef4e65898202a87385a76ab4793cd9422ee0452b89287",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Samples/ParagraphFormattingSamples.cs",
+          "sha256": "2fe44aa4461eafdb6d20f8e6f5480c217bf0bc54284ea025914f315f394c0258",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Samples/StyleSystemSamples.cs",
+          "sha256": "b8b4cb6ed9a0c67797cf8b0aab00b482c650173ad41d7cdd5d78af3a50b4cbea",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Samples/TableSamples.cs",
+          "sha256": "9d8cb65afaef088d8c90ea438fd8155b91e1ca74c5b92a1049698565faa39052",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Samples/TrackChangesSamples.cs",
+          "sha256": "067ecbc69bf70bece3f26553ddfb2452e166a570d73942dcc60c996b8fc52d6a",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Typography/CjkHelper.cs",
+          "sha256": "eacdceed0103749ef34de8a32bdc1cc4df8c23dad360dce33e24ba626d733ebc",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Typography/FontDefaults.cs",
+          "sha256": "91aa2368bad387763f60e4b2156012dc699ed78eaacccc3e1e32dca95e1fc0f4",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Typography/PageSizes.cs",
+          "sha256": "6e95bb3f99d0b35e93ea55233e58cb1d6b4d947c0ca769ab01d983c9b78aef66",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Validation/BusinessRuleValidator.cs",
+          "sha256": "173b07e0c24f4f5b64e145a90a2630a640e22b2afb6e092f75f3a5ec42197791",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Validation/GateCheckValidator.cs",
+          "sha256": "6f07ee9a1631d868e119313131b8cfc75a605ac6ba4046ebbae17d164f94d9d7",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Validation/ValidationResult.cs",
+          "sha256": "e992fec3bf1756869a523dfc22714f02f91639b5051f64567b76f89caa037d0f",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.Core/Validation/XsdValidator.cs",
+          "sha256": "d6ca121941dcb906047f2c591eaf80f1e69bd8cd5c687a238c5b6f80f89f6a6d",
+          "executable": false
+        },
+        {
+          "path": "scripts/dotnet/MiniMaxAIDocx.slnx",
+          "sha256": "145f185521c15cfc13a3cc1bd6ca5494132a88f5c242b1f0994c330faa9b2aeb",
+          "executable": false
+        },
+        {
+          "path": "scripts/env_check.sh",
+          "sha256": "317dd5067710d32699f1bb7819c406ee57f33a496db31944570dd24110cc7342",
+          "executable": true
+        },
+        {
+          "path": "scripts/setup.ps1",
+          "sha256": "d47aa72db7d0558a67695b88d50127175cfdbec17f03f12e48317a36ab54c121",
+          "executable": false
+        },
+        {
+          "path": "scripts/setup.sh",
+          "sha256": "9b371d075d4ca29346cd4d2d6889e0200d35c8ea07ce2aa3edbe651749c6bc9b",
+          "executable": true
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "45c169630f30b8f034bc7d53edf73d592fbd82e82188beec7da3ca1996a97fb5",
+          "executable": false
+        }
+      ]
+    },
+    {
+      "name": "minimax-xlsx",
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "eed4ccce37c2d24822da3bd9d5bee7bc12d494741de56ada513d0b97f537fcd0",
+          "executable": false
+        },
+        {
+          "path": "references/create.md",
+          "sha256": "56ca500af2a9880ee72148f07000486512c6022fbcee20afd1c202874653c3b9",
+          "executable": false
+        },
+        {
+          "path": "references/edit.md",
+          "sha256": "515cbce48c43abc769140bc3ca8bb1b72506d035d68eaf134e6a030cb5041f4e",
+          "executable": false
+        },
+        {
+          "path": "references/fix.md",
+          "sha256": "5d91be6bc928b61741848381e5c82e3ae664b97bfb3064cd7d71ba0592e1a647",
+          "executable": false
+        },
+        {
+          "path": "references/format.md",
+          "sha256": "60ad868439aaf7b0a255f55ea92eaa629ae1238abf10503faf43727fc47b569c",
+          "executable": false
+        },
+        {
+          "path": "references/ooxml-cheatsheet.md",
+          "sha256": "cc285ed13d967ed65a7c4e404a724532ab4b57af6a993ceabc93ab65f2924eed",
+          "executable": false
+        },
+        {
+          "path": "references/read-analyze.md",
+          "sha256": "78fc8f0c982ae36e3c3141a0d7e2d93a9d85b6c04c1a57645001628ac32c59a4",
+          "executable": false
+        },
+        {
+          "path": "references/validate.md",
+          "sha256": "fee73ec103df50dcc88c1cfd5ce769c24ef85570fd90dab1dacf45239261da08",
+          "executable": false
+        },
+        {
+          "path": "scripts/formula_check.py",
+          "sha256": "94661b6ebbfef0450b762392b45477678a7cd641982e0eb9397fef7bcb716e15",
+          "executable": false
+        },
+        {
+          "path": "scripts/libreoffice_recalc.py",
+          "sha256": "a7967a78aff2f8f74f4975db2f674215a4dce1086c38b5312e353f7bad084f87",
+          "executable": false
+        },
+        {
+          "path": "scripts/shared_strings_builder.py",
+          "sha256": "18cecc1990a59b6c208173a405de48d6bfb983b4682938bcb1f949ef05cd7c7c",
+          "executable": false
+        },
+        {
+          "path": "scripts/style_audit.py",
+          "sha256": "4ac17193e5ad306cb89007a7fe8492b9117de0d4b0136a3ffaa65223e60abcb6",
+          "executable": false
+        },
+        {
+          "path": "scripts/xlsx_add_column.py",
+          "sha256": "8575ecfb6b8863933e36546339202de9d3cc54d4a811ac3f9f5a7754a79f1bd8",
+          "executable": false
+        },
+        {
+          "path": "scripts/xlsx_insert_row.py",
+          "sha256": "e67f580d55577cd080eabde9455869169dd1c8635a173d16f51bde05fd14c445",
+          "executable": false
+        },
+        {
+          "path": "scripts/xlsx_pack.py",
+          "sha256": "a267748f5e0265987094380b99e6d7a61bc3af73a82aa55763d5e99c917e22d9",
+          "executable": false
+        },
+        {
+          "path": "scripts/xlsx_reader.py",
+          "sha256": "585071399f9e5683700081db959812bcce02edb694bb5a7dece94d9b89a5e1f0",
+          "executable": false
+        },
+        {
+          "path": "scripts/xlsx_shift_rows.py",
+          "sha256": "bcfdafa80414fd74c4dbfd7c11bcc69dae986ffd84b7ffacdd2d000b82911c6d",
+          "executable": false
+        },
+        {
+          "path": "scripts/xlsx_unpack.py",
+          "sha256": "9169017fde883e6c5685fa6111b22b9027052e4721142785b037ceaf7a60fe18",
+          "executable": false
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "4ffb70af6ccd00e90c3b14516d50a850ae0f2f1807a01d326aa1393e0067dd41",
+          "executable": false
+        },
+        {
+          "path": "templates/minimal_xlsx/_rels/.rels",
+          "sha256": "04fb672e829ec6d5942a95014326ff1a89365346d8593631fe58a067379f79db",
+          "executable": false
+        },
+        {
+          "path": "templates/minimal_xlsx/[Content_Types].xml",
+          "sha256": "af1b5e212ea1c6081649269e2126f0f8c28bea7cc0b8039731f4cdd064eb9a09",
+          "executable": false
+        },
+        {
+          "path": "templates/minimal_xlsx/xl/_rels/workbook.xml.rels",
+          "sha256": "f60ff34ef9eeae7a2c01f2e316180b6771cce3ce96bbef4a6ca4c8c4c60704c9",
+          "executable": false
+        },
+        {
+          "path": "templates/minimal_xlsx/xl/sharedStrings.xml",
+          "sha256": "2f5b6bb2ad8bc9b7d3077555917377404f7c14e0b2736ad7ba936ae5b99fca95",
+          "executable": false
+        },
+        {
+          "path": "templates/minimal_xlsx/xl/styles.xml",
+          "sha256": "7a83fa48c30277de1f2110a699f18fe6496af31a6f7264a01e3cbdff5313da32",
+          "executable": false
+        },
+        {
+          "path": "templates/minimal_xlsx/xl/workbook.xml",
+          "sha256": "64a5961f39a8c255ba5d0c49d1e0be86c01d25ca1fd87445759d2d92756380dc",
+          "executable": false
+        },
+        {
+          "path": "templates/minimal_xlsx/xl/worksheets/sheet1.xml",
+          "sha256": "666bff4e34691adb89a53cecddc3d84a6f1f04b38eba353c188b7d1693e342ac",
+          "executable": false
+        }
+      ]
+    },
+    {
+      "name": "pdf",
+      "files": [
+        {
+          "path": "agents/openai.yaml",
+          "sha256": "f8b223e25343559f57e1839ccd849fd1494a9729da33da04bb5074b7f80f4887",
+          "executable": false
+        },
+        {
+          "path": "assets/pdf.png",
+          "sha256": "17da356d195d4e3fa24f9becbee6b8d9e60e13005762b5ab0809c520c76da6ee",
+          "executable": false
+        },
+        {
+          "path": "LICENSE.txt",
+          "sha256": "4dd13869245e356246a5b770723247bbb80a8f07a181d1d3d873a1734297cdb9",
+          "executable": false
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "d108cf2b36355ab37eb5962933f4d09785ec002f3105c506129320209306b9d2",
+          "executable": false
+        }
+      ]
+    },
+    {
+      "name": "phaser",
+      "files": [
+        {
+          "path": "assets-and-performance.md",
+          "sha256": "3ae53a7b8bf2b565bf76f425f5c3d561062c7619d4b9fd077eb0e01ba0766d34",
+          "executable": false
+        },
+        {
+          "path": "conventions.md",
+          "sha256": "844e1ecc29ace3a83653947dc17d7c9f719ae92678c9b36294ae8b9140e1b6c6",
+          "executable": false
+        },
+        {
+          "path": "examples/complex-game.md",
+          "sha256": "21ee63390ba7b3bab5376331052961de99bae541be112ccd961c8401f9e2e078",
+          "executable": false
+        },
+        {
+          "path": "examples/simple-game.md",
+          "sha256": "92a0755d06d0f3421f51f16cb5502d3500a2a56df9a7253555a43032c945e7a6",
+          "executable": false
+        },
+        {
+          "path": "game-objects.md",
+          "sha256": "e9801a9193ad72950016c5d6933144104cdf2d01dd0aee27b6be4cbca665d238",
+          "executable": false
+        },
+        {
+          "path": "no-asset-design.md",
+          "sha256": "2a5d2a6b9fd91d0070868bcd27287573c937ceeef15beeab7d9482489850d593",
+          "executable": false
+        },
+        {
+          "path": "patterns.md",
+          "sha256": "826348ed6cb9d9354290645c8cb61d86b0500ee3507ac21613790cd16c8bed9b",
+          "executable": false
+        },
+        {
+          "path": "physics-and-movement.md",
+          "sha256": "a50c5092f3dbd99612ae645d9082ecb3e47d5c4fa9fa5e6dc7ce0c74f00b8bd0",
+          "executable": false
+        },
+        {
+          "path": "project-setup.md",
+          "sha256": "acd883538812d644ff72b50bcb4264f59c59ba07a6045bccddf47b219875a99c",
+          "executable": false
+        },
+        {
+          "path": "scenes-and-lifecycle.md",
+          "sha256": "d57a3476096df8624dfd7bfcabdafcfff4f71f218a4747eb3f787deea4115aa8",
+          "executable": false
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "055a683d40ee69974699ed23805d307874ca2aad60a3ec9f1dc28a5b9656e80e",
+          "executable": false
+        }
+      ]
+    },
+    {
+      "name": "playwright-expert",
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "06dcddbb6908a0c6dd4a9e8ec822eea41d5a460a53089fecccc8a68049e99241",
+          "executable": false
+        },
+        {
+          "path": "references/api-mocking.md",
+          "sha256": "e4f788c6355a79c9baa21b232f55788cc80620d735d29d43dea62667120fde45",
+          "executable": false
+        },
+        {
+          "path": "references/configuration.md",
+          "sha256": "f65f5eb5a91d3a13dafb845026ee07f41353e3b82bbb6def4fc7054e55b6f2aa",
+          "executable": false
+        },
+        {
+          "path": "references/debugging-flaky.md",
+          "sha256": "e559423dad74e5c384ba3de0a1c0db8d7f7723bd1a19cdc46f25b0f7622d5627",
+          "executable": false
+        },
+        {
+          "path": "references/page-object-model.md",
+          "sha256": "256aa9f89ed8ef2a8ca0126007f44fa1324414197130455a48455b1184ab7226",
+          "executable": false
+        },
+        {
+          "path": "references/selectors-locators.md",
+          "sha256": "659941eebd0f53ecde7dba938ec035d76673b6b0bb7cba06441a06e46922e134",
+          "executable": false
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "d84e24b9d20e910e519a763e4dc7f0744e81497ffcc6b29cf7806dc0c07cca12",
+          "executable": false
+        }
+      ]
+    },
+    {
+      "name": "pptx-generator",
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "eed4ccce37c2d24822da3bd9d5bee7bc12d494741de56ada513d0b97f537fcd0",
+          "executable": false
+        },
+        {
+          "path": "references/design-system.md",
+          "sha256": "8a225af2ebd3bfa979616da74b7ec34395712fe1a8195e5613214aa291211996",
+          "executable": false
+        },
+        {
+          "path": "references/editing.md",
+          "sha256": "5385ef88e7d081c43ee488ca308174743678314d53f6afc5df9b932390dcb3bf",
+          "executable": false
+        },
+        {
+          "path": "references/pitfalls.md",
+          "sha256": "247a8eb1860524fdd0d8a3365a791490c162d4a58677eb3f329d4dd682ce0257",
+          "executable": false
+        },
+        {
+          "path": "references/pptxgenjs.md",
+          "sha256": "4b66df00dd581c2eeadb140fd9bbad71daea6fb48b424f97b993f8521e41d470",
+          "executable": false
+        },
+        {
+          "path": "references/slide-types.md",
+          "sha256": "fa2c0da76d420463990317dc5932e607cea5e126389ca391e3e5718629b0cb38",
+          "executable": false
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "6eeb36239fdef35ab133ca462e1ec4674cb96dd9c5cd63da39c29151899bda10",
+          "executable": false
+        }
+      ]
+    },
+    {
+      "name": "scientific-critical-thinking",
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1",
+          "executable": false
+        },
+        {
+          "path": "references/common_biases.md",
+          "sha256": "641e8e8e6dfadac1643ea8691b7d3e4e58cf013f134cd42c71301878096a5a39",
+          "executable": false
+        },
+        {
+          "path": "references/core_capabilities.md",
+          "sha256": "0f337b96aa2d7453433a17824368fbd0638b9469d4f90a5fd23f4167c9dee180",
+          "executable": false
+        },
+        {
+          "path": "references/evidence_hierarchy.md",
+          "sha256": "534fbe991ecfb2d162f755004dc528118ce74a78862917c2911595a522d76e6c",
+          "executable": false
+        },
+        {
+          "path": "references/experimental_design.md",
+          "sha256": "eca7e42025393984c07676f3d4bc354d217e5604dc2209c76215d31953a7c74c",
+          "executable": false
+        },
+        {
+          "path": "references/logical_fallacies.md",
+          "sha256": "becfc5bfac7b831dca67cc442cd0fcb42d8eea527a6fc2921c1b704e592ff593",
+          "executable": false
+        },
+        {
+          "path": "references/review_sources.md",
+          "sha256": "71e75106f36f3e69b28959ad1fec503ccdb21b7f5361ab230173e4812accbf62",
+          "executable": false
+        },
+        {
+          "path": "references/scientific_method.md",
+          "sha256": "5aa925b97c7a916f819dafc8b42a9c24e4bd3eb2836594e724f1e7f9ae75ea0f",
+          "executable": false
+        },
+        {
+          "path": "references/statistical_pitfalls.md",
+          "sha256": "0c43204a0a81110cfeb7c982fa4caa89f274bdcebf096e09e5adfccf31241cb9",
+          "executable": false
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "563af70571b7dcd6a96bf2e303bedfdcba623b4e9f082d58f04aacbc961fdae4",
+          "executable": false
+        }
+      ]
+    },
+    {
+      "name": "unity-ecs-patterns",
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746",
+          "executable": false
+        },
+        {
+          "path": "references/details.md",
+          "sha256": "031cc2f576b3e03803a356469d8bd3da15a216649208a3460d055042b1c2300c",
+          "executable": false
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "18c3305e118e330e352b3e85011640385bb2bed1602e88d7447f55ae3447c973",
+          "executable": false
+        }
+      ]
+    },
+    {
+      "name": "vercel-react-best-practices",
+      "files": [
+        {
+          "path": "AGENTS.md",
+          "sha256": "fc93e7421177bbf869cce892bc60a6c83a4517d974bc3bf65c4e2c1e58a6ccf6",
+          "executable": false
+        },
+        {
+          "path": "metadata.json",
+          "sha256": "c4e18bac3290fbe1b471a605867d4df68b03144ea26b8befdbe8f9d8fd124354",
+          "executable": false
+        },
+        {
+          "path": "README.md",
+          "sha256": "9eafb2123d3b8b2aef41fba0db2648a3f4f49996f8c7c8bb2c86263befd8b48a",
+          "executable": false
+        },
+        {
+          "path": "rules/_sections.md",
+          "sha256": "01c59969e4e867f0708c8f8ef9c6d87fab9a07d0586244f429ff84013db8a115",
+          "executable": false
+        },
+        {
+          "path": "rules/_template.md",
+          "sha256": "99df2a3ea088c6c22de2484ddc7e964d0e9923846f44c63380343ecc64455442",
+          "executable": false
+        },
+        {
+          "path": "rules/advanced-effect-event-deps.md",
+          "sha256": "55ed8f9f27a1bff803d6fa55828176207714b02123cbb97ddb8a90d88024a723",
+          "executable": false
+        },
+        {
+          "path": "rules/advanced-event-handler-refs.md",
+          "sha256": "a3097edeecfb2ff6851cd66ed8cdf0617c3c88180504bee824aa6e75a215bbbc",
+          "executable": false
+        },
+        {
+          "path": "rules/advanced-init-once.md",
+          "sha256": "3e4dc22173eb0e2b6dcf583e3babd862b8696328f8f59aee7c4d746c5bc05f6c",
+          "executable": false
+        },
+        {
+          "path": "rules/advanced-use-latest.md",
+          "sha256": "8a3f64dfe5a77d1564248faf17fe662ae75b55d497a243cb30b38eb07ccbbf9a",
+          "executable": false
+        },
+        {
+          "path": "rules/async-api-routes.md",
+          "sha256": "523338540d73427dc14c0cbb19f2741ebccdf8b105a7b2c1b33d2905cf237a42",
+          "executable": false
+        },
+        {
+          "path": "rules/async-cheap-condition-before-await.md",
+          "sha256": "03107c1f70a293cd58a8abc5474c5548e20ea4efdf01b6d45aae7ad0ac1cb32c",
+          "executable": false
+        },
+        {
+          "path": "rules/async-defer-await.md",
+          "sha256": "f3c142d090615abdcc99d31c123be37b31f0f1ed8d9ec9f7789a3bc6883ae0fb",
+          "executable": false
+        },
+        {
+          "path": "rules/async-dependencies.md",
+          "sha256": "16ef469f877e30c6b8e1e1b4bc3e527312fa3c6318cb785a4eca186ea236131a",
+          "executable": false
+        },
+        {
+          "path": "rules/async-parallel.md",
+          "sha256": "6d2f841896279e976dfcdc1ac89e70771ac188baadfd43c096b5706cb838b961",
+          "executable": false
+        },
+        {
+          "path": "rules/async-suspense-boundaries.md",
+          "sha256": "de05fedac2eb7ae563b887b5a424464ec3dfaf84e5b7797467ebe2a796ac8afc",
+          "executable": false
+        },
+        {
+          "path": "rules/bundle-analyzable-paths.md",
+          "sha256": "62090b5c815fd71bf1133dce754f51abc16a9456d0ccd025fd627de27726e92a",
+          "executable": false
+        },
+        {
+          "path": "rules/bundle-barrel-imports.md",
+          "sha256": "e648f6d54525f07a691357040ca5bff6ea3424788a91ff63812adb29622a671b",
+          "executable": false
+        },
+        {
+          "path": "rules/bundle-conditional.md",
+          "sha256": "09c8259c3efb04fc0abb8e412ccbda217c222ae8118516283e571c995fe3a7d4",
+          "executable": false
+        },
+        {
+          "path": "rules/bundle-defer-third-party.md",
+          "sha256": "3719fb47b191e8db4fe22686ec88448ad5af9e6838585425abbe103d0b642e37",
+          "executable": false
+        },
+        {
+          "path": "rules/bundle-dynamic-imports.md",
+          "sha256": "401817a7369f315fc5a68a1095742ff7d53d0461906880dc9d64a41495ee1986",
+          "executable": false
+        },
+        {
+          "path": "rules/bundle-preload.md",
+          "sha256": "d1f7cc28da7cd5ab249acd287edc5b761afcfb194e9cb62cd44c5f3543db2de2",
+          "executable": false
+        },
+        {
+          "path": "rules/client-event-listeners.md",
+          "sha256": "242a873349febc1ce685e85617994784dbab92c2eaa68aed7fed5a83e7680e93",
+          "executable": false
+        },
+        {
+          "path": "rules/client-localstorage-schema.md",
+          "sha256": "0fb7cdf9dc93fdf22f87e3669f953fb9d4ac9b0be42eec4a29fe9a2560610b88",
+          "executable": false
+        },
+        {
+          "path": "rules/client-passive-event-listeners.md",
+          "sha256": "1f35016f9053de69e884ee9be00654e37979c2ca85f5e57764dc2626ff7acb4b",
+          "executable": false
+        },
+        {
+          "path": "rules/client-swr-dedup.md",
+          "sha256": "644652c39c6cc00de8d1c77a7273612e868dc3f7edda30764164c12ec0f764a3",
+          "executable": false
+        },
+        {
+          "path": "rules/js-batch-dom-css.md",
+          "sha256": "480b891b9eaf96e929dc1e964274a4828e3a78009b7d00ccd965a0d425215959",
+          "executable": false
+        },
+        {
+          "path": "rules/js-cache-function-results.md",
+          "sha256": "3daaa11d24f4295cb6be8bc6f407f2ce83cc7b5bd1f0e68891ea8ab835721dc7",
+          "executable": false
+        },
+        {
+          "path": "rules/js-cache-property-access.md",
+          "sha256": "73e47431e74878a927061bf0ddc7cd91a7556cb35d2573f3421e82300d9ae311",
+          "executable": false
+        },
+        {
+          "path": "rules/js-cache-storage.md",
+          "sha256": "11b826b0433898c1ece2d3547010d8e77db9fb240185748c45db91493de9b6cc",
+          "executable": false
+        },
+        {
+          "path": "rules/js-combine-iterations.md",
+          "sha256": "71add08aeeb43091d4ff4c0b2842cce8b4bdef8ad3e732cc034bb5a84827e746",
+          "executable": false
+        },
+        {
+          "path": "rules/js-early-exit.md",
+          "sha256": "925ce5ce87f3347186ca62212f29cc6baa2b8c85a96d2720ad07c3d0abf781c0",
+          "executable": false
+        },
+        {
+          "path": "rules/js-flatmap-filter.md",
+          "sha256": "9e5b166a41914d975bef7635467f8fb32cd98b5c3126c0bc6f163490812fb5f0",
+          "executable": false
+        },
+        {
+          "path": "rules/js-hoist-regexp.md",
+          "sha256": "f9e9aef2f7c2307dd7310f283df85dcada45fc43e9bb941b0c3aa414dec21ec4",
+          "executable": false
+        },
+        {
+          "path": "rules/js-index-maps.md",
+          "sha256": "5df1bdc2cfabb2c98abd55d26762e5c18189535c2e686184f426082e62920391",
+          "executable": false
+        },
+        {
+          "path": "rules/js-length-check-first.md",
+          "sha256": "8b54a311c826b299272f29187fc58bc55772a04c4a72eeb29456ee96dc9fc624",
+          "executable": false
+        },
+        {
+          "path": "rules/js-min-max-loop.md",
+          "sha256": "87dfb67e2f39df6ad8bcfb5b78c5fb364d3c07554ad188a202408d99f3763421",
+          "executable": false
+        },
+        {
+          "path": "rules/js-request-idle-callback.md",
+          "sha256": "ee08f83905b4011abbc33d594033157d77561b5bbd9b36b04f0f409581ffec32",
+          "executable": false
+        },
+        {
+          "path": "rules/js-set-map-lookups.md",
+          "sha256": "a7fd781a6ba9ad49065961b6f9a90ef486bf6b648390e1a08704025f98e1642b",
+          "executable": false
+        },
+        {
+          "path": "rules/js-tosorted-immutable.md",
+          "sha256": "d0a5e1b0fec48a0a81397957e2f068e224329f7c42cb5feeed8aae6fa64025e8",
+          "executable": false
+        },
+        {
+          "path": "rules/rendering-activity.md",
+          "sha256": "1e5e7eaf3555e61d6a2e900089c676527d26259501db5594f59544b6c664f85a",
+          "executable": false
+        },
+        {
+          "path": "rules/rendering-animate-svg-wrapper.md",
+          "sha256": "9c6ae0ca7a51434e803887c64cded760956579a1452ccb80a461a03f9c937c77",
+          "executable": false
+        },
+        {
+          "path": "rules/rendering-conditional-render.md",
+          "sha256": "2ec2fa23c4148285144687050c52369adba3da2fbe3d486f8d3e0aad8f06f2bc",
+          "executable": false
+        },
+        {
+          "path": "rules/rendering-content-visibility.md",
+          "sha256": "64eee6d5b916fe74df33363994b27fc7f71bea3bcedc7ee04bda23107ca3e6e4",
+          "executable": false
+        },
+        {
+          "path": "rules/rendering-hoist-jsx.md",
+          "sha256": "93b229560fae92005ed9a2a829064607b39b2e984e92d221d05b2d41df2b7c0e",
+          "executable": false
+        },
+        {
+          "path": "rules/rendering-hydration-no-flicker.md",
+          "sha256": "dc7ab358c67c177bca6e6f360fbc935ebe4efa928c0ba3ebd3f9f3d9e2000ca3",
+          "executable": false
+        },
+        {
+          "path": "rules/rendering-hydration-suppress-warning.md",
+          "sha256": "915bacb934e2927d84b37a3f3d225a47b309ac8f9e494ed2bcb66ce07c5676a2",
+          "executable": false
+        },
+        {
+          "path": "rules/rendering-resource-hints.md",
+          "sha256": "351b1095d641717b930f1b2253282b7120af3023bc74e06c17675168d4286864",
+          "executable": false
+        },
+        {
+          "path": "rules/rendering-script-defer-async.md",
+          "sha256": "4cea07b7875ba7fc2c7465ff23b63a2bb334f90aaf2d9293d38d67b05fdb32ab",
+          "executable": false
+        },
+        {
+          "path": "rules/rendering-svg-precision.md",
+          "sha256": "ed468533f6e95f622859c884b122cf21f9f593ed6bb3d500a54de4b9f9bcb9fb",
+          "executable": false
+        },
+        {
+          "path": "rules/rendering-usetransition-loading.md",
+          "sha256": "3a1249c3f13026b6f54ab5712c388df219d6af01b12aa542749acd99a46f4bc1",
+          "executable": false
+        },
+        {
+          "path": "rules/rerender-defer-reads.md",
+          "sha256": "234050a77faf50cb306be10a9e15bd4421134ab5907e75f13e6d78e2bd262dc9",
+          "executable": false
+        },
+        {
+          "path": "rules/rerender-dependencies.md",
+          "sha256": "17eb5830956fb56486fd3cfc7431f5849d39751730c05ad9e77dd4f0c27169c5",
+          "executable": false
+        },
+        {
+          "path": "rules/rerender-derived-state-no-effect.md",
+          "sha256": "cb11ec76f50aa7b6847269f02d79b120c889a30d9ecd2c1d578f75144419c77a",
+          "executable": false
+        },
+        {
+          "path": "rules/rerender-derived-state.md",
+          "sha256": "1c326bb67b01fb084eb00c8911b0a7cff54681c2315b629f88e49b64eaa6481d",
+          "executable": false
+        },
+        {
+          "path": "rules/rerender-functional-setstate.md",
+          "sha256": "5e68df6b2ae8058e67f476ff1ac67bde159f5a9d18df439e46eabcdeb7b52e58",
+          "executable": false
+        },
+        {
+          "path": "rules/rerender-lazy-state-init.md",
+          "sha256": "4ae844740f266fc8cbf050701230286624a2440ec5be67b9a63d9edc3c580573",
+          "executable": false
+        },
+        {
+          "path": "rules/rerender-memo-with-default-value.md",
+          "sha256": "81c47476564ad8a79fc68fc442734255ca7d6829424359464503fda0a9f9a0dd",
+          "executable": false
+        },
+        {
+          "path": "rules/rerender-memo.md",
+          "sha256": "1f258990c2f27ff6256b3cc5c43300631bb3f0d81f749aed08d07fcdcc131dd1",
+          "executable": false
+        },
+        {
+          "path": "rules/rerender-move-effect-to-event.md",
+          "sha256": "abc2cbf167bee056743023351e96806a411d3398da8802093620aecf0721f029",
+          "executable": false
+        },
+        {
+          "path": "rules/rerender-no-inline-components.md",
+          "sha256": "1cc32907a770272524ba682eef9e7efdd8ad4533b6f89b718a1fcd7d1d0eb6a3",
+          "executable": false
+        },
+        {
+          "path": "rules/rerender-simple-expression-in-memo.md",
+          "sha256": "5bdcf2d1558ba5204e643c887b7b4060f89630969425651eb68e96427d97f800",
+          "executable": false
+        },
+        {
+          "path": "rules/rerender-split-combined-hooks.md",
+          "sha256": "6f45d703343484ef9acef9388397f3642966ae6a5a258899a0cf1f9977cfbf6c",
+          "executable": false
+        },
+        {
+          "path": "rules/rerender-transitions.md",
+          "sha256": "60f4033909a62df5e5b8c601494f9e50a562e2f8c1c2d81eac24f38142265f1c",
+          "executable": false
+        },
+        {
+          "path": "rules/rerender-use-deferred-value.md",
+          "sha256": "8c3579576a61a949884167745dcfaf1d5426ba305cc61fd0a79602d70fda4909",
+          "executable": false
+        },
+        {
+          "path": "rules/rerender-use-ref-transient-values.md",
+          "sha256": "f1a649af9d1d0b5c762f6c9c4c1c70c90d7df82aa10296ee87aadb78c1b76c54",
+          "executable": false
+        },
+        {
+          "path": "rules/server-after-nonblocking.md",
+          "sha256": "d0b8d24a3db9f0f65f9e2bddbf230b0e03a5f60e1229d93a4a18f5e7a991c7c2",
+          "executable": false
+        },
+        {
+          "path": "rules/server-auth-actions.md",
+          "sha256": "a2ca8aa102839251c7971ec784560fab943c20b36fe6f80365d4110c13260c23",
+          "executable": false
+        },
+        {
+          "path": "rules/server-cache-lru.md",
+          "sha256": "1924b64561841923b88a657085097a0aeba3e0ba2d5470b9f5c15cc10d6ae70f",
+          "executable": false
+        },
+        {
+          "path": "rules/server-cache-react.md",
+          "sha256": "fddeea6c870bb3da4134b61d54b7d09b83d2603f929b7547cd3dc1dc269edd5c",
+          "executable": false
+        },
+        {
+          "path": "rules/server-dedup-props.md",
+          "sha256": "c2747424cdac46be62f835f245a0aa887b0090b416d28e2ac8676702645eeb37",
+          "executable": false
+        },
+        {
+          "path": "rules/server-hoist-static-io.md",
+          "sha256": "5abea4dd882b13661bd5f7dfb93f9e547d5f08176c61c448ade91b210ed5d49f",
+          "executable": false
+        },
+        {
+          "path": "rules/server-no-shared-module-state.md",
+          "sha256": "4d869bf1cd2f1632e5ca4c0e64b1cf0e71c5f5a0f940bc8a22174d205e735ed7",
+          "executable": false
+        },
+        {
+          "path": "rules/server-parallel-fetching.md",
+          "sha256": "569a2e9fc04f9606686cd75c5894ef8781b502786a7fffe241396846c7733472",
+          "executable": false
+        },
+        {
+          "path": "rules/server-parallel-nested-fetching.md",
+          "sha256": "ad5d9656984d4a959997a2367bf59cc6632297b4634a1dd13a087939d83f30b3",
+          "executable": false
+        },
+        {
+          "path": "rules/server-serialization.md",
+          "sha256": "f4c7d68b29c82381baad059c4a7f09e868e71ec9c3115a26ad3ae7d24c0dfe1f",
+          "executable": false
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "71ed7794962fa6e803ee83030517b5b93a9f70fbfeb431ec4535c5480a8d8355",
+          "executable": false
+        }
+      ]
+    },
+    {
+      "name": "vercel-react-native-skills",
+      "files": [
+        {
+          "path": "AGENTS.md",
+          "sha256": "72996343b8260800fbeb9af63ddaed91f14b65dc547e0922f9f8e9bd72076cbf",
+          "executable": false
+        },
+        {
+          "path": "metadata.json",
+          "sha256": "59ee2274cadbd95b2220727028f0dbc26d3e0251e7937226edc9e7640756ba21",
+          "executable": false
+        },
+        {
+          "path": "README.md",
+          "sha256": "d60d7623005a833b928be6a109ed9d14dea43d7217fb534e8f2e4de5fc1f0ddf",
+          "executable": false
+        },
+        {
+          "path": "rules/_sections.md",
+          "sha256": "21d7445e92bd7d393b420118c3fb9ebbf30aaf123a15143afb6c0b1b562cfdfd",
+          "executable": false
+        },
+        {
+          "path": "rules/_template.md",
+          "sha256": "99df2a3ea088c6c22de2484ddc7e964d0e9923846f44c63380343ecc64455442",
+          "executable": false
+        },
+        {
+          "path": "rules/animation-derived-value.md",
+          "sha256": "689228e9d59227934f296563963951aa9368be0afb2a188f650de161203b1862",
+          "executable": false
+        },
+        {
+          "path": "rules/animation-gesture-detector-press.md",
+          "sha256": "69408d4be669e74689d865c5f50a22fc3a802d521fe493371761abd20526e58e",
+          "executable": false
+        },
+        {
+          "path": "rules/animation-gpu-properties.md",
+          "sha256": "f885e4179445da27cbc225e0a4aa3ed9016fc3507ca6f864392ba7a9d0bd7516",
+          "executable": false
+        },
+        {
+          "path": "rules/design-system-compound-components.md",
+          "sha256": "dcb10900a58fcf57cca2e27c062d02df2325a7949e08fb45e9e05cc2b132b1a6",
+          "executable": false
+        },
+        {
+          "path": "rules/fonts-config-plugin.md",
+          "sha256": "b92568774064a604e7a479d4c8d7263aed5609740e9161d2f2764bfff761905d",
+          "executable": false
+        },
+        {
+          "path": "rules/imports-design-system-folder.md",
+          "sha256": "aa6337f7f2869a46a9141ec65e02c3da5c3bf051023899b82e0f0aef5bff8423",
+          "executable": false
+        },
+        {
+          "path": "rules/js-hoist-intl.md",
+          "sha256": "b4b08622465ffcd5e5961878eb8c6d7359aa242d16c990b59941c9111962fe46",
+          "executable": false
+        },
+        {
+          "path": "rules/list-performance-callbacks.md",
+          "sha256": "db800e9dfe0080eb4954b96e2a362ee8344d08e08b1ed06bc8059450f3e6f0dd",
+          "executable": false
+        },
+        {
+          "path": "rules/list-performance-function-references.md",
+          "sha256": "b54470e41d578b207ee3223f6853efb7fbf8e5f83d9aecf8da16989072f99544",
+          "executable": false
+        },
+        {
+          "path": "rules/list-performance-images.md",
+          "sha256": "e88f16ac113c29230d674b7aa2c66c31d5772a74b1ea378d48a97b1143fe6c19",
+          "executable": false
+        },
+        {
+          "path": "rules/list-performance-inline-objects.md",
+          "sha256": "e2a80aac0f29c6abaf0163c1cc273d09cc8a0030ec077ca2022bbf5c309e4625",
+          "executable": false
+        },
+        {
+          "path": "rules/list-performance-item-expensive.md",
+          "sha256": "a68cc8ec5dba3c55761bd5df9dfd3d98485f63076868d3e03af15f1e58907ce3",
+          "executable": false
+        },
+        {
+          "path": "rules/list-performance-item-memo.md",
+          "sha256": "38ec1d149ee485434d11c2b9e2101dfc914afadae4a0738ca905f26b05f708c1",
+          "executable": false
+        },
+        {
+          "path": "rules/list-performance-item-types.md",
+          "sha256": "eed225f4e9e504bfa7db01f5395d1402545cc47de8adf1829a9408cd5d158cf6",
+          "executable": false
+        },
+        {
+          "path": "rules/list-performance-virtualize.md",
+          "sha256": "98cad308118acb4d6e8e975c0168ce56e2d48ca52ed47f23bc9a30667c066ada",
+          "executable": false
+        },
+        {
+          "path": "rules/monorepo-native-deps-in-app.md",
+          "sha256": "8368b109027fcec1b8a81bfb99718aef2b64edaba77107f73d7c465cc5a14217",
+          "executable": false
+        },
+        {
+          "path": "rules/monorepo-single-dependency-versions.md",
+          "sha256": "61c01b9eaab1e319bf078204231fb573bdfea3c43a6eb99e7ef73ee95d474ccc",
+          "executable": false
+        },
+        {
+          "path": "rules/navigation-native-navigators.md",
+          "sha256": "6642dedb57e72f0b56df5fbc3d5b8aaa91fc4456932c12712cfd076d393f32c6",
+          "executable": false
+        },
+        {
+          "path": "rules/react-compiler-destructure-functions.md",
+          "sha256": "8048926a4fa3fbd28fc0ecf4ba4c383a2f0ed06c2fd7330dd4a15d7f4e548044",
+          "executable": false
+        },
+        {
+          "path": "rules/react-compiler-reanimated-shared-values.md",
+          "sha256": "3174303a72b6849ff0eda5cd9f9650f26baa5f31ed28d35a75076af714fb2ffc",
+          "executable": false
+        },
+        {
+          "path": "rules/react-state-dispatcher.md",
+          "sha256": "7ec5b653e3ff8d9ca97d8d66981cce5590c0e49fa79ab708fd6324542b588870",
+          "executable": false
+        },
+        {
+          "path": "rules/react-state-fallback.md",
+          "sha256": "eb76e386d71680bfdfc0ab64dba1221f4d3d0fdcb4980bb4a871381d58e9e58b",
+          "executable": false
+        },
+        {
+          "path": "rules/react-state-minimize.md",
+          "sha256": "31b989de61defda1c61d8578c4700efd64a427218c3f3dbb7062a1666e1cbe43",
+          "executable": false
+        },
+        {
+          "path": "rules/rendering-no-falsy-and.md",
+          "sha256": "7300fa45ac3a4968db144727a21052421bc62de9b5e9f6f59e28bd16d2fff001",
+          "executable": false
+        },
+        {
+          "path": "rules/rendering-text-in-text-component.md",
+          "sha256": "fc67897b6126b6b5574f4d284a6c5b2282528fe89de8ec08e6cfd2a86ab5b235",
+          "executable": false
+        },
+        {
+          "path": "rules/scroll-position-no-state.md",
+          "sha256": "70aa1ee679e755556d7b01b326431fe898d3c23ddba40d0da6bdac23c87a1525",
+          "executable": false
+        },
+        {
+          "path": "rules/state-ground-truth.md",
+          "sha256": "9f3efc73d2e66a5deb3199c9774f42524cd6a0f69784af38301946be5d747cb5",
+          "executable": false
+        },
+        {
+          "path": "rules/ui-expo-image.md",
+          "sha256": "c3c13cce3dd2cc7f8a9b4861e5743af98f62e28f5699f72f492e79a335cfae55",
+          "executable": false
+        },
+        {
+          "path": "rules/ui-image-gallery.md",
+          "sha256": "b34d1ba03710ed9622187716541ae618968e7d03bc28895c2ac918d3cc5853f1",
+          "executable": false
+        },
+        {
+          "path": "rules/ui-measure-views.md",
+          "sha256": "170d058abc4900ea9e851e54f5e8b437ffffc2c9d3847ae35e30a515c8990c3d",
+          "executable": false
+        },
+        {
+          "path": "rules/ui-menus.md",
+          "sha256": "5964adbecfe9aeb28d736a4eaacec6469a1c4ca3f48779d243eb38b6d181cfe9",
+          "executable": false
+        },
+        {
+          "path": "rules/ui-native-modals.md",
+          "sha256": "d803493b3046ad31cbb2c189f1fffb948fd0055050e3c322589bd548421e23a8",
+          "executable": false
+        },
+        {
+          "path": "rules/ui-pressable.md",
+          "sha256": "52cdbad127d713d7d32c59ef74ab1bbd6dca211edc9b25993453f7f4545e79fa",
+          "executable": false
+        },
+        {
+          "path": "rules/ui-safe-area-scroll.md",
+          "sha256": "3dd776caef2344d73529010940b50042861d06d31a192122a4df64bc06aed0e8",
+          "executable": false
+        },
+        {
+          "path": "rules/ui-scrollview-content-inset.md",
+          "sha256": "89e4bbe5e9a602660f4155e9d4c0dee09db1adf21c73f47213cd67ec896e5a13",
+          "executable": false
+        },
+        {
+          "path": "rules/ui-styling.md",
+          "sha256": "cdef4d8b1a097b844e5992ab78e66a2dc604faf1e90f8d325a0eb116e8ef6a7e",
+          "executable": false
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "4012750a5ccbe064ca04af3835d5d1b011979d2d09d9b6df1c8128fac58e0a66",
+          "executable": false
+        }
+      ]
+    }
+  ]
+}

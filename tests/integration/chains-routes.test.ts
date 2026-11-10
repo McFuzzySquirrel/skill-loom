@@ -123,9 +123,13 @@ async function updateChain(
   payload: unknown,
   query = '',
 ): Promise<{ statusCode: number; body: unknown }> {
+  const current = await app.inject({ method: 'GET', url: chainUrl(projectId, chainId) });
+  const revision = current.statusCode === 200
+    ? current.json<{ revision: string }>().revision : '0'.repeat(64);
   const response = await app.inject({
     method: 'PUT',
     url: `${chainUrl(projectId, chainId)}${query}`,
+    headers: { 'x-loom-chain-revision': revision },
     payload: payload as Record<string, unknown>,
   });
   return { statusCode: response.statusCode, body: response.json<unknown>() };
@@ -151,9 +155,13 @@ async function deleteChain(
   projectId: string,
   chainId: string,
 ): Promise<{ statusCode: number; body: unknown }> {
+  const current = await app.inject({ method: 'GET', url: chainUrl(projectId, chainId) });
+  const revision = current.statusCode === 200
+    ? current.json<{ revision: string }>().revision : '0'.repeat(64);
   const response = await app.inject({
     method: 'DELETE',
     url: chainUrl(projectId, chainId),
+    headers: { 'x-loom-chain-revision': revision },
   });
   return { statusCode: response.statusCode, body: response.json<unknown>() };
 }
@@ -212,6 +220,49 @@ function sequenceIds(prefix = 'chain'): (name: string) => string {
 }
 
 describe('chain CRUD through src/server/app.ts', () => {
+  it('requires a current revision for HTTP update and deletion', async () => {
+    const app = await buildTestApp();
+    const projectId = await registerProject(app, join(root, 'revision-project'));
+    const created = await createChain(app, projectId, baseDraft());
+    const chain = chainOf(created.body);
+    const url = chainUrl(projectId, chain.id);
+    const original = await app.inject({ method: 'GET', url });
+    const revision = original.json<{ revision: string }>().revision;
+    for (const method of ['PUT', 'DELETE'] as const) {
+      const response = await app.inject({
+        method, url, ...(method === 'PUT' ? { payload: baseDraft({ name: 'Unexpected' }) } : {}),
+      });
+      expect(response.statusCode).toBe(428);
+      expect(response.json()).toMatchObject({ error: { code: 'CHAIN_REVISION_REQUIRED' } });
+    }
+    const updated = await app.inject({
+      method: 'PUT', url, headers: { 'x-loom-chain-revision': revision },
+      payload: baseDraft({ name: 'Reviewed change' }),
+    });
+    expect(updated.statusCode).toBe(200);
+    const stale = await app.inject({
+      method: 'DELETE', url, headers: { 'x-loom-chain-revision': revision },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toMatchObject({ error: { code: 'CHAIN_STALE' } });
+    const current = await app.inject({ method: 'GET', url });
+    expect(current.json<{ chain: Chain }>().chain.name).toBe('Reviewed change');
+    const staleCopy = await app.inject({
+      method: 'POST', url: `${url}/duplicate`, headers: { 'x-loom-chain-revision': revision },
+      payload: { harness: 'copilot' },
+    });
+    expect(staleCopy.statusCode).toBe(409);
+    expect(staleCopy.json()).toMatchObject({ error: { code: 'CHAIN_STALE' } });
+    expect(chainsOf((await listChains(app, projectId)).body)).toHaveLength(1);
+    const currentCopy = await app.inject({
+      method: 'POST', url: `${url}/duplicate`,
+      headers: { 'x-loom-chain-revision': current.json<{ revision: string }>().revision },
+      payload: { harness: 'copilot' },
+    });
+    expect(currentCopy.statusCode).toBe(201);
+    expect(chainOf(currentCopy.json()).harness).toBe('copilot');
+  });
+
   it('persists and duplicates an exact native-agent selection', async () => {
     const app = await buildTestApp();
     const projectId = await registerProject(app, join(root, 'project-agent-chain'));
@@ -233,6 +284,21 @@ describe('chain CRUD through src/server/app.ts', () => {
     const duplicated = await duplicateChain(app, projectId, chain.id);
     expect(duplicated.statusCode).toBe(201);
     expect(chainOf(duplicated.body).agent).toEqual(agent);
+
+    const sameHarness = await duplicateChain(app, projectId, chain.id, { harness: 'opencode' });
+    expect(sameHarness.statusCode).toBe(201);
+    expect(chainOf(sameHarness.body).agent).toEqual(agent);
+
+    const differentHarness = await duplicateChain(app, projectId, chain.id, { harness: 'copilot' });
+    expect(differentHarness.statusCode).toBe(201);
+    const copy = chainOf(differentHarness.body);
+    expect(copy).toMatchObject({ harness: 'copilot', steps: chain.steps, inputs: chain.inputs });
+    expect(copy).not.toHaveProperty('agent');
+    expect(chainOf((await getChain(app, projectId, chain.id)).body).agent).toEqual(agent);
+
+    const invalidHarness = await duplicateChain(app, projectId, chain.id, { harness: 'unknown' });
+    expect(invalidHarness.statusCode).toBe(422);
+    expect(chainsOf((await listChains(app, projectId)).body)).toHaveLength(4);
 
     const updated = await updateChain(app, projectId, chain.id, {
       ...chain,

@@ -1,9 +1,17 @@
 #!/usr/bin/env node
-import { basename } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { basename, resolve } from 'node:path';
+import { getSystemErrorMap } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { BundleError } from './bundle.js';
 import { executePortableRequest, PortableRunError, type PortableRequest } from './runtime.js';
+import { ProjectClaimError } from '../shared/project-claim.js';
+import { ProjectCoordinationError } from '../shared/project-coordination.js';
+import { ProjectRunRecordsError } from '../shared/project-run-records.js';
 
 const COMMANDS = ['inspect', 'prepare', 'status', 'step', 'record', 'resume'] as const;
+const SYSTEM_ERROR_CODES = new Set([...getSystemErrorMap().values()].map(([code]) => code));
+SYSTEM_ERROR_CODES.add('ERR_SQLITE_ERROR');
 type Command = (typeof COMMANDS)[number];
 
 export function parsePortableArgs(argv: readonly string[]): PortableRequest {
@@ -55,15 +63,24 @@ export async function runPortableCli(
     stdout.write(`${JSON.stringify(result)}\n`);
     return 0;
   } catch (error) {
-    const code = error instanceof PortableRunError || error instanceof BundleError
+    const known = error instanceof PortableRunError || error instanceof BundleError ||
+      error instanceof ProjectClaimError || error instanceof ProjectCoordinationError ||
+      error instanceof ProjectRunRecordsError;
+    const code = known
       ? error.code
       : error instanceof SyntaxError ? 'JSON_INVALID' : 'REQUEST_FAILED';
-    const message = error instanceof PortableRunError || error instanceof BundleError
+    const message = known
       ? error.message
       : error instanceof SyntaxError
         ? 'Structured helper input is not valid JSON.'
         : 'The portable helper could not complete the request. Check file permissions and retry.';
-    stderr.write(`${JSON.stringify({ ok: false, error: { code, message } })}\n`);
+    const rawCode = error instanceof Error && 'code' in error ? error.code : undefined;
+    const systemCode = !known && typeof rawCode === 'string' && SYSTEM_ERROR_CODES.has(rawCode)
+      ? rawCode
+      : undefined;
+    stderr.write(`${JSON.stringify({
+      ok: false, error: { code, message, ...(systemCode === undefined ? {} : { systemCode }) },
+    })}\n`);
     return 1;
   }
 }
@@ -82,7 +99,19 @@ async function readStdin(input: NodeJS.ReadableStream | undefined): Promise<stri
   return Buffer.concat(chunks).toString('utf8');
 }
 
-if (process.argv[1] !== undefined && ['loom-bundle.mjs', 'cli.js'].includes(basename(process.argv[1]))) {
+function isMainModule(): boolean {
+  const entry = process.argv[1];
+  if (entry === undefined || !['loom-bundle.mjs', 'cli.js'].includes(basename(entry))) {
+    return false;
+  }
+  try {
+    return realpathSync(resolve(entry)) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isMainModule()) {
   void runPortableCli().then((code) => {
     if (code !== 0) process.exitCode = code;
   });

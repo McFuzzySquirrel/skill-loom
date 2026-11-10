@@ -265,7 +265,7 @@ describe('terminal WebSocket transport through the composition root', () => {
     socket.close();
 
     const event = await exit;
-    expect(event.exitCode).toBeGreaterThanOrEqual(0);
+    expect(Number.isInteger(event.exitCode)).toBe(true);
     expect(target.session.isRunning()).toBe(false);
     await waitFor(
       () => !target.manager.hasSession(target.session.id),
@@ -287,7 +287,7 @@ describe('terminal WebSocket transport through the composition root', () => {
     harness = null;
 
     const event = await exit;
-    expect(event.exitCode).toBeGreaterThanOrEqual(0);
+    expect(Number.isInteger(event.exitCode)).toBe(true);
     expect(target.session.isRunning()).toBe(false);
     expect(target.manager.hasSession(target.session.id)).toBe(false);
   });

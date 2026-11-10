@@ -1,11 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { execFile as execFileCallback } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { constants } from 'node:fs';
 import {
   chmod,
+  link,
   lstat,
   mkdir,
   mkdtemp,
-  opendir,
+  open,
   readFile,
   readdir,
   realpath,
@@ -17,23 +19,22 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import { frontmatterString, parseSkillFrontmatter } from './frontmatter.js';
+import { createGitBlobReader, GitBatchError } from './git-batch.js';
+import { snapshotReviewFingerprint } from './snapshot-fingerprint.js';
+import { MAX_SNAPSHOT_INDEX_BYTES, readSnapshotIndex, SnapshotIndexTooLarge, writeSnapshotIndex } from './snapshot-index.js';
+import { exceedsStagingLimits, type StagingLimit } from './staging-limits.js';
 import {
+  REMOTE_CATALOG_DEFAULT_LIMITS,
+  REMOTE_CATALOG_HARD_LIMITS,
+  RemoteCatalogLimitOverridesSchema,
+  RemoteCatalogLimitsSchema,
   RemoteSkillSourceSchema,
+  type RemoteCatalogLimits,
   type RemoteSkillSource,
 } from '../config/schema.js';
 import type { ConfigStore } from '../config/store.js';
 
-export const REMOTE_SOURCE_LIMITS = {
-  cloneTimeoutMs: 120_000,
-  commandTimeoutMs: 15_000,
-  maxCommandOutputBytes: 2 * 1024 * 1024,
-  maxFiles: 2_000,
-  maxPackages: 100,
-  maxAgents: 100,
-  maxPackageBytes: 20 * 1024 * 1024,
-  maxStagingBytes: 128 * 1024 * 1024,
-  maxStagingEntries: 10_000,
-} as const;
+export const REMOTE_SOURCE_LIMITS = REMOTE_CATALOG_DEFAULT_LIMITS;
 
 const snapshotManifestSchema = z.strictObject({
   version: z.literal(1),
@@ -45,10 +46,10 @@ const snapshotManifestSchema = z.strictObject({
     description: z.string().max(4_096),
     repositoryPath: z.string().min(1).max(4_096),
     directory: z.string().regex(/^[a-f0-9]{64}$/),
-    files: z.number().int().min(1).max(REMOTE_SOURCE_LIMITS.maxFiles),
-    bytes: z.number().int().min(1).max(REMOTE_SOURCE_LIMITS.maxPackageBytes),
+    files: z.number().int().min(1).max(REMOTE_CATALOG_HARD_LIMITS.maxFiles),
+    bytes: z.number().int().min(1).max(REMOTE_CATALOG_HARD_LIMITS.maxPackageBytes),
     fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-  })).max(REMOTE_SOURCE_LIMITS.maxPackages),
+  })).max(REMOTE_CATALOG_HARD_LIMITS.maxPackages),
   agents: z.array(z.strictObject({
     harness: z.enum(['opencode', 'copilot']),
     name: z.string().min(1).max(255),
@@ -56,12 +57,23 @@ const snapshotManifestSchema = z.strictObject({
     repositoryPath: z.string().min(1).max(4_096),
     agentPath: z.string().min(1).max(4_096),
     directory: z.string().regex(/^[a-f0-9]{64}$/),
-    bytes: z.number().int().min(1).max(REMOTE_SOURCE_LIMITS.maxPackageBytes),
+    bytes: z.number().int().min(1).max(REMOTE_CATALOG_HARD_LIMITS.maxPackageBytes),
     fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
     status: z.enum(['available', 'disabled', 'invalid', 'unsupported']),
     statusReason: z.string().max(256).nullable(),
-  })).max(REMOTE_SOURCE_LIMITS.maxAgents).default([]),
+  })).max(REMOTE_CATALOG_HARD_LIMITS.maxAgents).default([]),
 });
+const MAX_SNAPSHOT_MANIFEST_BYTES = 256 * 1024 * 1024;
+const snapshotModesSchema = z.strictObject({
+  version: z.literal(1),
+  executablePaths: z.array(z.string().min(1).max(4_096)).max(REMOTE_CATALOG_HARD_LIMITS.maxFiles),
+});
+type SnapshotModes = z.infer<typeof snapshotModesSchema>;
+const snapshotReviewSchema = z.strictObject({
+  version: z.literal(1),
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+});
+type SnapshotReview = z.infer<typeof snapshotReviewSchema>;
 
 export type RemoteSkillSnapshot = z.infer<typeof snapshotManifestSchema>;
 export type RemoteNativeAgent = RemoteSkillSnapshot['agents'][number];
@@ -78,6 +90,10 @@ export interface RemoteSourceOptions {
   gitRunner?: RemoteSourceGitRunner;
   /** Staging root seam for isolated tests. */
   temporaryDirectory?: string;
+  /** Cancel work before snapshot publication. */
+  signal?: AbortSignal;
+  /** Refresh an already saved exact commit without changing the configured ref. */
+  revision?: string;
 }
 
 export const REMOTE_SOURCE_ERROR_CODES = {
@@ -86,6 +102,7 @@ export const REMOTE_SOURCE_ERROR_CODES = {
   DUPLICATE: 'REMOTE_SOURCE_DUPLICATE',
   CLONE_FAILED: 'REMOTE_SOURCE_CLONE_FAILED',
   TIMEOUT: 'REMOTE_SOURCE_TIMEOUT',
+  CANCELLED: 'REMOTE_SOURCE_CANCELLED',
   TOO_LARGE: 'REMOTE_SOURCE_TOO_LARGE',
   INVALID_PACKAGE: 'REMOTE_SOURCE_INVALID_PACKAGE',
   SNAPSHOT_CORRUPT: 'REMOTE_SOURCE_SNAPSHOT_CORRUPT',
@@ -102,8 +119,65 @@ export class RemoteSourceError extends Error {
   }
 }
 
+const sourceQueues = new Map<string, Promise<void>>();
+
+function withSourceLock<T>(configStore: ConfigStore, sourceId: string, operation: () => Promise<T>): Promise<T> {
+  const key = `${resolve(configStore.getConfigDir())}\0${sourceId}`;
+  const previous = sourceQueues.get(key) ?? Promise.resolve();
+  const result = previous.then(operation, operation);
+  const settled = result.then(() => undefined, () => undefined);
+  sourceQueues.set(key, settled);
+  void settled.then(() => {
+    if (sourceQueues.get(key) === settled) sourceQueues.delete(key);
+  });
+  return result;
+}
+
 export async function listRemoteSkillSources(configStore: ConfigStore): Promise<RemoteSkillSource[]> {
   return (await configStore.get()).remoteSkillSources;
+}
+
+export async function getRemoteCatalogSettings(configStore: ConfigStore) {
+  return {
+    global: (await configStore.get()).remoteCatalogLimits,
+    defaults: REMOTE_CATALOG_DEFAULT_LIMITS,
+    maximums: REMOTE_CATALOG_HARD_LIMITS,
+  };
+}
+
+export async function setRemoteCatalogLimits(configStore: ConfigStore, raw: unknown) {
+  const parsed = RemoteCatalogLimitOverridesSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.INVALID, 'The remote catalog limits are not valid.');
+  }
+  await configStore.update({ remoteCatalogLimits: parsed.data });
+  return getRemoteCatalogSettings(configStore);
+}
+
+export async function setRemoteSourceLimits(configStore: ConfigStore, sourceId: string, raw: unknown) {
+  const parsed = RemoteCatalogLimitOverridesSchema.nullable().safeParse(raw);
+  if (!parsed.success) {
+    throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.INVALID, 'The remote source limits are not valid.');
+  }
+  return withSourceLock(configStore, sourceId, async () => {
+    const config = await configStore.update((current) => {
+      if (!current.remoteSkillSources.some((source) => source.id === sourceId)) {
+        throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.NOT_FOUND, 'The configured remote skill source was not found.');
+      }
+      return {
+        remoteSkillSources: current.remoteSkillSources.map((source) => {
+          if (source.id !== sourceId) return source;
+          const { limits: _limits, ...rest } = source;
+          return parsed.data === null ? rest : { ...rest, limits: parsed.data };
+        }),
+      };
+    });
+    const source = config.remoteSkillSources.find((candidate) => candidate.id === sourceId);
+    if (source === undefined) {
+      throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.NOT_FOUND, 'The configured remote skill source was not found.');
+    }
+    return source;
+  });
 }
 
 export async function registerRemoteSkillSource(
@@ -127,41 +201,45 @@ export async function registerRemoteSkillSource(
     );
   }
 
-  let duplicate = false;
-  await configStore.update((current) => {
-    duplicate = current.remoteSkillSources.some((source) =>
-      source.repository === parsed.data.repository && source.ref === parsed.data.ref,
-    );
-    if (duplicate) return {};
-    return { remoteSkillSources: [...current.remoteSkillSources, parsed.data] };
+  return withSourceLock(configStore, parsed.data.id, async () => {
+    let duplicate = false;
+    await configStore.update((current) => {
+      duplicate = current.remoteSkillSources.some((source) =>
+        source.repository === parsed.data.repository && source.ref === parsed.data.ref,
+      );
+      if (duplicate) return {};
+      return { remoteSkillSources: [...current.remoteSkillSources, parsed.data] };
+    });
+    if (duplicate) {
+      throw new RemoteSourceError(
+        REMOTE_SOURCE_ERROR_CODES.DUPLICATE,
+        'That repository and ref are already registered.',
+        { sourceId: parsed.data.id },
+      );
+    }
+    return parsed.data;
   });
-  if (duplicate) {
-    throw new RemoteSourceError(
-      REMOTE_SOURCE_ERROR_CODES.DUPLICATE,
-      'That repository and ref are already registered.',
-      { sourceId: parsed.data.id },
-    );
-  }
-  return parsed.data;
 }
 
 export async function unregisterRemoteSkillSource(
   configStore: ConfigStore,
   sourceId: string,
 ): Promise<void> {
-  let removed = false;
-  await configStore.update((current) => {
-    const remaining = current.remoteSkillSources.filter((source) => source.id !== sourceId);
-    removed = remaining.length !== current.remoteSkillSources.length;
-    return removed ? { remoteSkillSources: remaining } : {};
+  return withSourceLock(configStore, sourceId, async () => {
+    let removed = false;
+    await configStore.update((current) => {
+      const remaining = current.remoteSkillSources.filter((source) => source.id !== sourceId);
+      removed = remaining.length !== current.remoteSkillSources.length;
+      return removed ? { remoteSkillSources: remaining } : {};
+    });
+    if (!removed) {
+      throw new RemoteSourceError(
+        REMOTE_SOURCE_ERROR_CODES.NOT_FOUND,
+        'The configured remote skill source was not found.',
+        { sourceId },
+      );
+    }
   });
-  if (!removed) {
-    throw new RemoteSourceError(
-      REMOTE_SOURCE_ERROR_CODES.NOT_FOUND,
-      'The configured remote skill source was not found.',
-      { sourceId },
-    );
-  }
 }
 
 /**
@@ -173,6 +251,44 @@ export async function refreshRemoteSkillSource(
   sourceId: string,
   options: RemoteSourceOptions = {},
 ): Promise<RemoteSkillSnapshot> {
+  const cancelled = (): RemoteSourceError => new RemoteSourceError(
+    REMOTE_SOURCE_ERROR_CODES.CANCELLED, 'The remote catalog refresh was cancelled.', { sourceId },
+  );
+  if (options.signal?.aborted) throw cancelled();
+  let started = false;
+  const result = withSourceLock(configStore, sourceId, () => {
+    started = true;
+    return refreshRemoteSkillSourceUnlocked(configStore, sourceId, options);
+  });
+  const signal = options.signal;
+  if (signal === undefined) return result;
+  return new Promise<RemoteSkillSnapshot>((resolve, reject) => {
+    const onAbort = (): void => {
+      if (!started) {
+        signal.removeEventListener('abort', onAbort);
+        reject(cancelled());
+      }
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) onAbort();
+    void result.then(
+      (snapshot) => { signal.removeEventListener('abort', onAbort); resolve(snapshot); },
+      (error: unknown) => { signal.removeEventListener('abort', onAbort); reject(error); },
+    );
+  });
+}
+
+async function refreshRemoteSkillSourceUnlocked(
+  configStore: ConfigStore,
+  sourceId: string,
+  options: RemoteSourceOptions,
+): Promise<RemoteSkillSnapshot> {
+  const checkCancelled = (): void => {
+    if (options.signal?.aborted) {
+      throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.CANCELLED, 'The remote catalog refresh was cancelled.', { sourceId });
+    }
+  };
+  checkCancelled();
   const config = await configStore.get();
   const source = config.remoteSkillSources.find((candidate) => candidate.id === sourceId);
   if (source === undefined) {
@@ -182,10 +298,38 @@ export async function refreshRemoteSkillSource(
       { sourceId },
     );
   }
+  if (options.revision !== undefined) {
+    if (!/^[a-f0-9]{40,64}$/.test(options.revision) ||
+        await findRemoteSkillSnapshot(configStore.getConfigDir(), sourceId, options.revision) === undefined) {
+      throw new RemoteSourceError(
+        REMOTE_SOURCE_ERROR_CODES.NOT_FOUND,
+        'The saved remote snapshot was not found.',
+        { sourceId },
+      );
+    }
+  }
+  const ref = options.revision ?? source.ref;
+  const requestedCommit = ref !== undefined && isCommit(ref) ? ref.toLowerCase() : undefined;
+  const limits = RemoteCatalogLimitsSchema.parse({
+    ...config.remoteCatalogLimits,
+    ...Object.fromEntries(Object.entries(source.limits ?? {}).filter(([, value]) => value !== undefined)),
+  });
 
   const workRoot = await mkdtemp(join(options.temporaryDirectory ?? tmpdir(), 'skill-loom-source-'));
   const clonePath = join(workRoot, 'repository');
-  const git = options.gitRunner ?? runGit;
+  const git: RemoteSourceGitRunner = async (args, cwd, timeoutMs, maxOutputBytes) => {
+    try {
+      checkCancelled();
+      const result = options.gitRunner === undefined
+        ? await runGit(args, cwd, timeoutMs, maxOutputBytes, limits, options.signal)
+        : await options.gitRunner(args, cwd, timeoutMs, maxOutputBytes);
+      checkCancelled();
+      return result;
+    } catch (error) {
+      if (!(error instanceof RemoteSourceError)) throw error;
+      throw new RemoteSourceError(error.code, error.message, { ...error.details, sourceId });
+    }
+  };
   try {
     await git(
       [
@@ -194,32 +338,38 @@ export async function refreshRemoteSkillSource(
         '--depth=1',
         '--filter=blob:none',
         '--no-tags',
-        ...(source.ref === undefined || isCommit(source.ref) ? [] : [`--branch=${source.ref}`]),
+        ...(ref === undefined || isCommit(ref) ? [] : [`--branch=${ref}`]),
         '--',
         source.repository,
         clonePath,
       ],
       workRoot,
-      REMOTE_SOURCE_LIMITS.cloneTimeoutMs,
-      REMOTE_SOURCE_LIMITS.maxCommandOutputBytes,
+      limits.cloneTimeoutMs,
+      limits.maxCommandOutputBytes,
     );
 
-    if (source.ref !== undefined && isCommit(source.ref)) {
-      await git(['-C', clonePath, 'fetch', '--depth=1', 'origin', source.ref], workRoot,
-        REMOTE_SOURCE_LIMITS.commandTimeoutMs, REMOTE_SOURCE_LIMITS.maxCommandOutputBytes);
+    if (requestedCommit !== undefined) {
+      await git(['-C', clonePath, 'fetch', '--depth=1', 'origin', requestedCommit], workRoot,
+        limits.commandTimeoutMs, limits.maxCommandOutputBytes);
     }
 
     const revisionResult = await git(
       ['-C', clonePath, 'rev-parse', '--verify', 'FETCH_HEAD^{commit}'],
       workRoot,
-      REMOTE_SOURCE_LIMITS.commandTimeoutMs,
-      REMOTE_SOURCE_LIMITS.maxCommandOutputBytes,
-    ).catch(async () => git(
-      ['-C', clonePath, 'rev-parse', '--verify', 'HEAD^{commit}'],
-      workRoot,
-      REMOTE_SOURCE_LIMITS.commandTimeoutMs,
-      REMOTE_SOURCE_LIMITS.maxCommandOutputBytes,
-    ));
+      limits.commandTimeoutMs,
+      limits.maxCommandOutputBytes,
+    ).catch(async (error: unknown) => {
+      checkCancelled();
+      if (requestedCommit !== undefined) throw error;
+      if (error instanceof RemoteSourceError && error.code !== REMOTE_SOURCE_ERROR_CODES.CLONE_FAILED) throw error;
+      return git(
+        ['-C', clonePath, 'rev-parse', '--verify', 'HEAD^{commit}'],
+        workRoot,
+        limits.commandTimeoutMs,
+        limits.maxCommandOutputBytes,
+      );
+    });
+    checkCancelled();
     const revision = outputText(revisionResult.stdout).trim();
     if (!/^[a-f0-9]{40,64}$/.test(revision)) {
       throw new RemoteSourceError(
@@ -228,35 +378,80 @@ export async function refreshRemoteSkillSource(
         { sourceId },
       );
     }
+    if (requestedCommit !== undefined && revision !== requestedCommit) {
+      throw new RemoteSourceError(
+        REMOTE_SOURCE_ERROR_CODES.CLONE_FAILED,
+        'Git resolved a different commit than the one requested.',
+        { sourceId, revision: requestedCommit },
+      );
+    }
 
     const tree = await git(
       ['-C', clonePath, 'ls-tree', '-rz', '--full-tree', revision],
       workRoot,
-      REMOTE_SOURCE_LIMITS.commandTimeoutMs,
-      REMOTE_SOURCE_LIMITS.maxCommandOutputBytes,
+      limits.commandTimeoutMs,
+      limits.maxCommandOutputBytes,
     );
-    const files = parseTree(outputText(tree.stdout));
+    const files = parseTree(decodeTreeOutput(tree.stdout, sourceId));
     const packages = findSkillPackages(files);
     const agents = findNativeAgentFiles(files);
-    if (packages.length > REMOTE_SOURCE_LIMITS.maxPackages ||
-        agents.length > REMOTE_SOURCE_LIMITS.maxAgents) {
-      throw tooLarge(sourceId);
-    }
+    if (packages.length > limits.maxPackages) throw tooLarge(sourceId, 'maxPackages', limits.maxPackages);
+    if (agents.length > limits.maxAgents) throw tooLarge(sourceId, 'maxAgents', limits.maxAgents);
+    const indexedPackages = indexPackageFiles(files, packages, sourceId, limits.maxFiles);
+    checkCancelled();
 
     const snapshotRoot = await ensureSnapshotRoot(configStore.getConfigDir(), sourceId, revision);
     const temporarySnapshot = join(dirname(snapshotRoot), `.${revision}.${randomUUID()}.tmp`);
     await mkdir(temporarySnapshot, { recursive: false, mode: 0o700 });
+    const blobReader = options.gitRunner === undefined
+      ? createGitBlobReader({
+          repository: clonePath,
+          cwd: workRoot,
+          timeoutMs: limits.commandTimeoutMs,
+          maxStderrBytes: limits.maxCommandOutputBytes,
+          exceedsStagingLimits: () => exceedsStagingLimits(workRoot, limits),
+          ...(options.signal === undefined ? {} : { signal: options.signal }),
+        })
+      : undefined;
+    const readBlob = async (object: string, packageBytes: number, snapshotBytes: number): Promise<Buffer> => {
+      checkCancelled();
+      if (blobReader === undefined) {
+        const content = await git(
+          ['-C', clonePath, 'cat-file', 'blob', object],
+          workRoot,
+          limits.commandTimeoutMs,
+          limits.maxPackageBytes,
+        );
+        return outputBuffer(content.stdout);
+      }
+      const packageRemaining = limits.maxPackageBytes - packageBytes;
+      const snapshotRemaining = limits.maxSnapshotBytes - snapshotBytes;
+      try {
+        return await blobReader.read(object, Math.min(packageRemaining, snapshotRemaining));
+      } catch (error) {
+        if (!(error instanceof GitBatchError)) throw error;
+        if (error.code === 'CANCELLED') checkCancelled();
+        if (error.code === 'TOO_LARGE' && 'bytes' in error.details) {
+          const dimension = packageRemaining <= snapshotRemaining ? 'maxPackageBytes' : 'maxSnapshotBytes';
+          throw tooLarge(sourceId, dimension, limits[dimension]);
+        }
+        throw new RemoteSourceError(
+          error.code === 'TIMEOUT' ? REMOTE_SOURCE_ERROR_CODES.TIMEOUT :
+            error.code === 'TOO_LARGE' ? REMOTE_SOURCE_ERROR_CODES.TOO_LARGE : REMOTE_SOURCE_ERROR_CODES.CLONE_FAILED,
+          error.message,
+          { sourceId, ...error.details },
+        );
+      }
+    };
     try {
       const packageManifests: RemoteSkillSnapshot['packages'] = [];
       const agentManifests: RemoteNativeAgent[] = [];
-      let totalFiles = 0;
+      await mkdir(join(temporarySnapshot, 'modes'), { mode: 0o700 });
+      let totalFiles = indexedPackages.totalFiles;
       let totalBytes = 0;
       for (const packagePath of packages) {
-        const packageFiles = files.filter((file) =>
-          file.path.startsWith(packagePath === '.' ? '' : `${packagePath}/`),
-        );
-        totalFiles += packageFiles.length;
-        if (totalFiles > REMOTE_SOURCE_LIMITS.maxFiles) throw tooLarge(sourceId);
+        checkCancelled();
+        const packageFiles = indexedPackages.files.get(packagePath)!;
 
         const skillFile = packageFiles.find((file) =>
           file.path === (packagePath === '.' ? 'SKILL.md' : `${packagePath}/SKILL.md`),
@@ -277,19 +472,11 @@ export async function refreshRemoteSkillSource(
           }
           const packageRelative = packagePath === '.' ? file.path : file.path.slice(packagePath.length + 1);
           validateRelativePackagePath(packageRelative, sourceId, packagePath);
-          const content = await git(
-            ['-C', clonePath, 'cat-file', 'blob', file.object],
-            workRoot,
-            REMOTE_SOURCE_LIMITS.commandTimeoutMs,
-            REMOTE_SOURCE_LIMITS.maxPackageBytes,
-          );
-          const bytes = outputBuffer(content.stdout);
+          const bytes = await readBlob(file.object, packageBytes, totalBytes);
           packageBytes += bytes.byteLength;
           totalBytes += bytes.byteLength;
-          if (packageBytes > REMOTE_SOURCE_LIMITS.maxPackageBytes ||
-              totalBytes > REMOTE_SOURCE_LIMITS.maxPackageBytes) {
-            throw tooLarge(sourceId);
-          }
+          if (packageBytes > limits.maxPackageBytes) throw tooLarge(sourceId, 'maxPackageBytes', limits.maxPackageBytes);
+          if (totalBytes > limits.maxSnapshotBytes) throw tooLarge(sourceId, 'maxSnapshotBytes', limits.maxSnapshotBytes);
           fingerprintFiles.push({
             path: packageRelative,
             mode: file.mode === '100755' ? 'x' : '-',
@@ -310,6 +497,16 @@ export async function refreshRemoteSkillSource(
             .update('\0')
             .update(file.content);
         }
+        await writeSnapshotModes(temporarySnapshot, packageDirectory, {
+          version: 1,
+          executablePaths: fingerprintFiles.filter((file) => file.mode === 'x').map((file) => file.path),
+        });
+        await writeSnapshotReview(temporarySnapshot, packageDirectory, {
+          version: 1,
+          fingerprint: snapshotReviewFingerprint(fingerprintFiles.map((file) => ({
+            path: file.path, content: file.content, executable: file.mode === 'x',
+          }))),
+        });
         const metadata = parseSkillFrontmatter(skillText);
         packageManifests.push({
           name: frontmatterString(metadata.data, 'name') ?? basename(packagePath),
@@ -323,18 +520,16 @@ export async function refreshRemoteSkillSource(
       }
 
       totalFiles += agents.length;
-      if (totalFiles > REMOTE_SOURCE_LIMITS.maxFiles) throw tooLarge(sourceId);
+      if (totalFiles > limits.maxFiles) throw tooLarge(sourceId, 'maxFiles', limits.maxFiles);
       for (const file of agents) {
+        checkCancelled();
         if (file.mode !== '100644') throw invalidPackage(sourceId, file.repositoryPath);
-        const contentResult = await git(
-          ['-C', clonePath, 'cat-file', 'blob', file.object],
-          workRoot,
-          REMOTE_SOURCE_LIMITS.commandTimeoutMs,
-          REMOTE_SOURCE_LIMITS.maxPackageBytes,
-        );
-        const content = outputBuffer(contentResult.stdout);
+        const content = await readBlob(file.object, 0, totalBytes);
+        if (content.byteLength > limits.maxPackageBytes) {
+          throw tooLarge(sourceId, 'maxPackageBytes', limits.maxPackageBytes);
+        }
         totalBytes += content.byteLength;
-        if (totalBytes > REMOTE_SOURCE_LIMITS.maxPackageBytes) throw tooLarge(sourceId);
+        if (totalBytes > limits.maxSnapshotBytes) throw tooLarge(sourceId, 'maxSnapshotBytes', limits.maxSnapshotBytes);
         validateRelativePackagePath(file.agentPath, sourceId, file.repositoryPath);
         const inspected = inspectNativeAgent(file, content.toString('utf8'));
         const directory = createHash('sha256')
@@ -353,6 +548,22 @@ export async function refreshRemoteSkillSource(
         });
       }
 
+      try {
+        await blobReader?.close();
+      } catch (error) {
+        if (!(error instanceof GitBatchError)) throw error;
+        if (error.code === 'CANCELLED') checkCancelled();
+        throw new RemoteSourceError(
+          error.code === 'TIMEOUT' ? REMOTE_SOURCE_ERROR_CODES.TIMEOUT :
+            error.code === 'TOO_LARGE' ? REMOTE_SOURCE_ERROR_CODES.TOO_LARGE : REMOTE_SOURCE_ERROR_CODES.CLONE_FAILED,
+          error.message,
+          { sourceId, ...error.details },
+        );
+      }
+      const stagingExceeded = await exceedsStagingLimits(workRoot, limits);
+      if (stagingExceeded !== null) {
+        throw tooLarge(sourceId, stagingExceeded.dimension, stagingExceeded.limit);
+      }
       const manifest = snapshotManifestSchema.parse({
         version: 1,
         sourceId,
@@ -366,16 +577,75 @@ export async function refreshRemoteSkillSource(
         `${JSON.stringify(manifest, null, 2)}\n`,
         { flag: 'wx', mode: 0o600 },
       );
+      try {
+        await writeSnapshotIndex(temporarySnapshot, manifest);
+      } catch (error) {
+        if (error instanceof SnapshotIndexTooLarge) {
+          throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.TOO_LARGE, error.message, {
+            sourceId, dimension: 'snapshotIndexBytes', limit: MAX_SNAPSHOT_INDEX_BYTES,
+          });
+        }
+        throw error;
+      }
       await mkdir(dirname(snapshotRoot), { recursive: true, mode: 0o700 });
+      checkCancelled();
       try {
         await rename(temporarySnapshot, snapshotRoot);
       } catch (error) {
-        if (!isErrno(error, 'EEXIST') && !isErrno(error, 'ENOTEMPTY')) throw error;
+        if (!isErrno(error, 'EEXIST') && !isErrno(error, 'ENOTEMPTY') &&
+            !(process.platform === 'win32' && isErrno(error, 'EPERM'))) throw error;
+        try {
+          await lstat(snapshotRoot);
+        } catch (inspectionError) {
+          if (isErrno(inspectionError, 'ENOENT')) throw error;
+          throw inspectionError;
+        }
+        const existing = await readSnapshot(snapshotRoot);
+        if (JSON.stringify(existing) !== JSON.stringify(manifest)) {
+          throw snapshotCorrupt('IMMUTABLE_MISMATCH');
+        }
+        const missingModes: Array<{ directory: string; modes: SnapshotModes }> = [];
+        const missingReviews: Array<{ directory: string; review: SnapshotReview }> = [];
+        for (const entry of existing.packages) {
+          checkCancelled();
+          const stagedModes = await readSnapshotModes(temporarySnapshot, entry.directory);
+          if (stagedModes === undefined) throw snapshotCorrupt('MODE_INDEX_INVALID');
+          const savedModes = await readSnapshotModes(snapshotRoot, entry.directory);
+          if (savedModes !== undefined && JSON.stringify(savedModes) !== JSON.stringify(stagedModes)) {
+            throw snapshotCorrupt('MODE_INDEX_INVALID');
+          }
+          const stagedReview = await readSnapshotReview(temporarySnapshot, entry.directory);
+          if (stagedReview === undefined) throw snapshotCorrupt('REVIEW_INDEX_INVALID');
+          const savedReview = await readSnapshotReview(snapshotRoot, entry.directory);
+          if (savedReview !== undefined && savedReview.fingerprint !== stagedReview.fingerprint) {
+            throw snapshotCorrupt('REVIEW_INDEX_INVALID');
+          }
+          await verifySnapshotPackage(configStore.getConfigDir(), existing, entry, savedModes ?? stagedModes, stagedReview);
+          if (savedModes === undefined) missingModes.push({ directory: entry.directory, modes: stagedModes });
+          if (savedReview === undefined) missingReviews.push({ directory: entry.directory, review: stagedReview });
+        }
+        for (const entry of existing.agents) {
+          checkCancelled();
+          await verifySnapshotAgent(configStore.getConfigDir(), existing, entry);
+        }
+        await verifyExistingSnapshotIndex(snapshotRoot, existing, checkCancelled);
+        for (const entry of missingModes) {
+          checkCancelled();
+          await publishSnapshotModes(snapshotRoot, temporarySnapshot, entry.directory, entry.modes);
+        }
+        for (const entry of missingReviews) {
+          checkCancelled();
+          await publishSnapshotReview(snapshotRoot, temporarySnapshot, entry.directory, entry.review);
+        }
         await rm(temporarySnapshot, { recursive: true, force: true });
       }
       return await readSnapshot(snapshotRoot);
     } catch (error) {
-      await rm(temporarySnapshot, { recursive: true, force: true });
+      try {
+        await blobReader?.close(true);
+      } finally {
+        await rm(temporarySnapshot, { recursive: true, force: true });
+      }
       throw error;
     }
   } finally {
@@ -390,9 +660,10 @@ export async function listRemoteSkillSnapshots(
   if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(sourceId)) {
     throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.NOT_FOUND, 'The remote source id is invalid.');
   }
-  const root = join(resolve(configDirectory), 'catalog-sources', sourceId);
   let names: string[];
+  let root: string;
   try {
+    root = join(await realpath(configDirectory), 'catalog-sources', sourceId);
     names = await readdir(root);
   } catch (error) {
     if (isErrno(error, 'ENOENT')) return [];
@@ -406,11 +677,157 @@ export async function listRemoteSkillSnapshots(
   return snapshots;
 }
 
+export async function findRemoteSkillSnapshot(
+  configDirectory: string,
+  sourceId: string,
+  revision: string,
+): Promise<RemoteSkillSnapshot | undefined> {
+  if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(sourceId) || !/^[a-f0-9]{40,64}$/.test(revision)) {
+    throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.NOT_FOUND, 'The remote source identity is invalid.');
+  }
+  let configRoot: string;
+  try {
+    configRoot = await realpath(configDirectory);
+  } catch (error) {
+    if (isErrno(error, 'ENOENT')) return undefined;
+    throw error;
+  }
+  const root = join(configRoot, 'catalog-sources', sourceId, revision);
+  try {
+    await lstat(root);
+  } catch (error) {
+    if (isErrno(error, 'ENOENT')) return undefined;
+    throw error;
+  }
+  const snapshot = await readSnapshot(root);
+  if (snapshot.sourceId !== sourceId || snapshot.revision !== revision) throw snapshotCorrupt();
+  return snapshot;
+}
+
+const snapshotPageSchema = z.strictObject({
+  kind: z.enum(['skill', 'agent']),
+  search: z.string().trim().max(500).default(''),
+  offset: z.number().int().min(0).max(REMOTE_CATALOG_HARD_LIMITS.maxPackages + REMOTE_CATALOG_HARD_LIMITS.maxAgents).default(0),
+  limit: z.number().int().min(1).max(100).default(50),
+});
+
+export async function listRemoteSnapshotPage(
+  configDirectory: string,
+  sourceId: string,
+  revision: string,
+  raw: unknown,
+) {
+  const parsed = snapshotPageSchema.safeParse(raw);
+  if (!parsed.success || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(sourceId) ||
+      !/^[a-f0-9]{40,64}$/.test(revision)) {
+    throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.INVALID, 'The remote snapshot page request is not valid.');
+  }
+  let root: string;
+  try {
+    root = join(await realpath(configDirectory), 'catalog-sources', sourceId, revision);
+  } catch {
+    throw snapshotCorrupt();
+  }
+  const { kind, offset, limit, search } = parsed.data;
+  let indexed;
+  try {
+    indexed = await readSnapshotIndex(root, sourceId, revision, { kind, offset, limit, search });
+  } catch {
+    throw snapshotCorrupt('INDEX_INVALID');
+  }
+  if (indexed !== null && !('stale' in indexed)) {
+    const schema = kind === 'skill' ? snapshotManifestSchema.shape.packages : snapshotManifestSchema.shape.agents;
+    const parsedItems = schema.safeParse(indexed.items);
+    if (!parsedItems.success) throw snapshotCorrupt('INDEX_INVALID');
+    const items = parsedItems.data;
+    if (indexed.total > (kind === 'skill' ? REMOTE_CATALOG_HARD_LIMITS.maxPackages : REMOTE_CATALOG_HARD_LIMITS.maxAgents) ||
+        items.length !== Math.min(limit, Math.max(0, indexed.total - offset))) throw snapshotCorrupt('INDEX_INVALID');
+    return {
+      sourceId, revision, repository: indexed.repository, kind, search, total: indexed.total, items,
+      nextOffset: offset + items.length < indexed.total ? offset + items.length : null,
+    };
+  }
+  const snapshot = await readSnapshot(root);
+  if (snapshot.sourceId !== sourceId || snapshot.revision !== revision) throw snapshotCorrupt();
+  const needle = search.toLowerCase();
+  const entries = (kind === 'skill' ? snapshot.packages : snapshot.agents)
+    .filter((entry) => `${entry.name}\n${entry.description}\n${entry.repositoryPath}`.toLowerCase().includes(needle))
+    .sort((a, b) => comparePaths(a.name, b.name) ||
+      comparePaths(a.repositoryPath, b.repositoryPath) || comparePaths(a.directory, b.directory));
+  const items = entries.slice(offset, offset + limit);
+  const nextOffset = offset + items.length < entries.length ? offset + items.length : null;
+  return {
+    sourceId,
+    revision,
+    repository: snapshot.repository,
+    kind,
+    search,
+    total: entries.length,
+    items,
+    nextOffset,
+    ...(indexed !== null && 'stale' in indexed ? {
+      warning: { code: 'REMOTE_SOURCE_INDEX_STALE', message: 'The snapshot index is stale; this page was read from the validated manifest.' },
+    } : {}),
+  };
+}
+
+export async function inspectRemoteSnapshotCandidate(
+  configDirectory: string,
+  sourceId: string,
+  revision: string,
+  raw: unknown,
+) {
+  const parsed = z.strictObject({
+    kind: z.enum(['skill', 'agent']),
+    repositoryPath: z.string().min(1).max(4096),
+  }).safeParse(raw);
+  if (!parsed.success || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(sourceId) ||
+      !/^[a-f0-9]{40,64}$/.test(revision)) {
+    throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.INVALID, 'The remote candidate request is not valid.');
+  }
+  let configRoot: string;
+  try {
+    configRoot = await realpath(configDirectory);
+  } catch {
+    throw snapshotCorrupt();
+  }
+  const snapshot = await readSnapshot(join(configRoot, 'catalog-sources', sourceId, revision));
+  if (snapshot.sourceId !== sourceId || snapshot.revision !== revision) throw snapshotCorrupt();
+  const candidates = parsed.data.kind === 'skill' ? snapshot.packages : snapshot.agents;
+  const matches = candidates.filter((candidate) => candidate.repositoryPath === parsed.data.repositoryPath);
+  if (matches.length === 0) {
+    throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.NOT_FOUND, 'The candidate is not present in the pinned snapshot.');
+  }
+  if (matches.length !== 1) throw snapshotCorrupt();
+  if (parsed.data.kind === 'skill') {
+    const skill = snapshot.packages.find((candidate) => candidate.repositoryPath === parsed.data.repositoryPath);
+    if (skill === undefined) throw snapshotCorrupt();
+    return {
+      sourceId, revision, repository: snapshot.repository, kind: 'skill' as const,
+      candidate: skill, path: await resolveSnapshotPackagePath(configDirectory, snapshot, skill),
+    };
+  }
+  const agent = snapshot.agents.find((candidate) => candidate.repositoryPath === parsed.data.repositoryPath);
+  if (agent === undefined) throw snapshotCorrupt();
+  return {
+    sourceId, revision, repository: snapshot.repository, kind: 'agent' as const,
+    candidate: agent, path: await resolveSnapshotAgentPath(configDirectory, snapshot, agent),
+  };
+}
+
 export async function resolveSnapshotPackagePath(
   configDirectory: string,
   snapshot: RemoteSkillSnapshot,
   packageInfo: RemoteSkillSnapshot['packages'][number],
 ): Promise<string> {
+  return (await resolveSnapshotPackage(configDirectory, snapshot, packageInfo)).path;
+}
+
+export async function resolveSnapshotPackage(
+  configDirectory: string,
+  snapshot: RemoteSkillSnapshot,
+  packageInfo: RemoteSkillSnapshot['packages'][number],
+): Promise<{ path: string; reviewFingerprint: string; executablePaths?: string[] }> {
   const parsedSnapshot = snapshotManifestSchema.parse(snapshot);
   const registeredPackage = parsedSnapshot.packages.find((candidate) =>
     candidate.directory === packageInfo.directory &&
@@ -419,7 +836,16 @@ export async function resolveSnapshotPackagePath(
   if (registeredPackage === undefined) {
     throw snapshotCorrupt();
   }
-  const selectedPackage = registeredPackage;
+  return verifySnapshotPackage(configDirectory, parsedSnapshot, registeredPackage);
+}
+
+async function verifySnapshotPackage(
+  configDirectory: string,
+  parsedSnapshot: RemoteSkillSnapshot,
+  selectedPackage: RemoteSkillSnapshot['packages'][number],
+  modeOverride?: SnapshotModes,
+  reviewOverride?: SnapshotReview,
+): Promise<{ path: string; reviewFingerprint: string; executablePaths?: string[] }> {
   try {
     const configRoot = await realpath(configDirectory);
     const sourceRoot = join(configRoot, 'catalog-sources', parsedSnapshot.sourceId);
@@ -432,6 +858,11 @@ export async function resolveSnapshotPackagePath(
       }
     }
 
+    const modes = modeOverride ?? await readSnapshotModes(snapshotRoot, selectedPackage.directory);
+    if (process.platform === 'win32' && modes === undefined) throw snapshotCorrupt('MODE_INDEX_MISSING');
+    const review = reviewOverride ?? await readSnapshotReview(snapshotRoot, selectedPackage.directory);
+    if (review === undefined) throw snapshotCorrupt('REVIEW_INDEX_MISSING');
+    const remainingExecutables = modes === undefined ? undefined : new Set(modes.executablePaths);
     const fingerprint = createHash('sha256');
     const fingerprintFiles: Array<{ path: string; mode: string; content: Buffer }> = [];
     let files = 0;
@@ -449,12 +880,17 @@ export async function resolveSnapshotPackagePath(
         if (!info.isFile()) throw snapshotCorrupt();
         const filePath = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
         validateRelativePackagePath(filePath, parsedSnapshot.sourceId, selectedPackage.repositoryPath);
-        const content = await readFile(path);
+        if (files >= selectedPackage.files) throw snapshotCorrupt('CONTENT_MISMATCH');
+        const { content, executable } = await readBoundedSnapshotFile(path, selectedPackage.bytes - bytes);
+        const recordedExecutable = remainingExecutables?.delete(filePath);
+        if (recordedExecutable !== undefined && process.platform !== 'win32' && recordedExecutable !== executable) {
+          throw snapshotCorrupt('CONTENT_MISMATCH');
+        }
         files += 1;
         bytes += content.byteLength;
         fingerprintFiles.push({
           path: filePath,
-          mode: info.mode & 0o111 ? 'x' : '-',
+          mode: (recordedExecutable ?? executable) ? 'x' : '-',
           content,
         });
       }
@@ -469,7 +905,8 @@ export async function resolveSnapshotPackagePath(
         .update(file.content);
     }
     const actualFingerprint = fingerprint.digest('hex');
-    if (files !== selectedPackage.files || bytes !== selectedPackage.bytes ||
+    if ((remainingExecutables?.size ?? 0) !== 0 ||
+        files !== selectedPackage.files || bytes !== selectedPackage.bytes ||
         actualFingerprint !== selectedPackage.fingerprint) {
       throw snapshotCorrupt('CONTENT_MISMATCH', {
         files,
@@ -481,7 +918,15 @@ export async function resolveSnapshotPackagePath(
         expectedFingerprint: selectedPackage.fingerprint,
       });
     }
-    return packageRoot;
+    const reviewFingerprint = snapshotReviewFingerprint(fingerprintFiles.map((file) => ({
+      path: file.path, content: file.content, executable: file.mode === 'x',
+    })));
+    if (reviewFingerprint !== review.fingerprint) throw snapshotCorrupt('CONTENT_MISMATCH');
+    return {
+      path: packageRoot,
+      reviewFingerprint,
+      ...(modes === undefined ? {} : { executablePaths: modes.executablePaths }),
+    };
   } catch (error) {
     if (error instanceof RemoteSourceError) throw error;
     throw snapshotCorrupt();
@@ -502,6 +947,14 @@ export async function resolveSnapshotAgentPath(
   );
   if (registeredAgent === undefined) throw snapshotCorrupt();
 
+  return verifySnapshotAgent(configDirectory, parsedSnapshot, registeredAgent);
+}
+
+async function verifySnapshotAgent(
+  configDirectory: string,
+  parsedSnapshot: RemoteSkillSnapshot,
+  registeredAgent: RemoteNativeAgent,
+): Promise<string> {
   try {
     const configRoot = await realpath(configDirectory);
     const sourceRoot = join(configRoot, 'catalog-sources', parsedSnapshot.sourceId);
@@ -519,7 +972,8 @@ export async function resolveSnapshotAgentPath(
     if (!info.isFile() || info.isSymbolicLink() || info.size !== registeredAgent.bytes) {
       throw snapshotCorrupt();
     }
-    const content = await readFile(agentPath);
+    const { content } = await readBoundedSnapshotFile(agentPath, registeredAgent.bytes);
+    if (content.byteLength !== registeredAgent.bytes) throw snapshotCorrupt();
     const fingerprint = createHash('sha256').update(content).digest('hex');
     if (fingerprint !== registeredAgent.fingerprint) {
       throw snapshotCorrupt('CONTENT_MISMATCH', {
@@ -534,15 +988,223 @@ export async function resolveSnapshotAgentPath(
   }
 }
 
+async function verifyExistingSnapshotIndex(
+  root: string,
+  snapshot: RemoteSkillSnapshot,
+  checkCancelled: () => void,
+): Promise<void> {
+  for (const kind of ['skill', 'agent'] as const) {
+    const expected = [...(kind === 'skill' ? snapshot.packages : snapshot.agents)]
+      .sort((a, b) => comparePaths(a.name, b.name) ||
+        comparePaths(a.repositoryPath, b.repositoryPath) || comparePaths(a.directory, b.directory));
+    for (let offset = 0; offset < expected.length || offset === 0; offset += 1000) {
+      checkCancelled();
+      let page;
+      try {
+        page = await readSnapshotIndex(root, snapshot.sourceId, snapshot.revision, {
+          kind, search: '', offset, limit: 1000,
+        });
+      } catch {
+        throw snapshotCorrupt('INDEX_INVALID');
+      }
+      if (page === null || 'stale' in page) break;
+      const entries = expected.slice(offset, offset + 1000);
+      const searches = entries.map((entry) =>
+        `${entry.name}\n${entry.description}\n${entry.repositoryPath}`.toLowerCase());
+      if (page.repository !== snapshot.repository || page.total !== expected.length ||
+          JSON.stringify(page.items) !== JSON.stringify(entries) ||
+          JSON.stringify(page.searches) !== JSON.stringify(searches)) {
+        throw snapshotCorrupt('INDEX_INVALID');
+      }
+    }
+  }
+}
+
+async function writeSnapshotModes(root: string, directory: string, modes: SnapshotModes): Promise<void> {
+  const content = `${JSON.stringify(snapshotModesSchema.parse(modes))}\n`;
+  if (Buffer.byteLength(content, 'utf8') > MAX_SNAPSHOT_MANIFEST_BYTES) {
+    throw snapshotCorrupt('MODE_INDEX_INVALID');
+  }
+  const handle = await open(join(root, 'modes', `${directory}.json`), 'wx', 0o600);
+  try {
+    await handle.writeFile(content, 'utf8');
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+async function writeSnapshotReview(root: string, directory: string, review: SnapshotReview): Promise<void> {
+  const content = `${JSON.stringify(snapshotReviewSchema.parse(review))}\n`;
+  const handle = await open(join(root, 'modes', `${directory}.review.json`), 'wx', 0o600);
+  try {
+    await handle.writeFile(content, 'utf8');
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+async function readSnapshotReview(root: string, directory: string): Promise<SnapshotReview | undefined> {
+  if (!/^[a-f0-9]{64}$/.test(directory)) throw snapshotCorrupt('REVIEW_INDEX_INVALID');
+  const modeRoot = join(root, 'modes');
+  try {
+    const rootInfo = await lstat(modeRoot);
+    if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink() || await realpath(modeRoot) !== modeRoot) {
+      throw snapshotCorrupt('REVIEW_INDEX_INVALID');
+    }
+    const path = join(modeRoot, `${directory}.review.json`);
+    const info = await lstat(path);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 1024) {
+      throw snapshotCorrupt('REVIEW_INDEX_INVALID');
+    }
+    const { content } = await readBoundedSnapshotFile(path, 1024);
+    return snapshotReviewSchema.parse(JSON.parse(content.toString('utf8')) as unknown);
+  } catch (error) {
+    if (isErrno(error, 'ENOENT')) return undefined;
+    throw snapshotCorrupt('REVIEW_INDEX_INVALID');
+  }
+}
+
+async function readSnapshotModes(root: string, directory: string): Promise<SnapshotModes | undefined> {
+  if (!/^[a-f0-9]{64}$/.test(directory)) throw snapshotCorrupt('MODE_INDEX_INVALID');
+  const modeRoot = join(root, 'modes');
+  try {
+    const rootInfo = await lstat(modeRoot);
+    if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink() || await realpath(modeRoot) !== modeRoot) {
+      throw snapshotCorrupt('MODE_INDEX_INVALID');
+    }
+    const path = join(modeRoot, `${directory}.json`);
+    const info = await lstat(path);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_SNAPSHOT_MANIFEST_BYTES) {
+      throw snapshotCorrupt('MODE_INDEX_INVALID');
+    }
+    const { content } = await readBoundedSnapshotFile(path, MAX_SNAPSHOT_MANIFEST_BYTES);
+    const modes = snapshotModesSchema.parse(JSON.parse(content.toString('utf8')) as unknown);
+    let previous: string | undefined;
+    for (const item of modes.executablePaths) {
+      validateRelativePackagePath(item, '', '');
+      if (previous !== undefined && comparePaths(previous, item) >= 0) throw snapshotCorrupt('MODE_INDEX_INVALID');
+      previous = item;
+    }
+    return modes;
+  } catch (error) {
+    if (isErrno(error, 'ENOENT')) return undefined;
+    throw snapshotCorrupt('MODE_INDEX_INVALID');
+  }
+}
+
+async function publishSnapshotModes(
+  root: string,
+  temporaryRoot: string,
+  directory: string,
+  expected: SnapshotModes,
+): Promise<void> {
+  const modeRoot = join(root, 'modes');
+  try {
+    await mkdir(modeRoot, { mode: 0o700 });
+  } catch (error) {
+    if (!isErrno(error, 'EEXIST')) throw error;
+  }
+  const info = await lstat(modeRoot);
+  if (!info.isDirectory() || info.isSymbolicLink() || await realpath(modeRoot) !== modeRoot) {
+    throw snapshotCorrupt('MODE_INDEX_INVALID');
+  }
+  try {
+    await link(join(temporaryRoot, 'modes', `${directory}.json`), join(modeRoot, `${directory}.json`));
+  } catch (error) {
+    if (!isErrno(error, 'EEXIST')) throw error;
+    const existing = await readSnapshotModes(root, directory);
+    if (JSON.stringify(existing) !== JSON.stringify(expected)) throw snapshotCorrupt('MODE_INDEX_INVALID');
+  }
+  const handle = await open(modeRoot, constants.O_RDONLY);
+  try {
+    try {
+      await handle.sync();
+    } catch (error) {
+      if (process.platform !== 'win32' || !isErrno(error, 'EPERM')) throw error;
+    }
+  } finally {
+    await handle.close();
+  }
+}
+
+async function publishSnapshotReview(
+  root: string,
+  temporaryRoot: string,
+  directory: string,
+  expected: SnapshotReview,
+): Promise<void> {
+  const modeRoot = join(root, 'modes');
+  try {
+    await mkdir(modeRoot, { mode: 0o700 });
+  } catch (error) {
+    if (!isErrno(error, 'EEXIST')) throw error;
+  }
+  const info = await lstat(modeRoot);
+  if (!info.isDirectory() || info.isSymbolicLink() || await realpath(modeRoot) !== modeRoot) {
+    throw snapshotCorrupt('REVIEW_INDEX_INVALID');
+  }
+  try {
+    await link(join(temporaryRoot, 'modes', `${directory}.review.json`),
+      join(modeRoot, `${directory}.review.json`));
+  } catch (error) {
+    if (!isErrno(error, 'EEXIST')) throw error;
+    const existing = await readSnapshotReview(root, directory);
+    if (JSON.stringify(existing) !== JSON.stringify(expected)) throw snapshotCorrupt('REVIEW_INDEX_INVALID');
+  }
+  const handle = await open(modeRoot, constants.O_RDONLY);
+  try {
+    try {
+      await handle.sync();
+    } catch (error) {
+      if (process.platform !== 'win32' || !isErrno(error, 'EPERM')) throw error;
+    }
+  } finally {
+    await handle.close();
+  }
+}
+
+async function readBoundedSnapshotFile(path: string, maximumBytes: number): Promise<{ content: Buffer; executable: boolean }> {
+  const before = await lstat(path, { bigint: true });
+  if (!before.isFile() || before.isSymbolicLink() || before.ino === 0n ||
+      before.size > BigInt(maximumBytes)) throw snapshotCorrupt('CONTENT_MISMATCH');
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const info = await file.stat({ bigint: true });
+    if (!info.isFile() || info.dev !== before.dev || info.ino !== before.ino ||
+        info.size !== before.size) throw snapshotCorrupt('CONTENT_MISMATCH');
+    const buffer = Buffer.alloc(Number(info.size) + 1);
+    let bytes = 0;
+    while (bytes < buffer.length) {
+      const read = await file.read(buffer, bytes, buffer.length - bytes, bytes);
+      if (read.bytesRead === 0) break;
+      bytes += read.bytesRead;
+    }
+    const after = await file.stat({ bigint: true });
+    const current = await lstat(path, { bigint: true });
+    if (bytes !== Number(info.size) || after.size !== info.size || after.mtimeNs !== info.mtimeNs ||
+        after.mode !== info.mode || !current.isFile() || current.isSymbolicLink() ||
+        current.dev !== info.dev || current.ino !== info.ino) throw snapshotCorrupt('CONTENT_MISMATCH');
+    return { content: buffer.subarray(0, bytes), executable: (info.mode & 0o111n) !== 0n };
+  } finally {
+    await file.close();
+  }
+}
+
 async function readSnapshot(root: string): Promise<RemoteSkillSnapshot> {
   try {
     const info = await lstat(root);
     if (!info.isDirectory() || info.isSymbolicLink() || await realpath(root) !== root) {
       throw new Error('unsafe');
     }
-    return snapshotManifestSchema.parse(
-      JSON.parse(await readFile(join(root, 'snapshot.json'), 'utf8')) as unknown,
-    );
+    const manifest = join(root, 'snapshot.json');
+    const manifestInfo = await lstat(manifest);
+    if (!manifestInfo.isFile() || manifestInfo.isSymbolicLink() || manifestInfo.size > MAX_SNAPSHOT_MANIFEST_BYTES) {
+      throw new Error('unsafe');
+    }
+    const { content } = await readBoundedSnapshotFile(manifest, MAX_SNAPSHOT_MANIFEST_BYTES);
+    return snapshotManifestSchema.parse(JSON.parse(content.toString('utf8')) as unknown);
   } catch {
     throw snapshotCorrupt();
   }
@@ -560,7 +1222,13 @@ async function ensureSnapshotRoot(configDirectory: string, sourceId: string, rev
   if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(sourceId) || !/^[a-f0-9]{40,64}$/.test(revision)) {
     throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.NOT_FOUND, 'The remote source identity is invalid.');
   }
-  const root = resolve(configDirectory);
+  const configuredRoot = resolve(configDirectory);
+  await mkdir(configuredRoot, { recursive: true, mode: 0o700 });
+  const rootInfo = await lstat(configuredRoot);
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) {
+    throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.NOT_FOUND, 'The remote source storage path is unsafe.');
+  }
+  const root = await realpath(configuredRoot);
   const sources = join(root, 'catalog-sources');
   const sourceDirectory = join(sources, sourceId);
   const snapshot = join(sourceDirectory, revision);
@@ -590,6 +1258,20 @@ interface NativeAgentFile extends TreeFile {
   agentPath: string;
 }
 
+function decodeTreeOutput(output: string | Buffer, sourceId: string): string {
+  if (typeof output === 'string') return output;
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(output);
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+    throw new RemoteSourceError(
+      REMOTE_SOURCE_ERROR_CODES.INVALID_PACKAGE,
+      'The remote tree contains a path that is not valid UTF-8.',
+      { sourceId },
+    );
+  }
+}
+
 function parseTree(output: string): TreeFile[] {
   return output.split('\0').filter(Boolean).map((entry) => {
     const match = /^(100644|100755|120000|040000) (?:blob|tree) ([a-f0-9]{40,64})\t(.+)$/.exec(entry);
@@ -611,6 +1293,54 @@ function findSkillPackages(files: readonly TreeFile[]): string[] {
     }
   }
   return [...packages].sort();
+}
+
+function indexPackageFiles(
+  files: readonly TreeFile[],
+  packages: readonly string[],
+  sourceId: string,
+  maxFiles: number,
+): { files: Map<string, TreeFile[]>; totalFiles: number } {
+  const grouped = new Map(packages.map((path) => [path, [] as TreeFile[]]));
+  interface PackageNode {
+    children: Map<string, PackageNode>;
+    packagePath?: string;
+  }
+  const root: PackageNode = { children: new Map() };
+  for (const path of packages) {
+    if (path === '.') continue;
+    let node = root;
+    for (const segment of path.split('/')) {
+      let child = node.children.get(segment);
+      if (child === undefined) {
+        child = { children: new Map() };
+        node.children.set(segment, child);
+      }
+      node = child;
+    }
+    node.packagePath = path;
+  }
+  let totalFiles = 0;
+  const add = (path: string, file: TreeFile): void => {
+    const entries = grouped.get(path);
+    if (entries === undefined) return;
+    totalFiles += 1;
+    if (totalFiles > maxFiles) throw tooLarge(sourceId, 'maxFiles', maxFiles);
+    entries.push(file);
+  };
+  for (const file of files) {
+    add('.', file);
+    let node = root;
+    let start = 0;
+    for (let slash = file.path.indexOf('/'); slash !== -1; slash = file.path.indexOf('/', start)) {
+      const child = node.children.get(file.path.slice(start, slash));
+      if (child === undefined) break;
+      node = child;
+      if (node.packagePath !== undefined) add(node.packagePath, file);
+      start = slash + 1;
+    }
+  }
+  return { files: grouped, totalFiles };
 }
 
 function findNativeAgentFiles(files: readonly TreeFile[]): NativeAgentFile[] {
@@ -717,11 +1447,11 @@ function invalidPackage(sourceId: string, packagePath: string): RemoteSourceErro
   );
 }
 
-function tooLarge(sourceId: string): RemoteSourceError {
+function tooLarge(sourceId: string, dimension: keyof RemoteCatalogLimits, limit: number): RemoteSourceError {
   return new RemoteSourceError(
     REMOTE_SOURCE_ERROR_CODES.TOO_LARGE,
-    'The remote repository exceeds the configured skill snapshot limits.',
-    { sourceId },
+    `The remote repository exceeds the ${dimension} limit (${String(limit)}). Adjust the catalog limits or narrow the source.`,
+    { sourceId, dimension, limit },
   );
 }
 
@@ -734,97 +1464,151 @@ async function runGit(
   cwd: string,
   timeout: number = REMOTE_SOURCE_LIMITS.commandTimeoutMs,
   maxOutputBytes: number = REMOTE_SOURCE_LIMITS.maxCommandOutputBytes,
+  limits: RemoteCatalogLimits = REMOTE_SOURCE_LIMITS,
+  signal?: AbortSignal,
 ): Promise<{ stdout: string | Buffer }> {
+  if (signal?.aborted) {
+    throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.CANCELLED, 'The remote catalog refresh was cancelled.');
+  }
   return new Promise((resolvePromise, rejectPromise) => {
     let finished = false;
-    let tooLarge = false;
+    let stagingLimit: StagingLimit | null = null;
     let monitorError: unknown;
     let timer: NodeJS.Timeout | undefined;
+    let timeoutTimer: NodeJS.Timeout | undefined;
+    let escalation: NodeJS.Timeout | undefined;
+    let monitorPromise: Promise<void> | undefined;
+    let timedOut = false;
+    let outputExceeded = false;
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
 
-    const child = execFileCallback(
-      'git',
-      args,
-      {
-        cwd,
-        encoding: 'buffer',
-        timeout,
-        maxBuffer: maxOutputBytes,
-        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
-      },
-      (error, stdout) => {
+    let processError: unknown;
+    const stdout: Buffer[] = [];
+    // Override inherited hooks even for clone/fetch ref updates. This path is
+    // deliberately absent inside the private temporary work root.
+    const child = spawn('git', ['-c', `core.hooksPath=${join(cwd, '.skill-loom-disabled-hooks')}`, ...args], {
+      cwd,
+      detached: process.platform !== 'win32',
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: false,
+    });
+    child.once('error', (error) => {
+      processError = error;
+    });
+    child.once('close', (code, signal) => {
         finished = true;
+        abortSignal?.removeEventListener('abort', cancel);
         if (timer !== undefined) clearTimeout(timer);
-        if (monitorError !== undefined) {
-          rejectPromise(monitorError);
-          return;
+        if (timeoutTimer !== undefined) clearTimeout(timeoutTimer);
+        if (escalation !== undefined) {
+          clearTimeout(escalation);
+          signalProcess('SIGKILL');
         }
-        if (tooLarge) {
-          rejectPromise(tooLargeError());
-          return;
-        }
-        if (error !== null) {
-          const code = isRecord(error) ? error.code : undefined;
-          if (code === 'ETIMEDOUT' || code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
-            rejectPromise(new RemoteSourceError(
-              code === 'ETIMEDOUT' ? REMOTE_SOURCE_ERROR_CODES.TIMEOUT : REMOTE_SOURCE_ERROR_CODES.TOO_LARGE,
-              code === 'ETIMEDOUT'
-                ? 'The Git operation timed out; check repository access and retry.'
-                : 'The Git operation exceeded its output limit.',
-            ));
-            return;
+        void (async () => {
+          await monitorPromise;
+          if (monitorError !== undefined) throw monitorError;
+          const exceeded = stagingLimit ?? await exceedsStagingLimits(cwd, limits);
+          if (exceeded !== null) throw tooLargeError(exceeded);
+          if (cancelled) {
+            throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.CANCELLED, 'The remote catalog refresh was cancelled.');
           }
-          rejectPromise(new RemoteSourceError(
-            REMOTE_SOURCE_ERROR_CODES.CLONE_FAILED,
-            'The Git operation failed. Check the repository URL, ref, authentication, and network access.',
-          ));
-          return;
+          if (outputExceeded || timedOut) {
+            throw new RemoteSourceError(
+              outputExceeded ? REMOTE_SOURCE_ERROR_CODES.TOO_LARGE : REMOTE_SOURCE_ERROR_CODES.TIMEOUT,
+              outputExceeded
+                ? `The Git operation exceeded the maxCommandOutputBytes limit (${String(maxOutputBytes)}). Adjust the catalog limits or narrow the source.`
+                : 'The Git operation timed out; check repository access and retry.',
+              outputExceeded ? { dimension: 'maxCommandOutputBytes', limit: maxOutputBytes } : {},
+            );
+          }
+          if (processError !== undefined || code !== 0 || signal !== null) {
+            throw new RemoteSourceError(
+              REMOTE_SOURCE_ERROR_CODES.CLONE_FAILED,
+              'The Git operation failed. Check the repository URL, ref, authentication, and network access.',
+            );
+          }
+          return { stdout: Buffer.concat(stdout) };
+        })().then(resolvePromise, rejectPromise);
+    });
+
+    const signalProcess = (signal: NodeJS.Signals): void => {
+      try {
+        if (process.platform !== 'win32' && child.pid !== undefined) {
+          process.kill(-child.pid, signal);
+        } else {
+          child.kill(signal);
         }
-        resolvePromise({ stdout });
-      },
-    );
+      } catch (error) {
+        if (!isErrno(error, 'ESRCH')) {
+          monitorError ??= new RemoteSourceError(
+            REMOTE_SOURCE_ERROR_CODES.CLONE_FAILED,
+            'The Git process could not be terminated safely.',
+          );
+        }
+      }
+    };
+    const terminate = (): void => {
+      signalProcess('SIGTERM');
+      if (escalation === undefined) {
+        escalation = setTimeout(() => signalProcess('SIGKILL'), 1_000);
+        escalation.unref();
+      }
+    };
+    const abortSignal = signal;
+    let cancelled = false;
+    const cancel = (): void => {
+      cancelled = true;
+      terminate();
+    };
+    abortSignal?.addEventListener('abort', cancel, { once: true });
+    if (abortSignal?.aborted) cancel();
+    timeoutTimer = setTimeout(() => {
+      timedOut = true;
+      terminate();
+    }, timeout);
+    child.stdout?.on('data', (chunk: Buffer) => {
+      stdoutBytes += chunk.length;
+      if (stdoutBytes > maxOutputBytes && !outputExceeded) {
+        outputExceeded = true;
+        terminate();
+      }
+      if (!outputExceeded) stdout.push(chunk);
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      stderrBytes += chunk.length;
+      if (stderrBytes > maxOutputBytes && !outputExceeded) {
+        outputExceeded = true;
+        terminate();
+      }
+    });
 
     const monitorStaging = async (): Promise<void> => {
       try {
-        if (await exceedsStagingLimits(cwd)) {
-          tooLarge = true;
-          child.kill('SIGTERM');
+        const exceeded = await exceedsStagingLimits(cwd, limits);
+        if (exceeded !== null) {
+          stagingLimit = exceeded;
+          if (!finished) terminate();
         }
       } catch (error) {
         monitorError = error;
-        child.kill('SIGTERM');
+        if (!finished) terminate();
       }
-      if (!finished) timer = setTimeout(() => void monitorStaging(), 250);
+      if (!finished) timer = setTimeout(runMonitor, 250);
     };
-    timer = setTimeout(() => void monitorStaging(), 250);
+    const runMonitor = (): void => {
+      monitorPromise = monitorStaging();
+    };
+    timer = setTimeout(runMonitor, 250);
   });
 }
 
-async function exceedsStagingLimits(root: string): Promise<boolean> {
-  const pending = [root];
-  let entries = 0;
-  let bytes = 0;
-  while (pending.length > 0) {
-    const directory = pending.pop()!;
-    const handle = await opendir(directory);
-    for await (const entry of handle) {
-      entries += 1;
-      if (entries > REMOTE_SOURCE_LIMITS.maxStagingEntries) return true;
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) {
-        pending.push(path);
-      } else if (entry.isFile()) {
-        bytes += (await lstat(path)).size;
-        if (bytes > REMOTE_SOURCE_LIMITS.maxStagingBytes) return true;
-      }
-    }
-  }
-  return false;
-}
-
-function tooLargeError(): RemoteSourceError {
+function tooLargeError(exceeded: StagingLimit): RemoteSourceError {
   return new RemoteSourceError(
     REMOTE_SOURCE_ERROR_CODES.TOO_LARGE,
-    'The remote repository exceeds the configured skill snapshot limits.',
+    `The Git staging directory exceeds the ${exceeded.dimension} limit (${String(exceeded.limit)}).`,
+    { ...exceeded },
   );
 }
 

@@ -28,6 +28,7 @@ import {
   type CopilotCommandRunner,
 } from '../src/server/catalog/copilot.js';
 import { scanOpenCodeSkills } from '../src/server/catalog/opencode.js';
+import { MINIMUM_OPENCODE_VERSION, supportsOpenCodeVersion } from './opencode-version.js';
 import {
   SKILL_SOURCES,
   type CatalogWarning,
@@ -41,7 +42,7 @@ const EVIDENCE_PATH = join(PROJECT_ROOT, 'docs', 'evidence', 'live-discovery.jso
 const TASK_ID = 'CAT-05';
 const PROBE_SKILL_NAME = 'loom-live-probe';
 const PROBE_TOKEN = 'PINEAPPLE';
-const EXPECTED_OPENCODE_VERSION = '2.2.5';
+const EXPECTED_OPENCODE_VERSION = MINIMUM_OPENCODE_VERSION;
 const EXPECTED_COPILOT_VERSION = '1.0.105';
 const VERSION_TIMEOUT_MS = 10_000;
 const COPILOT_DISCOVERY_TIMEOUT_MS = 20_000;
@@ -1224,11 +1225,13 @@ async function main(): Promise<number> {
             }),
       );
 
-      if (probe.available && !probe.versionMatches) {
+      if (probe.available && (harness === 'opencode'
+        ? !supportsOpenCodeVersion(probe.version)
+        : !probe.versionMatches)) {
         report.warnings.push({
           code: 'CLI_VERSION_MISMATCH',
           harness,
-          message: `Expected ${probe.expectedVersion}, observed ${probe.version ?? 'unknown'}. The probe continued against the installed version.`,
+          message: `Expected ${harness === 'opencode' ? 'stable OpenCode >=' : ''}${probe.expectedVersion}, observed ${probe.version ?? 'unknown'}. The probe continued against the installed version.`,
         });
       }
     }

@@ -1,5 +1,5 @@
 import { readFile, realpath } from 'node:fs/promises';
-import { isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import type { RemoteSkillSource } from '../config/schema.js';
 import type { ConfigStore } from '../config/store.js';
 import {
@@ -18,12 +18,13 @@ import {
   RemoteSourceError,
   listRemoteSkillSnapshots,
   resolveSnapshotAgentPath,
-  resolveSnapshotPackagePath,
+  resolveSnapshotPackage,
 } from './remote.js';
 import {
   CATALOG_ERROR_CODES,
   CATALOG_WARNING_CODES,
   CatalogError,
+  REMOTE_SNAPSHOT_CONTENT,
   SKILL_HARNESSES,
   SKILL_SOURCE_ORDER,
   SKILL_SOURCES,
@@ -272,11 +273,12 @@ export function createCatalogService(options: CatalogServiceOptions): CatalogSer
             for (const snapshot of snapshots) {
               for (const packageInfo of snapshot.packages) {
                 try {
-                  const packagePath = await resolveSnapshotPackagePath(
+                  const resolved = await resolveSnapshotPackage(
                     options.configDirectory,
                     snapshot,
                     packageInfo,
                   );
+                  const packagePath = resolved.path;
                   const skillPath = join(packagePath, 'SKILL.md');
                   const metadata = parseSkillFrontmatter(await readFile(skillPath, 'utf8'));
                   const name = frontmatterString(metadata.data, 'name') ?? packageInfo.name;
@@ -299,6 +301,11 @@ export function createCatalogService(options: CatalogServiceOptions): CatalogSer
                     repository: snapshot.repository,
                     revision: snapshot.revision,
                     repositoryPath: packageInfo.repositoryPath,
+                    [REMOTE_SNAPSHOT_CONTENT]: {
+                      fingerprint: packageInfo.fingerprint,
+                      reviewFingerprint: resolved.reviewFingerprint,
+                      ...(resolved.executablePaths === undefined ? {} : { executablePaths: resolved.executablePaths }),
+                    },
                     enabled: true,
                   });
                 } catch (error) {
@@ -557,10 +564,19 @@ function validateRemovalPath(input: unknown): string {
 }
 
 async function canonicalizeIfPossible(input: string): Promise<string> {
-  try {
-    return await realpath(input);
-  } catch {
-    return resolve(input);
+  let candidate = resolve(input);
+  const missing: string[] = [];
+  for (;;) {
+    try {
+      return join(await realpath(candidate), ...missing);
+    } catch (error) {
+      if (!(error instanceof Error && 'code' in error &&
+          (error.code === 'ENOENT' || error.code === 'ENOTDIR'))) throw error;
+      const parent = dirname(candidate);
+      if (parent === candidate) throw error;
+      missing.unshift(basename(candidate));
+      candidate = parent;
+    }
   }
 }
 

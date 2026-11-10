@@ -27,7 +27,7 @@ let extra: string;
 let restoreModePaths: string[];
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'loom-catalog-opencode-'));
+  root = await realpath(await mkdtemp(join(tmpdir(), 'loom-catalog-opencode-')));
   project = join(root, 'project');
   home = join(root, 'home');
   extra = join(root, 'extra');
@@ -46,7 +46,7 @@ afterEach(async () => {
 
 const projectSkills = (): string => join(project, '.opencode', 'skills');
 const personalSkills = (): string => join(home, '.config', 'opencode', 'skills');
-const unprivilegedIt = process.getuid?.() === 0 ? it.skip : it;
+const unprivilegedIt = process.platform === 'win32' || process.getuid?.() === 0 ? it.skip : it;
 
 /**
  * Write a package with either a YAML frontmatter block or a raw body. The

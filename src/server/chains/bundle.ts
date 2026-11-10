@@ -1,11 +1,13 @@
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, readFile, readdir, realpath, rm } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import type { BundlePreview, BundleSkill, ChainBundle } from '../../shared/bundles.js';
 import { projectSkillRootFor } from '../catalog/copy.js';
 import { SHARED_PROJECT_SKILLS_SEGMENTS, sharedProjectSkillRoot } from '../catalog/project-paths.js';
 import { resolveSkillCatalogEntry } from '../catalog/skill-resolution.js';
+import { snapshotPackageFingerprint, snapshotReviewFingerprint } from '../catalog/snapshot-fingerprint.js';
+import { readGitExecutablePaths } from './git-file-modes.js';
 import {
   installNativeAgentContentIntoProject,
   inspectInstalledNativeAgent,
@@ -14,6 +16,7 @@ import {
   removeNativeAgentIfUnchanged,
 } from '../catalog/agent-copy.js';
 import type { CatalogService } from '../catalog/merge.js';
+import { CATALOG_WARNING_CODES, REMOTE_SNAPSHOT_CONTENT, type SkillEntry } from '../catalog/types.js';
 import type { Chain } from './model.js';
 import type { ChainService } from './service.js';
 import {
@@ -27,6 +30,9 @@ import {
   parseBundle,
   validatePackagePath,
 } from '../../portable/bundle.js';
+import { writeBundleSkillFiles } from '../../portable/install-skill.js';
+import { discardInstalledModeIndex, installedExecutableFlag, readInstalledModeIndex, type InstalledModeReceipt } from '../../portable/installed-modes.js';
+import { packageFingerprint, treeFingerprint } from '../../portable/runtime.js';
 export { BundleError, MAX_BUNDLE_BYTES, parseBundle } from '../../portable/bundle.js';
 
 export { MAX_BUNDLE_REQUEST_BYTES } from '../../portable/bundle.js';
@@ -114,10 +120,28 @@ export async function exportBundle(
       );
     }
     const source = selected.packagePath;
-    const skill: BundleSkill = { name, directory: basename(source), files: [] };
+    let directory = basename(source);
+    if (selected.source === 'remote' && !/[\\/]/.test(name)) {
+      try {
+        validatePackagePath(name);
+        directory = name;
+      } catch (error) {
+        if (!(error instanceof BundleError)) throw error;
+      }
+    }
+    const skill: BundleSkill = { name, directory, files: [] };
+    const snapshotContent = selected[REMOTE_SNAPSHOT_CONTENT];
+    const installedModes = await readInstalledModeIndex(source);
+    if (process.platform === 'win32' && selected.source === 'remote' && snapshotContent?.executablePaths === undefined) {
+      throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', 'The remote package modes cannot be verified on Windows. Refresh the source and retry.');
+    }
+    const remainingExecutables = snapshotContent?.executablePaths === undefined
+      ? undefined
+      : new Set(snapshotContent.executablePaths);
     async function collect(directory: string, prefix: string, depth: number): Promise<void> {
       if (depth > 32) invalid('The skill package exceeds the directory depth limit.');
       for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+        if (prefix === '' && entry.name === '.loom' && installedModes?.metadataDirectory === join(source, '.loom')) continue;
         const path = prefix + entry.name;
         validatePackagePath(path);
         const absolute = join(directory, entry.name);
@@ -136,7 +160,17 @@ export async function exportBundle(
             const content = Buffer.alloc(info.size + 1);
             const { bytesRead } = await handle.read(content, 0, content.length, 0);
             if (bytesRead !== info.size) invalid('A package changed during export. Retry after editing finishes.');
-            skill.files.push({ path, content: content.subarray(0, bytesRead).toString('base64'), executable: (info.mode & 0o111) !== 0 });
+            const executable = (info.mode & 0o111) !== 0;
+            const recordedExecutable = remainingExecutables?.delete(path);
+            if (recordedExecutable !== undefined && process.platform !== 'win32' && recordedExecutable !== executable) {
+              invalid('A remote package changed during export. Refresh and review it again.');
+            }
+            skill.files.push({
+              path,
+              content: content.subarray(0, bytesRead).toString('base64'),
+              executable: installedModes === null ? recordedExecutable ?? executable :
+                installedExecutableFlag(installedModes, path, executable),
+            });
           } finally {
             await handle.close();
           }
@@ -150,6 +184,23 @@ export async function exportBundle(
         invalid('Export refuses symbolic links in skill package paths.');
       }
       await collect(source, '', 0);
+      if (installedModes !== null && installedModes.files.length !== skill.files.length) {
+        invalid('Installed files no longer match their executable-mode metadata. Restore the complete reviewed package.');
+      }
+      if (process.platform === 'win32' && snapshotContent === undefined && installedModes === null) {
+        const executablePaths = await readGitExecutablePaths(source, skill.files.map((file) => file.path));
+        for (const file of skill.files) file.executable = executablePaths.has(file.path);
+      }
+      if (snapshotContent !== undefined) {
+        const files = skill.files.map((file) => ({
+          path: file.path, executable: file.executable, content: Buffer.from(file.content, 'base64'),
+        }));
+        if ((remainingExecutables?.size ?? 0) !== 0 ||
+            snapshotPackageFingerprint(files) !== snapshotContent.fingerprint ||
+            snapshotReviewFingerprint(files) !== snapshotContent.reviewFingerprint) {
+          invalid('A remote package changed during export. Refresh and review it again.');
+        }
+      }
     } catch (error) {
       if (error instanceof BundleError) throw error;
       throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', `The complete package for skill "${name}" could not be read. Check its files and permissions, then retry.`);
@@ -240,10 +291,31 @@ export async function previewBundle(
   raw: unknown,
   projectPath: string,
   catalog: CatalogService,
+  requireCompleteDiscovery = false,
 ): Promise<BundlePreview> {
+  return (await inspectBundleDestination(raw, projectPath, catalog, requireCompleteDiscovery)).preview;
+}
+
+export async function inspectBundleDestination(
+  raw: unknown,
+  projectPath: string,
+  catalog: CatalogService,
+  requireCompleteDiscovery = false,
+): Promise<{ preview: BundlePreview; entries: SkillEntry[] }> {
   const bundle = parseBundle(raw);
-  const entries = bundle.skills.length === 0 ? [] :
-    (await catalog.getCatalog({ projectPath, harness: bundle.chain.harness })).groups.flatMap((group) => group.entries);
+  const discovery = bundle.skills.length === 0 ? undefined :
+    await catalog.getCatalog({ projectPath, harness: bundle.chain.harness });
+  if (requireCompleteDiscovery && discovery !== undefined) {
+    const incomplete = discovery.warnings.filter((warning) =>
+      warning.code !== CATALOG_WARNING_CODES.DISCOVERY_SLOW &&
+      warning.code !== CATALOG_WARNING_CODES.REMOTE_SOURCE_UNAVAILABLE &&
+      (warning.source === undefined || warning.source === 'project'));
+    if (incomplete.length > 0) {
+      const codes = [...new Set(incomplete.map((warning) => warning.code))].sort().join(', ');
+      throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', `Project skill discovery is incomplete (${codes}); resolve the warnings before reviewing an import.`);
+    }
+  }
+  const entries = discovery?.groups.flatMap((group) => group.entries) ?? [];
   const agents = bundle.version === 2 && bundle.chain.agent !== undefined
     ? await Promise.all(bundle.agents.map(async (agent) => {
         const destination = installedNativeAgentPath(projectPath, bundle.chain.agent!);
@@ -256,7 +328,7 @@ export async function previewBundle(
         };
       }))
     : [];
-  return {
+  const preview: BundlePreview = {
     bundle,
     skills: await Promise.all(bundle.skills.map(async (skill) => ({
       name: skill.name,
@@ -269,6 +341,7 @@ export async function previewBundle(
     }))),
     agents,
   };
+  return { preview, entries };
 }
 
 async function safeSkillRoot(projectPath: string): Promise<string> {
@@ -306,8 +379,10 @@ export async function importBundle(
   catalog: CatalogService,
   chains: ChainService,
   reuseSkills: string[],
+  requireCompleteDiscovery = false,
+  verifyReuse?: () => Promise<void>,
 ): Promise<Chain> {
-  const preview = await previewBundle(raw, projectPath, catalog);
+  const { preview, entries } = await inspectBundleDestination(raw, projectPath, catalog, requireCompleteDiscovery);
   const reuse = new Set(reuseSkills);
   if (reuse.size !== reuseSkills.length || [...reuse].some((name) =>
     !preview.skills.some((skill) => skill.name === name && skill.conflict))) {
@@ -317,8 +392,17 @@ export async function importBundle(
     if (!reuse.has(skill.name) && (skill.conflict || skill.directoryExists)) {
       throw new BundleError('BUNDLE_CONFLICT', `Skill "${skill.name}" already exists. Reuse the installed skill or cancel; import never overwrites packages.`);
     }
+    if (process.platform === 'win32' && reuse.has(skill.name)) {
+      const paths = new Set(entries.filter((entry) =>
+        entry.enabled && entry.source === 'project' && entry.name === skill.name).map((entry) => entry.packagePath));
+      const path = [...paths][0];
+      if (paths.size !== 1 || path === undefined || await readInstalledModeIndex(path) === null) {
+        throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', 'Windows package reuse requires intact installed-mode metadata. Install the reviewed bundle into a new package directory.');
+      }
+    }
   }
   const created: string[] = [];
+  const createdModes: InstalledModeReceipt[] = [];
   const createdAgents: Array<{ path: string; fingerprint: string }> = [];
   try {
     if (preview.bundle.skills.some((skill) => !reuse.has(skill.name))) {
@@ -333,14 +417,12 @@ export async function importBundle(
           throw error;
         }
         created.push(destination);
-        for (const file of skill.files) {
-          const segments = file.path.split('/');
-          segments.pop();
-          if (segments.length > 0) await mkdir(join(destination, ...segments), { recursive: true, mode: 0o755 });
-          await writeFile(join(destination, file.path), decodeBundleFile(file.content), {
-            flag: 'wx',
-            mode: file.executable ? 0o755 : 0o644,
-          });
+        const modes = await writeBundleSkillFiles(destination, skill.files, {
+          directoryMode: 0o755, recordExecutableModes: process.platform === 'win32',
+        });
+        if (modes !== undefined) createdModes.push(modes);
+        if (await treeFingerprint(destination) !== packageFingerprint(skill.files)) {
+          throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', 'The newly installed skill differs from the reviewed bundle.');
         }
       }
     }
@@ -360,9 +442,11 @@ export async function importBundle(
         });
       }
     }
+    if (verifyReuse !== undefined) await verifyReuse();
     return await chains.importChain(projectPath, bundleChain(preview.bundle));
   } catch (error) {
     await Promise.all(created.map((path) => rm(path, { recursive: true, force: true })));
+    await Promise.all(createdModes.map(discardInstalledModeIndex));
     await Promise.all(createdAgents.map(({ path, fingerprint }) =>
       removeNativeAgentIfUnchanged(path, fingerprint)));
     if (error instanceof NativeAgentCopyError) {

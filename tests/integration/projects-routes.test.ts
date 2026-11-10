@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import { createConfigStore } from '../../src/server/config/store.js';
 import type { GitInitRunner } from '../../src/server/projects/registry.js';
+import { acquireProjectRunClaim } from '../../src/shared/project-coordination.js';
 import {
   isApiErrorEnvelope,
   type ApiErrorEnvelope,
@@ -118,6 +119,65 @@ function envelope(body: unknown): ApiErrorEnvelope {
   expect(body.error.message).not.toContain('stack');
   return body;
 }
+
+describe('project coordination review', () => {
+  it('requires fresh review and separate confirmations to enable and clear coordination', async () => {
+    const app = await buildTestApp();
+    const projectPath = join(root, 'coordination-actions');
+    await mkdir(projectPath);
+    const project = projectOf((await postProject(app, { mode: 'open', path: projectPath })).body);
+    const reviewUrl = `/api/projects/${project.id}/coordination-review`;
+    const actionUrl = `/api/projects/${project.id}/coordination-action`;
+    const review = async () => (await app.inject({ method: 'POST', url: reviewUrl })).json<{
+      review: { reviewDigest: string; protocol: unknown; claim: unknown };
+    }>().review;
+    const initial = await review();
+    const incomplete = await app.inject({
+      method: 'POST', url: actionUrl,
+      payload: { action: 'enable', reviewDigest: initial.reviewDigest, oldClientsStoppedConfirmed: true },
+    });
+    expect(incomplete.statusCode).toBe(422);
+    expect((await review()).protocol).toBeNull();
+    const enable = { action: 'enable', reviewDigest: initial.reviewDigest, stoppedConfirmed: true, oldClientsStoppedConfirmed: true };
+    expect((await app.inject({ method: 'POST', url: actionUrl, payload: enable })).statusCode).toBe(200);
+    expect((await review()).protocol).not.toBeNull();
+    expect((await app.inject({ method: 'POST', url: actionUrl, payload: enable })).statusCode).toBe(422);
+
+    await acquireProjectRunClaim(projectPath, 'managed', 'run-no-record');
+    const claimed = await review();
+    const clear = { action: 'clear', reviewDigest: claimed.reviewDigest, stoppedConfirmed: true, oldClientsStoppedConfirmed: true };
+    const denied = await app.inject({ method: 'POST', url: actionUrl, payload: { ...clear, stoppedConfirmed: false } });
+    expect(denied.statusCode).toBe(422);
+    expect((await review()).claim).not.toBeNull();
+    expect((await app.inject({ method: 'POST', url: actionUrl, payload: clear })).statusCode).toBe(200);
+    expect((await review()).claim).toBeNull();
+  });
+
+  it('reviews a registered project and reports corrupt records without modifying them', async () => {
+    const app = await buildTestApp();
+    const projectPath = join(root, 'coordination-project');
+    await mkdir(projectPath);
+    const project = projectOf((await postProject(app, { mode: 'open', path: projectPath })).body);
+    const url = `/api/projects/${project.id}/coordination-review`;
+    const response = await app.inject({ method: 'POST', url });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      executionCoordinated: false,
+      review: { protocol: null, claim: null, records: [], reviewDigest: expect.stringMatching(/^[a-f0-9]{64}$/) },
+    });
+    expect(await readFile(join(projectPath, '.loom', '.gitignore'), 'utf8'))
+      .toContain('project-claim.sqlite*');
+
+    await mkdir(join(projectPath, '.loom', 'runs'));
+    const corrupt = join(projectPath, '.loom', 'runs', 'run-broken.json');
+    await writeFile(corrupt, '{broken');
+    const failed = await app.inject({ method: 'POST', url });
+    expect(failed.statusCode).toBe(422);
+    expect(envelope(failed.json()).error.code).toBe('PROJECT_RUN_RECORDS_UNSAFE');
+    expect(await readFile(corrupt, 'utf8')).toBe('{broken');
+    expect((await app.inject({ method: 'POST', url: '/api/projects/unknown/coordination-review' })).statusCode).toBe(404);
+  });
+});
 
 function issuesOf(body: unknown): ApiValidationIssue[] {
   const error = envelope(body);

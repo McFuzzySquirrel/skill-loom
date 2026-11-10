@@ -3,6 +3,7 @@ import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -10,8 +11,10 @@ import { unzipSync } from 'fflate';
 
 const execFileAsync = promisify(execFile);
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const npxCommand = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+const npmCommand = process.platform === 'win32' ? process.execPath : 'npm';
+const npmArguments = process.platform === 'win32'
+  ? [process.env.npm_execpath ?? join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js')]
+  : [];
 const packageName = JSON.parse(
   await readFile(join(repoRoot, 'package.json'), 'utf8'),
 ).name;
@@ -23,10 +26,13 @@ const packageVersion = JSON.parse(
 function assertPackageContents(files) {
   const required = [
     'package/package.json',
+    'package/install/ensure-pty-helper.mjs',
     'package/dist/package.json',
     'package/dist/src/server/cli.js',
     'package/dist/src/server/index.js',
+    'package/dist/src/server/windows-control.ps1',
     'package/dist/src/server/chains/scenario-skills/THIRD_PARTY_NOTICES.md',
+    'package/dist/src/server/chains/scenario-skill-modes.json',
     'package/dist/src/server/chains/scenario-skills/minimax-xlsx/SKILL.md',
     'package/dist/src/server/chains/scenario-skills/minimax-xlsx/LICENSE',
     'package/dist/web/index.html',
@@ -38,6 +44,9 @@ function assertPackageContents(files) {
     'package/dist/skills/scenario-discovery/LICENSE',
     'package/dist/skills/scenario-discovery/scripts/read-handoff.mjs',
     'package/dist/skills/scenario-discovery/scripts/build-from-handoff.mjs',
+    'package/dist/skills/loom-chain-workflow.zip',
+    'package/dist/skills/loom-chain-workflow/SKILL.md',
+    'package/dist/skills/loom-chain-workflow/LICENSE',
   ];
   for (const path of required) {
     if (!files.includes(path)) {
@@ -161,6 +170,61 @@ async function smokePortableSkill(temporaryRoot) {
   if (result.ok !== true || result.chain.name !== 'Package smoke') {
     throw new Error('The standalone helper could not inspect a bundle outside the repository.');
   }
+  if (result.reviewDigest !== null) throw new Error('Project-free inspection must not authorize preparation.');
+  const project = join(temporaryRoot, 'portable-project');
+  await mkdir(project);
+  const invoke = async (command, args, input, expectedError) => {
+    const child = spawn(process.execPath, [helperPath, command, ...args], {
+      cwd: temporaryRoot, stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    const closed = once(child, 'close');
+    child.stdin.end(input === undefined ? '' : JSON.stringify(input));
+    const [code] = await closed;
+    if (code !== 0) {
+      if (expectedError !== undefined && JSON.parse(stderr).error?.code === expectedError) return;
+      throw new Error(`Portable ${command} failed: ${stderr}`);
+    }
+    if (expectedError !== undefined) throw new Error(`Portable ${command} unexpectedly succeeded.`);
+    return JSON.parse(stdout);
+  };
+  const review = await invoke('inspect', ['--bundle', bundlePath, '--project', project]);
+  if (!/^[a-f0-9]{64}$/.test(review.reviewDigest)) throw new Error('Portable review digest is missing.');
+  const prepareInput = {
+    installConfirmed: true,
+    reviewDigest: review.reviewDigest,
+    actualHost: 'copilot',
+    progression: 'supervised',
+    sessionDecision: {
+      requested: 'shared',
+      mechanism: 'current-conversation',
+      description: 'Package smoke test in a simulated host.',
+      confirmed: true,
+    },
+    inputs: {},
+  };
+  const prepareArgs = ['--bundle', bundlePath, '--project', project];
+  const prepared = await invoke('prepare', prepareArgs, prepareInput);
+  await invoke('prepare', prepareArgs, prepareInput, 'RUN_ACTIVE_CONFLICT');
+  const runArgs = ['--project', project, '--run-id', prepared.runId];
+  const step = await invoke('step', runArgs, { revision: prepared.revision, confirmed: true });
+  if (step.step.instruction !== 'Instruction:\nVerify the packaged helper.') {
+    throw new Error('The packaged helper did not return the reviewed instruction.');
+  }
+  const recorded = await invoke('record', runArgs, {
+    revision: step.revision, outcome: 'done', confirmed: true, summary: 'Simulated host outcome.',
+  });
+  const status = await invoke('status', runArgs);
+  if (recorded.status !== 'completed' || status.run.status !== 'completed') {
+    throw new Error('The packaged helper did not persist its simulated run outcome.');
+  }
+  const next = await invoke('prepare', prepareArgs, prepareInput);
+  await invoke('record', ['--project', project, '--run-id', next.runId], { revision: next.revision, action: 'abort' });
 }
 
 async function smokeScenarioDiscoverySkill() {
@@ -191,20 +255,43 @@ async function smokeScenarioDiscoverySkill() {
   }
 }
 
+async function smokeChainWorkflowSkill() {
+  const archive = await readFile(join(repoRoot, 'dist', 'skills', 'loom-chain-workflow.zip'));
+  const files = unzipSync(archive);
+  const skill = files['loom-chain-workflow/SKILL.md'];
+  const license = files['loom-chain-workflow/LICENSE'];
+  if (!skill || !license || Object.keys(files).length !== 2) {
+    throw new Error('The loom-chain-workflow archive has unexpected or missing files.');
+  }
+  for (const directory of [
+    join(repoRoot, '.github', 'skills', 'loom-chain-workflow'),
+    join(repoRoot, 'skill', 'loom-chain-workflow'),
+  ]) {
+    if (!(await readFile(join(directory, 'SKILL.md'))).equals(skill)) {
+      throw new Error(`The loom-chain-workflow package is missing or out of sync: ${directory}`);
+    }
+  }
+  if (!(await readFile(join(repoRoot, 'LICENSE'))).equals(license)) {
+    throw new Error('The loom-chain-workflow archive has an unexpected license.');
+  }
+}
+
 async function main() {
   await mkdir(join(repoRoot, '.tmp'), { recursive: true });
   const temporaryRoot = await mkdtemp(join(repoRoot, '.tmp', 'package-smoke-'));
   const tarDirectory = join(temporaryRoot, 'tarball');
-  const configDirectory = join(temporaryRoot, 'config');
+  const profileParent = process.platform === 'win32'
+    ? await mkdtemp(join(tmpdir(), 'loom-package-profile-')) : temporaryRoot;
+  const configDirectory = join(profileParent, 'config');
   await mkdir(tarDirectory, { recursive: true });
-  await mkdir(configDirectory, { recursive: true });
 
   let child = null;
+  let operationError;
 
   try {
     const packed = await execFileAsync(
       npmCommand,
-      ['pack', '--json', '--pack-destination', tarDirectory],
+      [...npmArguments, 'pack', '--json', '--pack-destination', tarDirectory],
       { cwd: repoRoot, maxBuffer: 20 * 1024 * 1024 },
     );
     // `prepack` runs the build, whose output shares stdout with npm's JSON
@@ -233,27 +320,85 @@ async function main() {
     assertPackageContents(files);
     await smokePortableSkill(temporaryRoot);
     await smokeScenarioDiscoverySkill();
+    await smokeChainWorkflowSkill();
 
     const version = await execFileAsync(
-      npxCommand,
-      ['--yes', `--package=${tarball}`, 'skill-loom', '--version'],
-      { cwd: repoRoot, maxBuffer: 20 * 1024 * 1024, env: { ...process.env, CI: '1' } },
+      npmCommand,
+      [...npmArguments, 'exec', '--yes', `--package=${tarball}`, '--', 'skill-loom', '--version'],
+      {
+        cwd: repoRoot, maxBuffer: 20 * 1024 * 1024,
+        // A fresh tarball path gives npm exec a fresh installation cache. Keep
+        // it inside this smoke's cleanup boundary instead of growing ~/.npm.
+        env: { ...process.env, CI: '1', npm_config_cache: join(temporaryRoot, 'npm-cache') },
+      },
     );
     if (!version.stdout.includes(`Skill Loom ${packageVersion}`)) {
       throw new Error(`Unexpected --version output: ${version.stdout.trim()}`);
     }
 
+    const installedRoot = join(temporaryRoot, 'installed-package');
+    await mkdir(installedRoot);
+    await writeFile(join(installedRoot, 'package.json'), '{"private":true}\n');
+    await execFileAsync(
+      npmCommand,
+      [...npmArguments, 'install', '--no-audit', '--no-fund', '--no-package-lock', '--no-save', tarball],
+      { cwd: installedRoot, maxBuffer: 20 * 1024 * 1024, env: { ...process.env, CI: '1' } },
+    );
+    const terminalProbe = `
+      const { pathToFileURL } = require('node:url');
+      (async () => {
+        process.stderr.write('Packaged PTY: importing runtime\\n');
+        const path = require.resolve('skill-loom-cli/dist/src/server/terminal/pty.js');
+        const { createTerminalSession } = await import(pathToFileURL(path).href);
+        for (let index = 0; index < 3; index++) {
+          process.stderr.write('Packaged PTY: creating session ' + index + '\\n');
+          await new Promise((resolve, reject) => {
+            const session = createTerminalSession({
+              executable: process.execPath,
+              args: ['-e', "process.stdin.setRawMode(true);process.stdin.once('data',()=>{process.stdin.pause();process.stdout.write('PACKAGED_PTY_DRAINED\\\\r\\\\n',()=>{process.exitCode=0})});process.stdout.write('PACKAGED_PTY_OK\\\\r\\\\n');"],
+            });
+            let acknowledged = false;
+            const acknowledge = () => {
+              if (!acknowledged && session.getBufferedOutput().includes('PACKAGED_PTY_OK')) {
+                acknowledged = true;
+                session.write('\\r');
+              }
+            };
+            const unsubscribe = session.onData(acknowledge);
+            acknowledge();
+            const timeout = setTimeout(() => {
+              session.kill();
+              reject(new Error('Packaged PTY timed out.'));
+            }, 10000);
+            session.onExit(({ exitCode }) => {
+              process.stderr.write('Packaged PTY: exit received ' + index + '\\n');
+              clearTimeout(timeout);
+              unsubscribe();
+              // Must not kill by a recycled PID after natural exit.
+              session.kill();
+              session.kill();
+              if (exitCode !== 0 || !session.getBufferedOutput().includes('PACKAGED_PTY_DRAINED')) {
+                reject(new Error('Packaged PTY lost its final output.'));
+              } else {
+                resolve();
+              }
+            });
+          });
+        }
+      })().catch((error) => { console.error(error); process.exitCode = 1; });
+    `;
     const port = await findFreePort();
+    const installedCli = join(installedRoot, 'node_modules', packageName, 'dist/src/server/cli.js');
     child = spawn(
       process.execPath,
       [
-        join(repoRoot, 'dist', 'src', 'server', 'cli.js'),
+        installedCli,
         '--no-open',
         '--port',
         String(port),
       ],
       {
-        cwd: repoRoot,
+        cwd: installedRoot,
         env: {
           ...process.env,
           CI: '1',
@@ -264,9 +409,26 @@ async function main() {
       },
     );
 
-    const health = await waitForHealth(port);
+    const health = await waitForHealth(port, process.platform === 'win32' ? 60_000 : 15_000);
     if (health.status !== 'ok') {
       throw new Error('Packaged server health response is not ok.');
+    }
+    const control = await execFileAsync(process.execPath, [
+      installedCli, 'service', 'status', '--config-dir', configDirectory,
+    ], { cwd: installedRoot, timeout: 30_000 });
+    if (JSON.parse(control.stdout).result?.state !== 'running') {
+      throw new Error('The installed CLI could not authenticate to the packaged server.');
+    }
+    const workflowResponse = await fetch(
+      `http://127.0.0.1:${String(port)}/api/portable-skill/loom-chain-workflow`,
+    );
+    if (!workflowResponse.ok ||
+        workflowResponse.headers.get('content-type') !== 'application/zip' ||
+        workflowResponse.headers.get('cache-control') !== 'no-store' ||
+        !Buffer.from(await workflowResponse.arrayBuffer()).equals(
+          await readFile(join(repoRoot, 'dist', 'skills', 'loom-chain-workflow.zip')),
+        )) {
+      throw new Error('The packaged server did not serve the chain workflow skill archive.');
     }
 
     const projectPath = join(temporaryRoot, 'scenario-project');
@@ -308,15 +470,51 @@ async function main() {
     ) {
       throw new Error('Packaged scenario copy is missing its source attribution.');
     }
+    const stopped = await execFileAsync(process.execPath, [
+      installedCli, 'service', 'stop', '--config-dir', configDirectory,
+    ], { cwd: installedRoot, timeout: 30_000 });
+    if (JSON.parse(stopped.stdout).ok !== true) {
+      throw new Error('The installed CLI could not stop the packaged server.');
+    }
+    if (child.exitCode === null && child.signalCode === null) {
+      let timeout;
+      try {
+        await Promise.race([
+          once(child, 'exit'),
+          new Promise((_, reject) => {
+            timeout = setTimeout(() => reject(new Error('Packaged server did not stop.')), 15_000);
+          }),
+        ]);
+      } finally { clearTimeout(timeout); }
+    }
+    if (child.exitCode !== 0) throw new Error('The packaged server did not stop cleanly.');
+    const terminalProbePath = join(installedRoot, 'terminal-probe.cjs');
+    await writeFile(terminalProbePath, terminalProbe);
+    await execFileAsync(process.execPath, [terminalProbePath], {
+      cwd: installedRoot, maxBuffer: 20 * 1024 * 1024, timeout: 15_000,
+    });
 
     console.log(
       `Package smoke passed: ${packageName}@${packageVersion}, ${String(files.length)} files, ${String(files.filter((path) => path.startsWith('package/dist/')).length)} dist files.`,
     );
+  } catch (error) {
+    operationError = error;
+    throw error;
   } finally {
+    const cleanupErrors = [];
     if (child !== null) {
-      await stopProcess(child);
+      try { await stopProcess(child); } catch (error) { cleanupErrors.push(error); }
     }
-    await rm(temporaryRoot, { recursive: true, force: true });
+    if (profileParent !== temporaryRoot) {
+      try { await rm(profileParent, { recursive: true, force: true }); } catch (error) { cleanupErrors.push(error); }
+    }
+    try { await rm(temporaryRoot, { recursive: true, force: true }); } catch (error) { cleanupErrors.push(error); }
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError(
+        operationError === undefined ? cleanupErrors : [operationError, ...cleanupErrors],
+        'Package smoke operation or cleanup failed.',
+      );
+    }
   }
 }
 

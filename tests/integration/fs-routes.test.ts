@@ -13,7 +13,7 @@ let project: string;
 let app: FastifyInstance;
 let restoreModePaths: string[];
 
-const unprivilegedIt = process.getuid?.() === 0 ? it.skip : it;
+const unprivilegedIt = process.platform === 'win32' || process.getuid?.() === 0 ? it.skip : it;
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'loom-fs-routes-'));

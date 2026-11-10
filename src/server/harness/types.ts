@@ -1,5 +1,5 @@
 import { accessSync, constants, statSync } from 'node:fs';
-import { delimiter, isAbsolute, resolve } from 'node:path';
+import { delimiter, extname, isAbsolute, resolve } from 'node:path';
 import { CHAIN_SESSION_MODES, type ChainSessionMode } from '../chains/model.js';
 import type { HarnessId } from '../config/schema.js';
 import type { SkillSource } from '../catalog/types.js';
@@ -570,10 +570,15 @@ function searchPath(
     if (segment === '') {
       continue;
     }
-    const candidate = resolve(cwd, segment, name);
-    attempted.push(candidate);
-    if (probe(candidate)) {
-      return candidate;
+    const names = process.platform === 'win32' && extname(name) === ''
+      ? [name, `${name}.exe`]
+      : [name];
+    for (const candidateName of names) {
+      const candidate = resolve(cwd, segment, candidateName);
+      attempted.push(candidate);
+      if (probe(candidate)) {
+        return candidate;
+      }
     }
   }
   return undefined;

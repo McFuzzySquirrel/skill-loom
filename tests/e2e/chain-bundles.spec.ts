@@ -79,6 +79,7 @@ test('shares mixed chains through a reviewed download and import with explicit c
   expect(imported.automaticPermissionOptIn).toBe(false);
   expect(imported.steps[1]!.kind).toBe('instruction');
 
+  await writeFile(join(target, '.agents', 'skills', 'sharing-probe', 'SKILL.md'), `${skill}Local changes.\n`);
   await page.getByRole('button', { name: 'Import bundle', exact: true }).click();
   await importDialog.getByLabel('Chain bundle (.loom.json)').setInputFiles(bundlePath);
   const reuse = importDialog.getByRole('checkbox', { name: /Reuse installed "sharing-probe"/ });
@@ -86,6 +87,9 @@ test('shares mixed chains through a reviewed download and import with explicit c
   await importDialog.getByRole('checkbox', { name: 'I reviewed and trust these instructions and packages.' }).check();
   await expect(importDialog.getByRole('button', { name: 'Import chain, skills, and agents' })).toBeDisabled();
   await reuse.check();
+  await expect(importDialog.getByText('Installed package review: sharing-probe (different contents)')).toBeVisible();
+  await expect(importDialog.getByRole('button', { name: 'Import chain, skills, and agents' })).toBeDisabled();
+  await importDialog.getByRole('checkbox', { name: 'I reviewed the installed files and separately approve reusing the differing contents.' }).check();
   await importDialog.getByRole('button', { name: 'Import chain, skills, and agents' }).click();
   await expect(importDialog).not.toBeVisible();
   await expect(cards).toHaveCount(2);

@@ -60,6 +60,8 @@ export interface Chain {
   agent?: ChainAgentSelection;
   createdAt: string;
   updatedAt: string;
+  /** Opaque optimistic-concurrency token returned by the owning service. */
+  revision?: string;
 }
 
 /**
@@ -109,11 +111,13 @@ export interface ChainRequestOptions {
   signal?: AbortSignal;
   /** Ask the server to reject another chain with the same name (409). */
   uniqueName?: boolean;
+  expectedRevision?: string;
 }
 
 export interface DuplicateChainOptions extends ChainRequestOptions {
   /** Optional explicit copy name; the server otherwise uses "<name> copy". */
   name?: string;
+  harness?: ChainHarness;
 }
 
 export interface DeleteChainResult {
@@ -150,7 +154,7 @@ export interface ChainsApi {
   deleteChain: (
     projectId: string,
     chainId: string,
-    options?: Pick<ChainRequestOptions, 'signal'>,
+    options?: Pick<ChainRequestOptions, 'signal' | 'expectedRevision'>,
   ) => Promise<DeleteChainResult>;
 }
 
@@ -347,12 +351,15 @@ function decodeWarning(value: unknown): ChainStoreWarning {
 }
 
 function decodeChainList(value: unknown): ChainListResult {
-  if (!isRecord(value) || !Array.isArray(value.chains) || !Array.isArray(value.warnings)) {
+  if (!isRecord(value) || !Array.isArray(value.chains) || !Array.isArray(value.warnings) || !isRecord(value.revisions)) {
     throw invalidResponse('chain library');
   }
-
+  const revisions = value.revisions;
   return {
-    chains: value.chains.map(decodeChain),
+    chains: value.chains.map((entry) => {
+      const chain = decodeChain(entry);
+      return { ...chain, revision: decodeRevision(revisions[chain.id]) };
+    }),
     warnings: value.warnings.map(decodeWarning),
   };
 }
@@ -361,7 +368,21 @@ function decodeChainResponse(value: unknown, what: string): Chain {
   if (!isRecord(value) || value.chain === undefined) {
     throw invalidResponse(what);
   }
-  return decodeChain(value.chain);
+  return { ...decodeChain(value.chain), revision: decodeRevision(value.revision) };
+}
+
+export function decodeRevision(value: unknown): string {
+  if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) throw invalidResponse('chain revision');
+  return value;
+}
+
+export function revisionHeader(revision: string | undefined): HeadersInit {
+  if (revision === undefined || !/^[a-f0-9]{64}$/.test(revision)) {
+    throw new ApiClientError('Reload the chain before changing it; its revision is unavailable.', {
+      code: 'CHAIN_REVISION_REQUIRED', status: 0,
+    });
+  }
+  return { 'x-loom-chain-revision': revision };
 }
 
 function optionsFor(signal: AbortSignal | undefined): RequestJsonOptions {
@@ -533,6 +554,7 @@ export function createChainsApi(fetchImpl: FetchLike = fetch): ChainsApi {
         {
           method: 'PUT',
           body: toUpdateBody(draft),
+          headers: revisionHeader(options.expectedRevision),
           ...optionsFor(options.signal),
         },
         fetchImpl,
@@ -545,11 +567,15 @@ export function createChainsApi(fetchImpl: FetchLike = fetch): ChainsApi {
       if (options.name !== undefined) {
         body.name = options.name;
       }
+      if (options.harness !== undefined) {
+        body.harness = options.harness;
+      }
       const value = await requestJson<unknown>(
         withUniqueName(`${chainPath(projectId, chainId)}/duplicate`, options.uniqueName),
         {
           method: 'POST',
           body,
+          headers: revisionHeader(options.expectedRevision),
           ...optionsFor(options.signal),
         },
         fetchImpl,
@@ -562,6 +588,7 @@ export function createChainsApi(fetchImpl: FetchLike = fetch): ChainsApi {
         chainPath(projectId, chainId),
         {
           method: 'DELETE',
+          headers: revisionHeader(options.expectedRevision),
           ...optionsFor(options.signal),
         },
         fetchImpl,

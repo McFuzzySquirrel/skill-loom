@@ -409,6 +409,8 @@ export function RunPage({ runId }: RunPageProps) {
 
         {terminalId !== null ? (
           <TerminalPane
+            attachmentGeneration={stream.terminalGeneration}
+            recoveryGeneration={stream.terminalRecoveryGeneration}
             sessionId={terminalId}
             terminalPath={runTerminalPath(terminalId)}
             label={`Harness terminal for ${run.chainSnapshot.name}`}

@@ -1,15 +1,15 @@
 {
   "version": 1,
   "taskId": "RUN-08",
-  "generatedAt": "2026-11-04T15:06:02.515Z",
-  "node": "v26.13.0",
-  "platform": "linux-arm64",
+  "generatedAt": "2026-11-09T04:06:35.272Z",
+  "node": "v26.12.1",
+  "platform": "linux-x64",
   "loomVersion": "0.1.0",
-  "durationMs": 35028,
-  "result": "passed",
+  "durationMs": 15951,
+  "result": "failed",
   "isolation": {
     "temporaryRoot": "<temporary-root>",
-    "cacheRootMode": "home-cache",
+    "cacheRootMode": "XDG_CACHE_HOME",
     "copilotHomeMode": "isolated",
     "loomConfigDirMode": "isolated",
     "environmentVariablesSet": [
@@ -37,20 +37,21 @@
     "opencode": {
       "executable": "opencode",
       "command": "opencode --version",
-      "exitCode": 0,
+      "exitCode": null,
       "timedOut": false,
-      "durationMs": 231,
-      "version": "2.2.5",
+      "durationMs": 5,
+      "version": null,
       "expectedVersion": "2.2.5",
-      "versionMatches": true,
-      "available": true
+      "versionMatches": false,
+      "available": false,
+      "errorCode": "HARNESS_UNAVAILABLE"
     },
     "copilot": {
       "executable": "copilot",
       "command": "copilot --version",
       "exitCode": 0,
       "timedOut": false,
-      "durationMs": 182,
+      "durationMs": 1922,
       "version": "1.0.105",
       "expectedVersion": "1.0.105",
       "versionMatches": true,
@@ -60,8 +61,8 @@
   "auth": {
     "opencode": {
       "harness": "opencode",
-      "state": "authenticated",
-      "reason": "CLI_CREDENTIALS",
+      "state": "unknown",
+      "reason": "NO_EXECUTABLE",
       "loginHint": "Run \"opencode auth login\" in a terminal, then re-run preflight.",
       "evidence": [
         {
@@ -93,22 +94,13 @@
           "kind": "environment",
           "name": "OPENROUTER_API_KEY",
           "present": false
-        },
-        {
-          "kind": "command",
-          "command": "~/.opencode/bin/opencode auth list --format json",
-          "description": "opencode auth list --format json",
-          "exitCode": 0,
-          "timedOut": false,
-          "state": "authenticated",
-          "reason": "CLI_CREDENTIALS"
         }
       ]
     },
     "copilot": {
       "harness": "copilot",
-      "state": "unknown",
-      "reason": "NO_EVIDENCE",
+      "state": "authenticated",
+      "reason": "ENVIRONMENT_TOKEN",
       "loginHint": "Run \"copilot login\" in a terminal, or set COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN, then re-run preflight.",
       "evidence": [
         {
@@ -124,7 +116,7 @@
         {
           "kind": "environment",
           "name": "GITHUB_TOKEN",
-          "present": false
+          "present": true
         }
       ]
     }
@@ -132,51 +124,40 @@
   "harnesses": {
     "opencode": {
       "harness": "opencode",
-      "version": "2.2.5",
+      "version": null,
       "expectedVersion": "2.2.5",
-      "versionMatches": true,
-      "sessionId": "ses_cCGRZddKE7xmIZL4pu9BJgiilL",
+      "versionMatches": false,
+      "sessionId": "",
       "sessionMode": "shared",
-      "model": "deepseek/deepseek-flash",
-      "modelSource": "authenticated-provider",
+      "model": null,
+      "modelSource": "default",
       "command": {
         "executable": "opencode",
-        "args": [
-          "--session",
-          "ses_cCGRZddKE7xmIZL4pu9BJgiilL",
-          "--prompt",
-          "<probe-prompt>",
-          "<temporary-project>"
-        ],
+        "args": [],
         "cwd": "<temporary-project>"
       },
       "seededPrompt": {
-        "passed": true,
-        "tokenObserved": true,
-        "durationMs": 5671,
-        "exitCode": 130,
+        "passed": false,
+        "tokenObserved": false,
+        "durationMs": 0,
+        "exitCode": null,
         "timedOut": false,
-        "forcedKill": true,
+        "forcedKill": false,
         "skillAvailable": true
       },
       "signal": {
-        "working": true,
-        "idle": true,
-        "clear": true,
-        "workingBeforeIdle": true,
-        "workingEventCount": 6,
-        "idleEventCount": 2,
-        "clearEventCount": 1,
-        "sequence": [
-          "idle",
-          "working",
-          "clear",
-          "idle"
-        ],
-        "sessionIdFromSignal": "ses_cCGRZddKE7xmIZL4pu9BJgiilL",
-        "firstWorkingAtMs": 2322,
-        "firstIdleAfterWorkingAtMs": 5239,
-        "paramFormat": "colon",
+        "working": false,
+        "idle": false,
+        "clear": false,
+        "workingBeforeIdle": false,
+        "workingEventCount": 0,
+        "idleEventCount": 0,
+        "clearEventCount": 0,
+        "sequence": [],
+        "sessionIdFromSignal": null,
+        "firstWorkingAtMs": null,
+        "firstIdleAfterWorkingAtMs": null,
+        "paramFormat": "unknown",
         "productParser": {
           "eventCount": 0,
           "recognized": false
@@ -188,18 +169,16 @@
         }
       },
       "recall": {
-        "passed": true,
-        "tokenObserved": true,
-        "durationMs": 2727,
-        "exitCode": 130,
+        "passed": false,
+        "tokenObserved": false,
+        "durationMs": 0,
+        "exitCode": null,
         "timedOut": false,
-        "forcedKill": true,
+        "forcedKill": false,
         "probeSkillPresent": false
       },
       "cleanup": {
-        "sessionsCreated": [
-          "ses_cCGRZddKE7xmIZL4pu9BJgiilL"
-        ],
+        "sessionsCreated": [],
         "sessionsDeleted": true,
         "sessionsStillPresent": []
       }
@@ -209,39 +188,39 @@
       "version": "1.0.105",
       "expectedVersion": "1.0.105",
       "versionMatches": true,
-      "sessionId": "70f221c7-f681-4930-bc17-22364d92a1b9",
+      "sessionId": "dc194d42-e79a-4a56-b8c6-df9c965959cf",
       "copilotHomeMode": "isolated",
       "trust": {
         "resolved": true,
         "state": "trusted",
         "reason": "FOLDER_TRUSTED",
         "mechanism": "dialog",
-        "durationMs": 4266,
+        "durationMs": 4573,
         "configPath": "<temporary-root>/copilot-home/config.json",
         "manualFallback": "copilot -C <temporary-project>",
         "sentSelectionKeys": true,
         "outputClassified": "trust-dialog"
       },
       "seededPrompt": {
-        "passed": true,
-        "tokenObserved": true,
-        "durationMs": 10867,
-        "exitCode": 0,
+        "passed": false,
+        "tokenObserved": false,
+        "durationMs": 5232,
+        "exitCode": 1,
         "timedOut": false,
         "forcedKill": false,
         "skillAvailable": true,
-        "skillObserved": true,
-        "skillObservation": "observed",
+        "skillObserved": false,
+        "skillObservation": "not-observable",
         "broadPermissions": [
           "--allow-all-paths",
           "--allow-all-tools"
         ]
       },
       "recall": {
-        "passed": true,
-        "tokenObserved": true,
-        "durationMs": 8820,
-        "exitCode": 0,
+        "passed": false,
+        "tokenObserved": false,
+        "durationMs": 3873,
+        "exitCode": 1,
         "timedOut": false,
         "forcedKill": false,
         "probeSkillPresent": false
@@ -252,7 +231,7 @@
           "-p",
           "<probe-prompt>",
           "--session-id",
-          "70f221c7-f681-4930-bc17-22364d92a1b9",
+          "dc194d42-e79a-4a56-b8c6-df9c965959cf",
           "--allow-all-paths",
           "--allow-all-tools",
           "-C",
@@ -268,10 +247,11 @@
       "harness": "opencode",
       "description": "Confirm the opencode CLI is installed and reports a version.",
       "expected": "opencode --version exits 0 and prints a semantic version.",
-      "observed": "opencode --version exited 0 and reported 2.2.5.",
-      "status": "passed",
-      "passed": true,
-      "durationMs": 231
+      "observed": "opencode --version could not start (HARNESS_UNAVAILABLE).",
+      "status": "failed",
+      "passed": false,
+      "remediation": "Install OpenCode 2.2.5 (https://opencode.ai) and ensure \"opencode\" is on PATH, or set harnessCommands.opencode in the Skill Loom config.",
+      "durationMs": 5
     },
     {
       "id": "prereq.copilot",
@@ -281,15 +261,15 @@
       "observed": "copilot --version exited 0 and reported 1.0.105.",
       "status": "passed",
       "passed": true,
-      "durationMs": 182
+      "durationMs": 1922
     },
     {
       "id": "auth.opencode",
       "harness": "opencode",
       "description": "Confirm opencode has local authentication evidence.",
       "expected": "Positive local authentication evidence without reading credential values.",
-      "observed": "Authentication evidence: CLI_CREDENTIALS.",
-      "status": "passed",
+      "observed": "No static authentication evidence was available (NO_EXECUTABLE); the live opencode probe determines whether authentication works.",
+      "status": "not-applicable",
       "passed": true
     },
     {
@@ -297,69 +277,73 @@
       "harness": "copilot",
       "description": "Confirm copilot has local authentication evidence.",
       "expected": "Positive local authentication evidence without reading credential values.",
-      "observed": "No static authentication evidence was available (NO_EVIDENCE); the live copilot probe determines whether authentication works.",
-      "status": "not-applicable",
+      "observed": "Authentication evidence: ENVIRONMENT_TOKEN.",
+      "status": "passed",
       "passed": true
     },
     {
       "id": "opencode.seed",
       "harness": "opencode",
-      "description": "Run a seeded interactive OpenCode prompt in a PTY and return the probe token.",
-      "expected": "The loom-live-probe skill returns the probe token.",
-      "observed": "The seeded prompt returned the probe token after 5671 ms.",
-      "status": "passed",
-      "passed": true,
-      "durationMs": 5671
+      "description": "Run the live opencode seed probe.",
+      "expected": "The opencode seed probe completes successfully.",
+      "observed": "Blocked: the opencode CLI is unavailable (HARNESS_UNAVAILABLE).",
+      "status": "failed",
+      "passed": false,
+      "remediation": "Install the expected opencode CLI version and rerun npm run test:live:execution."
     },
     {
       "id": "opencode.signal",
       "harness": "opencode",
-      "description": "Observe OpenCode OSC 7501 working followed by idle.",
-      "expected": "At least one state=working event precedes a later state=idle event.",
-      "observed": "Observed 6 working, 2 idle, and 1 clear event(s); sequence idle -> working -> clear -> idle.",
-      "status": "passed",
-      "passed": true,
-      "durationMs": 5671
+      "description": "Run the live opencode signal probe.",
+      "expected": "The opencode signal probe completes successfully.",
+      "observed": "Blocked: the opencode CLI is unavailable (HARNESS_UNAVAILABLE).",
+      "status": "failed",
+      "passed": false,
+      "remediation": "Install the expected opencode CLI version and rerun npm run test:live:execution."
     },
     {
       "id": "opencode.recall",
       "harness": "opencode",
-      "description": "Recall the probe token in a second OpenCode process using the same session id.",
-      "expected": "The same ses_ session returns the probe token after the probe skill is removed.",
-      "observed": "The second process recalled the token after 2727 ms; probe skill present during recall=false.",
-      "status": "passed",
-      "passed": true,
-      "durationMs": 2727
+      "description": "Run the live opencode recall probe.",
+      "expected": "The opencode recall probe completes successfully.",
+      "observed": "Blocked: the opencode CLI is unavailable (HARNESS_UNAVAILABLE).",
+      "status": "failed",
+      "passed": false,
+      "remediation": "Install the expected opencode CLI version and rerun npm run test:live:execution."
     },
     {
       "id": "copilot.trust",
       "harness": "copilot",
       "description": "Resolve Copilot folder trust before running a seeded prompt.",
       "expected": "The temporary project is recorded as a trusted folder.",
-      "observed": "Trust resolved via dialog (FOLDER_TRUSTED) after 4266 ms; selection keys sent=true.",
+      "observed": "Trust resolved via dialog (FOLDER_TRUSTED) after 4573 ms; selection keys sent=true.",
       "status": "passed",
       "passed": true,
-      "durationMs": 4266
+      "durationMs": 4573
     },
     {
       "id": "copilot.seed",
       "harness": "copilot",
       "description": "Run a headless Copilot prompt and return the probe token.",
       "expected": "Exit 0 and the loom-live-probe skill returns the probe token.",
-      "observed": "The headless prompt returned the probe token after 10867 ms; skill line observed=true.",
-      "status": "passed",
-      "passed": true,
-      "durationMs": 10867
+      "observed": "Headless failure class command; exit 1, timed out=false, token observed=false.",
+      "status": "failed",
+      "passed": false,
+      "remediation": "Inspect the bounded redacted excerpt, fix the reported CLI or skill problem, then rerun npm run test:live:execution.",
+      "durationMs": 5232,
+      "excerpt": "Error: Failed to load models\nError: error sending request for url (https://api.individual.githubcopilot.com/models): client error (Connect): dns error: error resolving DNS: failed to lookup address information: No address associated with hostname [ENOTFOUND]\nCopilot could not retrieve the list of available models.\nTo resolve this, try the following:\n  • If you set COPILOT_GITHUB_TOKEN, GH_TOKEN or GITHUB_TOKEN, verify it is a user token with Copilot access, or unset it to use your Copilot CLI login\n  • Start 'copilot' and run the '/login' command to re-authenticate\n  • Run 'gh auth status' to check your current authentication status\n  • If the problem persists, retry later or contact support with the Request ID above"
     },
     {
       "id": "copilot.recall",
       "harness": "copilot",
       "description": "Recall the probe token in a second Copilot process using the same UUID session id.",
       "expected": "The same UUID session returns the probe token after the probe skill is removed.",
-      "observed": "The second process recalled the token after 8820 ms; probe skill present during recall=false.",
-      "status": "passed",
-      "passed": true,
-      "durationMs": 8820
+      "observed": "Headless failure class command; exit 1, timed out=false, token observed=false; session id dc194d42-e79a-4a56-b8c6-df9c965959cf.",
+      "status": "failed",
+      "passed": false,
+      "remediation": "Verify the same UUID session id was passed to both Copilot processes and that Copilot persisted the first session. Rerun npm run test:live:execution.",
+      "durationMs": 3873,
+      "excerpt": "Error: Failed to load models\nError: error sending request for url (https://api.individual.githubcopilot.com/models): client error (Connect): dns error: error resolving DNS: failed to lookup address information: No address associated with hostname [ENOTFOUND]\nCopilot could not retrieve the list of available models.\nTo resolve this, try the following:\n  • If you set COPILOT_GITHUB_TOKEN, GH_TOKEN or GITHUB_TOKEN, verify it is a user token with Copilot access, or unset it to use your Copilot CLI login\n  • Start 'copilot' and run the '/login' command to re-authenticate\n  • Run 'gh auth status' to check your current authentication status\n  • If the problem persists, retry later or contact support with the Request ID above"
     },
     {
       "id": "cleanup.temporary-root",
@@ -375,37 +359,19 @@
       "harness": "opencode",
       "description": "Delete the OpenCode session created by the probe.",
       "expected": "No probe session remains in the OpenCode session store.",
-      "observed": "1 probe session(s) verified absent after deletion.",
-      "status": "passed",
+      "observed": "No OpenCode session was created before the probe stopped.",
+      "status": "not-applicable",
       "passed": true
     }
   ],
-  "warnings": [
-    {
-      "code": "OSC7501_PRODUCT_PARSER_MISMATCH",
-      "harness": "opencode",
-      "message": "Live OpenCode 2.2.5 emitted colon-separated OSC 7501 parameters (state=working:app=opencode). The product parser splits on \";\" and recognized 0 event(s), while the probe's equivalent buffered parser recognized the signal. Report this contract mismatch to the backend engineer."
-    },
-    {
-      "code": "OSC7501_CLEAR_BEFORE_IDLE",
-      "harness": "opencode",
-      "message": "Live OpenCode emitted clear between working and idle. The product Osc7501StateMachine resets its working observation on clear, so this live order would still fail to advance after the parameter-separator defect is fixed. The probe asserts the CLI order (working before idle) without weakening the no-idle-only rule. Report this contract mismatch to the backend engineer."
-    }
-  ],
+  "warnings": [],
   "cleanup": {
     "attempted": true,
     "temporaryRootRemoved": true,
     "temporaryRoot": null,
     "processesRemaining": 0,
     "ptySessionsRemaining": 0,
-    "opencodeSessions": [
-      {
-        "sessionId": "ses_cCGRZddKE7xmIZL4pu9BJgiilL",
-        "existed": true,
-        "deleted": true,
-        "verifiedAbsent": true
-      }
-    ],
+    "opencodeSessions": [],
     "opencodeSessionCleanupPassed": true
   },
   "limitations": []

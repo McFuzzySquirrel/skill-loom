@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   CHAIN_VERSION,
@@ -35,9 +35,9 @@ import {
 } from '../../src/server/preflight/engine.js';
 
 const CREATED_AT = '2026-11-04T12:00:00.000Z';
-const PROJECT = '/workspace/demo-project';
-const HOME = '/home/preflight';
-const PATH_ENV = '/fake/bin';
+const PROJECT = resolve('/workspace/demo-project');
+const HOME = resolve('/home/preflight');
+const PATH_ENV = resolve('/fake/bin');
 
 const OPENCODE = join(PATH_ENV, 'opencode');
 const COPILOT = join(PATH_ENV, 'copilot');
@@ -646,7 +646,7 @@ describe('preflight engine: hard blocks', () => {
         harness: 'copilot',
         env: { PATH: PATH_ENV, COPILOT_GITHUB_TOKEN: 'present' },
         readFileText: async () =>
-          JSON.stringify({ trustedFolders: ['/workspace/other-project'] }),
+          JSON.stringify({ trustedFolders: [resolve('/workspace/other-project')] }),
         runner: createRunner(),
       }),
     });
@@ -655,7 +655,10 @@ describe('preflight engine: hard blocks', () => {
     expect(checkById(report, 'trust')?.details).toMatchObject({
       harness: 'copilot',
       state: 'untrusted',
-      configPath: `${HOME}/.copilot/config.json`,
+      configPath: join(HOME, '.copilot', 'config.json'),
+      manualCommandText: process.platform === 'win32'
+        ? `& '${COPILOT.replaceAll("'", "''")}' '-C' '${PROJECT.replaceAll("'", "''")}'`
+        : `${COPILOT} -C ${PROJECT}`,
     });
   });
 

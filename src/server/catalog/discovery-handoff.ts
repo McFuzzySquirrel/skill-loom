@@ -15,11 +15,13 @@ import {
 } from '../../shared/discovery-handoff.js';
 import { validatePackagePath } from '../../portable/bundle.js';
 import type { ConfigStore } from '../config/store.js';
+import { snapshotReviewFingerprint } from './snapshot-fingerprint.js';
 import {
-  listRemoteSkillSnapshots,
+  findRemoteSkillSnapshot,
   listRemoteSkillSources,
-  resolveSnapshotPackagePath,
+  resolveSnapshotPackage,
   RemoteSourceError,
+  type RemoteSkillSnapshot,
 } from './remote.js';
 
 const candidateIdentitySchema = DiscoveryHandoffSchema.shape.candidates.element.pick({
@@ -83,6 +85,7 @@ export async function prepareDiscoveryHandoff(
     ? []
     : await listRemoteSkillSources(configStore);
   const packages: DiscoveryHandoffCandidate[] = [];
+  const snapshots = new Map<string, RemoteSkillSnapshot>();
   let totalFiles = 0;
   let totalBytes = 0;
   for (const identity of identities) {
@@ -92,11 +95,22 @@ export async function prepareDiscoveryHandoff(
     ) {
       throw unavailable('The selected source is no longer registered. Review the current sources and select it again.');
     }
-    const snapshots = await listRemoteSkillSnapshots(
-      configStore.getConfigDir(),
-      identity.sourceId,
-    );
-    const snapshot = snapshots.find((entry) => entry.revision === identity.revision);
+    const snapshotKey = `${identity.sourceId}\0${identity.revision}`;
+    let snapshot = snapshots.get(snapshotKey);
+    if (snapshot === undefined) {
+      snapshot = await findRemoteSkillSnapshot(configStore.getConfigDir(), identity.sourceId, identity.revision)
+        .catch((error: unknown) => {
+          if (error instanceof RemoteSourceError) {
+            throw new DiscoveryHandoffError(
+              'DISCOVERY_SNAPSHOT_UNSAFE',
+              'The selected pinned snapshot could not be verified. Refresh the source and review its warnings.',
+              422,
+            );
+          }
+          throw error;
+        });
+      if (snapshot !== undefined) snapshots.set(snapshotKey, snapshot);
+    }
     if (snapshot === undefined) {
       throw unavailable('The exact pinned snapshot is no longer available. Refresh and explicitly reselect a current candidate.');
     }
@@ -115,6 +129,10 @@ export async function prepareDiscoveryHandoff(
       );
     }
     const packageInfo = matches[0]!;
+    if (packageInfo.files > MAX_HANDOFF_FILES - totalFiles ||
+        packageInfo.bytes > MAX_HANDOFF_BYTES - totalBytes) {
+      throw handoffTooLarge();
+    }
     if (packageInfo.name.length > 128 || /[\\/]/.test(packageInfo.name)) {
       throw unavailable('The selected package name cannot be represented safely in a portable chain bundle.');
     }
@@ -123,7 +141,7 @@ export async function prepareDiscoveryHandoff(
     } catch {
       throw unavailable('The selected package name cannot be represented safely in a portable chain bundle.');
     }
-    const packagePath = await resolveSnapshotPackagePath(
+    const resolvedPackage = await resolveSnapshotPackage(
       configStore.getConfigDir(),
       snapshot,
       packageInfo,
@@ -137,15 +155,22 @@ export async function prepareDiscoveryHandoff(
       }
       throw error;
     });
-    const files = await collectPackage(packagePath).catch((error: unknown) => {
+    const files = await collectPackage(
+      resolvedPackage.path, MAX_HANDOFF_FILES - totalFiles, MAX_HANDOFF_BYTES - totalBytes,
+      resolvedPackage.executablePaths,
+    ).catch((error: unknown) => {
       if (error instanceof DiscoveryHandoffError) throw error;
       throw unsafe();
     });
     const actualFingerprint = fingerprintFiles(files);
+    const packageBytes = files.reduce((sum, file) => sum + Buffer.byteLength(file.content, 'base64'), 0);
     if (
       actualFingerprint !== packageInfo.fingerprint ||
+      snapshotReviewFingerprint(files.map((file) => ({
+        path: file.path, executable: file.executable, content: Buffer.from(file.content, 'base64'),
+      }))) !== resolvedPackage.reviewFingerprint ||
       files.length !== packageInfo.files ||
-      files.reduce((sum, file) => sum + Buffer.from(file.content, 'base64').length, 0) !== packageInfo.bytes
+      packageBytes !== packageInfo.bytes
     ) {
       throw new DiscoveryHandoffError(
         'DISCOVERY_SNAPSHOT_UNSAFE',
@@ -154,20 +179,13 @@ export async function prepareDiscoveryHandoff(
       );
     }
     totalFiles += files.length;
-    totalBytes += files.reduce(
-      (sum, file) => sum + Buffer.from(file.content, 'base64').length,
-      0,
-    );
+    totalBytes += packageBytes;
     if (
       totalFiles > MAX_HANDOFF_FILES ||
       totalBytes > MAX_HANDOFF_BYTES ||
       packages.length + 1 > MAX_HANDOFF_PACKAGES
     ) {
-      throw new DiscoveryHandoffError(
-        'DISCOVERY_HANDOFF_TOO_LARGE',
-        `The selection exceeds handoff limits (${String(MAX_HANDOFF_PACKAGES)} packages, ${String(MAX_HANDOFF_FILES)} files, ${String(MAX_HANDOFF_BYTES)} decoded bytes). Remove candidates and prepare again; none were omitted.`,
-        413,
-      );
+      throw handoffTooLarge();
     }
     packages.push({
       sourceId: snapshot.sourceId,
@@ -202,8 +220,15 @@ export async function prepareDiscoveryHandoff(
   return validated;
 }
 
-async function collectPackage(root: string): Promise<DiscoveryHandoffFile[]> {
+async function collectPackage(
+  root: string,
+  remainingFiles: number,
+  remainingBytes: number,
+  executablePaths?: string[],
+): Promise<DiscoveryHandoffFile[]> {
   const files: DiscoveryHandoffFile[] = [];
+  const remainingExecutables = executablePaths === undefined ? undefined : new Set(executablePaths);
+  let bytes = 0;
   async function visit(directory: string, prefix: string, depth: number): Promise<void> {
     if (depth > 32) throw unsafe();
     for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) =>
@@ -221,24 +246,31 @@ async function collectPackage(root: string): Promise<DiscoveryHandoffFile[]> {
       const handle = await open(absolute, constants.O_RDONLY | constants.O_NOFOLLOW);
       try {
         const opened = await handle.stat();
-        if (!opened.isFile() || opened.size > MAX_HANDOFF_BYTES) throw unsafe();
+        if (!opened.isFile()) throw unsafe();
+        if (files.length >= remainingFiles || opened.size > remainingBytes - bytes) throw handoffTooLarge();
         const content = Buffer.alloc(opened.size + 1);
-        const { bytesRead } = await handle.read(content, 0, content.length, 0);
-        if (bytesRead !== opened.size) throw unsafe();
+        let bytesRead = 0;
+        while (bytesRead < content.length) {
+          const read = await handle.read(content, bytesRead, content.length - bytesRead, bytesRead);
+          if (read.bytesRead === 0) break;
+          bytesRead += read.bytesRead;
+        }
+        const after = await handle.stat();
+        if (bytesRead !== opened.size || after.size !== opened.size || after.mtimeMs !== opened.mtimeMs ||
+            after.mode !== opened.mode) throw unsafe();
+        const executable = (opened.mode & 0o111) !== 0;
+        const recordedExecutable = remainingExecutables?.delete(path);
+        if (recordedExecutable !== undefined && process.platform !== 'win32' && recordedExecutable !== executable) {
+          throw unsafe();
+        }
+        bytes += bytesRead;
         files.push({
           path,
           content: content.subarray(0, bytesRead).toString('base64'),
-          executable: (opened.mode & 0o111) !== 0,
+          executable: recordedExecutable ?? executable,
         });
       } finally {
         await handle.close();
-      }
-      if (files.length > MAX_HANDOFF_FILES) {
-        throw new DiscoveryHandoffError(
-          'DISCOVERY_HANDOFF_TOO_LARGE',
-          `The selection exceeds the ${String(MAX_HANDOFF_FILES)}-file handoff limit. Remove candidates and prepare again; none were omitted.`,
-          413,
-        );
       }
     }
   }
@@ -247,6 +279,7 @@ async function collectPackage(root: string): Promise<DiscoveryHandoffFile[]> {
     throw unsafe();
   }
   await visit(root, '', 0);
+  if ((remainingExecutables?.size ?? 0) !== 0) throw unsafe();
   return files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 }
 
@@ -265,6 +298,14 @@ function fingerprintFiles(files: DiscoveryHandoffFile[]): string {
 
 function unavailable(message: string): DiscoveryHandoffError {
   return new DiscoveryHandoffError('DISCOVERY_CANDIDATE_UNAVAILABLE', message, 409);
+}
+
+function handoffTooLarge(): DiscoveryHandoffError {
+  return new DiscoveryHandoffError(
+    'DISCOVERY_HANDOFF_TOO_LARGE',
+    `The selection exceeds handoff limits (${String(MAX_HANDOFF_PACKAGES)} packages, ${String(MAX_HANDOFF_FILES)} files, ${String(MAX_HANDOFF_BYTES)} decoded bytes). Remove candidates and prepare again; none were omitted.`,
+    413,
+  );
 }
 
 function unsafe(): DiscoveryHandoffError {

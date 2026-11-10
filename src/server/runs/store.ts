@@ -16,6 +16,7 @@ import type { FileHandle } from 'node:fs/promises';
 import type { Stats } from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { z } from 'zod';
+import { withProjectClaimTransaction } from '../../shared/project-claim.js';
 import {
   atomicWriteJson as writeJsonAtomically,
   resolveConfigDir,
@@ -96,6 +97,8 @@ export const RUN_STORE_WARNING_CODES = {
   UNSUPPORTED_VERSION: RUN_STORE_ERROR_CODES.UNSUPPORTED_VERSION,
   ACTIVE_POINTER_CORRUPT: RUN_STORE_ERROR_CODES.ACTIVE_POINTER_CORRUPT,
   PROJECT_NOT_FOUND: RUN_STORE_ERROR_CODES.PROJECT_NOT_FOUND,
+  RECOVERY_AMBIGUOUS: 'RUN_RECOVERY_AMBIGUOUS',
+  RECOVERY_CLAIMED: 'RUN_RECOVERY_CLAIMED',
 } as const;
 
 export type RunStoreWarningCode =
@@ -273,8 +276,8 @@ export interface RunStore {
   /** Remove the pointer regardless of its contents. Used only by recovery. */
   clearActiveRun(): Promise<boolean>;
   /**
-   * Mark every record still `starting`, `running`, `paused`, or `awaiting-user`
-   * as `interrupted`, then clear a stale pointer. Never replays a step.
+   * Recover only the active record named by this profile's pointer. Other
+   * active records may belong to another profile and are left unchanged.
    */
   recoverInterruptedRuns(): Promise<RunRecoveryResult>;
   /** Skill Loom config directory that owns the active-run pointer. */
@@ -383,23 +386,8 @@ export async function recoverActiveRunOnStartup(
   const projects: string[] = [];
   const seen = new Set<string>();
 
-  let pointer: ActiveRunPointer | null = null;
+  const pointer = await readActivePointerAt(activeRunPathFor(configDirectory));
   let clearedActiveRun = false;
-  try {
-    pointer = await readActivePointerAt(activeRunPathFor(configDirectory));
-  } catch (error) {
-    if (error instanceof RunStoreError && error.code === RUN_STORE_ERROR_CODES.ACTIVE_POINTER_CORRUPT) {
-      warnings.push({
-        code: RUN_STORE_WARNING_CODES.ACTIVE_POINTER_CORRUPT,
-        message: 'The active-run pointer was corrupt and has been removed.',
-        path: activeRunPathFor(configDirectory),
-        reason: 'CORRUPT',
-      });
-      clearedActiveRun = await clearActivePointerAt(activeRunPathFor(configDirectory));
-    } else {
-      throw error;
-    }
-  }
 
   const targets: string[] = [];
   if (pointer !== null) {
@@ -719,45 +707,72 @@ class FileRunStore implements RunStore {
 
   async recoverInterruptedRuns(): Promise<RunRecoveryResult> {
     const root = await this.resolveRoot(false);
+    const pointer = await this.readActivePointer();
+    if (pointer !== null && pointer.projectPath === root.projectPath) {
+      return withProjectClaimTransaction(root.projectPath, async (tx) => {
+        if (tx.read() !== null || tx.protocol() !== null) {
+          const listed = root.exists ? await this.list() : { runs: [], warnings: [] as RunStoreWarning[] };
+          const ambiguous = listed.runs
+            .filter((run) => isActiveRunStatus(run.status) && run.id !== pointer.runId)
+            .map((run): RunStoreWarning => ({
+              code: RUN_STORE_WARNING_CODES.RECOVERY_AMBIGUOUS,
+              message: 'An active run is not owned by this profile pointer and was left unchanged; it may belong to another profile.',
+              path: targetForId(root.runsDirectory, run.id),
+              runId: run.id,
+              projectPath: root.projectPath,
+              reason: 'OWNERSHIP_UNKNOWN',
+            }));
+          return {
+            interrupted: [],
+            clearedActiveRun: false,
+            warnings: [...listed.warnings, ...ambiguous, {
+              code: RUN_STORE_WARNING_CODES.RECOVERY_CLAIMED,
+              message: 'Project coordination requires explicit review; startup left the run and active pointer unchanged.',
+              path: this.getActiveRunPath(),
+              runId: pointer.runId,
+              projectPath: root.projectPath,
+              reason: 'PROJECT_RECONCILIATION_REQUIRED',
+            }],
+          };
+        }
+        return this.recoverInterruptedRunsUncoordinated(root);
+      });
+    }
+    return this.recoverInterruptedRunsUncoordinated(root);
+  }
+
+  private async recoverInterruptedRunsUncoordinated(root: ResolvedRunsRoot): Promise<RunRecoveryResult> {
     const listed = root.exists ? await this.list() : { runs: [], warnings: [] as RunStoreWarning[] };
-    const timestamp = this.timestamp();
     const interrupted: Run[] = [];
+    const warnings = listed.warnings;
+    let clearedActiveRun = false;
+    const pointer = await this.readActivePointer();
 
     for (const run of listed.runs) {
       if (!isActiveRunStatus(run.status)) {
         continue;
       }
+      if (
+        pointer === null ||
+        pointer.projectPath !== root.projectPath ||
+        pointer.runId !== run.id ||
+        !isActiveRunStatus(pointer.status)
+      ) {
+        warnings.push({
+          code: RUN_STORE_WARNING_CODES.RECOVERY_AMBIGUOUS,
+          message: 'An active run is not owned by this profile pointer and was left unchanged; it may belong to another profile.',
+          path: targetForId(root.runsDirectory, run.id),
+          runId: run.id,
+          projectPath: root.projectPath,
+          reason: 'OWNERSHIP_UNKNOWN',
+        });
+        continue;
+      }
 
-      const record = markRunInterrupted(run, timestamp, 'SERVER_RESTART');
+      const record = markRunInterrupted(run, this.timestamp(), 'SERVER_RESTART');
       const target = targetForId(root.runsDirectory, record.id);
       await this.writeRunFile(target, record);
       interrupted.push(record);
-    }
-
-    let warnings = listed.warnings;
-    let clearedActiveRun = false;
-    let pointer: ActiveRunPointer | null = null;
-
-    try {
-      pointer = await this.readActivePointer();
-    } catch (error) {
-      if (
-        error instanceof RunStoreError &&
-        error.code === RUN_STORE_ERROR_CODES.ACTIVE_POINTER_CORRUPT
-      ) {
-        warnings = [
-          ...warnings,
-          {
-            code: RUN_STORE_WARNING_CODES.ACTIVE_POINTER_CORRUPT,
-            message: 'The active-run pointer was corrupt and has been removed.',
-            path: this.getActiveRunPath(),
-            reason: 'CORRUPT',
-          },
-        ];
-        clearedActiveRun = await this.clearActiveRun();
-        return { interrupted, clearedActiveRun, warnings };
-      }
-      throw error;
     }
 
     if (pointer !== null) {
@@ -854,15 +869,7 @@ class FileRunStore implements RunStore {
   }
 
   private async releaseActiveRunUnlocked(runId: string): Promise<boolean> {
-    const pointer = await this.readActivePointer().catch((error: unknown) => {
-      if (
-        error instanceof RunStoreError &&
-        error.code === RUN_STORE_ERROR_CODES.ACTIVE_POINTER_CORRUPT
-      ) {
-        return null;
-      }
-      throw error;
-    });
+    const pointer = await this.readActivePointer();
 
     if (pointer === null || pointer.runId !== runId) {
       return false;
@@ -878,18 +885,7 @@ class FileRunStore implements RunStore {
   private async syncActivePointer(run: Run, canonicalProjectPath: string): Promise<void> {
     const path = this.getActiveRunPath();
     await enqueuePointer(path, async () => {
-      let pointer: ActiveRunPointer | null;
-      try {
-        pointer = await this.readActivePointer();
-      } catch (error) {
-        if (
-          error instanceof RunStoreError &&
-          error.code === RUN_STORE_ERROR_CODES.ACTIVE_POINTER_CORRUPT
-        ) {
-          return;
-        }
-        throw error;
-      }
+      const pointer = await this.readActivePointer();
 
       if (pointer === null || pointer.runId !== run.id) {
         return;
@@ -1319,15 +1315,10 @@ function samePointerState(left: ActiveRunPointer, right: ActiveRunPointer): bool
   );
 }
 
-/** A pointer target that cannot prove an active run no longer blocks a start. */
+/** Missing legacy targets retain the existing stale-pointer recovery behavior. */
 function isRecoverablePointerTargetError(code: RunStoreErrorCode): boolean {
   return (
     code === RUN_STORE_ERROR_CODES.NOT_FOUND ||
-    code === RUN_STORE_ERROR_CODES.READ_FAILED ||
-    code === RUN_STORE_ERROR_CODES.FILE_CORRUPT ||
-    code === RUN_STORE_ERROR_CODES.FILE_UNREADABLE ||
-    code === RUN_STORE_ERROR_CODES.FILE_ID_MISMATCH ||
-    code === RUN_STORE_ERROR_CODES.UNSUPPORTED_VERSION ||
     code === RUN_STORE_ERROR_CODES.PROJECT_NOT_FOUND
   );
 }

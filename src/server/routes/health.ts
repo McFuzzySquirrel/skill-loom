@@ -1,5 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ConfigStore } from '../config/store.js';
+import { isActiveRunStatus } from '../runs/model.js';
+import { readActiveRunPointerFile } from '../runs/store.js';
 import {
   createInactiveRunSummary,
   type ActiveRunSummary,
@@ -13,22 +15,27 @@ export interface HealthRouteOptions {
   version: string;
   /** Configured port exposed by the health response. */
   port: number;
-  /**
-   * Run-state seam. Run orchestration replaces this later; until then the
-   * server reports an honest inactive placeholder.
-   */
-  getActiveRun?: () => ActiveRunSummary;
+  /** Optional run-state seam for tests or alternate compositions. */
+  getActiveRun?: () => ActiveRunSummary | undefined | Promise<ActiveRunSummary | undefined>;
 }
 
 /**
  * `GET /api/health` — liveness plus the local configuration identity.
  *
- * The handler never reads the config file, so a corrupt configuration cannot
- * make the health check fail or overwrite user data.
+ * The handler may inspect the existing run owner or persisted run pointer,
+ * but never initializes run recovery or reads the config file.
  */
 export const healthRoutes: FastifyPluginAsync<HealthRouteOptions> = async (app, options) => {
   app.get('/api/health', async (): Promise<HealthResponse> => {
-    const activeRun = options.getActiveRun?.() ?? createInactiveRunSummary();
+    let activeRun = await options.getActiveRun?.();
+    if (activeRun === undefined) {
+      const pointer = await readActiveRunPointerFile({
+        configDirectory: options.configStore.getConfigDir(),
+      });
+      activeRun = pointer !== null && isActiveRunStatus(pointer.status)
+        ? { active: true, runId: pointer.runId, status: pointer.status }
+        : createInactiveRunSummary();
+    }
 
     return {
       status: 'ok',

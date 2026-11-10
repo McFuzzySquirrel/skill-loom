@@ -15,16 +15,22 @@ You need:
 - Skill Loom running locally and its loopback URL open in a desktop browser. The default URL is `http://127.0.0.1:7373` for a production build or `http://127.0.0.1:5173` for `npm run dev`.
 - A project folder you are willing to let a harness read and modify. Chain and run data is written under `<project>/.loom/`.
 - The harness you intend to use installed, authenticated, and resolvable from the `PATH` that launched Skill Loom:
-  - OpenCode 2.2.5 for OpenCode chains.
+  - Stable OpenCode 2.2.5 or newer for OpenCode chains.
   - GitHub Copilot CLI 1.0.105 for Copilot chains.
 - For Copilot, the project folder trusted in Copilot's own trust dialog before the first run.
 - Optional: a Git repository in the project if you want the dirty-tree preflight warning. A non-Git project skips that warning.
 
 Skill Loom does not install or authenticate harnesses for you, and it does not send prompts to a hosted service of its own.
 
+On Windows, service startup also requires a protected private profile on a
+local fixed NTFS/ReFS drive, Windows PowerShell 5.1 and .NET 4.7.2+. Unsafe
+existing profile ACLs are refused rather than silently changed. See the
+[administrator's profile instructions](admin-guide.md#identity-secrets-and-tls)
+before choosing a fresh profile or migrating an existing one.
+
 ## Sign In and First Use
 
-There is **no sign-in**. Skill Loom binds to loopback and has **no authentication** because it is not designed for remote access. Do not expose the port through a reverse proxy, tunnel, container port publish, or remote host.
+There is **no browser sign-in**. The browser interface binds to loopback and has **no authentication** because it is not designed for remote access. The separate CLI control channel authenticates its local clients; it does not protect the browser interface. Do not expose either port through a reverse proxy, tunnel, container port publish, or remote host.
 
 On first load you land on **Start**, which organizes the main journeys around your goal rather than storage type:
 
@@ -66,10 +72,10 @@ OpenCode also discovers legacy project packages under `.opencode/skills/`. Copil
 1. Open **Remote skill repositories** and enter an HTTPS or SSH Git URL. Do not include a username/password or token in the URL.
 2. Optionally enter a branch, tag, or commit, then register the source. Private repositories use the Git authentication already configured on this machine; Skill Loom does not collect credentials.
 3. Choose **Refresh pinned snapshot** to explicitly access the repository. Skill Loom resolves a commit and stores a local snapshot of discovered `SKILL.md` packages. Repository files are read as data; Loom does not check out the repository or run its scripts.
-4. Open **Project skills** for a project and inspect the remote group. A selected package can be copied into `<project>/.agents/skills/` through the existing no-overwrite copy action. For agent-assisted scenario discovery without a project, use **Discover workflows**; for manual authoring, use **Drafts**.
+4. Open **Project skills** for a project and inspect the remote group. A selected package can be copied into `<project>/.agents/skills/` through the existing no-overwrite copy action. Loom checks the copy against the discovered snapshot fingerprint and rejects a mismatch; this check does not prevent later changes to the installed package. For agent-assisted scenario discovery without a project, use **Discover workflows**; for manual authoring, use **Drafts**.
 5. **Unregister** removes the source registration but keeps saved snapshots. This preserves already-discovered packages; it does not delete snapshot storage.
 
-Refresh requires Git and network access. Each refresh is bounded to 100 packages, 2,000 files, 20 MiB of skill-package content, 128 MiB of temporary Git staging data, 10,000 staging entries, and bounded Git command output/time. A limit, authentication, host-key, or network error is reported rather than shown as an empty catalog. Remote package contents are untrusted instructions; review them before copying or running a chain that uses them.
+Refresh requires Git and network access. By default, each refresh is bounded to 100 skill packages, 100 native agents, 2,000 files, 20 MiB of package content per snapshot, 128 MiB of Git staging data, 10,000 staging entries, and bounded Git command output/time. On **Remote skill repositories**, expand **Remote catalog limits** (collapsed initially) to configure higher global limits or per-repository overrides when needed; raising the limits increases resource usage. Size fields, maximums, and package sizes use MB (1 MB = 1,000,000 bytes), including fractional MB for small sizes. Staging is monitored, not isolated by an OS quota. A limit, authentication, host-key, or network error is reported rather than shown as an empty catalog. Existing snapshots remain readable after limits are lowered. Remote package contents are untrusted instructions; review them before copying or running a chain that uses them.
 
 ### Discover candidate skills and prepare a handoff
 
@@ -80,6 +86,15 @@ Inspect candidate metadata and `SKILL.md` content, choose only packages relevant
 Review the contents and redistribution rights separately before downloading. Browser download location is controlled by your browser. The page provides a copyable prompt with a path placeholder; replace it with the actual downloaded file path in an existing OpenCode or Copilot CLI session using `scenario-discovery`. The helper validates the complete handoff offline, treats its goal and packages as untrusted data, and proposes scenarios without running package files or making network requests. You choose and revise a proposal, then explicitly approve the full chain and selected packages before it creates a normal v1 `.loom.json` bundle. Redistribution review and execution consent are separate decisions. The chain is never imported or run automatically.
 
 If your host does not already have the updated skill, download **scenario-discovery v1** from the discovery page. Install the `scenario-discovery/` directory into a host-discovered skill location, then refresh or restart the host. The helper requires Node.js 24+ and structured process arguments. Handoff-created v1 bundles do not include native-agent definitions; use Skill Loom's managed designer and run flow for chains requiring a selected agent.
+
+For a CLI-led workflow across discovery, optional workspace testing, reviewed
+import, and current-session execution, the discovery page also offers
+**Download CLI workflow skill**. Install `loom-chain-workflow/` alongside the
+separately distributed `scenario-discovery/` and `loom-run-bundle/` skills,
+then ask your host to use `loom-chain-workflow`. It preserves separate approvals
+for review, testing, installation, and execution; a workspace is not an OS
+sandbox. Skill-bearing CLI-managed starts and portable selected-agent starts
+remain blocked.
 
 ### Start a project-independent draft from a goal
 
@@ -121,7 +136,7 @@ Instruction steps run through the chain's selected harness in the same order and
 
 ### Test in a disposable project
 
-In the workflow designer, choose **Test in disposable workspace** to save the current chain and create a fresh managed test project containing its chain and selected packages. The run uses Skill Loom's regular preflight, trust, permissions, and run controls. It does not modify the source project's files. The test project and run records are retained for inspection until you remove them from **Test workspaces** in the navigation. Cleanup is blocked while a workspace owns the active run.
+In the workflow designer, choose **Test in disposable workspace** to save the current chain and create a fresh managed test project containing its chain and selected packages. The run uses Skill Loom's regular preflight, trust, permissions, and run controls. It does not modify the source project's files. The test project and run records are retained for inspection until you remove them from **Test workspaces** in the navigation. Cleanup is blocked by active or unresolved runs and retained project claims. Before removal, stop all work and descendants, and older Skill Loom services and helpers using the workspace.
 
 A separate working directory is not a security sandbox: the selected harness can still access files, network resources, and credentials allowed by its normal permissions. A new test workspace is not shown in the ordinary recent-project list, but remains registered for run recovery. Do not treat successful execution as proof that the chain or its outputs are correct.
 
@@ -141,7 +156,23 @@ Discovery workspaces and run history remain available until you explicitly remov
 2. Review the chain instructions, input definitions, package file lists, and `SKILL.md` previews. The bundle includes complete referenced skill packages: scripts, binary assets, and supporting files, with executable flags preserved. A chain with a selected native agent exports as bundle version 2 and includes its exact definition and pinned identity; the export review displays the agent text. Private repository URLs are not included.
 3. Confirm that you reviewed the contents and have redistribution permission, then choose **Download bundle**. Send the resulting `.loom.json` file using your own file-sharing method; Skill Loom does not upload it or create a public link.
 
-The export excludes input default values, run records, terminal output, local catalog source paths, chain identity/timestamps, and automatic-permission consent. It refuses packages containing symbolic links, special files, `.env` files, credential-named files, `.git`, `.loom`, `.ssh`, or `node_modules` directories rather than silently exporting a partial package. Version 1 remains the export format for chains without a selected native agent; version 2 includes the selected agent definition and provenance identity. This is not a secret scanner: secrets, private paths, or confidential material inside ordinary instructions and files must be removed before sharing.
+The export excludes input default values, run records, terminal output, local catalog source paths, chain identity/timestamps, and automatic-permission consent. It refuses packages containing symbolic links, special files, `.env` files, credential-named files, `.git`, `.loom`, `.ssh`, or `node_modules` directories rather than silently exporting a partial package. The only `.loom` exception is a validated installed-mode record: Loom verifies both copies and omits that operational metadata, retaining the recorded executable flags in the bundle. Unexpected files in that metadata directory block review and export. Version 1 remains the export format for chains without a selected native agent; version 2 includes the selected agent definition and provenance identity. This is not a secret scanner: secrets, private paths, or confidential material inside ordinary instructions and files must be removed before sharing.
+
+On Windows, imports and the portable helper preserve executable intent in two versioned records: `<package>/.loom/installed-modes.json` and `<project>/.loom/package-modes/<key>.json`. Each records the package-relative identity, complete file paths, executable flags, and original content hashes. Both are published exclusively and flushed before any `SKILL.md` entry. Current content and recorded flags are bound together by the ordinary package review fingerprints; those fingerprints, not the original hashes, govern approval and detect changes after review. Editing an existing file retains its executable intent and requires a fresh review for reuse or export. Adding or removing files requires a new reviewed installation; Loom does not guess intent for new paths.
+
+Nested skills use a subtree view of their parent package's validated records. Review, copying, reuse, and export retain the nested files' flags without relying on possibly different Git index bits. Only the actual validated metadata directory is excluded; a nested `.loom` directory is not silently hidden.
+
+Remote copies use the verified snapshot's flags; bundled copies use a shipped content-bound mode manifest. Copying another filesystem package on Windows requires either its intact installed-mode records or a complete, non-conflicted Git index. Non-shared legacy filesystem packages can also be exported using their Git index. Loom never derives executable intent from Windows filesystem mode bits. Refresh an older remote snapshot to attach verified mode metadata.
+
+Missing, corrupt, inconsistent, linked, or unexpectedly populated metadata blocks review and export. Windows shared packages with neither record are also blocked, including legacy shared packages: restore both original records and files, or reinstall a reviewed bundle into a new package directory. There is no automatic metadata repair or overwrite. After an interrupted install, confirm that no installer is active, inspect the incomplete package and its matching registry entry (`packagePath` identifies the package), and remove only those abandoned artifacts before retrying. Do not remove another package's registry entry. Normal failed installation rolls back records created by that attempt; a crash can leave records and temporary files.
+
+When sharing installed packages through Git, include both metadata copies and stage the desired Git executable bits explicitly. For example, use `git update-index --chmod=+x -- <script-path>` for an executable file and `--chmod=-x` for a non-executable file, especially with `core.filemode=false`; adding files alone does not preserve Windows executable intent in Git. Loom does not stage files or modify their Git modes. On POSIX hosts, physical executable flags must agree with the records. Bundles avoid transporting operational metadata and are the preferred cross-project exchange format.
+
+Mode records are not an execution sandbox, an authenticated ledger, or protection against a writer who can replace both records and package files. They do not prove power-loss durability on filesystems without directory synchronization, and they do not enable protected managed skill execution or descendant containment.
+
+Older remote snapshots also need a refresh at their exact revision before Loom can use their new content-verification index. If a branch has advanced, choose **Refresh this saved commit** on the remote repositories page, or review and select the newer snapshot; refreshing the branch tip does not upgrade the old snapshot.
+
+For the Copilot folder-trust manual fallback, run the displayed command in PowerShell on Windows or a POSIX-compatible shell on macOS and Linux. Skill Loom does not execute this displayed command.
 
 Each skill must resolve to an enabled, readable package for the chain's selected harness. A single project-local package takes precedence over same-name personal or extra-directory copies; multiple distinct project packages remain ambiguous. If there is no project copy, only one available non-project package can be exported. Missing, disabled, ambiguous, or non-filesystem skills block export. Bundles support up to 100 skill packages, 2,000 files, and 20 MiB of decoded file content; the JSON upload limit is 30 MiB. Directory names and file paths must be portable and safe, and directory nesting is bounded.
 
@@ -151,23 +182,39 @@ Each skill must resolve to an enabled, readable package for the chain's selected
 2. Confirm content review and redistribution review separately. Publication stores an immutable copy in the configured shared directory; it does not install or run the bundle and does not establish redistribution rights.
 3. To import, open the destination project and choose **Import bundle** in its **Chains** list, or use **Import into project** from a shared-library entry.
 4. Select a `.loom.json` file. Preview validates the bundle without installing files. Review its harness, steps, inputs, package file lists, complete file contents, and any native agent.
-5. If a skill name is already installed, explicitly choose **Reuse installed** to keep your version; its contents may differ from the bundle. Import never overwrites an existing skill package. If a destination directory exists without a matching catalog skill, cancel and resolve that directory conflict first.
+5. If a skill name is already installed, expand its installed-package review and inspect the complete files at the displayed path. The inventory includes fingerprints and executable bits; it does not display all file contents. Explicitly choose **Reuse installed** to keep your version. If it differs from the bundle, separately confirm reuse of those differing contents. Import never overwrites an existing skill package. If a destination directory exists without a matching catalog skill, cancel and resolve that directory conflict first.
 6. Confirm that you trust the instructions and packages, then choose **Import chain and skills**.
 7. Open the new chain, provide inputs, review automatic permissions, and run preflight before running it.
 
-Import creates an independent chain with a fresh id and timestamps, resets automatic-permission consent to off, and installs new packages under `.agents/skills/` for both harnesses. It rechecks conflicts at import time and removes newly installed packages if saving the chain fails. Existing packages remain untouched. Import never executes bundled scripts, starts a run, authenticates a harness, or grants folder trust. Removing the imported chain later does not remove its installed skills.
+Import creates an independent chain with a fresh id and timestamps, resets automatic-permission consent to off, and installs new packages under `.agents/skills/` for both harnesses. It rechecks the reviewed bundle, destination, and reused package fingerprints and removes newly installed packages if saving the chain fails. Review evidence is point-in-time, not a lock against external edits or proof of human review. Existing packages remain untouched. Import never executes bundled scripts, starts a run, authenticates a harness, or grants folder trust. Removing the imported chain later does not remove its installed skills.
+
+New bundle packages and copied catalog skills publish their `SKILL.md` files only after the other files are written, deepest first and with the top-level entry last; the destination filesystem must support hard links. Remote copies are verified and bundled-skill attribution is written before publication. Nested skills can still be discovered if installation is interrupted between links. If the process stops unexpectedly, an incomplete package directory without a top-level `SKILL.md` or a `.loom-skill-*.tmp` file may remain under `.agents/skills/`. Confirm that no installation is still running, inspect those artifacts, and remove only the abandoned ones before retrying. This ordering does not guarantee recovery from power loss or protect against outside edits.
 
 The recipient still needs the selected harness and any external tools, services, or dependencies used by the skills. Version 2 requires a Loom build that supports native agents; older readers should reject it rather than discard the selected agent. The standalone `loom-run-bundle` helper can inspect v2 agent content but will not prepare a chain that selects a native agent, because a current conversation cannot switch its harness agent. Import such a bundle into Skill Loom to run it with the selected agent. Bundles are not backups of project files or the global library, and exporting a global template requires first importing it into a project.
 
 ### Run an exported chain inside a harness
 
+For a step-by-step walkthrough that does not need Skill Loom running, see the [standalone skill guide](standalone-skill-guide.md).
+
 The export dialog and shared bundle library offer **Download reusable runner skill**. The separate discovery page offers **Download scenario-discovery v1**. The runner ZIP contains the generic `loom-run-bundle` Agent Skill, its references, a dependency-bundled helper, and license notices; the discovery ZIP contains the scenario-discovery skill and standalone handoff helpers. Neither ZIP contains a user chain. A recipient needs Node.js 24+ and a host that can read project skills, invoke Node with arguments, and request confirmation. Skill Loom does not need to be installed or running during handoff review or portable chain inspection.
 
 Extract the ZIP and install its `loom-run-bundle/` directory into the target project's `.agents/skills/` directory, unless that skill already exists. Alternatively, in a Skill Loom checkout run `npm run build:portable-skill` and copy the generated `dist/skills/loom-run-bundle/` directory into that location. Do not merge over an existing runner package. Refresh or restart the host if it does not discover the new skill. The helper also needs to be invokable from the skill directory reported by the host; if the host cannot locate it or pass structured stdin, stop rather than guessing a global path.
 
-In the target project's harness session, invoke `loom-run-bundle` and provide an absolute path to the downloaded `.loom.json` bundle. The helper's read-only `inspect` command validates the complete bundle and reports instructions, inputs, package files, `SKILL.md` text, executable bits, and project skill conflicts before installation. Review the content as untrusted, confirm package installation/reuse separately from chain execution, resolve inputs, and review the current host and session plan. The helper installs packages under `<project>/.agents/skills/` without overwriting; changed existing packages require a separate explicit reuse choice. If the harness needs a refresh to see newly installed skills, do that before starting a step.
+In the target project's harness session, invoke `loom-run-bundle` and provide an absolute path to the downloaded `.loom.json` bundle. The helper's read-only `inspect` command validates the complete bundle and reports instructions, inputs, package files, `SKILL.md` text, executable bits, and project skill conflicts before installation. Review the content as untrusted, confirm package installation/reuse separately from chain execution, resolve inputs, and review the current host and session plan. Preparation requires the review digest returned by inspection with the target project; changed bundle, destination, or existing package evidence requires a new review. The digest does not lock external edits or prove human review. The helper installs packages under `<project>/.agents/skills/` without overwriting; changed existing packages require inspection of their contents and a separate explicit reuse choice. If the harness needs a refresh to see newly installed skills, do that before starting a step.
 
-The standalone workflow defaults to supervised execution: confirm each step, then record its outcome. Agent-driven progression is optional and needs separate consent. The helper persists a frozen bundle/input snapshot and bounded attempt summaries under `<project>/.loom/portable-runs/`, which it adds to the project's `.loom/.gitignore`; input values therefore remain local files and should not contain secrets unless you accept that storage. `status`, `pause`, `retry`, reasoned `skip`, `abort`, and explicit `resume` are available. An interrupted attempt is uncertain and is never replayed without a recovery choice. Retry does not roll back file changes.
+The helper rejects a symbolic-link bundle file and checks file identity during inspection. These checks do not lock the bundle or project against concurrent writers.
+
+Portable runs created with older package fingerprints remain readable and recoverable, but runs with installed skills cannot start another step. Reconcile any unresolved attempt, abort the old run, then inspect and prepare a new one. Older helpers cannot read newly prepared run records, so update all participating helpers and services.
+
+The standalone workflow defaults to supervised execution: confirm each step, then record its outcome. Agent-driven progression is optional and needs separate consent. The helper persists a frozen bundle/input snapshot and bounded attempt summaries under `<project>/.loom/portable-runs/`, which it adds to the project's `.loom/.gitignore`; input values therefore remain local files and should not contain secrets unless you accept that storage. `status`, `pause`, `retry`, reasoned `skip`, `abort`, and explicit `resume` are available. Before marking a still-running attempt interrupted, confirm the earlier host work has stopped; the helper requires `stoppedConfirmed: true`, which is an assertion rather than a process check. An interrupted attempt is uncertain and is never replayed without a recovery choice. Retry does not roll back file changes.
+
+Current portable helpers reject preparation or a step when another unfinished portable run is recorded in the same project. Default operation does **not** establish exclusive ownership against managed runs, other profiles, or older helpers. Before installing packages or running a chain, ensure no other run is using that project and maintain that separation until the run completes or is explicitly aborted. Checking status alone does not lock the project; if exclusive use cannot be established, do not proceed.
+
+Run mutations also initialize project-local coordination files. When coordination is enabled, portable and managed runs retain their claim even after a failure, completion, or abort. Process-tree cleanup remains unverified. Do not delete the database to bypass an error.
+
+Before coordination is enabled, do not start another Skill Loom profile that knows the project while a managed run is active. A stale pointer can make recovery ownership ambiguous. Older helpers and services do not participate even after enablement.
+
+To inspect project coordination, expand **Project details** and select **Review coordination**. The review creates coordination files if needed but does not stop or change runs or lock the project. Run state may change during or after review. After reviewing, confirm separately that older clients and prior work, including descendants, have stopped before enabling coordination. Claimed runs can be adopted or interrupted after review; abandoning an interrupted managed run and clearing its claim are separate choices. Portable runs must be resolved with their helper before clearing. The service refuses reconciliation while it owns a live run. These confirmations are your assertions, not proof that processes have stopped.
 
 Portable execution is not Skill Loom's terminal runner. The helper never launches a harness CLI, grants tool permissions, changes trust settings, or runs package scripts. The host performs the work and reports completion, so outcomes are not verified process exits and do not prove a skill fired. `shared` uses the current conversation. `fresh` needs a verified isolated worker or explicit acceptance of a shared-conversation approximation; `fork` needs a verified native fork or explicit acceptance of a labelled handoff. A different host from the bundle's authored harness requires compatibility review. If the current host cannot supply a required capability or confirmation, execution must stop before dispatch.
 
@@ -224,11 +271,11 @@ Automatic mode advances only on the signal declared by the selected harness:
 
 Automatic controls include **Pause**, **Resume**, **Run next**, **Retry**, **Skip**, and **Abort** as available. A missing completion signal, a non-zero exit, or the 30-minute per-step timeout pauses the run. Output-idle heuristics, animation quiescence, and fixed sleeps never advance a step.
 
-> **Current OpenCode limitation:** the live execution probe recorded that OpenCode 2.2.5 emitted colon-separated `OSC 7501` parameters while the product parser expects semicolon-separated parameters. The probe's own parser recognized the signal; the product parser did not. Until that parser mismatch is fixed and the live probe is rerun, do not rely on automatic OpenCode advancement. Supervised OpenCode runs are unaffected by this specific gap.
+> **Current OpenCode limitation:** the record-aware parser passed a live OpenCode 2.2.6 prompt, advancement, recall and cleanup probe. Managed multi-step automatic execution is still unverified; automatic CLI starts remain blocked. Supervised runs are unaffected.
 
 ### Recover an interrupted run
 
-If the server stops or a step loses its process, startup recovery marks the active record `interrupted` and clears the stale active-run pointer. Nothing replays on reload. The run view offers:
+If the server stops, startup recovery normally marks the active record named by its profile pointer `interrupted` and clears the stale pointer. Active records without a matching pointer are left unchanged and reported in the server log because they may belong to another profile. If project coordination data requires review, recovery leaves the run and pointer unchanged and logs `RUN_RECOVERY_CLAIMED`; inspect **Project details** before reconciliation. Nothing replays on reload. The run view offers:
 
 - **Retry interrupted step** — restarts only the interrupted step with its existing session plan.
 - **Continue from next pending step** — leaves finished steps alone and starts at the next pending step.
@@ -242,7 +289,7 @@ Skill Loom is a local application. The UI and API work without an internet conne
 
 - If the browser loses the server, the header shows **Server connection error** with a **Retry** action and a short screen-reader announcement.
 - Run and terminal routes request a snapshot on connect and then receive ordered deltas. Reopening the run page does not start, advance, or replay a step.
-- Closing the browser does not stop the server or a live harness process. Run terminals are server-owned and survive a browser detach so you can reattach. If the server itself exits, recovery marks active records `interrupted`.
+- Closing the browser does not stop the server or a live harness process. Run terminals are server-owned and survive a browser detach so you can reattach. If the server itself exits, recovery marks the active record named by its profile pointer `interrupted`.
 - **Stop server** intentionally stops Skill Loom on this machine and interrupts its active local runs; every browser tab connected to that server is affected. If a chain has unsaved edits, explicitly confirm that they may be discarded. Restart Skill Loom using the same launch method, then choose a recovery action on the interrupted run. No step replays automatically.
 - Stopping Skill Loom cannot stop work independently performed by a separate host agent using `loom-run-bundle`; use that host's explicit pause/abort controls. Closing a browser tab is not a server shutdown.
 - A dropped terminal WebSocket retries a bounded number of times. After the retry budget, the terminal shows a disconnected notice.
@@ -321,6 +368,7 @@ A non-loopback `LOOM_HOST` aborts startup by design. Use `127.0.0.1`, `::1`, or 
 ## Getting Help
 
 - [Administrator guide](admin-guide.md) — installation, configuration, backup, upgrades, and operational troubleshooting.
+- [Standalone skill guide](standalone-skill-guide.md) — discover, inspect, and run chains using only the companion skills, without the Skill Loom server.
 - [Operations guide](OPERATIONS.md) — the full operator contract, data locations, trust and permissions, security model, fork behavior, and troubleshooting.
 - [Support](SUPPORT.md) — ownership, intake, and escalation for this repository.
 - [Architecture decisions](adr/README.md) — why the application is local-only, harness-agnostic, prompt-ordered, snapshot-based, and shell-free.

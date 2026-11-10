@@ -271,7 +271,8 @@ export function TrustPanel({
         <p className="field__hint">
           Display only. Skill Loom never executes this line for you. If the dialog asks, choose
           "Yes, and remember this folder for future sessions"; session-only trust is not saved. Run
-          this command in a terminal inside the project if Copilot cannot persist trust.
+          this command in a terminal inside the project if Copilot cannot persist trust. On Windows,
+          use PowerShell; on macOS or Linux, use a POSIX-compatible shell.
         </p>
         <pre className="trust-panel__command">
           <code data-testid="trust-manual-command">

@@ -11,6 +11,10 @@
  *   the documented broad flags, return the probe token, and recall the token in
  *   a second process using the same UUID session id.
  *
+ * `--harness opencode` runs only the OpenCode portion and writes separate
+ * evidence. `--evidence <path>` explicitly overrides the output location.
+ * The default remains the combined probe and includes Copilot's broad flags.
+ *
  * Every failure is explicit: a missing CLI, an unauthenticated harness, an
  * unresolved trust gate, a missing token, a missing signal, a failed recall, or
  * a failed cleanup exits non-zero with an actionable message.
@@ -45,6 +49,8 @@ import {
 import { checkFolderTrust, type TrustCheckResult } from '../src/server/preflight/trust.js';
 import { Osc7501Parser, Osc7501StateMachine } from '../src/server/runs/osc.js';
 import { createTerminalSession, type TerminalSession } from '../src/server/terminal/pty.js';
+import { classifyFailure, type FailureClass } from './live-failure.js';
+import { MINIMUM_OPENCODE_VERSION, supportsOpenCodeVersion } from './opencode-version.js';
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const EVIDENCE_PATH = join(PROJECT_ROOT, 'docs', 'evidence', 'live-execution.json');
@@ -52,7 +58,7 @@ const EVIDENCE_PATH = join(PROJECT_ROOT, 'docs', 'evidence', 'live-execution.jso
 const TASK_ID = 'RUN-08';
 const PROBE_SKILL_NAME = 'loom-live-probe';
 const PROBE_TOKEN = 'PINEAPPLE';
-const EXPECTED_OPENCODE_VERSION = '2.2.5';
+const EXPECTED_OPENCODE_VERSION = MINIMUM_OPENCODE_VERSION;
 const EXPECTED_COPILOT_VERSION = '1.0.105';
 
 const VERSION_TIMEOUT_MS = 10_000;
@@ -103,7 +109,6 @@ type EvidenceStatus = 'passed' | 'failed' | 'not-applicable';
 type HarnessName = 'opencode' | 'copilot';
 type CheckHarness = HarnessName | 'environment';
 type OpenCodeParamFormat = 'colon' | 'semicolon' | 'unknown';
-type FailureClass = 'none' | 'auth' | 'trust' | 'limit' | 'command' | 'timeout' | 'token-missing';
 
 interface CheckRecord {
   id: string;
@@ -163,6 +168,8 @@ interface SignalEvidence {
   idleEventCount: number;
   clearEventCount: number;
   sequence: string[];
+  records: Array<{ state: 'working' | 'idle' | 'clear'; recordId: string | null }>;
+  recordsTruncated: boolean;
   sessionIdFromSignal: string | null;
   firstWorkingAtMs: number | null;
   firstIdleAfterWorkingAtMs: number | null;
@@ -174,6 +181,7 @@ interface SignalEvidence {
   productStateMachine: {
     sawWorking: boolean;
     completed: boolean;
+    advanced: boolean;
     state: string;
   };
 }
@@ -293,7 +301,7 @@ interface CleanupRecord {
   ptySessionsRemaining: number;
   opencodeSessions: Array<{
     sessionId: string;
-    existed: boolean;
+    existed: boolean | null;
     deleted: boolean;
     verifiedAbsent: boolean;
   }>;
@@ -310,8 +318,9 @@ interface ExecutionEvidence {
   loomVersion: string | null;
   durationMs: number;
   result: 'passed' | 'failed' | 'interrupted';
+  scope: 'both' | 'opencode';
   isolation: IsolationEvidence;
-  prerequisites: { opencode: VersionProbe; copilot: VersionProbe } | null;
+  prerequisites: Partial<Record<HarnessName, VersionProbe>> | null;
   auth: { opencode: AuthSummary | null; copilot: AuthSummary | null };
   harnesses: { opencode?: OpenCodeEvidence; copilot?: CopilotEvidence };
   checks: CheckRecord[];
@@ -689,23 +698,6 @@ function boundedExcerpt(
   return redacted.slice(-MAX_EXCERPT_CHARS);
 }
 
-function classifyFailure(combined: string): FailureClass {
-  if (/free usage limit|rate limit|quota|limit reached|too many requests|429/i.test(combined)) {
-    return 'limit';
-  }
-  if (
-    /not (?:logged|signed) in|not authenticated|unauthenticated|authentication (?:failed|required)|please (?:log|sign) in|run ['"]?copilot login|unauthorized|\b401\b/i.test(
-      combined,
-    )
-  ) {
-    return 'auth';
-  }
-  if (/untrusted folder|folder (?:is )?not trusted|trust (?:is )?required|confirm folder trust/i.test(combined)) {
-    return 'trust';
-  }
-  return 'command';
-}
-
 /* ------------------------------------------------------------------------- */
 /* OSC 7501 probe parser                                                     */
 /* ------------------------------------------------------------------------- */
@@ -714,10 +706,9 @@ function classifyFailure(combined: string): FailureClass {
  * Buffered OSC 7501 parser used by the probe.
  *
  * The installed OpenCode 2.2.5 emits colon-separated parameters such as
- * `OSC 7501;state=working:app=opencode:title=...`. The product parser splits
- * parameters on `;`, so the probe keeps an equivalent parser here that accepts
- * both separators and records the live format for the evidence file. This is a
- * probe assertion helper only; the product parser is not modified.
+ * `OSC 7501;state=working:app=opencode:title=...`. The probe keeps an
+ * independent parser that accepts both separators and records the live format
+ * for comparison with the product parser and state machine.
  */
 class ProbeOsc7501Parser {
   private buffer = '';
@@ -849,12 +840,14 @@ function emptySignalEvidence(): SignalEvidence {
     idleEventCount: 0,
     clearEventCount: 0,
     sequence: [],
+    records: [],
+    recordsTruncated: false,
     sessionIdFromSignal: null,
     firstWorkingAtMs: null,
     firstIdleAfterWorkingAtMs: null,
     paramFormat: 'unknown',
     productParser: { eventCount: 0, recognized: false },
-    productStateMachine: { sawWorking: false, completed: false, state: 'unknown' },
+    productStateMachine: { sawWorking: false, completed: false, advanced: false, state: 'unknown' },
   };
 }
 
@@ -1261,12 +1254,21 @@ function updateSignalEvidence(
     }
   }
 
-  signal.productParser.eventCount += productParser.push(chunk).length;
+  const productEvents = productParser.push(chunk);
+  signal.productParser.eventCount += productEvents.length;
+  for (const event of productEvents) {
+    if (signal.records.length >= 64) {
+      signal.recordsTruncated = true;
+      break;
+    }
+    signal.records.push({ state: event.state, recordId: event.sessionId });
+  }
   signal.productParser.recognized = signal.productParser.eventCount > 0;
-  productState.push(chunk);
+  const changes = productState.push(chunk);
   signal.productStateMachine = {
     sawWorking: productState.sawWorking,
     completed: productState.completed,
+    advanced: signal.productStateMachine.advanced || changes.some((change) => change.advanced),
     state: productState.state,
   };
 }
@@ -1295,6 +1297,7 @@ async function runOpenCodeInteractive(input: {
   const productState = new Osc7501StateMachine();
 
   let accumulated = '';
+  let tokenEligibleOutput = '';
   let tokenObserved = false;
   let timedOut = false;
   let forcedKill = false;
@@ -1390,11 +1393,27 @@ async function runOpenCodeInteractive(input: {
       if (accumulated.length > MAX_CAPTURE_BYTES * 2) {
         accumulated = accumulated.slice(-MAX_CAPTURE_BYTES);
       }
-      updateSignalEvidence(signal, probeParser, productParser, productState, chunk, startedAt);
-      // A seed run must see the token after the harness has entered its working
-      // state. This prevents the probe skill's own text from being mistaken for
-      // model output if a future TUI renders the skill body.
-      if (accumulated.includes(PROBE_TOKEN) && (!input.requireSignal || signal.working)) {
+      let eligible = chunk;
+      if (input.requireSignal && !signal.working) {
+        let index = 0;
+        while (index < chunk.length && !signal.working) {
+          const bell = chunk.indexOf('\x07', index);
+          const backslash = chunk.indexOf('\\', index);
+          const c1 = chunk.indexOf('\u009c', index);
+          const candidates = [bell, backslash, c1].filter((value) => value >= 0);
+          const terminator = candidates.length === 0 ? -1 : Math.min(...candidates);
+          const end = terminator < 0 ? chunk.length : terminator + 1;
+          updateSignalEvidence(signal, probeParser, productParser, productState, chunk.slice(index, end), startedAt);
+          index = end;
+        }
+        eligible = chunk.slice(index);
+      }
+      updateSignalEvidence(signal, probeParser, productParser, productState, eligible, startedAt);
+      tokenEligibleOutput += eligible;
+      if (tokenEligibleOutput.length > MAX_CAPTURE_BYTES * 2) {
+        tokenEligibleOutput = tokenEligibleOutput.slice(-MAX_CAPTURE_BYTES);
+      }
+      if (tokenEligibleOutput.includes(PROBE_TOKEN)) {
         tokenObserved = true;
       }
       if (completed() && !timedOut && !forcedKill) {
@@ -1727,7 +1746,7 @@ async function deleteOpenCodeSession(input: {
   sessionId: string;
   env: NodeJS.ProcessEnv;
   cwd: string;
-}): Promise<{ existed: boolean; deleted: boolean; verifiedAbsent: boolean }> {
+}): Promise<{ existed: boolean | null; deleted: boolean; verifiedAbsent: boolean }> {
   const existed = await openCodeSessionExists(input);
   if (existed === false) {
     return { existed: false, deleted: true, verifiedAbsent: true };
@@ -1744,12 +1763,10 @@ async function deleteOpenCodeSession(input: {
   );
   const deleted = result.exitCode === 0 && !result.timedOut && result.errorCode === undefined;
   const after = await openCodeSessionExists(input);
-  // A successful delete is accepted when the follow-up list cannot run, but a
-  // list that still contains the session is always a cleanup failure.
-  const verifiedAbsent = after === false || (after === null && deleted);
+  const verifiedAbsent = after === false;
 
   return {
-    existed: existed === true || (existed === null && deleted),
+    existed,
     deleted: deleted || after === false,
     verifiedAbsent,
   };
@@ -1796,7 +1813,7 @@ async function performCleanup(): Promise<CleanupRecord> {
       } catch {
         opencodeSessions.push({
           sessionId,
-          existed: true,
+          existed: null,
           deleted: false,
           verifiedAbsent: false,
         });
@@ -1991,8 +2008,9 @@ async function writeEvidenceFile(filePath: string, evidence: ExecutionEvidence):
 async function buildEvidence(input: {
   report: MutableReport;
   result: 'passed' | 'failed' | 'interrupted';
+  scope: 'both' | 'opencode';
   cleanup: CleanupRecord;
-  prerequisites: { opencode: VersionProbe; copilot: VersionProbe } | null;
+  prerequisites: Partial<Record<HarnessName, VersionProbe>> | null;
 }): Promise<ExecutionEvidence> {
   return {
     version: 1,
@@ -2003,6 +2021,7 @@ async function buildEvidence(input: {
     loomVersion: await readLoomVersion(),
     durationMs: Date.now() - input.report.startedAt,
     result: input.result,
+    scope: input.scope,
     isolation: input.report.isolation,
     prerequisites: input.prerequisites,
     auth: input.report.auth,
@@ -2030,7 +2049,34 @@ function reportResult(report: MutableReport, cleanup: CleanupRecord): 'passed' |
 /* Main                                                                      */
 /* ------------------------------------------------------------------------- */
 
+function parseOptions(args: string[]): { scope: 'both' | 'opencode'; evidencePath: string } {
+  let scope: 'both' | 'opencode' = 'both';
+  let evidencePath: string | undefined;
+  let harnessSpecified = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--harness' && !harnessSpecified && args[index + 1] === 'opencode') {
+      scope = 'opencode';
+      harnessSpecified = true;
+      index += 1;
+    } else if (arg === '--evidence' && evidencePath === undefined &&
+      args[index + 1] !== undefined && args[index + 1] !== '' && !args[index + 1]?.startsWith('--')) {
+      evidencePath = resolve(args[index + 1]!);
+      index += 1;
+    } else {
+      throw new Error('Usage: npm run test:live:execution -- [--harness opencode] [--evidence <path>]');
+    }
+  }
+  return {
+    scope,
+    evidencePath: evidencePath ?? (scope === 'opencode'
+      ? join(PROJECT_ROOT, 'docs', 'evidence', 'live-execution-opencode.json')
+      : EVIDENCE_PATH),
+  };
+}
+
 async function main(): Promise<number> {
+  const { scope, evidencePath } = parseOptions(process.argv.slice(2));
   installProcessHandlers();
 
   const startedAt = Date.now();
@@ -2090,7 +2136,7 @@ async function main(): Promise<number> {
   const openCodeAdapter = registry.get('opencode');
   const copilotAdapter = registry.get('copilot');
 
-  let prerequisites: { opencode: VersionProbe; copilot: VersionProbe } | null = null;
+  let prerequisites: Partial<Record<HarnessName, VersionProbe>> | null = null;
   let fatal: unknown;
 
   try {
@@ -2104,28 +2150,28 @@ async function main(): Promise<number> {
       env: isolation.childEnv,
       cwd: canonicalProject,
     });
-    const copilotVersion = await probeVersion({
+    const copilotVersion = scope === 'both' ? await probeVersion({
       harness: 'copilot',
       adapter: copilotAdapter,
       expectedVersion: EXPECTED_COPILOT_VERSION,
       env: isolation.childEnv,
       cwd: canonicalProject,
-    });
-    prerequisites = { opencode: openCodeVersion, copilot: copilotVersion };
+    }) : undefined;
+    prerequisites = { opencode: openCodeVersion, ...(copilotVersion === undefined ? {} : { copilot: copilotVersion }) };
 
     addPrerequisiteCheck(report, openCodeVersion, 'opencode', openCodeAdapter.installHint);
-    addPrerequisiteCheck(report, copilotVersion, 'copilot', copilotAdapter.installHint);
+    if (copilotVersion !== undefined) addPrerequisiteCheck(report, copilotVersion, 'copilot', copilotAdapter.installHint);
 
-    if (openCodeVersion.available && !openCodeVersion.versionMatches) {
+    if (openCodeVersion.available && !supportsOpenCodeVersion(openCodeVersion.version)) {
       report.warnings.push({
         code: 'CLI_VERSION_MISMATCH',
         harness: 'opencode',
-        message: `Expected ${openCodeVersion.expectedVersion}, observed ${
+        message: `Expected stable OpenCode >=${openCodeVersion.expectedVersion}, observed ${
           openCodeVersion.version ?? 'unknown'
         }. The probe continued against the installed version.`,
       });
     }
-    if (copilotVersion.available && !copilotVersion.versionMatches) {
+    if (copilotVersion !== undefined && copilotVersion.available && !copilotVersion.versionMatches) {
       report.warnings.push({
         code: 'CLI_VERSION_MISMATCH',
         harness: 'copilot',
@@ -2145,26 +2191,23 @@ async function main(): Promise<number> {
       env: isolation.childEnv,
       runner: localRunner,
     });
-    const copilotAuth = await collectAuth({
+    const copilotAuth = scope === 'both' ? await collectAuth({
       harness: 'copilot',
       adapter: copilotAdapter,
       projectPath: canonicalProject,
       env: isolation.childEnv,
       runner: localRunner,
-    });
+    }) : undefined;
     report.auth = {
       opencode: openCodeAuth.summary,
-      copilot: copilotAuth.summary,
+      copilot: copilotAuth?.summary ?? null,
     };
     addAuthCheck(report, openCodeAuth.summary);
-    addAuthCheck(report, copilotAuth.summary);
+    if (copilotAuth !== undefined) addAuthCheck(report, copilotAuth.summary);
     throwIfInterrupted();
 
     const openCodeBlocked =
       !openCodeVersion.available || openCodeAuth.summary.state === 'unauthenticated';
-    const copilotBlocked =
-      !copilotVersion.available || copilotAuth.summary.state === 'unauthenticated';
-
     if (openCodeBlocked) {
       report.harnesses.opencode = blockedOpenCodeEvidence(openCodeVersion);
       addBlockedChecks(report, 'opencode', openCodeVersion, openCodeAuth.summary);
@@ -2180,28 +2223,28 @@ async function main(): Promise<number> {
 
     throwIfInterrupted();
 
-    // The OpenCode recall phase removes both probe skill locations so a recall
-    // cannot re-read the token. Re-create the Copilot probe before its seed.
-    await writeProbeSkill(canonicalProject, 'copilot');
-
-    if (copilotBlocked) {
-      report.harnesses.copilot = blockedCopilotEvidence(copilotVersion);
-      addBlockedChecks(report, 'copilot', copilotVersion, copilotAuth.summary);
-    } else {
-      report.harnesses.copilot = await runCopilotProbe({
-        report,
-        adapter: copilotAdapter,
-        projectPath: canonicalProject,
-        env: isolation.childEnv,
-        replacements: replacementsValue,
-      });
+    if (copilotVersion !== undefined && copilotAuth !== undefined) {
+      // Recall removes both skill locations, so recreate this one for Copilot.
+      await writeProbeSkill(canonicalProject, 'copilot');
+      if (!copilotVersion.available || copilotAuth.summary.state === 'unauthenticated') {
+        report.harnesses.copilot = blockedCopilotEvidence(copilotVersion);
+        addBlockedChecks(report, 'copilot', copilotVersion, copilotAuth.summary);
+      } else {
+        report.harnesses.copilot = await runCopilotProbe({
+          report,
+          adapter: copilotAdapter,
+          projectPath: canonicalProject,
+          env: isolation.childEnv,
+          replacements: replacementsValue,
+        });
+      }
     }
 
     if (report.harnesses.opencode !== undefined) {
       report.harnesses.opencode.version = openCodeVersion.version;
       report.harnesses.opencode.versionMatches = openCodeVersion.versionMatches;
     }
-    if (report.harnesses.copilot !== undefined) {
+    if (report.harnesses.copilot !== undefined && copilotVersion !== undefined) {
       report.harnesses.copilot.version = copilotVersion.version;
       report.harnesses.copilot.versionMatches = copilotVersion.versionMatches;
       report.harnesses.copilot.copilotHomeMode = report.isolation.copilotHomeMode;
@@ -2258,13 +2301,13 @@ async function main(): Promise<number> {
   }
 
   const result = interruptedBy !== undefined ? 'interrupted' : reportResult(report, cleanup);
-  const evidence = await buildEvidence({ report, result, cleanup, prerequisites });
+  const evidence = await buildEvidence({ report, result, scope, cleanup, prerequisites });
 
   try {
-    await writeEvidenceFile(EVIDENCE_PATH, evidence);
+    await writeEvidenceFile(evidencePath, evidence);
   } catch (error) {
     console.error(
-      `Live execution: evidence could not be written to ${EVIDENCE_PATH}: ${sanitizeError(
+      `Live execution: evidence could not be written to ${evidencePath}: ${sanitizeError(
         error,
         replacementsValue,
       )}`,
@@ -2272,7 +2315,7 @@ async function main(): Promise<number> {
     return 1;
   }
 
-  printSummary(evidence, fatal !== undefined);
+  printSummary(evidence, fatal !== undefined, evidencePath);
   if (interruptedBy !== undefined) {
     return interruptedBy === 'SIGINT' ? 130 : 143;
   }
@@ -2499,7 +2542,7 @@ function addBlockedChecks(
   const prefix = harness === 'opencode' ? 'opencode' : 'copilot';
   const checks =
     harness === 'opencode'
-      ? ['seed', 'signal', 'recall']
+      ? ['seed', 'signal', 'product-advancement', 'recall']
       : ['trust', 'seed', 'recall'];
   for (const check of checks) {
     report.checks.push(
@@ -2630,21 +2673,40 @@ async function runOpenCodeProbe(input: {
         }),
   );
 
+  input.report.checks.push(
+    seed.signal.productStateMachine.advanced
+      ? checkPassed({
+          id: 'opencode.product-advancement',
+          harness: 'opencode',
+          description: 'Check the observed signal with the product advancement state machine.',
+          expected: 'The product state machine observes a qualifying working-to-idle transition.',
+          observed: 'The product state machine completed on the captured signal.',
+        })
+      : checkFailed({
+          id: 'opencode.product-advancement',
+          harness: 'opencode',
+          description: 'Check the observed signal with the product advancement state machine.',
+          expected: 'The product state machine observes a qualifying working-to-idle transition.',
+          observed: `The product state machine did not complete on the captured signal (state=${seed.signal.productStateMachine.state}).`,
+          remediation: 'Keep automatic OpenCode advancement unverified and investigate the captured signal sequence and product parser.',
+        }),
+  );
+
   if (seed.signal.paramFormat === 'colon' && !seed.signal.productParser.recognized) {
     input.report.warnings.push({
       code: 'OSC7501_PRODUCT_PARSER_MISMATCH',
       harness: 'opencode',
-      message: `Live OpenCode ${EXPECTED_OPENCODE_VERSION} emitted colon-separated OSC 7501 parameters (state=working:app=opencode). The product parser splits on ";" and recognized ${String(
+      message: `Live OpenCode ${EXPECTED_OPENCODE_VERSION} emitted colon-separated OSC 7501 parameters (state=working:app=opencode). The product parser recognized ${String(
         seed.signal.productParser.eventCount,
       )} event(s), while the probe's equivalent buffered parser recognized the signal. Report this contract mismatch to the backend engineer.`,
     });
   }
-  if (seed.signal.clearEventCount > 0 && !seed.signal.productStateMachine.completed) {
+  if (seed.signal.clearEventCount > 0 && !seed.signal.productStateMachine.advanced) {
     input.report.warnings.push({
       code: 'OSC7501_CLEAR_BEFORE_IDLE',
       harness: 'opencode',
       message:
-        'Live OpenCode emitted clear between working and idle. The product Osc7501StateMachine resets its working observation on clear, so this live order would still fail to advance after the parameter-separator defect is fixed. The probe asserts the CLI order (working before idle) without weakening the no-idle-only rule. Report this contract mismatch to the backend engineer.',
+        'The captured stream contains clear events but no qualifying product advancement. Inspect signal.records: child clear must not reset root working, while root clear or a matching record clear requires fresh working before idle. Keep automatic OpenCode advancement unverified.',
     });
   }
 
@@ -2975,6 +3037,8 @@ function openCodeRemediation(failureClass: FailureClass, recall = false): string
       return 'Run "opencode auth login" in a terminal, then rerun npm run test:live:execution. The probe never reads credential values.';
     case 'limit':
       return 'The selected model is rate-limited or out of quota. Authenticate another provider, or set LOOM_LIVE_OPENCODE_MODEL to an available authenticated model, then rerun npm run test:live:execution.';
+    case 'network':
+      return 'Check DNS and network access to the selected model provider, then rerun npm run test:live:execution.';
     case 'timeout':
       return 'The interactive OpenCode run exceeded the bounded timeout. Check the login state and selected model, then rerun npm run test:live:execution.';
     case 'token-missing':
@@ -2999,6 +3063,8 @@ function copilotRemediation(
       }" in a terminal, accept the folder-trust dialog, then rerun npm run test:live:execution.`;
     case 'limit':
       return 'The selected model is rate-limited or out of quota. Authenticate another provider or choose an available model, then rerun npm run test:live:execution.';
+    case 'network':
+      return 'Check DNS and network access to the Copilot API, then rerun npm run test:live:execution.';
     case 'timeout':
       return 'The headless prompt exceeded the bounded timeout. Check the Copilot login state, trust state, and model availability, then rerun npm run test:live:execution.';
     case 'token-missing':
@@ -3008,13 +3074,13 @@ function copilotRemediation(
   }
 }
 
-function printSummary(evidence: ExecutionEvidence, fatal: boolean): void {
+function printSummary(evidence: ExecutionEvidence, fatal: boolean, evidencePath: string): void {
   const lines: string[] = [];
   lines.push('Skill Loom live execution (RUN-FR-13)');
   lines.push(
-    `  node ${evidence.node} | opencode ${
-      evidence.prerequisites?.opencode.version ?? 'unavailable'
-    } | copilot ${evidence.prerequisites?.copilot.version ?? 'unavailable'}`,
+    `  scope: ${evidence.scope} | node ${evidence.node} | opencode ${
+      evidence.prerequisites?.opencode?.version ?? 'unavailable'
+    }${evidence.scope === 'both' ? ` | copilot ${evidence.prerequisites?.copilot?.version ?? 'unavailable'}` : ''}`,
   );
 
   for (const check of evidence.checks) {
@@ -3035,7 +3101,7 @@ function printSummary(evidence: ExecutionEvidence, fatal: boolean): void {
   }
 
   lines.push(`  result: ${evidence.result}`);
-  lines.push(`  evidence: ${EVIDENCE_PATH}`);
+  lines.push(`  evidence: ${evidencePath}`);
 
   if (fatal) {
     lines.push('  A fatal error occurred; see the script.fatal check above.');

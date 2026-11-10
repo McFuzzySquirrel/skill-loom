@@ -7,8 +7,7 @@ import {
   type ApiValidationIssue,
 } from '../../shared/api.js';
 import { BundleError, exportBundle } from '../chains/bundle.js';
-import type { Chain } from '../chains/model.js';
-import { createGlobalDraftService } from '../chains/drafts.js';
+import { createGlobalDraftService, DraftPayloadSchema } from '../chains/drafts.js';
 import type { ChainDraft, ChainService } from '../chains/service.js';
 import {
   createCatalogService,
@@ -17,20 +16,11 @@ import {
 import { SKILL_SOURCE_ORDER, type SkillHarness } from '../catalog/types.js';
 import {
   CHAIN_ID_PATTERN,
-  type ChainListResult,
 } from '../chains/store.js';
 import type { ConfigStore } from '../config/store.js';
-import { sendChainFailure } from './chains.js';
+import { chainListResponse, chainResponse, chainRevisionHeader, sendChainFailure } from './chains.js';
 
-const draftPayloadSchema = z.strictObject({
-  name: z.string(),
-  harness: z.string(),
-  sessionMode: z.string(),
-  steps: z.array(z.unknown()),
-  inputs: z.array(z.unknown()).optional(),
-  automaticPermissionOptIn: z.boolean().optional(),
-  agent: z.unknown().optional(),
-});
+const draftPayloadSchema = DraftPayloadSchema;
 
 const catalogQuerySchema = z.strictObject({
   harness: z.enum(['opencode', 'copilot']),
@@ -40,6 +30,7 @@ const catalogQuerySchema = z.strictObject({
 export interface DraftRoutesOptions {
   configStore: ConfigStore;
   draftService?: ChainService;
+  getDraftService?: () => ChainService;
   catalogService?: CatalogService;
 }
 
@@ -54,7 +45,7 @@ export const draftRoutes: FastifyPluginAsync<DraftRoutesOptions> = async (
   let service = options.draftService;
   const getConfigDirectory = () => options.configStore.getConfigDir();
   const getDraftService = () => {
-    service ??= createGlobalDraftService(getConfigDirectory());
+    service ??= options.getDraftService?.() ?? createGlobalDraftService(getConfigDirectory());
     return service;
   };
   const catalogService =
@@ -65,10 +56,7 @@ export const draftRoutes: FastifyPluginAsync<DraftRoutesOptions> = async (
     try {
       const configDirectory = getConfigDirectory();
       const result = await getDraftService().list(configDirectory);
-      return reply.code(200).send({
-        chains: result.chains,
-        warnings: result.warnings,
-      } satisfies ChainListResult);
+      return reply.code(200).send(chainListResponse(result));
     } catch (error) {
       return sendChainFailure(reply, error);
     }
@@ -78,7 +66,7 @@ export const draftRoutes: FastifyPluginAsync<DraftRoutesOptions> = async (
     try {
       const configDirectory = getConfigDirectory();
       const chain = await getDraftService().get(configDirectory, request.params.draftId);
-      return reply.code(200).send({ chain } satisfies { chain: Chain });
+      return reply.code(200).send(chainResponse(chain));
     } catch (error) {
       return sendChainFailure(reply, error);
     }
@@ -195,7 +183,7 @@ export const draftRoutes: FastifyPluginAsync<DraftRoutesOptions> = async (
     try {
       const configDirectory = getConfigDirectory();
       const chain = await getDraftService().create(configDirectory, toDraft(parsed.data));
-      return reply.code(201).send({ chain } satisfies { chain: Chain });
+      return reply.code(201).send(chainResponse(chain));
     } catch (error) {
       return sendChainFailure(reply, error);
     }
@@ -214,12 +202,14 @@ export const draftRoutes: FastifyPluginAsync<DraftRoutesOptions> = async (
 
     try {
       const configDirectory = getConfigDirectory();
+      const revision = chainRevisionHeader(request.headers);
       const chain = await getDraftService().update(
         configDirectory,
         request.params.draftId,
         toDraft(parsed.data),
+        { expectedRevision: revision },
       );
-      return reply.code(200).send({ chain } satisfies { chain: Chain });
+      return reply.code(200).send(chainResponse(chain));
     } catch (error) {
       return sendChainFailure(reply, error);
     }
@@ -228,7 +218,8 @@ export const draftRoutes: FastifyPluginAsync<DraftRoutesOptions> = async (
   app.delete<{ Params: DraftParams }>('/api/drafts/:draftId', async (request, reply) => {
     try {
       const configDirectory = getConfigDirectory();
-      await getDraftService().remove(configDirectory, request.params.draftId);
+      const revision = chainRevisionHeader(request.headers);
+      await getDraftService().remove(configDirectory, request.params.draftId, { expectedRevision: revision });
       return reply.code(200).send({ draftId: request.params.draftId, deleted: true });
     } catch (error) {
       return sendChainFailure(reply, error);

@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { ChildProcess } from 'node:child_process';
+import { resolve } from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
 import {
   CHAIN_VERSION,
   type Chain,
@@ -25,13 +27,14 @@ import {
   type AutomaticSpawnSpec,
   type AutomaticTimers,
 } from '../../src/server/runs/automatic.js';
-import type { TerminalExit } from '../../src/server/terminal/pty.js';
+import { createTerminalSession, type TerminalExit, type TerminalSession } from '../../src/server/terminal/pty.js';
+import { adaptChildProcess } from '../../src/server/runs/headless-process.js';
 
 const CREATED_AT = '2026-11-04T10:00:00.000Z';
-const PROJECT_PATH = '/tmp/loom-automatic-project';
+const PROJECT_PATH = resolve('/tmp/loom-automatic-project');
 
-const OPENCODE_EXECUTABLE = '/opt/loom/bin/opencode';
-const COPILOT_EXECUTABLE = '/opt/loom/bin/copilot';
+const OPENCODE_EXECUTABLE = resolve('/opt/loom/bin/opencode');
+const COPILOT_EXECUTABLE = resolve('/opt/loom/bin/copilot');
 
 const OSC_WORKING = '\x1b]7501;state=working\x07';
 const OSC_IDLE = '\x1b]7501;state=idle\x07';
@@ -329,6 +332,284 @@ async function advanceOscStep(harness: Harness, process: FakeProcess): Promise<v
 }
 
 describe('automatic OpenCode advancement', () => {
+  it.skipIf(process.platform === 'win32')('reaps a real SIGTERM-resistant PTY before automatic advancement', async () => {
+    const harness = makeHarness();
+    const sessions: TerminalSession[] = [];
+    const runner = createAutomaticRunner({
+      run: harness.run,
+      adapter: harness.adapter,
+      projectPath: PROJECT_PATH,
+      spawn: () => {
+        const output = sessions.length === 0 ? OSC_WORKING + OSC_IDLE : 'READY';
+        const session = createTerminalSession({
+          executable: process.execPath,
+          args: ['-e', `process.on('SIGTERM', () => {}); process.stdout.write(${JSON.stringify(output)}); setInterval(() => {}, 1000);`],
+          cwd: process.cwd(),
+        });
+        sessions.push(session);
+        return session;
+      },
+    });
+    try {
+      await runner.start();
+      await vi.waitFor(() => expect(sessions).toHaveLength(2), { timeout: 5_000 });
+      expect(sessions[0]!.isRunning()).toBe(false);
+      await runner.abort();
+    } finally {
+      for (const session of sessions) session.kill('SIGKILL');
+      await runner.shutdown();
+    }
+  }, 10_000);
+
+  it('reaps a stubborn process before advancing on its completion signal', async () => {
+    const harness = makeHarness();
+    await harness.runner.start();
+    const first = harness.spawner.lastProcess;
+    const kill = first.kill.bind(first);
+    vi.spyOn(first, 'kill').mockImplementation((signal) => {
+      if (signal === 'SIGKILL') kill(signal);
+    });
+    await advanceOscStep(harness, first);
+    expect(first.killSignals).toContain('SIGKILL');
+    expect(first.isRunning()).toBe(false);
+    expect(harness.spawner.spawns).toHaveLength(2);
+    await harness.runner.abort();
+  });
+
+  it('pauses without advancing if the automatic process cannot be terminated', async () => {
+    const harness = makeHarness();
+    await harness.runner.start();
+    const first = harness.spawner.lastProcess;
+    const kill = vi.spyOn(first, 'kill').mockImplementation(() => { throw new Error('termination failed'); });
+    await advanceOscStep(harness, first);
+    expect(harness.runner.getRun()).toMatchObject({
+      status: 'paused', currentStepIndex: 0, reason: 'PROCESS_TERMINATION_FAILED',
+    });
+    expect(harness.runner.getRun().steps[0]).toMatchObject({
+      status: 'failed', reason: 'PROCESS_TERMINATION_FAILED',
+    });
+    expect(harness.spawner.spawns).toHaveLength(1);
+    expect(first.isRunning()).toBe(true);
+    await expect(harness.runner.retry()).rejects.toMatchObject({
+      code: 'AUTOMATIC_RETRY_NOT_AVAILABLE',
+    });
+    kill.mockRestore();
+    await harness.runner.shutdown();
+    expect(first.isRunning()).toBe(false);
+  });
+
+  it('does not record an abort when the automatic process cannot be terminated', async () => {
+    const harness = makeHarness();
+    await harness.runner.start();
+    const process = harness.spawner.lastProcess;
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => { throw new Error('termination failed'); });
+    await expect(harness.runner.abort()).rejects.toMatchObject({
+      code: 'AUTOMATIC_PROCESS_TERMINATION_FAILED',
+    });
+    expect(harness.runner.getRun().status).not.toBe('aborted');
+    expect(process.isRunning()).toBe(true);
+    kill.mockRestore();
+    await harness.runner.shutdown();
+  });
+
+  it('retains the automatic process after a failed shutdown so cleanup can be retried', async () => {
+    const harness = makeHarness();
+    await harness.runner.start();
+    const process = harness.spawner.lastProcess;
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => { throw new Error('termination failed'); });
+
+    await expect(harness.runner.shutdown()).rejects.toMatchObject({
+      code: 'AUTOMATIC_PROCESS_TERMINATION_FAILED',
+    });
+    expect(process.isRunning()).toBe(true);
+
+    kill.mockRestore();
+    await harness.runner.shutdown();
+    expect(process.isRunning()).toBe(false);
+  });
+
+  it('retains an automatic process that ignores both termination signals', async () => {
+    const harness = makeHarness();
+    await harness.runner.start();
+    const process = harness.spawner.lastProcess;
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => undefined);
+    vi.useFakeTimers();
+    try {
+      const shutdown = harness.runner.shutdown();
+      const failure = expect(shutdown).rejects.toMatchObject({
+        code: 'AUTOMATIC_PROCESS_TERMINATION_FAILED',
+      });
+      await vi.advanceTimersByTimeAsync(2_500);
+      await failure;
+      expect(kill.mock.calls.map(([signal]) => signal)).toEqual(['SIGTERM', 'SIGKILL']);
+      expect(process.isRunning()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      kill.mockRestore();
+      await harness.runner.shutdown();
+    }
+    expect(process.isRunning()).toBe(false);
+  });
+
+  it('pauses if the next automatic step cannot be persisted before spawning', async () => {
+    let fail = true;
+    const harness = makeHarness({
+      persist: (run) => {
+        if (fail && run.steps[1]?.status === 'running') throw new Error('simulated persistence failure');
+      },
+    });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await harness.runner.start();
+      await advanceOscStep(harness, harness.spawner.lastProcess);
+      expect(harness.spawner.spawns).toHaveLength(1);
+      expect(harness.runner.getRun()).toMatchObject({
+        status: 'paused', reason: 'PERSIST_FAILED', steps: [{ status: 'done' }, { status: 'failed' }],
+      });
+      expect(harness.runner.state.canRetry).toBe(true);
+      expect(harness.events.some((event) => event.type === 'run-paused' && event.reason === 'PERSIST_FAILED')).toBe(true);
+      fail = false;
+      await harness.runner.retry();
+      expect(harness.spawner.spawns).toHaveLength(2);
+      await harness.runner.abort();
+    } finally {
+      log.mockRestore();
+      await harness.runner.shutdown();
+    }
+  });
+
+  it('pauses without replay when an automatic completion cannot be persisted', async () => {
+    let fail = true;
+    const harness = makeHarness({
+      persist: (run) => {
+        if (fail && run.steps[0]?.status === 'done') throw new Error('simulated persistence failure');
+      },
+    });
+
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await harness.runner.start();
+      await advanceOscStep(harness, harness.spawner.lastProcess);
+      expect(harness.spawner.spawns).toHaveLength(1);
+      expect(harness.runner.getRun()).toMatchObject({
+        status: 'paused', reason: 'PERSIST_FAILED', currentStepIndex: 0,
+        steps: [{ status: 'done' }, { status: 'pending' }],
+      });
+      expect(harness.runner.state.canRunNext).toBe(true);
+      expect(harness.events.some((event) => event.type === 'run-paused' && event.reason === 'PERSIST_FAILED')).toBe(true);
+      fail = false;
+      await harness.runner.runNext();
+      expect(harness.spawner.spawns).toHaveLength(2);
+      await harness.runner.abort();
+    } finally {
+      log.mockRestore();
+      await harness.runner.shutdown();
+    }
+  });
+
+  it('logs only a recognized system code from a nested persistence failure', async () => {
+    const secret = 'private-persistence-details';
+    const systemError = Object.assign(new Error(secret), { code: 'EPERM', syscall: 'rename' });
+    const harness = makeHarness({
+      persist: (run) => {
+        if (run.steps[0]?.status === 'done') {
+          throw new Error(secret, { cause: systemError });
+        }
+      },
+    });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await harness.runner.start();
+      await advanceOscStep(harness, harness.spawner.lastProcess);
+      expect(harness.runner.getRun()).toMatchObject({ status: 'paused', reason: 'PERSIST_FAILED' });
+      expect(log).toHaveBeenCalledWith(expect.stringContaining('(system code: EPERM, operation: rename)'));
+      expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
+    } finally {
+      log.mockRestore();
+      await harness.runner.shutdown();
+    }
+  });
+
+  it.each([false, true])('does not expose completion before its persistence settles (failure: %s)', async (fail) => {
+    let release: () => void = () => undefined;
+    let entered: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const reached = new Promise<void>((resolve) => { entered = resolve; });
+    const harness = makeHarness({
+      persist: async (run) => {
+        if (run.status === 'completed') {
+          entered();
+          await gate;
+          if (fail) throw new Error('injected final write failure');
+        }
+      },
+    });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await harness.runner.start();
+      await advanceOscStep(harness, harness.spawner.lastProcess);
+      harness.spawner.lastProcess.emitData(OSC_WORKING + OSC_IDLE);
+      await reached;
+      expect(harness.runner.getRun().status).toBe('running');
+      expect(harness.events.some((event) => event.type === 'run-completed')).toBe(false);
+      release();
+      await harness.runner.whenSettled();
+      expect(harness.runner.getRun().status).toBe(fail ? 'paused' : 'completed');
+      expect(harness.events.some((event) => event.type === 'run-completed')).toBe(!fail);
+    } finally {
+      release();
+      log.mockRestore();
+      await harness.runner.shutdown();
+    }
+  });
+
+  it('does not spawn another automatic step while a completion is being shut down', async () => {
+    let release: () => void = () => undefined;
+    let entered: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const reached = new Promise<void>((resolve) => { entered = resolve; });
+    const harness = makeHarness({
+      persist: async (run) => {
+        if (run.steps[0]?.status === 'done') {
+          entered();
+          await gate;
+        }
+      },
+    });
+    await harness.runner.start();
+    harness.spawner.lastProcess.emitData(OSC_WORKING + OSC_IDLE);
+    await reached;
+    const shutdown = harness.runner.shutdown();
+    release();
+    await shutdown;
+    await harness.runner.whenSettled();
+    expect(harness.spawner.spawns).toHaveLength(1);
+    expect(harness.spawner.lastProcess.isRunning()).toBe(false);
+  });
+
+  it('does not spawn an automatic step after shutdown begins during its pre-spawn write', async () => {
+    let release: () => void = () => undefined;
+    let entered: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const reached = new Promise<void>((resolve) => { entered = resolve; });
+    const harness = makeHarness({
+      persist: async (run) => {
+        if (run.steps[1]?.status === 'running') {
+          entered();
+          await gate;
+        }
+      },
+    });
+    await harness.runner.start();
+    harness.spawner.lastProcess.emitData(OSC_WORKING + OSC_IDLE);
+    await reached;
+    const shutdown = harness.runner.shutdown();
+    release();
+    await shutdown;
+    await harness.runner.whenSettled();
+    expect(harness.spawner.spawns).toHaveLength(1);
+    expect(harness.spawner.lastProcess.isRunning()).toBe(false);
+  });
   it('runs instruction steps with ordinary OSC advancement and no skill observation', async () => {
     const chain = makeChain({
       steps: [
@@ -431,7 +712,32 @@ describe('automatic OpenCode advancement', () => {
     expect(harness.spawner.spawns).toHaveLength(2);
   });
 
-  it('requires a fresh working signal after clear resets the step observation', async () => {
+  it('advances across child clear but never reuses root working in the next step', async () => {
+    const harness = makeHarness();
+    await harness.runner.start();
+    const process = harness.spawner.lastProcess;
+
+    process.emitData(
+      OSC_IDLE + OSC_WORKING +
+      '\x1b]7501;state=working;id=ses_child\x07' +
+      '\x1b]7501;state=clear;id=ses_child\x07' +
+      OSC_IDLE + OSC_CLEAR,
+    );
+    await harness.runner.whenSettled();
+
+    expect(harness.runner.getRun().currentStepIndex).toBe(1);
+    expect(harness.runner.getRun().steps[0]!.status).toBe('done');
+    expect(harness.spawner.spawns).toHaveLength(2);
+    expect(process.isRunning()).toBe(false);
+
+    harness.spawner.lastProcess.emitData(OSC_IDLE);
+    await harness.runner.whenSettled();
+    expect(harness.runner.getRun().currentStepIndex).toBe(1);
+    expect(harness.runner.getRun().steps[1]!.status).toBe('running');
+    expect(harness.spawner.spawns).toHaveLength(2);
+  });
+
+  it('requires a fresh working signal after root clear resets the step observation', async () => {
     const harness = makeHarness();
     await harness.runner.start();
     const process = harness.spawner.lastProcess;
@@ -561,6 +867,45 @@ describe('automatic Copilot process-exit advancement', () => {
   function copilotChain(overrides: Partial<Chain> = {}): Chain {
     return makeChain({ harness: 'copilot', automaticPermissionOptIn: true, ...overrides });
   }
+
+  it('retains a live child and refuses abort when signaling errors do not confirm exit', async () => {
+    const chain = copilotChain();
+    const child = new ChildProcess();
+    Object.defineProperty(child, 'pid', { value: 12345 });
+    const kill = vi.spyOn(child, 'kill').mockImplementation(() => {
+      child.emit('error', Object.assign(new Error('permission denied'), { code: 'EPERM' }));
+      return false;
+    });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const spawn = vi.fn(() => adaptChildProcess(child));
+    const runner = createAutomaticRunner({
+      run: makeRun(chain),
+      adapter: copilotAdapter(),
+      projectPath: PROJECT_PATH,
+      spawn,
+      timers: new FakeTimers(),
+    });
+    try {
+      await runner.start();
+      vi.useFakeTimers();
+      const abort = runner.abort();
+      const failure = expect(abort).rejects.toMatchObject({
+        code: 'AUTOMATIC_PROCESS_TERMINATION_FAILED',
+      });
+      await vi.advanceTimersByTimeAsync(2_500);
+      await failure;
+      expect(kill.mock.calls.map(([signal]) => signal)).toEqual(['SIGTERM', 'SIGKILL']);
+      expect(runner.getRun().status).not.toBe('aborted');
+      expect(runner.getRun().currentStepIndex).toBe(0);
+      expect(spawn).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+      child.emit('exit', 0, null);
+      await runner.shutdown();
+      log.mockRestore();
+      kill.mockRestore();
+    }
+  });
 
   it('runs one headless process per step with the opt-in flags and advances only on exit', async () => {
     const harness = makeHarness({

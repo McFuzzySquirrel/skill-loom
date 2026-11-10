@@ -501,30 +501,17 @@ export function ChainBuilderPage({
     setDuplicateBusy(true);
     setDuplicateError(null);
     try {
-      // Duplicate the saved record first, then change the harness only on the
-      // copy. The source chain record is never rewritten.
-      const copy = await api.duplicateChain(projectId, chainId);
-      const updated = await api.updateChain(projectId, copy.id, {
-        id: copy.id,
-        version: copy.version,
-        createdAt: copy.createdAt,
-        updatedAt: copy.updatedAt,
-        name: copy.name,
+      const copy = await api.duplicateChain(projectId, chainId, {
         harness: target,
-        sessionMode: copy.sessionMode,
-        steps: copy.steps,
-        inputs: copy.inputs,
-        automaticPermissionOptIn: copy.automaticPermissionOptIn,
+        ...(state.document.revision === undefined ? {} : { expectedRevision: state.document.revision }),
       });
-      const agentNotice = copy.agent === undefined
-        ? ''
-        : ' The native agent was not copied because agent definitions are not translated between harnesses.';
+      const agentNotice = ' Native agents are not copied when changing harnesses.';
       announce(
-        `Duplicated ${source.name} as ${updated.name} with the ${
+        `Duplicated ${source.name} as ${copy.name} with the ${
           CHAIN_HARNESS_LABELS[target]
         } harness. The original chain is unchanged.${agentNotice}`,
       );
-      navigate(chainBuilderPath(projectId, updated.id));
+      navigate(chainBuilderPath(projectId, copy.id));
     } catch (error) {
       const apiError = toApiClientError(
         error,

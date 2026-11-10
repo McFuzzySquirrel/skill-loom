@@ -1,4 +1,4 @@
-import type { BundlePreview, ChainBundle } from '../../shared/bundles';
+import type { ChainBundle, ReviewedBundlePreview } from '../../shared/bundles';
 import type { Chain } from './chains';
 import { ApiClientError, requestJson } from './client';
 
@@ -19,15 +19,15 @@ export const bundlesApi = {
     );
     return result.bundle;
   },
-  preview(projectId: string, bundle: unknown): Promise<BundlePreview> {
+  preview(projectId: string, bundle: unknown): Promise<ReviewedBundlePreview> {
     return requestJson(`${base(projectId)}/chain-bundles/preview`, {
       method: 'POST', body: { bundle },
     });
   },
-  async import(projectId: string, bundle: ChainBundle, reuseSkills: string[]): Promise<Chain> {
+  async import(projectId: string, bundle: ChainBundle, reuseSkills: string[], reviewDigest: string, differingReuseConfirmed: boolean): Promise<Chain> {
     const result = await requestJson<{ chain: Chain }>(
       `${base(projectId)}/chain-bundles/import`,
-      { method: 'POST', body: { bundle, reuseSkills, confirmed: true } },
+      { method: 'POST', body: { bundle, reuseSkills, reviewDigest, differingReuseConfirmed, confirmed: true } },
     );
     return result.chain;
   },

@@ -6,6 +6,11 @@ import {
   type BuildAppOptions,
   type ServerSettings,
 } from './app.js';
+import { createConfigStore } from './config/store.js';
+import { ControlError, ControlStartupCleanupError, startControlServer } from './control.js';
+import { acquireProfileOwner, type ProfileOwner } from './profile-owner.js';
+
+const retainedOwners = new Set<ProfileOwner>();
 
 /** Minimal closeable surface so signal wiring is testable without a listener. */
 export interface CloseableServer {
@@ -84,14 +89,77 @@ export function installShutdownHandlers(
  * Build, listen, and install signal handlers. The caller owns the returned
  * instance and may call `stop()` for an explicit shutdown.
  */
-export async function startServer(options: BuildAppOptions = {}): Promise<StartedServer> {
-  const app = await buildApp(options);
+export async function startServer(options: BuildAppOptions & { enableControl?: boolean } = {}): Promise<StartedServer> {
+  const configStore = options.configStore ?? createConfigStore(options.env === undefined ? {} : { env: options.env });
+  const owner = await acquireProfileOwner(configStore.getConfigDir());
+  let app: FastifyInstance;
+  try {
+    app = await buildApp({ ...options, configStore });
+  } catch (error) {
+    owner.release();
+    throw error;
+  }
   const settings: ServerSettings = { ...app.loomSettings };
 
   try {
-    await app.listen({ host: settings.host, port: settings.port });
+    await app.loomRunOwner.recoverIfConfigured();
   } catch (error) {
-    await app.close().catch(() => undefined);
+    try {
+      await app.close();
+    } catch (cleanupError) {
+      retainedOwners.add(owner);
+      throw new AggregateError([error, cleanupError], 'Startup recovery failed and application cleanup did not complete.');
+    }
+    owner.release();
+    throw error;
+  }
+
+  let control: { close(): Promise<void> } | undefined;
+  let controlReady = false;
+  try {
+    if (options.enableControl !== false) {
+      control = await startControlServer(configStore, {
+        services: app.loomServices,
+        runOwner: app.loomRunOwner,
+        terminalManager: app.loomTerminalManager,
+        isStopping: () => app.loomLifecycle.state !== 'running',
+        isFailed: () => app.loomLifecycle.state === 'failed',
+        isReady: () => controlReady,
+        prepareStop: async () => {
+          if (!controlReady) {
+            throw new ControlError('CONTROL_BUSY', 'The Skill Loom service is still starting.');
+          }
+          if (app.loomLifecycle.state === 'failed') return;
+          if (!app.loomRunOwner.blockMutations()) {
+            throw new ControlError('CONTROL_BUSY', 'A run operation is in progress; retry after it finishes.');
+          }
+          if (!app.loomLifecycle.beginShutdown()) {
+            app.loomRunOwner.unblockMutations();
+            throw new ControlError('CONTROL_STOPPING', 'The Skill Loom service is already stopping.');
+          }
+          try {
+            const active = await (await app.loomRunOwner.get()).getActiveRun();
+            if (active.active) {
+              throw new ControlError('CONTROL_RUN_ACTIVE', 'A managed run is active. Abort or finish it before stopping the service.');
+            }
+          } catch (error) {
+            app.loomLifecycle.cancelUnflushedShutdown();
+            app.loomRunOwner.unblockMutations();
+            throw error;
+          }
+        },
+        stop: () => app.loomLifecycle.stop(),
+      });
+    }
+  } catch (error) {
+    try {
+      await app.close();
+    } catch (cleanupError) {
+      retainedOwners.add(owner);
+      throw new AggregateError([error, cleanupError], 'Control startup failed and application cleanup did not complete.');
+    }
+    if (error instanceof ControlStartupCleanupError) retainedOwners.add(owner);
+    else owner.release();
     throw error;
   }
 
@@ -113,7 +181,16 @@ export async function startServer(options: BuildAppOptions = {}): Promise<Starte
   }
   app.loomLifecycle.setShutdownHandler(async () => {
     removeSignalHandlers();
-    await app.close();
+    try {
+      await app.loomRunOwner.shutdown();
+      await control?.close();
+      await app.close();
+      owner.release();
+      retainedOwners.delete(owner);
+    } catch (error) {
+      retainedOwners.add(owner);
+      throw error;
+    }
     if (
       process.env.LOOM_DEV_SUPERVISOR === '1' &&
       process.send !== undefined &&
@@ -138,6 +215,16 @@ export async function startServer(options: BuildAppOptions = {}): Promise<Starte
   removeSignalHandlers = installShutdownHandlers({
     close: () => app.loomLifecycle.stop(),
   });
+  try {
+    await app.listen({ host: settings.host, port: settings.port });
+    if (app.loomLifecycle.state !== 'running') {
+      throw new ControlError('CONTROL_STOPPING', 'The Skill Loom service stopped during startup.');
+    }
+    controlReady = true;
+  } catch (error) {
+    await app.loomLifecycle.stop();
+    throw error;
+  }
 
   return {
     app,

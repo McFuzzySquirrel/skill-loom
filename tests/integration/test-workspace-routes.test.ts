@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -9,6 +9,8 @@ import { createGlobalDraftService } from '../../src/server/chains/drafts.js';
 import { createConfigStore } from '../../src/server/config/store.js';
 import { createProjectRegistry } from '../../src/server/projects/registry.js';
 import { testWorkspaceRoutes } from '../../src/server/routes/test-workspaces.js';
+import { inspectTestWorkspace } from '../../src/server/runs/workspace-inspect.js';
+import { evaluateTestWorkspace } from '../../src/server/runs/workspace-evaluate.js';
 
 let root: string;
 
@@ -17,10 +19,12 @@ afterEach(async () => {
 });
 
 describe('test-workspace routes', () => {
-  it('creates a disposable workspace directly from a project-independent draft', async () => {
-    root = await mkdtemp(join(tmpdir(), 'loom-draft-workspace-'));
+  it.each(['canonical', 'alias'] as const)('creates and removes a draft workspace using a %s config path', async (pathKind) => {
+    root = await realpath(await mkdtemp(join(tmpdir(), 'loom-draft-workspace-')));
+    const alias = join(root, 'alias');
+    if (pathKind === 'alias') await symlink(root, alias, process.platform === 'win32' ? 'junction' : 'dir');
     const configStore = createConfigStore({
-      env: { LOOM_CONFIG_DIR: join(root, 'config') },
+      env: { LOOM_CONFIG_DIR: join(pathKind === 'alias' ? alias : root, 'config') },
       homeDirectory: () => join(root, 'home'),
     });
     const draftService = createGlobalDraftService(configStore.getConfigDir());
@@ -64,12 +68,27 @@ describe('test-workspace routes', () => {
     expect(response.json()).toMatchObject({
       workspace: { sourceDraftId: draft.id, chainId: expect.any(String) },
     });
+    const workspace = response.json().workspace as { id: string; path: string };
+    expect(workspace.path).toBe(join(root, 'config', 'test-workspaces', workspace.id));
+    const listed = await app.inject({ method: 'GET', url: '/api/test-workspaces' });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().workspaces).toContainEqual(workspace);
+    await writeFile(join(workspace.path, 'result.txt'), 'completed');
+    const inspection = { configStore, projectRegistry: createProjectRegistry({ configStore }) };
+    expect(await inspectTestWorkspace(inspection, {
+      workspaceId: workspace.id, path: 'result.txt', offset: 0, limit: 50,
+    })).toMatchObject({ type: 'file', content: Buffer.from('completed').toString('base64') });
+    expect(await evaluateTestWorkspace(inspection, {
+      workspaceId: workspace.id, checks: [{ path: 'result.txt', contains: 'completed' }],
+    })).toMatchObject({ passed: true });
+    const removed = await app.inject({ method: 'DELETE', url: `/api/test-workspaces/${workspace.id}` });
+    expect(removed.statusCode).toBe(200);
 
     await app.close();
   });
 
   it('creates, lists, and removes a disposable chain project', async () => {
-    root = await mkdtemp(join(tmpdir(), 'loom-workspace-routes-'));
+    root = await realpath(await mkdtemp(join(tmpdir(), 'loom-workspace-routes-')));
     const configStore = createConfigStore({
       env: { LOOM_CONFIG_DIR: join(root, 'config') },
       homeDirectory: () => join(root, 'home'),
@@ -141,7 +160,7 @@ describe('test-workspace routes', () => {
   });
 
   it('rejects malformed create payloads before creating a workspace', async () => {
-    root = await mkdtemp(join(tmpdir(), 'loom-workspace-routes-invalid-'));
+    root = await realpath(await mkdtemp(join(tmpdir(), 'loom-workspace-routes-invalid-')));
     const configStore = createConfigStore({
       env: { LOOM_CONFIG_DIR: join(root, 'config') },
       homeDirectory: () => join(root, 'home'),

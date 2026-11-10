@@ -416,9 +416,11 @@ export function createTerminalSession(
         return;
       }
       try {
-        child.kill(signal);
-      } catch {
-        // Kill races and already-exited children are expected during cleanup.
+        child.kill(process.platform === 'win32' ? undefined : signal);
+      } catch (error) {
+        if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH')) {
+          throw error;
+        }
       }
     },
   };
@@ -464,12 +466,13 @@ export class TerminalManager {
   }
 
   createSession(spec: TerminalSpawnSpec, options: CreateTerminalSessionOptions = {}): TerminalSession {
-    const session = createTerminalSession(spec, { ...this.options, ...options });
-    if (this.terminals.has(session.id)) {
+    const id = validateSessionId(options.id ?? `term_${randomUUID()}`);
+    if (this.terminals.has(id)) {
       throw new TerminalInvalidSpecError('Terminal session id is already in use.', {
         field: 'id',
       });
     }
+    const session = createTerminalSession(spec, { ...this.options, ...options, id });
     this.terminals.set(session.id, {
       session,
       subscriber: null,
@@ -557,10 +560,11 @@ export class TerminalManager {
 
         if (entry.subscriber === subscriber) {
           entry.subscriber = null;
+          this.clearListeners(entry);
+        } else if (entry.subscriber !== null) {
+          return;
         }
-        this.clearListeners(entry);
-
-        if (detachOptions.terminate === true) {
+        if (detachOptions.terminate === true && this.terminals.get(sessionId) === entry) {
           this.closeSession(sessionId);
         }
       },
@@ -578,8 +582,11 @@ export class TerminalManager {
     const active = entry.subscriber;
     entry.subscriber = null;
     this.clearListeners(entry);
-    entry.session.kill();
-    active?.close(1001, 'terminal closed');
+    try {
+      entry.session.kill();
+    } finally {
+      active?.close(1001, 'terminal closed');
+    }
   }
 
   /**
@@ -588,6 +595,7 @@ export class TerminalManager {
    */
   async shutdown(timeoutMs = 500): Promise<void> {
     const entries = [...this.terminals.values()];
+    const errors: unknown[] = [];
     this.terminals.clear();
 
     for (const entry of entries) {
@@ -595,7 +603,11 @@ export class TerminalManager {
       entry.subscriber = null;
       this.clearListeners(entry);
       active?.close(1001, 'server shutting down');
-      entry.session.kill('SIGHUP');
+      try {
+        entry.session.kill('SIGHUP');
+      } catch (error) {
+        errors.push(error);
+      }
     }
 
     const deadline = Date.now() + Math.max(0, timeoutMs);
@@ -605,9 +617,14 @@ export class TerminalManager {
 
     for (const entry of entries) {
       if (entry.session.isRunning()) {
-        entry.session.kill('SIGKILL');
+        try {
+          entry.session.kill('SIGKILL');
+        } catch (error) {
+          errors.push(error);
+        }
       }
     }
+    if (errors.length > 0) throw new AggregateError(errors, 'Terminal shutdown failed.');
   }
 
   private send(entry: ManagedTerminal, message: TerminalServerMessage): void {

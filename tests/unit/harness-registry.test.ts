@@ -1,4 +1,5 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, isAbsolute, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -251,6 +252,19 @@ describe('executable resolution', () => {
     expect(registry.resolveExecutable('opencode').executable).toBe(fromEnvironment);
   });
 
+  it.runIf(process.platform === 'win32')('finds and launches a native Windows .exe without a shell', async () => {
+    const spaced = join(root, 'native bin with spaces');
+    await mkdir(spaced);
+    const executable = join(spaced, 'opencode.exe');
+    await copyFile(process.execPath, executable);
+    const registry = createHarnessRegistry({ pathEnv: spaced, cwd: root });
+    const resolved = registry.resolveExecutable('opencode');
+    expect(resolved.executable).toBe(executable);
+    expect(execFileSync(resolved.executable, ['--version'], { encoding: 'utf8' }).trim()).toBe(process.version);
+    expect(createHarnessRegistry({ commands: { opencode: 'opencode' }, pathEnv: spaced, cwd: root })
+      .resolveExecutable('opencode')).toMatchObject({ executable, source: 'config' });
+  });
+
   it('does not mix an injected environment with the real process PATH', () => {
     const registry = createHarnessRegistry({ env: {}, cwd: root });
     const error = expectHarnessError(
@@ -270,15 +284,23 @@ describe('executable resolution', () => {
     expect(registry.resolveExecutable('opencode').executable).toBe(opencodePath);
   });
 
-  it('skips non-executable files and directories that share the command name', async () => {
-    const nonExecutableRoot = join(root, 'bin-non-exec');
+  it('skips directories that share the command name', async () => {
     const directoryRoot = join(root, 'bin-directory');
-    await writeExecutable(nonExecutableRoot, 'opencode', 0o644);
     await mkdir(join(directoryRoot, 'opencode'), { recursive: true });
-    await chmod(join(directoryRoot, 'opencode'), 0o755);
+    const registry = createHarnessRegistry({
+      pathEnv: pathValue(directoryRoot, binA),
+      cwd: root,
+    });
+
+    expect(registry.resolveExecutable('opencode').executable).toBe(opencodePath);
+  });
+
+  it.skipIf(process.platform === 'win32')('skips non-executable files that share the command name', async () => {
+    const nonExecutableRoot = join(root, 'bin-non-exec');
+    await writeExecutable(nonExecutableRoot, 'opencode', 0o644);
 
     const registry = createHarnessRegistry({
-      pathEnv: pathValue(nonExecutableRoot, directoryRoot, binA),
+      pathEnv: pathValue(nonExecutableRoot, binA),
       cwd: root,
     });
 
@@ -337,10 +359,12 @@ describe('executable resolution', () => {
     );
 
     expect(error.details['reason']).toBe('OVERRIDE_NOT_FOUND');
-    expect(error.details['attempted']).toEqual([
-      join(binA, 'opencode-not-installed'),
-      join(binB, 'opencode-not-installed'),
-    ]);
+    expect(error.details['attempted']).toEqual(
+      [binA, binB].flatMap((directory) => [
+        join(directory, 'opencode-not-installed'),
+        ...(process.platform === 'win32' ? [join(directory, 'opencode-not-installed.exe')] : []),
+      ]),
+    );
   });
 
   it('rejects a relative path override instead of guessing at a base directory', () => {
@@ -391,7 +415,11 @@ describe('executable resolution', () => {
     const resolved = registry.resolveExecutable('opencode');
 
     expect(resolved.executable).toBe(expected);
-    expect(candidates).toEqual([join(binA, 'opencode'), expected]);
+    expect(candidates).toEqual([
+      join(binA, 'opencode'),
+      ...(process.platform === 'win32' ? [join(binA, 'opencode.exe')] : []),
+      expected,
+    ]);
     expect(candidates.every((candidate) => isAbsolute(candidate))).toBe(true);
   });
 

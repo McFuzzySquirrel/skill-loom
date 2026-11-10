@@ -70,6 +70,16 @@ describe('OSC 7501 parameter parsing', () => {
     });
   });
 
+  it('accepts observed colon-separated parameters and rejects conflicting state fields', () => {
+    expect(parseOsc7501Params('state=working:app=opencode:title=Working')).toMatchObject({
+      state: 'working', sessionId: null,
+    });
+    expect(parseOsc7501Params('id=ses_one:part:state=idle:app=opencode')).toMatchObject({
+      state: 'idle', sessionId: 'ses_one:part',
+    });
+    expect(parseOsc7501Params('state=working:state=idle')).toBeNull();
+  });
+
   it('exposes exactly the documented state vocabulary', () => {
     expect(OSC7501_STATES).toEqual(['working', 'idle', 'clear']);
   });
@@ -113,6 +123,14 @@ describe('streaming OSC 7501 parsing', () => {
 
       expect(states(events), `split at ${String(split)}`).toEqual(['idle']);
       expect(events[0]?.sessionId, `split at ${String(split)}`).toBe('ses_split_st');
+    }
+  });
+
+  it('parses the live colon-delimited format across every chunk boundary', () => {
+    const text = `${OSC7501_PREFIX}state=working:app=opencode:title=Working${BEL}`;
+    for (let split = 0; split <= text.length; split += 1) {
+      const parser = new Osc7501Parser();
+      expect(states([...parser.push(text.slice(0, split)), ...parser.push(text.slice(split))])).toEqual(['working']);
     }
   });
 
@@ -184,6 +202,12 @@ describe('streaming OSC 7501 parsing', () => {
 
     const events = parser.push(sequence('idle'));
     expect(states(events)).toEqual(['idle']);
+  });
+
+  it('enforces its buffer cap in UTF-8 bytes', () => {
+    const parser = new Osc7501Parser({ maxBufferBytes: 32 });
+    expect(parser.push(`${OSC7501_PREFIX}state=working${'é'.repeat(10)}`)).toEqual([]);
+    expect(parser.remainder).toBe('');
   });
 
   it('uses a 64 KiB default buffer cap', () => {
@@ -264,6 +288,42 @@ describe('OSC 7501 completion state machine', () => {
     expect(first[0]?.advanced).toBe(true);
     expect(second[0]?.advanced).toBe(false);
     expect(machine.completed).toBe(true);
+  });
+
+  it.each([false, true])('preserves root working across child removal (split=%s)', (split) => {
+    const machine = new Osc7501StateMachine();
+    const stream =
+      sequence('idle') +
+      sequence('working') +
+      sequence('working', 'ses_child') +
+      sequence('clear', 'ses_child') +
+      sequence('idle') +
+      sequence('clear');
+    const changes = (split ? [...stream] : [stream]).flatMap((chunk) => machine.push(chunk));
+    expect(changes.filter((change) => change.advanced)).toHaveLength(1);
+    expect(machine.completed).toBe(false);
+  });
+
+  it('does not complete root working from an unrelated child idle', () => {
+    const machine = new Osc7501StateMachine();
+    machine.push(sequence('working'));
+    machine.push(sequence('working', 'ses_child'));
+    expect(machine.push(sequence('idle', 'ses_child'))).toEqual([]);
+    expect(machine.completed).toBe(false);
+    expect(machine.push(sequence('idle'))[0]?.advanced).toBe(true);
+  });
+
+  it('requires matching records and new working after record clear or step reset', () => {
+    const machine = new Osc7501StateMachine();
+    machine.push(sequence('working', 'ses_child'));
+    expect(machine.push(sequence('idle', 'ses_other'))).toEqual([]);
+    machine.push(sequence('clear', 'ses_child'));
+    expect(machine.push(sequence('idle', 'ses_child'))).toEqual([]);
+    machine.push(sequence('working'));
+    machine.push(sequence('clear', 'ses_other'));
+    machine.reset();
+    expect(machine.push(sequence('idle'))).toEqual([]);
+    expect(machine.completed).toBe(false);
   });
 
   it('tracks the optional session id and keeps parsing across id changes', () => {

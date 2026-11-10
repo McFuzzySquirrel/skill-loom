@@ -69,26 +69,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/**
- * Render the exact executable-and-argument array carried by the preflight
- * report as display text. The string is never executed; the trust API owns the
- * authoritative verified command text after a verify action.
- */
 function displayTrustCommand(details: Record<string, unknown>): string | null {
-  const command = details['manualCommand'];
-  if (!isRecord(command) || typeof command.executable !== 'string') {
-    return null;
-  }
-  const args = Array.isArray(command.args)
-    ? command.args.filter((arg): arg is string => typeof arg === 'string')
-    : [];
-  return [command.executable, ...args].map(quoteForDisplay).join(' ');
-}
-
-function quoteForDisplay(value: string): string {
-  return /^[A-Za-z0-9_@%+=:,./-]+$/.test(value)
-    ? value
-    : `'${value.replaceAll("'", `'\\''`)}'`;
+  return typeof details['manualCommandText'] === 'string' ? details['manualCommandText'] : null;
 }
 
 function describeReport(report: PreflightReportData): string {
@@ -253,18 +235,24 @@ export function RunStartPage({
     setPermissionBusy(true);
     setPermissionError(null);
     try {
-      const updated = await api.updateChain(projectId, chainId, {
-        id: chain.id,
-        version: chain.version,
-        createdAt: chain.createdAt,
-        updatedAt: chain.updatedAt,
-        name: chain.name,
-        harness: chain.harness,
-        sessionMode: chain.sessionMode,
-        steps: chain.steps,
-        inputs: chain.inputs,
-        automaticPermissionOptIn: true,
-      });
+      const updated = await api.updateChain(
+        projectId,
+        chainId,
+        {
+          id: chain.id,
+          version: chain.version,
+          createdAt: chain.createdAt,
+          updatedAt: chain.updatedAt,
+          name: chain.name,
+          harness: chain.harness,
+          sessionMode: chain.sessionMode,
+          steps: chain.steps,
+          inputs: chain.inputs,
+          automaticPermissionOptIn: true,
+          ...(chain.agent === undefined ? {} : { agent: chain.agent }),
+        },
+        { ...(chain.revision === undefined ? {} : { expectedRevision: chain.revision }) },
+      );
       setChainState({ status: 'ready', chain: updated, error: null });
       setPendingOptIn(false);
       const flags = preflight.report?.permissions?.flags ?? [];

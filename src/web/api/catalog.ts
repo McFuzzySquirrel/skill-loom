@@ -4,6 +4,11 @@ import {
   type FetchLike,
   type RequestJsonOptions,
 } from './client';
+import {
+  REMOTE_CATALOG_LIMIT_KEYS,
+  type RemoteCatalogLimitOverrides,
+  type RemoteCatalogLimits,
+} from '../../shared/remote-catalog';
 
 /**
  * Typed client for the skill catalog and global extra-directory settings.
@@ -143,6 +148,13 @@ export interface RemoteSkillSource {
   id: string;
   repository: string;
   ref?: string;
+  limits?: RemoteCatalogLimitOverrides;
+}
+
+export interface RemoteCatalogSettings {
+  global: RemoteCatalogLimits;
+  defaults: RemoteCatalogLimits;
+  maximums: RemoteCatalogLimits;
 }
 
 export interface RemoteSkillPackage {
@@ -210,6 +222,9 @@ export interface CatalogApi {
     options?: { signal?: AbortSignal },
   ) => Promise<ExtraDirectoryMutation>;
   listRemoteSources: (options?: { signal?: AbortSignal }) => Promise<RemoteSkillSource[]>;
+  getRemoteCatalogLimits: () => Promise<RemoteCatalogSettings>;
+  setRemoteCatalogLimits: (limits: RemoteCatalogLimitOverrides) => Promise<RemoteCatalogSettings>;
+  setRemoteSourceLimits: (sourceId: string, limits: RemoteCatalogLimitOverrides | null) => Promise<RemoteSkillSource>;
   addRemoteSource: (
     repository: string,
     ref?: string,
@@ -225,7 +240,7 @@ export interface CatalogApi {
   ) => Promise<RemoteSkillSnapshot[]>;
   refreshRemoteSource: (
     sourceId: string,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; revision?: string },
   ) => Promise<RemoteSkillSnapshot>;
 }
 
@@ -545,6 +560,45 @@ function decodeRemoteSource(value: unknown): RemoteSkillSource {
     id: value.id,
     repository: value.repository,
     ...(typeof value.ref === 'string' ? { ref: value.ref } : {}),
+    ...(value.limits === undefined ? {} : { limits: decodeRemoteLimitOverrides(value.limits) }),
+  };
+}
+
+function decodeRemoteLimitOverrides(value: unknown): RemoteCatalogLimitOverrides {
+  if (!isRecord(value) || Object.keys(value).some((key) =>
+    !REMOTE_CATALOG_LIMIT_KEYS.some((candidate) => candidate === key))) {
+    throw invalidResponse('remote catalog limits');
+  }
+  const result: RemoteCatalogLimitOverrides = {};
+  for (const key of REMOTE_CATALOG_LIMIT_KEYS) {
+    const entry = value[key];
+    if (entry === undefined) continue;
+    if (typeof entry !== 'number' || !Number.isSafeInteger(entry) || entry < 1) {
+      throw invalidResponse('remote catalog limit');
+    }
+    result[key] = entry;
+  }
+  return result;
+}
+
+function decodeRemoteCatalogLimits(value: unknown): RemoteCatalogLimits {
+  const limits = decodeRemoteLimitOverrides(value);
+  if (!isCompleteRemoteCatalogLimits(limits)) {
+    throw invalidResponse('remote catalog limits');
+  }
+  return limits;
+}
+
+function isCompleteRemoteCatalogLimits(limits: RemoteCatalogLimitOverrides): limits is RemoteCatalogLimits {
+  return REMOTE_CATALOG_LIMIT_KEYS.every((key) => limits[key] !== undefined);
+}
+
+function decodeRemoteCatalogSettings(value: unknown): RemoteCatalogSettings {
+  if (!isRecord(value)) throw invalidResponse('remote catalog settings');
+  return {
+    global: decodeRemoteCatalogLimits(value.global),
+    defaults: decodeRemoteCatalogLimits(value.defaults),
+    maximums: decodeRemoteCatalogLimits(value.maximums),
   };
 }
 
@@ -771,6 +825,30 @@ export function createCatalogApi(fetchImpl: FetchLike = fetch): CatalogApi {
       ));
     },
 
+    async getRemoteCatalogLimits(): Promise<RemoteCatalogSettings> {
+      return decodeRemoteCatalogSettings(await requestJson<unknown>(
+        '/api/settings/remote-catalog-limits', {}, fetchImpl,
+      ));
+    },
+
+    async setRemoteCatalogLimits(limits): Promise<RemoteCatalogSettings> {
+      return decodeRemoteCatalogSettings(await requestJson<unknown>(
+        '/api/settings/remote-catalog-limits',
+        { method: 'PUT', body: { limits } },
+        fetchImpl,
+      ));
+    },
+
+    async setRemoteSourceLimits(sourceId, limits): Promise<RemoteSkillSource> {
+      const value = await requestJson<unknown>(
+        `/api/settings/remote-skill-sources/${encodeURIComponent(sourceId)}/limits`,
+        { method: 'PUT', body: { limits } },
+        fetchImpl,
+      );
+      if (!isRecord(value)) throw invalidResponse('remote source limits');
+      return decodeRemoteSource(value.source);
+    },
+
     async addRemoteSource(repository, ref, options = {}): Promise<RemoteSkillSource> {
       const value = await requestJson<unknown>(
         '/api/settings/remote-skill-sources',
@@ -810,7 +888,11 @@ export function createCatalogApi(fetchImpl: FetchLike = fetch): CatalogApi {
     async refreshRemoteSource(sourceId, options = {}): Promise<RemoteSkillSnapshot> {
       const value = await requestJson<unknown>(
         `/api/settings/remote-skill-sources/${encodeURIComponent(sourceId)}/refresh`,
-        { method: 'POST', ...optionsFor(options.signal) },
+        {
+          method: 'POST',
+          ...(options.revision === undefined ? {} : { body: { revision: options.revision } }),
+          ...optionsFor(options.signal),
+        },
         fetchImpl,
       );
       if (!isRecord(value)) throw invalidResponse('remote skill refresh');

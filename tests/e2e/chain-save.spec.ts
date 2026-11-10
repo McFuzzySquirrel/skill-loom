@@ -530,6 +530,15 @@ test.describe('Chain inputs and save', () => {
       page.getByText(/per-step harness switching is unsupported/i).first(),
     ).toBeVisible();
 
+    let updateRequests = 0;
+    await page.route(`**/api/projects/${project.id}/chains/*`, async (route) => {
+      if (route.request().method() === 'PUT') {
+        updateRequests += 1;
+        await route.abort();
+      } else {
+        await route.continue();
+      }
+    });
     await page.getByTestId('harness-duplicate-target').selectOption('copilot');
     await page.getByTestId('harness-duplicate-action').click();
 
@@ -538,6 +547,7 @@ test.describe('Chain inputs and save', () => {
     await expect(page).toHaveURL(
       new RegExp(`/projects/${escapeRegExp(project.id)}/chains/[^/]+$`),
     );
+    await expect.poll(() => chainIdFromUrl(page.url())).not.toBe(original.id);
     await expect(page.getByTestId('builder-chain-name')).toHaveText(`${name} copy`);
     const copyId = chainIdFromUrl(page.url());
     expect(copyId).not.toBe(original.id);
@@ -566,6 +576,46 @@ test.describe('Chain inputs and save', () => {
     const copyBody = (await copyAfter.json()) as { chain: StoredChain };
     expect(copyBody.chain.harness).toBe('copilot');
     expect(copyBody.chain.inputs).toHaveLength(1);
+    expect(updateRequests).toBe(0);
+  });
+
+  test('keeps unsaved edits when another client changes the chain', async ({ page, request }) => {
+    const project = await openFixtureProject(request);
+    const draft = {
+      name: `Concurrent ${runSuffix}`, harness: 'opencode', sessionMode: 'shared',
+      steps: [{ id: 'step-1', skillName: 'deploy-helper', instruction: 'Initial instruction.' }],
+      inputs: [],
+    };
+    const created = await request.post(`/api/projects/${project.id}/chains`, { data: draft });
+    expect(created.status()).toBe(201);
+    const { chain, revision } = (await created.json()) as { chain: StoredChain; revision: string };
+    await page.goto(`/projects/${project.id}/chains/${chain.id}`);
+    await expect(page.getByTestId('builder-chain-id')).toHaveText(chain.id);
+    await openFirstStepEditor(page);
+    await page.getByTestId('step-instruction').fill('My unsaved instruction.');
+    await closeStepEditor(page);
+
+    const external = await request.put(`/api/projects/${project.id}/chains/${chain.id}`, {
+      headers: { 'x-loom-chain-revision': revision },
+      data: { ...draft, steps: [{ ...draft.steps[0]!, instruction: 'External instruction.' }] },
+    });
+    expect(external.status()).toBe(200);
+    await page.getByTestId('chain-save').click();
+    await expect(page.getByTestId('chain-save-error')).toContainText('CHAIN_STALE');
+    await expect(page.getByTestId('chain-dirty-indicator')).toContainText('Unsaved changes');
+    await openFirstStepEditor(page);
+    await expect(page.getByTestId('step-instruction')).toHaveValue('My unsaved instruction.');
+    await closeStepEditor(page);
+    await page.getByText('Harness and duplicate settings').click();
+    await page.getByTestId('harness-duplicate-target').selectOption('copilot');
+    await page.getByTestId('harness-duplicate-action').click();
+    await expect(page.getByTestId('chain-duplicate-error')).toContainText('CHAIN_STALE');
+    await expect(page.getByTestId('chain-dirty-indicator')).toContainText('Unsaved changes');
+    const stored = await request.get(`/api/projects/${project.id}/chains/${chain.id}`);
+    expect(((await stored.json()) as { chain: StoredChain }).chain.steps[0]?.instruction).toBe('External instruction.');
+    const listed = await request.get(`/api/projects/${project.id}/chains`);
+    const result = (await listed.json()) as { chains: StoredChain[] };
+    expect(result.chains.filter((item) => item.name.startsWith(draft.name))).toHaveLength(1);
   });
 });
 

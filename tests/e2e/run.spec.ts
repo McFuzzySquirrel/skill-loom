@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page, type WebSocketRoute } from '@playwright/test';
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -19,6 +19,8 @@ const runSuffix = `${String(process.pid)}-${String(Date.now())}`;
 let fixtureRoot: string;
 let fakeOpenCodePath: string;
 let fakeCopilotPath: string;
+let originalOpenCode: Buffer | undefined;
+let originalCopilot: Buffer | undefined;
 let configDirectory: string;
 let configPath: string;
 let originalConfigText: string | null = null;
@@ -77,9 +79,12 @@ if (args[0] === '--version' || args[0] === 'version') {
   process.exit(0);
 }
 
+let launch = 1;
 try {
+  const log = path.join(cwd, '.fake-harness.log');
+  if (fs.existsSync(log)) launch += fs.readFileSync(log, 'utf8').split('\\n').filter(Boolean).length;
   fs.appendFileSync(
-    path.join(cwd, '.fake-harness.log'),
+    log,
     'LAUNCH ' + (automatic ? 'automatic' : 'supervised') + ' ' + projectName + '\\n',
   );
 } catch {
@@ -87,6 +92,7 @@ try {
 }
 
 process.stdout.write('FAKE_OPENCODE_' + (automatic ? 'AUTO' : 'SUPERVISED') + '_' + projectName + '\\r\\n');
+process.stdout.write('FAKE_HARNESS_LAUNCH_' + launch + '\\r\\n');
 
 if (automatic) {
   if (projectName.includes('failure')) {
@@ -94,16 +100,28 @@ if (automatic) {
     process.exit(1);
   }
 
-  // A real OSC working then idle sequence is the only automatic completion
-  // signal. The delay keeps Pause usable in the browser test.
+  // A real OSC working then idle sequence is the only automatic completion signal.
   process.stdout.write('\\x1b]7501;state=working\\x07');
-  setTimeout(() => {
+  const sendIdle = () => {
     process.stdout.write('FAKE_AUTOMATIC_IDLE_' + projectName + '\\r\\n');
     process.stdout.write('\\x1b]7501;state=idle\\x07');
     setTimeout(() => process.exit(0), 100);
-  }, 2000);
+  };
+  if (projectName.startsWith('automatic-') && launch === 1) {
+    const timer = setInterval(() => {
+      if (fs.existsSync(path.join(cwd, '.fake-release-first'))) {
+        clearInterval(timer);
+        sendIdle();
+      }
+    }, 50);
+  } else {
+    setTimeout(sendIdle, 2000);
+  }
 } else {
   process.stdout.write('FAKE_SUPERVISED_HOLDING\\r\\n');
+  if (args.join(' ').includes('Run the second supervised step.')) {
+    process.stdout.write('FAKE_SECOND_SUPERVISED_STEP\\r\\n');
+  }
   setInterval(() => {}, 1000);
 }
 `;
@@ -144,6 +162,8 @@ test.beforeAll(async ({ request }) => {
   await mkdir(fakeBinDirectory, { recursive: true });
   fakeOpenCodePath = join(fakeBinDirectory, 'opencode');
   fakeCopilotPath = join(fakeBinDirectory, 'copilot');
+  originalOpenCode = await readFile(fakeOpenCodePath);
+  originalCopilot = await readFile(fakeCopilotPath);
   await writeExecutable(fakeOpenCodePath, openCodeScript());
   await writeExecutable(fakeCopilotPath, copilotScript());
 
@@ -176,11 +196,11 @@ test.beforeAll(async ({ request }) => {
 });
 
 test.afterAll(async () => {
-  if (fakeOpenCodePath !== undefined) {
-    await rm(fakeOpenCodePath, { force: true });
+  if (fakeOpenCodePath !== undefined && originalOpenCode !== undefined) {
+    await writeFile(fakeOpenCodePath, originalOpenCode, { mode: 0o755 });
   }
-  if (fakeCopilotPath !== undefined) {
-    await rm(fakeCopilotPath, { force: true });
+  if (fakeCopilotPath !== undefined && originalCopilot !== undefined) {
+    await writeFile(fakeCopilotPath, originalCopilot, { mode: 0o755 });
   }
   if (configPath !== undefined) {
     if (originalConfigText === null) {
@@ -319,6 +339,54 @@ async function gotoRun(page: Page, runId: string): Promise<void> {
 
 function terminalScreen(page: Page) {
   return page.getByTestId('run-terminal-screen');
+}
+
+function collectTerminalFrames(page: Page): string[] {
+  const events: string[] = [];
+  const marker = 'FAKE_SUPERVISED_HOLDING';
+  page.on('websocket', (socket) => {
+    if (!new URL(socket.url()).pathname.startsWith('/api/terminal/')) {
+      return;
+    }
+    let tail = '';
+    events.push('socket opened');
+    socket.on('framereceived', ({ payload }) => {
+      if (typeof payload !== 'string') {
+        events.push('binary frame');
+        return;
+      }
+      try {
+        const message = JSON.parse(payload) as { type?: string; data?: string; code?: string };
+        if (message.type === 'output') {
+          const text = tail + (message.data ?? '');
+          events.push(`output: holding marker ${text.includes(marker) ? 'present' : 'absent'}`);
+          tail = text.slice(-(marker.length - 1));
+        } else {
+          events.push(`message: ${message.type ?? 'unknown'}${message.code === undefined ? '' : ` (${message.code})`}`);
+        }
+      } catch {
+        events.push('invalid JSON frame');
+      }
+    });
+    socket.on('close', () => events.push('socket closed'));
+    socket.on('socketerror', () => events.push('socket error'));
+  });
+  return events;
+}
+
+async function expectHoldingTerminal(page: Page, frames: string[]): Promise<void> {
+  try {
+    await expect(terminalScreen(page)).toContainText('FAKE_SUPERVISED_HOLDING', {
+      timeout: 15_000,
+    });
+    await expect(terminalScreen(page)).toContainText('FAKE_HARNESS_LAUNCH_1');
+  } catch (error) {
+    await test.info().attach('terminal-frames', {
+      body: frames.join('\n'),
+      contentType: 'text/plain',
+    });
+    throw error;
+  }
 }
 
 test.describe('Terminal-dominant run view', () => {
@@ -653,6 +721,9 @@ test.describe('Terminal-dominant run view', () => {
     await page.getByTestId('run-control-next').click();
     await expect(page.getByTestId('step-status-1')).toContainText('Awaiting user');
     await expect(page.getByRole('status')).toContainText('Step 2 of 2');
+    await expect(terminalScreen(page)).toContainText('FAKE_SECOND_SUPERVISED_STEP', { timeout: 15_000 });
+    await expect(terminalScreen(page)).toContainText('FAKE_HARNESS_LAUNCH_1');
+    await expect(terminalScreen(page)).toContainText('FAKE_HARNESS_LAUNCH_2');
 
     await page.getByTestId('run-control-abort').click();
     await expect(page.getByTestId('run-status')).toContainText('Aborted');
@@ -661,13 +732,241 @@ test.describe('Terminal-dominant run view', () => {
     expect(consoleErrors).toEqual([]);
   });
 
+  test('reattaches the compact terminal to the retried process', async ({ page, request }) => {
+    test.setTimeout(60_000);
+    const consoleErrors = collectConsoleErrors(page);
+    const { project } = await openFixtureProject(request, 'compact-retry');
+    const chain = await createChain(request, project.id, `Compact retry ${runSuffix}`, [
+      { id: 'retry-step', skillName: 'deploy-helper', instruction: 'Review the task.' },
+    ]);
+    const run = await createRun(request, project.id, chain.id, 'supervised');
+    await page.goto(`/runs/${encodeURIComponent(run.id)}/terminal`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Run terminal' })).toBeVisible();
+    await expect(terminalScreen(page)).toContainText('FAKE_HARNESS_LAUNCH_1', { timeout: 15_000 });
+
+    await page.getByTestId('run-outcome-failed').click();
+    await expect(page.getByTestId('terminal-run-status')).toContainText('Paused');
+    await page.getByTestId('run-control-retry').click();
+    await expect(page.getByTestId('terminal-run-status')).toContainText('Awaiting user');
+    await expect(terminalScreen(page)).toContainText('FAKE_HARNESS_LAUNCH_2', { timeout: 15_000 });
+    await expect(terminalScreen(page)).toContainText('FAKE_HARNESS_LAUNCH_1');
+    await page.getByTestId('run-control-abort').click();
+    await expect(page.getByTestId('terminal-run-status')).toContainText('Aborted');
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test('reattaches after missing a process-start event while the run stream is offline', async ({ page, request }) => {
+    test.setTimeout(60_000);
+    const { project, projectPath } = await openFixtureProject(request, 'missed-process-start');
+    const chain = await createChain(request, project.id, `Missed start ${runSuffix}`, [
+      { id: 'one', skillName: 'deploy-helper', instruction: 'Review first.' },
+      { id: 'two', skillName: 'deploy-helper', instruction: 'Review second.' },
+    ]);
+    const run = await createRun(request, project.id, chain.id, 'supervised');
+    let activeEvents: WebSocketRoute | undefined;
+    let rejectReconnect = false;
+    await page.routeWebSocket(/\/api\/runs\/[^/]+\/events/, (socket) => {
+      if (rejectReconnect) {
+        void socket.close();
+        return;
+      }
+      activeEvents = socket;
+      socket.connectToServer();
+    });
+    await gotoRun(page, run.id);
+    await expect(page.getByTestId('run-stream-state')).toContainText('live');
+    await expect(terminalScreen(page)).toContainText('FAKE_HARNESS_LAUNCH_1', { timeout: 15_000 });
+    if (activeEvents === undefined) throw new Error('The run event stream did not connect.');
+    rejectReconnect = true;
+    await activeEvents.close();
+    await expect(page.getByTestId('run-stream-state')).toContainText('offline');
+
+    const done = await request.post(`/api/runs/${run.id}/actions`, { data: { action: 'done' } });
+    expect(done.ok()).toBe(true);
+    const next = await request.post(`/api/runs/${run.id}/actions`, { data: { action: 'next' } });
+    expect(next.ok()).toBe(true);
+    await expect.poll(async () =>
+      (await readFile(join(projectPath, '.fake-harness.log'), 'utf8')).split('\n').filter(Boolean).length,
+    ).toBe(2);
+    rejectReconnect = false;
+    await expect(page.getByTestId('run-stream-state')).toContainText('live', { timeout: 15_000 });
+    await expect(page.getByTestId('step-status-1')).toContainText('Awaiting user');
+    await terminalScreen(page).scrollIntoViewIfNeeded();
+    await expect(terminalScreen(page)).toContainText('FAKE_HARNESS_LAUNCH_2', { timeout: 15_000 });
+    await expect(terminalScreen(page)).toContainText('FAKE_HARNESS_LAUNCH_1');
+    await page.getByTestId('run-control-abort').click();
+    await expect(page.getByTestId('run-status')).toContainText('Aborted');
+  });
+
+  test('keeps a healthy terminal attached when only the run stream reconnects', async ({ page, request }) => {
+    test.setTimeout(60_000);
+    const { project } = await openFixtureProject(request, 'event-reconnect');
+    const chain = await createChain(request, project.id, `Event reconnect ${runSuffix}`, [
+      { id: 'one', skillName: 'deploy-helper', instruction: 'Hold until aborted.' },
+    ]);
+    const run = await createRun(request, project.id, chain.id, 'supervised');
+    let activeEvents: WebSocketRoute | undefined;
+    let terminalConnections = 0;
+    page.on('websocket', (socket) => {
+      if (new URL(socket.url()).pathname.startsWith('/api/terminal/')) terminalConnections += 1;
+    });
+    await page.routeWebSocket(/\/api\/runs\/[^/]+\/events/, (socket) => {
+      activeEvents = socket;
+      socket.connectToServer();
+    });
+    await gotoRun(page, run.id);
+    await expect(page.getByTestId('run-stream-state')).toContainText('live');
+    await expect(terminalScreen(page)).toContainText('FAKE_HARNESS_LAUNCH_1', { timeout: 15_000 });
+    if (activeEvents === undefined) throw new Error('The run event stream did not connect.');
+    await activeEvents.close();
+    await expect(page.getByTestId('run-stream-state')).toContainText('offline');
+    await expect(page.getByTestId('run-stream-state')).toContainText('live', { timeout: 15_000 });
+    await page.waitForTimeout(900);
+    expect(terminalConnections).toBe(1);
+    await page.getByTestId('run-control-abort').click();
+    await expect(page.getByTestId('run-status')).toContainText('Aborted');
+  });
+
+  test('recovers a process started before the first event-stream snapshot', async ({ page, request }) => {
+    test.setTimeout(60_000);
+    const { project } = await openFixtureProject(request, 'initial-stream-race');
+    const chain = await createChain(request, project.id, `Initial stream race ${runSuffix}`, [
+      { id: 'one', skillName: 'deploy-helper', instruction: 'Review first.' },
+      { id: 'two', skillName: 'deploy-helper', instruction: 'Review second.' },
+    ]);
+    const run = await createRun(request, project.id, chain.id, 'supervised');
+    let connectEvents: (() => void) | undefined;
+    await page.routeWebSocket(/\/api\/runs\/[^/]+\/events/, (socket) => {
+      connectEvents = () => { socket.connectToServer(); };
+    });
+    await gotoRun(page, run.id);
+    await expect(terminalScreen(page)).toContainText('FAKE_HARNESS_LAUNCH_1', { timeout: 15_000 });
+    await expect.poll(() => connectEvents !== undefined).toBe(true);
+    expect((await request.post(`/api/runs/${run.id}/actions`, { data: { action: 'done' } })).ok()).toBe(true);
+    expect((await request.post(`/api/runs/${run.id}/actions`, { data: { action: 'next' } })).ok()).toBe(true);
+    connectEvents?.();
+    await expect(page.getByTestId('step-status-1')).toContainText('Awaiting user');
+    await terminalScreen(page).scrollIntoViewIfNeeded();
+    await expect(terminalScreen(page)).toContainText('FAKE_HARNESS_LAUNCH_2', { timeout: 15_000 });
+    await page.getByTestId('run-control-abort').click();
+    await expect(page.getByTestId('run-status')).toContainText('Aborted');
+  });
+
+  test('refuses live reconciliation and clears a claimed run only after abort and a fresh review', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(60_000);
+    const { project } = await openFixtureProject(request, 'claimed-reconciliation');
+    const reviewUrl = `/api/projects/${project.id}/coordination-review`;
+    const actionUrl = `/api/projects/${project.id}/coordination-action`;
+    const initial = await request.post(reviewUrl);
+    expect(initial.ok()).toBe(true);
+    const { review: initialReview } = await initial.json() as { review: { reviewDigest: string } };
+    const enabled = await request.post(actionUrl, {
+      data: { action: 'enable', reviewDigest: initialReview.reviewDigest, stoppedConfirmed: true, oldClientsStoppedConfirmed: true },
+    });
+    expect(enabled.ok()).toBe(true);
+    const chain = await createChain(request, project.id, `Claimed ${runSuffix}`, [{
+      id: 'claimed-step', skillName: 'deploy-helper', instruction: 'Hold until explicitly aborted.',
+    }]);
+    const run = await createRun(request, project.id, chain.id, 'supervised');
+
+    await page.goto(`/projects/${project.id}`);
+    const details = page.locator('.project-details');
+    if (!(await details.evaluate((element) => element instanceof HTMLDetailsElement && element.open))) {
+      await details.getByText('Project details').click();
+    }
+    const review = page.getByRole('button', { name: 'Review coordination' });
+    const confirmStopped = async () => {
+      await page.getByRole('checkbox', { name: 'I confirmed older Skill Loom services and helpers have stopped.' }).check();
+      await page.getByRole('checkbox', { name: 'I confirmed previous work and all its processes and descendants have stopped.' }).check();
+    };
+    await review.click();
+    await expect(page.getByText(`Claim: managed run ${run.id}`, { exact: false })).toBeVisible();
+    await confirmStopped();
+    await page.getByRole('button', { name: 'Mark claimed managed run interrupted' }).click();
+    await expect(page.getByText(/Coordination failed:.*PROJECT_COORDINATION_BUSY/)).toBeVisible();
+    await expect(review).toBeFocused();
+
+    const aborted = await request.post(`/api/runs/${run.id}/actions`, {
+      data: { action: 'abort', reason: 'Finish browser reconciliation test.' },
+    });
+    expect(aborted.ok(), await aborted.text()).toBe(true);
+    await review.click();
+    await expect(page.getByText(`Claim: managed run ${run.id}`, { exact: false })).toBeVisible();
+    await expect(page.getByText(/aborted — terminal/)).toBeVisible();
+    const clear = page.getByRole('button', { name: 'Clear reviewed claim' });
+    await expect(clear).toBeDisabled();
+    await confirmStopped();
+    await clear.click();
+    await expect(page.getByRole('status')).toHaveText('Coordination action applied. Review again before another action.');
+    await expect(review).toBeFocused();
+    await review.click();
+    await expect(page.getByText('Claim: None.')).toBeVisible();
+  });
+
+  test('stops retrying terminal attachments that are repeatedly rejected', async ({ page, request }) => {
+    test.setTimeout(60_000);
+    const { project } = await openFixtureProject(request, 'terminal-conflict');
+    const chain = await createChain(request, project.id, `Terminal conflict ${runSuffix}`, [{
+      id: 'terminal-conflict-step', skillName: 'deploy-helper', instruction: 'Hold until aborted.',
+    }]);
+    const run = await createRun(request, project.id, chain.id, 'supervised');
+    let attempts = 0;
+    await page.routeWebSocket(/\/api\/terminal\//, (socket) => {
+      attempts += 1;
+      socket.send(JSON.stringify({
+        type: 'error', code: 'TERMINAL_SUBSCRIBER_CONFLICT', message: 'Another subscriber is attached.',
+      }));
+      socket.close({ code: 1008, reason: 'TERMINAL_SUBSCRIBER_CONFLICT' });
+    });
+    await gotoRun(page, run.id);
+    await expect.poll(() => attempts, { timeout: 15_000 }).toBe(9);
+    await expect(page.getByTestId('run-terminal').getByText('Terminal disconnected. Reopen the terminal to try attaching again.')).toBeVisible();
+    await expect(page.getByRole('status')).toHaveText('Terminal disconnected. Reopen the terminal to try attaching again.');
+    expect(attempts).toBe(9);
+    await page.waitForTimeout(900);
+    expect(attempts).toBe(9);
+  });
+
+  test('renews the terminal retry budget after an attachment is accepted', async ({ page, request }) => {
+    test.setTimeout(60_000);
+    const { project } = await openFixtureProject(request, 'terminal-retry');
+    const chain = await createChain(request, project.id, `Terminal retry ${runSuffix}`, [{
+      id: 'terminal-retry-step', skillName: 'deploy-helper', instruction: 'Hold until aborted.',
+    }]);
+    const run = await createRun(request, project.id, chain.id, 'supervised');
+    let attempts = 0;
+    await page.routeWebSocket(/\/api\/terminal\//, async (socket) => {
+      attempts += 1;
+      if (attempts >= 9) {
+        socket.send(JSON.stringify({ type: 'ready', sessionId: 'loom_run_fixture', pid: 1, cols: 80, rows: 24 }));
+        if (attempts === 9) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 100));
+          socket.close({ code: 1001, reason: 'transient disconnect' });
+        }
+        return;
+      }
+      socket.send(JSON.stringify({
+        type: 'error', code: 'TERMINAL_SUBSCRIBER_CONFLICT', message: 'Another subscriber is attached.',
+      }));
+      socket.close({ code: 1008, reason: 'TERMINAL_SUBSCRIBER_CONFLICT' });
+    });
+    await gotoRun(page, run.id);
+    await expect.poll(() => attempts, { timeout: 15_000 }).toBe(10);
+    await expect(page.getByTestId('run-terminal').getByText('Terminal disconnected.', { exact: false })).toHaveCount(0);
+    await page.waitForTimeout(900);
+    expect(attempts).toBe(10);
+  });
+
   test('automatic mode advances only on the harness signal and exposes Pause, Resume, Run next, and Abort', async ({
     page,
     request,
   }) => {
     test.setTimeout(90_000);
     const consoleErrors = collectConsoleErrors(page);
-    const { project } = await openFixtureProject(request, 'automatic');
+    const { project, projectPath } = await openFixtureProject(request, 'automatic');
     const chain = await createChain(request, project.id, `Automatic ${runSuffix}`, [
       {
         id: 'automatic-step-one',
@@ -697,6 +996,9 @@ test.describe('Terminal-dominant run view', () => {
 
     await page.getByTestId('run-control-pause').click();
     await expect(page.getByTestId('run-status')).toContainText('Paused');
+    await expect(page.getByTestId('step-status-0')).toContainText('Running');
+    await expect(page.getByTestId('step-status-1')).toContainText('Pending');
+    await writeFile(join(projectPath, '.fake-release-first'), '');
 
     // The in-flight step still finishes on the signal, but the chain pauses
     // before the next step.
@@ -709,6 +1011,7 @@ test.describe('Terminal-dominant run view', () => {
 
     await page.getByTestId('run-control-resume').click();
     await expect(page.getByTestId('run-status')).toContainText('Running');
+    await expect(terminalScreen(page)).toContainText('FAKE_HARNESS_LAUNCH_2', { timeout: 15_000 });
     await expect(page.getByTestId('step-status-1')).toContainText('Done', {
       timeout: 30_000,
     });
@@ -766,6 +1069,7 @@ test.describe('Terminal-dominant run view', () => {
   }) => {
     test.setTimeout(60_000);
     const consoleErrors = collectConsoleErrors(page);
+    const terminalFrames = collectTerminalFrames(page);
     const { project, projectPath } = await openFixtureProject(request, 'reconnect');
     const chain = await createChain(request, project.id, `Reconnect ${runSuffix}`, [
       {
@@ -785,9 +1089,7 @@ test.describe('Terminal-dominant run view', () => {
 
     await gotoRun(page, run.id);
     await expect(page.getByTestId('run-status')).toContainText('Awaiting user');
-    await expect(terminalScreen(page)).toContainText('FAKE_SUPERVISED_HOLDING', {
-      timeout: 15_000,
-    });
+    await expectHoldingTerminal(page, terminalFrames);
 
     const logPath = join(projectPath, '.fake-harness.log');
     const launchesBefore = (await readFile(logPath, 'utf8')).split('\n').filter(Boolean).length;
@@ -799,9 +1101,11 @@ test.describe('Terminal-dominant run view', () => {
     await expect(page.getByTestId('step-status-0')).toContainText('Awaiting user');
     await expect(page.getByTestId('step-status-1')).toContainText('Pending');
     // The buffered terminal output is replayed by the server to the new xterm.
-    await expect(terminalScreen(page)).toContainText('FAKE_SUPERVISED_HOLDING', {
-      timeout: 15_000,
-    });
+    await expectHoldingTerminal(page, terminalFrames);
+    expect(terminalFrames.filter((event) => event === 'message: ready').length).toBeGreaterThanOrEqual(2);
+    expect(
+      terminalFrames.filter((event) => event === 'output: holding marker present').length,
+    ).toBeGreaterThanOrEqual(2);
 
     // The reload must not spawn the step again or advance it.
     await page.waitForTimeout(1_000);
@@ -893,16 +1197,33 @@ test.describe('Terminal-dominant run view', () => {
     await expect(page.getByTestId('run-recovery-restart')).toBeEnabled();
     await expect(page.getByTestId('run-terminal-empty')).toBeVisible();
 
+    let receivedSnapshot = false;
+    page.on('websocket', (socket) => {
+      if (!socket.url().includes(`/api/runs/${runId}/events`)) return;
+      socket.on('framereceived', ({ payload }) => {
+        if (typeof payload === 'string' && JSON.parse(payload).type === 'snapshot') {
+          receivedSnapshot = true;
+        }
+      });
+    });
     await page.getByTestId('run-recovery-retry').click();
     await expect(page.getByTestId('run-status')).toContainText('Awaiting user', {
       timeout: 20_000,
     });
     await expect(page.getByTestId('run-recovery')).toHaveCount(0);
     await expect(page.getByTestId('step-status-0')).toContainText('Awaiting user');
+    await terminalScreen(page).scrollIntoViewIfNeeded();
     await expect(terminalScreen(page)).toContainText('FAKE_SUPERVISED_HOLDING', {
       timeout: 15_000,
     });
 
+    await expect.poll(() => receivedSnapshot).toBe(true);
+    const externalFailure = await request.post(`/api/runs/${runId}/actions`, {
+      data: { action: 'failed', reason: 'External supervised decision' },
+    });
+    expect(externalFailure.status()).toBe(200);
+    await expect(page.getByTestId('run-status')).toContainText('Paused');
+    await expect(page.getByTestId('step-status-0')).toContainText('Failed');
     await page.getByTestId('run-control-abort').click();
     await expect(page.getByTestId('run-status')).toContainText('Aborted');
 
