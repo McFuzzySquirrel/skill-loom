@@ -7,6 +7,7 @@ import { toApiClientError } from '../api/projects';
 import { InlineError } from '../components/InlineError';
 import { useStatusAnnouncer } from '../components/StatusRegion';
 import { Link, useRouter } from '../router';
+import { formatMegabytes } from '../utils/size';
 
 interface SourceCatalog {
   source: RemoteSkillSource;
@@ -484,7 +485,7 @@ export function DiscoveryPage() {
                 </label>
                 <p className="field__hint">
                   {candidate.repository} · revision <code>{candidate.revision}</code> · path <code>{candidate.repositoryPath}</code>
-                  {' '}· {String(candidate.files)} files · {String(candidate.bytes)} bytes
+                  {' '}· {String(candidate.files)} files · {formatMegabytes(candidate.bytes)}
                 </p>
                 <button type="button" className="button button--secondary button--small" onClick={() => void inspectCandidate(candidate)} disabled={inspectionBusy !== null}>
                   {inspectionBusy === key ? 'Inspecting…' : 'Inspect package and SKILL.md'}

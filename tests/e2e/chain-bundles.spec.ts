@@ -66,6 +66,7 @@ test('shares mixed chains through a reviewed download and import with explicit c
   const importDialog = page.getByRole('dialog', { name: 'Import chain bundle' });
   await importDialog.getByLabel('Chain bundle (.loom.json)').setInputFiles(bundlePath);
   await expect(importDialog.getByText('Shared mixed chain', { exact: true })).toBeVisible();
+  await expect(importDialog.getByText(/sharing-probe: 2 files, .* MB\./)).toBeVisible();
   await expect(importDialog.getByRole('button', { name: 'Import chain, skills, and agents' })).toBeDisabled();
   await importDialog.getByRole('checkbox', { name: 'I reviewed and trust these instructions and packages.' }).check();
   await importDialog.getByRole('button', { name: 'Import chain, skills, and agents' }).click();

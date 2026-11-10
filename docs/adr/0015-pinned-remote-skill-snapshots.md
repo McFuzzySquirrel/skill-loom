@@ -70,6 +70,15 @@ The project catalog previously discovered local and harness-reported skill packa
 
 Chosen option: "Resolve each explicit refresh to a commit and retain a validated local snapshot", because this separates user-authorized network access from catalog reads and ensures refreshes cannot silently rewrite already-ingested package bytes.
 
+Refresh uses a depth-one clone without checkout or a blobless filter. A
+blobless clone followed by sequential blob reads caused one lazy remote fetch
+per missing package file; including blobs in the initial shallow transfer
+avoids those repeated network round trips. This may transfer unrelated blobs
+from the fetched revision, so staging size/entry limits, monitoring and
+cancellation remain mandatory. Snapshot content limits and validation are
+unchanged. A regression using a filter-capable Git remote verifies that a
+13-file package needs one upload-pack transfer rather than fourteen.
+
 ### Positive Consequences
 
 - Catalog browsing and package copy can use retained snapshots without contacting the remote repository.

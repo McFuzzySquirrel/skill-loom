@@ -61,6 +61,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Fixed
 
+- Remote refresh now fetches blobs with the shallow clone instead of triggering a separate lazy network fetch for each package file. No-checkout ingestion, staging limits and content validation remain in place. Discovery and bundle-import size displays now also use MB.
 - User-supplied Linux x64 evidence now confirms the OpenCode 2.2.6 record-aware parser fix: prompt, product advancement, recall and cleanup pass. Copilot CLI 1.0.107 also passes execution and recall, with its exact-baseline version warning retained. Managed multi-step automatic acceptance remains open; CLI guards are unchanged.
 - OpenCode OSC advancement now distinguishes root summary and child record IDs: child removal no longer erases root working, while root clear, matching-record clear, idle-only streams and per-step reset retain their fail-closed behavior. Live probe evidence now includes up to 64 status records and a truncation flag; automatic CLI starts remain blocked pending managed multi-step acceptance.
 - Health reporting now reads the existing run owner or persisted active-run pointer instead of always returning an inactive placeholder; invalid pointer files surface an error without being modified.

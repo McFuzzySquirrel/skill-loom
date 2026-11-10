@@ -76,6 +76,59 @@ afterEach(async () => {
 });
 
 describe('large remote catalog', () => {
+  it('fetches package blobs in one shallow transfer instead of one remote fetch per file', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'loom-git-transfers-'));
+    roots.push(root);
+    const repository = join(root, 'source.git');
+    execFileSync('git', ['init', '--bare', '--quiet', repository]);
+    const git = (args: string[], input?: string): string => execFileSync(
+      'git', [`--git-dir=${repository}`, ...args], { input, encoding: 'utf8' },
+    ).trim();
+    git(['config', 'uploadpack.allowFilter', 'true']);
+    const contents = [
+      '---\nname: transfer-fixture\n---\nInstructions.\n',
+      ...Array.from({ length: 12 }, (_, index) => `Unique file ${index}\n`),
+    ];
+    const entries = contents.map((content, index) => {
+      const object = git(['hash-object', '-w', '--stdin'], content);
+      return `100644 blob ${object}\t${index === 0 ? 'SKILL.md' : `file-${index}.txt`}`;
+    });
+    const tree = git(['mktree'], `${entries.join('\n')}\n`);
+    const commit = git(
+      ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit-tree', tree],
+      'Transfer fixture\n',
+    );
+    git(['update-ref', 'refs/heads/main', commit]);
+    git(['symbolic-ref', 'HEAD', 'refs/heads/main']);
+    const remote = 'https://example.invalid/transfers.git';
+    const config = join(root, 'gitconfig');
+    execFileSync('git', ['config', '--file', config, `url.file://${repository.replaceAll('\\', '/')}.insteadOf`, remote]);
+    const trace = join(root, 'trace.jsonl');
+    const names = ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_TRACE2_EVENT'] as const;
+    const previous = names.map((name) => [name, process.env[name]] as const);
+    process.env.GIT_CONFIG_GLOBAL = config;
+    process.env.GIT_CONFIG_NOSYSTEM = '1';
+    process.env.GIT_TRACE2_EVENT = trace;
+    try {
+      const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
+      await store.update({ remoteSkillSources: [{ id: 'transfers', repository: remote }] });
+      const snapshot = await refreshRemoteSkillSource(store, 'transfers', { temporaryDirectory: root });
+      expect(snapshot.packages).toMatchObject([{ files: contents.length }]);
+      const events = (await readFile(trace, 'utf8')).trim().split('\n').map((line) =>
+        JSON.parse(line) as { event: string; argv?: string[] });
+      const transfers = events.filter((event) => event.event === 'child_start' &&
+        event.argv?.some((arg) => arg.includes('git-upload-pack')));
+      expect(transfers).toHaveLength(1);
+      expect(events.filter((event) => event.event === 'child_start' &&
+        event.argv?.includes('fetch'))).toHaveLength(0);
+    } finally {
+      for (const [name, value] of previous) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
+  }, 30_000);
+
   it('treats remote instructions and executable package files as data during refresh and handoff', async () => {
     const root = await mkdtemp(join(tmpdir(), 'loom-git-untrusted-'));
     roots.push(root);

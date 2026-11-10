@@ -120,6 +120,12 @@ example, a 1,000-package, 20,000-file source also needs sufficient Git output,
 staging, total snapshot size, and timeouts. Each setting has a finite maximum.
 The UI edits and displays sizes in decimal MB (1 MB = 1,000,000 bytes);
 configuration and API values remain integer bytes, with no change to budgets.
+Refresh uses a depth-one, no-checkout clone with blobs included. This avoids
+partial-clone lazy fetches for individual package files, which can add a
+network round trip per file. Git staging still includes the whole fetched
+revision, including non-skill blobs, and is subject to the same finite budget;
+large mixed-content repositories may need a higher staging budget or a
+dedicated skills repository. Only validated skill/agent contents are retained.
 Staging is polled during Git operations and checked again afterward, so it is
 not a hard filesystem quota. Existing snapshots remain readable when budgets
 are lowered. Discovery handoffs and bundles retain their independent limits.
@@ -648,6 +654,17 @@ Config, chain, run, and active-run documents carry explicit versions. Unknown ve
 - **Live evidence is platform-specific.** Historical probes cover Linux ARM64 with OpenCode 2.2.5 and Copilot CLI 1.0.105. The supplied passing execution probe covers Linux x64 with OpenCode 2.2.6 and Copilot CLI 1.0.107, with a Copilot exact-version warning. Other platforms and versions remain unverified.
 
 ## Troubleshooting
+
+### Remote settings still show byte inputs or are not collapsed
+
+The current UI uses MB for size inputs and their maximums, with **Remote catalog
+limits** collapsed initially. API/config byte values are intentional. A running
+owner serves the built application, not changes made to source files. Finish
+or abort active runs, stop the owner using your normal UI/CLI shutdown path,
+update the checkout, run `npm run build`, and restart it. For a tarball install,
+rebuild/repack and reinstall the updated package instead. Reload the browser
+after restarting, and check that you are using the expected owner/profile.
+Do not delete configuration or change budgets to fix a stale UI.
 
 ### The server refuses to start with a host error
 

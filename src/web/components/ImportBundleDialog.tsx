@@ -7,6 +7,7 @@ import { BundleContents } from './BundleContents';
 import { InlineError } from './InlineError';
 import { useStatusAnnouncer } from './StatusRegion';
 import { HelpPopover } from './HelpPopover';
+import { formatMegabytes } from '../utils/size';
 
 export function ImportBundleDialog({
   projectId,
@@ -137,7 +138,7 @@ export function ImportBundleDialog({
           <BundleContents bundle={preview.bundle} />
           {preview.skills.map((skill) => (
             <div key={skill.name}>
-              <p>{skill.name}: {skill.files} files, {skill.bytes} bytes.</p>
+              <p>{skill.name}: {skill.files} files, {formatMegabytes(skill.bytes)}.</p>
               {preview.reuseEvidence.filter((item) => item.name === skill.name).map((item) => (
                 <details key={item.name}>
                   <summary>Installed package review: {item.name} ({item.differs ? 'different contents' : 'matching contents'})</summary>
@@ -147,7 +148,7 @@ export function ImportBundleDialog({
                     {item.inventory.map((file) => (
                       <li key={file.path}>
                         <code>{file.path}</code>{file.kind === 'directory' ? ' (directory)' :
-                          ` (${file.bytes} bytes${file.executable ? ', executable' : ''}; SHA-256 ${file.fingerprint})`}
+                          ` (${formatMegabytes(file.bytes)}${file.executable ? ', executable' : ''}; SHA-256 ${file.fingerprint})`}
                       </li>
                     ))}
                   </ul>
@@ -182,7 +183,7 @@ export function ImportBundleDialog({
             <div key={`${agent.harness}:${agent.agentPath}`}>
               <p>
                 Native {agent.harness} agent <strong>{agent.name}</strong> at{' '}
-                <code>{agent.agentPath}</code>, {agent.bytes} bytes.
+                <code>{agent.agentPath}</code>, {formatMegabytes(agent.bytes)}.
               </p>
               {agent.conflict ? (
                 <p role="alert">
