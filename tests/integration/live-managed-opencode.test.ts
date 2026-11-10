@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
@@ -86,9 +86,15 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  const temporaryBase = await realpath(tmpdir());
   for (const directory of retained.splice(0)) {
-    expect(directory.startsWith(join(tmpdir(), 'loom-managed-opencode-'))).toBe(true);
-    await rm(directory, { recursive: true, force: true });
+    try {
+      // macOS reports /var/folders while realpath yields /private/var/folders.
+      const canonical = await realpath(directory).catch(() => directory);
+      expect(canonical.startsWith(join(temporaryBase, 'loom-managed-opencode-'))).toBe(true);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   }
   await rm(root, { recursive: true, force: true });
 });
