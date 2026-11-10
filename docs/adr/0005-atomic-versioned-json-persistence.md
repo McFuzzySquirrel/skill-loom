@@ -4,7 +4,6 @@ applies_to:
   - "src/server/config/schema.ts"
   - "src/server/config/store.ts"
   - "src/server/chains/store.ts"
-  - "src/server/chains/library.ts"
   - "src/server/runs/store.ts"
   - "src/portable/runtime.ts"
 status: Accepted
@@ -32,7 +31,7 @@ status: Accepted
 
 ## Context and Problem Statement
 
-Skill Loom persists global configuration, project chains, global templates, and run records as files. A direct in-place write can leave a truncated document after a crash, and an unversioned format lets an older binary misinterpret a newer file. What storage contract keeps these records trustworthy?
+Skill Loom persists global configuration, drafts, project chains, and run records as files. A direct in-place write can leave a truncated document after a crash, and an unversioned format lets an older binary misinterpret a newer file. What storage contract keeps these records trustworthy?
 
 ## Decision Drivers
 

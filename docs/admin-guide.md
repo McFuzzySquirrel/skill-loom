@@ -93,7 +93,7 @@ The server reads configuration from the environment on each operation and from `
 
 | Setting | Default | Behavior |
 |---|---|---|
-| `LOOM_CONFIG_DIR` | `~/.config/loom` | Overrides the global config, recent-project, active-run pointer, and global chain template directory. A relative value is resolved against the server working directory. |
+| `LOOM_CONFIG_DIR` | `~/.config/loom` | Overrides the global config, recent-project, active-run pointer, drafts, and catalog snapshot directory. A relative value is resolved against the server working directory. |
 | `LOOM_HOST` | `127.0.0.1` | Bind host. Only `127.0.0.0/8`, `::1`, and `localhost` are accepted; anything else aborts startup. `localhost` is normalized to `127.0.0.1`. |
 | `LOOM_PORT` | `7373` | TCP port from 1 to 65535. |
 | `LOOM_WEB_ROOT` | discovered `dist/web` | Optional built-editor directory override for controlled deployments and tests. |
@@ -124,7 +124,7 @@ The config document is versioned and strict:
   with the original default budgets and are written as version 2 on the next
   update; older Skill Loom versions cannot read version 2 configs.
 - `recentProjects` stores the canonical path, display name, derived id, and last-opened time.
-- `uiPreferences` is opaque to the server; the web client owns its meaning.
+- `uiPreferences` is reserved for future client preferences; the current chain editor stores appearance locally in the browser and does not read this field.
 - Credential-like fields such as `apiKey`, `token`, or `secret` are structurally invalid and are never stored. Do not add them.
 
 Configuration writes use an atomic same-directory temporary-file replacement. A corrupt or unsupported-version config is reported, not silently rewritten or reset.
@@ -319,8 +319,7 @@ sandbox or a lock against external filesystem changes. Review output and run
 records can contain sensitive inputs. Confirmation records caller intent, not
 proof that a human reviewed it.
 To review a non-spawning action, send `{"runId":"...","action":"done"}` to
-`skill-loom run review-action`. The response contains the run view, the exact
-action evidence and a `reviewDigest`. To apply it, send the same fields plus
+`skill-loom run review-action`. The response contains the run record, the exact action evidence and a `reviewDigest`. To apply it, send the same fields plus
 `"reviewDigest":"..."` and `"confirmed":true` to `skill-loom run action`.
 Available non-spawning actions include supervised `done`, `failed`, and `skip`,
 and automatic `pause` and `skip`; `skip` requires a nonempty `reason` and
@@ -550,14 +549,14 @@ If you need multi-user or remote access, this project does not provide it. Treat
 | Path | Contents | Notes |
 |---|---|---|
 | `~/.config/loom/config.json` | Global config, executable overrides, extra skill directories, remote sources, recent projects, managed-workspace ownership, and UI preferences (unused by the chain editor). | Override the directory with `LOOM_CONFIG_DIR`. POSIX creation requests owner-only permissions; Windows service startup requires a verified protected private profile. |
-| `~/.config/loom/drafts/*.json` | Project-independent chain drafts. | Separate from templates and project chains; back up with the config directory. |
+| `~/.config/loom/drafts/*.json` | Project-independent chain drafts. | Separate from project chains; back up with the config directory. |
 | Caller-chosen file (`*.loom-discovery.json`) | A user-prepared discovery handoff containing the goal and exact selected candidate packages. | Not retained by the server. It can contain private or redistribution-restricted content; protect or remove it according to your local policy. |
 | `~/.config/loom/test-workspaces/<uuid>/` | Managed disposable projects created by `skill-loom workspace create`. | Retained until explicit `workspace remove`. Cleanup refuses the workspace holding the global active run. |
 | `~/.config/loom/discovery-workspaces/<uuid>/` | Reviewed handoff, bundled `scenario-discovery` package, managed project, result file, and run state for interactive scenario discovery (managed through the CLI control channel). | Retained until explicit cleanup. Cleanup refuses the workspace holding the global active run. |
 | `~/.config/loom/active-run.json` | Single global active-run pointer. | Holds the active run's project path, run id, and status. Do not edit while a run is live. |
 | `~/.config/loom/profile-owner.sqlite` | Profile ownership lock. | One server may own a profile at a time. Do not remove or replace this file while the server is running; the operating system releases the lock on process exit. Store the profile on a filesystem that supports SQLite locking. |
 | `~/.config/loom/control.json` | Temporary local control endpoint and bearer capability; Windows also includes client TLS credentials. | Private to the profile owner; do not share, commit, back up, or remove while the server is running. |
-| `~/.config/loom/chains/*.json` | Global chain templates. | Independent snapshots; importing copies one into a project with a new id. |
+| `~/.config/loom/chains/*.json` (legacy) | Chains written by the removed global-template library. | No current command reads or writes this directory; keep it only when preserving an old installation. |
 | `<project>/.loom/chains/*.json` | Saved project chains. | Versioned JSON, atomic writes. Back up or version these recipes. |
 | `<project>/.loom/runs/*.json` | Run snapshots, statuses, actions, and bounded tails. | At most 200 lines or 32 KiB per step. Never a full transcript. This repository git-ignores `.loom/runs/`. |
 | `<project>/.agents/skills/` | Newly copied and bundle-imported skill packages for either harness. | Independent project files; deleting a chain does not remove them. Include these in recipe backups when needed. Existing packages are not migrated. |
@@ -574,9 +573,9 @@ cp -a ~/.config/loom ~/loom-config-backup
 
 Back up a project's recipes by copying `<project>/.loom/chains/`. Run records are optional history; because they can contain terminal output, treat backups as sensitive and keep them out of version control. This repository already ignores `.loom/runs/`.
 
-Restore by stopping the server, replacing the config or chain directory, and starting again. Validate the restored JSON before use; valid chain version 1 documents migrate to version 2, while unsupported versions or corrupt documents are rejected.
+Restore by stopping the server, replacing the config or chain directory, and starting again. Validate the restored JSON before use; valid chain version 1 and 2 documents migrate to version 3 on read, while unsupported versions or corrupt documents are rejected.
 
-Managed test and discovery workspaces are working directories, not security sandboxes. They use the normal harness permissions and authentication available to the server process. Discovery workspaces persist candidate package contents and goals until explicit cleanup; protect the configured Skill Loom storage directory accordingly. Keep disk usage under review and use the UI's explicit cleanup; do not remove a directory while its run is active.
+Managed test and discovery workspaces are working directories, not security sandboxes. They use the normal harness permissions and authentication available to the server process. Discovery workspaces persist candidate package contents and goals until explicit cleanup; protect the configured Skill Loom storage directory accordingly. Keep disk usage under review and use `skill-loom workspace remove` for explicit cleanup; do not remove a directory while its run is active.
 
 
 ### Portable bundle administration
@@ -591,7 +590,7 @@ Back up both installed-mode records with their package. Missing, unsafe, inconsi
 
 These are mode-preservation and point-in-time review guarantees, not authenticated package metadata, protected content, descendant containment, or proof of power-loss durability where directory fsync is unavailable. Windows private IPC is a separate control-transport guarantee. Reviewed managed-execution safeguards and durable project claims remain in place.
 
-New remote snapshots also store a length-framed content digest derived from the fetched Git tree. Older snapshots without it are omitted from discovery until refreshed at the same revision and verified against the fetched contents; refreshing a newer branch tip does not upgrade a different historical revision. On the remote repositories page, use **Refresh this saved commit**, or run `skill-loom catalog source refresh --source <id> --revision <saved-commit>`. This requires Git access to that commit and does not change the configured ref. Alternatively, review and select the newer snapshot. The digest detects inconsistent package files or metadata, but neither it nor its writable index protects against an actor who can rewrite both.
+New remote snapshots also store a length-framed content digest derived from the fetched Git tree. Older snapshots without it are omitted from discovery until refreshed at the same revision and verified against the fetched contents; refreshing a newer branch tip does not upgrade a different historical revision. Use `skill-loom catalog source refresh --source <id> --revision <saved-commit>` to refresh a saved commit. This requires Git access to that commit and does not change the configured ref. The digest detects inconsistent package files or metadata, but neither it nor its writable index protects against an actor who can rewrite both.
 
 On Windows, a remote package is unavailable if its Git executable-mode index is missing, even if its files appear non-executable. Refresh the exact saved commit to reconstruct and verify that index.
 
@@ -650,7 +649,7 @@ Rollback:
 4. Restore the configuration and chain backups if the newer version wrote data you do not want to keep.
 5. Start the server and verify `/api/health`.
 
-Config, chain, run, and active-run documents carry explicit versions. Unknown versions are rejected rather than reinterpreted. Config and chain documents currently use version 2 and accept supported version 1 documents through their readers; there is no general migration tool.
+Config, chain, run, and active-run documents carry explicit versions. Unknown versions are rejected rather than reinterpreted. Config documents use version 2 and chain documents use version 3; supported older versions migrate on read, and there is no general migration tool.
 
 ## Known Limitations
 
@@ -697,11 +696,11 @@ Confirm `command -v opencode` or `command -v copilot` in the environment that la
 
 ### Copilot trust is blocked
 
-Use the trust panel, or run `copilot -C <absolute-project-path>` manually, and choose **Yes, and remember this folder for future sessions** in the folder-trust dialog. A session-only choice does not persist in `trustedFolders`. Exit the terminal and rerun preflight. Skill Loom reads `~/.copilot/config.json` and never writes it. Resolve trust before step 1 because a prompt queued behind the dialog can be swallowed.
+Run `copilot -C <absolute-project-path>` in a normal terminal and choose **Yes, and remember this folder for future sessions** in the folder-trust dialog. A session-only choice does not persist in `trustedFolders`. Exit the terminal and rerun preflight. Skill Loom reads `~/.copilot/config.json` and never writes it. Resolve trust before step 1 because a prompt queued behind the dialog can be swallowed.
 
 ### A run is interrupted or the active pointer is stale
 
-Restart the server and let startup recovery mark active records `interrupted` and clear the stale pointer. Then use **Retry interrupted step**, **Continue from next pending step**, or **Restart chain** in the run view. Do not delete `active-run.json` while a run is live.
+Restart the server and let startup recovery mark active records `interrupted` and clear the stale pointer. Then inspect the run with `skill-loom run show` and use `run review-action` plus `run action` to retry the interrupted step, continue from the next pending step, or restart from the snapshot. Do not delete `active-run.json` while a run is live.
 
 ### A corrupt run or chain file appears
 
@@ -723,7 +722,7 @@ For the full troubleshooting contract, including the dirty Git tree, node-pty, m
 
 ## Recovery and Support
 
-- **Run recovery:** restart the server, inspect the interrupted run, and choose retry, continue, or restart. Nothing replays silently.
+- **Run recovery:** restart the server, inspect the interrupted run with `skill-loom run show`, then use `run review-action` and `run action` to retry, continue, or restart. Nothing replays silently.
 - **Data recovery:** restore `~/.config/loom` or `<project>/.loom/chains/` from backup. Run history is optional and may be deleted when no run is active.
 - **Stale active pointer:** let startup recovery clear it; do not remove it while a run is live.
 - **Support ownership and intake:** see [SUPPORT.md](SUPPORT.md).

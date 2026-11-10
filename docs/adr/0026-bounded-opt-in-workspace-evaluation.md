@@ -8,6 +8,9 @@ status: Accepted
 
 # ADR-0026: Evaluate retained workspaces only with explicit bounded checks
 
+- **Deciders:** McFuzzySquirrel and the Skill Loom agent team
+- **Date:** 2026-11-10
+
 ## Context
 
 A retained test workspace needs objective evidence about what a chain left

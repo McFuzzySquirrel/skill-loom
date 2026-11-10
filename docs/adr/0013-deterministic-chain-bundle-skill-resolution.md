@@ -8,7 +8,6 @@ applies_to:
   - "src/web/hooks/useChainDraft.ts"
   - "tests/unit/chain-model.test.ts"
   - "tests/unit/preflight-engine.test.ts"
-  - "tests/integration/chain-bundles.test.ts"
 status: Accepted
 ---
 

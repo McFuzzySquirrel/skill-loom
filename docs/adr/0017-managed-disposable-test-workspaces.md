@@ -5,16 +5,13 @@ applies_to:
   - "src/server/projects/registry.ts"
   - "src/server/runs/test-workspaces.ts"
   - "src/server/runs/orchestrator.ts"
-  - "src/server/routes/test-workspaces.ts"
-  - "src/web/routes/ChainBuilderPage.tsx"
-  - "src/web/routes/TestWorkspacesPage.tsx"
 status: Accepted; web UI superseded in part by ADR-0027 and ADR-0028
 ---
 
 # ADR-0017: Run chain tests in managed disposable workspaces
 
 - **Deciders:** McFuzzySquirrel and the Skill Loom agent team
-- **Date:** 2026-11-13
+- **Date:** 2026-11-07
 
 **Technical Story:** Let users test a saved chain without running its file-producing steps in the original project, while retaining enough ownership metadata for inspection, recovery, and explicit cleanup.
 

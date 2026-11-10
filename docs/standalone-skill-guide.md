@@ -4,7 +4,7 @@
 
 ## Who This Is For
 
-Use this path when you already work in an agent harness (GitHub Copilot CLI, OpenCode, or another Agent Skills host) and want chains without installing or running Skill Loom. If you want the visual builder, terminal runner, managed automatic runs, or the CLI owner, use the [user guide](user-guide.md) instead.
+Use this path when you already work in an agent harness (GitHub Copilot CLI, OpenCode, or another Agent Skills host) and want chains without installing or running Skill Loom. If you want the visual chain editor, managed automatic runs, or the CLI owner, use the [user guide](user-guide.md) instead.
 
 ## What You Get and What You Do Not
 
@@ -111,7 +111,7 @@ When a Skill Loom owner is running (`skill-loom service start`), `loom-chain-wor
 
 ## Related Documents
 
-- [User guide: Run an exported chain inside a harness](user-guide.md#run-an-exported-chain-inside-a-harness)
+- [User guide: Run an exported chain inside your harness](user-guide.md#run-an-exported-chain-inside-your-harness)
 - [ADR-0014: Execute exported chains through a standalone agent skill](adr/0014-portable-agent-skill-execution.md)
 - [Administrator guide: Portable bundle administration](admin-guide.md#portable-bundle-administration)
 - [Changelog](../CHANGELOG.md)

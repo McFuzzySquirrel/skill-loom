@@ -1,6 +1,6 @@
 # Standalone CLI and agent-driven chains: end-to-end plan
 
-> **Historical.** This plan predates the CLI- and skill-driven pivot ([ADR-0027](adr/0027-cli-and-skill-driven-workflow.md), [ADR-0028](adr/0028-single-purpose-chain-editor.md)). The web screens it describes were removed; only the chain editor remains. See the [user guide](user-guide.md) for current behavior.
+> **Historical.** This plan predates the CLI- and skill-driven pivot ([ADR-0027](../adr/0027-cli-and-skill-driven-workflow.md), [ADR-0028](../adr/0028-single-purpose-chain-editor.md)). The web screens it describes were removed; only the chain editor remains. See the [user guide](../user-guide.md) for current behavior.
 
 ## Problem and outcome
 
@@ -706,7 +706,7 @@ clients must load and send the revision. External filesystem writes remain
 uncoordinated, so this is not an unconditional concurrency guarantee.
 The OSC parser recognizes colon-separated parameters and now distinguishes
 root summary from child status records. User-supplied OpenCode 2.2.6 evidence
-(`docs/evidence/live-execution-2026-11-10-opencode-2.2.6.json`) passed the
+(`docs/evidence/live-execution-2026-11-10-opencode-2.2.6-failed.json`) passed the
 prompt, loose signal, recall and cleanup checks but failed product advancement.
 Upstream clears child records before root idle; the record-aware parser fix
 preserves root working across that child clear, with regression coverage.

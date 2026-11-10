@@ -1,6 +1,6 @@
 # Implementation plan: intuitive workflows and scenario discovery
 
-> **Historical.** This plan predates the CLI- and skill-driven pivot ([ADR-0027](adr/0027-cli-and-skill-driven-workflow.md), [ADR-0028](adr/0028-single-purpose-chain-editor.md)). The web screens it describes were removed; only the chain editor remains. See the [user guide](user-guide.md) for current behavior.
+> **Historical.** This plan predates the CLI- and skill-driven pivot ([ADR-0027](../adr/0027-cli-and-skill-driven-workflow.md), [ADR-0028](../adr/0028-single-purpose-chain-editor.md)). The web screens it describes were removed; only the chain editor remains. See the [user guide](../user-guide.md) for current behavior.
 
 **Status:** Implemented. This document describes the delivered Start, discovery handoff, and project-independent shared-bundle workflows; see the user, administrator, and operations guides for current behavior.
 

@@ -6,35 +6,13 @@
 
 The sequence is `OSC 7501;state=working|idle|clear` with an optional `id=ses_...`. It may be split across chunks and mixed with unrelated ANSI.
 
-```ts
-type Phase = "unknown" | "working" | "idle" | "clear";
-
-class OscState {
-  private buffer = "";
-  private sawWorking = false;
-  private phase: Phase = "unknown";
-
-  push(chunk: string): Phase {
-    this.buffer += chunk;
-    const re = /\x1b\]7501;([^\x07\x1b]*)(?:\x07|\x1b\\)/g;
-    let match: RegExpExecArray | null;
-    let changed: Phase = this.phase;
-    while ((match = re.exec(this.buffer))) {
-      const state = /state=([a-z]+)/.exec(match[1])?.[1];
-      if (state === "working") { this.sawWorking = true; changed = "working"; }
-      else if (state === "idle" && this.sawWorking) { changed = "idle"; }
-      else if (state === "clear") { this.sawWorking = false; changed = "clear"; }
-    }
-    this.buffer = this.buffer.slice(Math.max(0, this.buffer.lastIndexOf("\x1b]7501;")));
-    this.phase = changed;
-    return changed;
-  }
-
-  get advanced(): boolean { return this.phase === "idle"; }
-}
-```
-
-Advance only when `advanced` becomes true after a `working` in the same step.
+Use `Osc7501StateMachine` from `src/server/runs/osc.ts`, not a separate regex
+implementation. Prefer the root summary (no `id`) over child records. Child
+clear removes that record, not the root's working observation. Root clear
+resets observation; an identified-only record requires a matching idle and
+clear. Advance only on a returned change with `advanced: true`, after working
+for the same record in the same step. Reset before each step. A later root
+clear can reset `completed` even though an earlier change already advanced.
 
 ## Transition matrix
 

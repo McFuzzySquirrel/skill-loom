@@ -3,8 +3,6 @@ id: ADR-0019
 applies_to:
   - "src/server/chains/drafts.ts"
   - "src/server/routes/drafts.ts"
-  - "src/web/routes/GlobalDraftsPage.tsx"
-  - "src/web/routes/ChainBuilderPage.tsx"
   - "src/server/runs/test-workspaces.ts"
   - "tests/integration/drafts-routes.test.ts"
 status: Accepted; web UI superseded in part by ADR-0027 and ADR-0028
@@ -13,13 +11,13 @@ status: Accepted; web UI superseded in part by ADR-0027 and ADR-0028
 # ADR-0019: Store project-independent chain drafts separately
 
 - **Deciders:** McFuzzySquirrel and the Skill Loom agent team
-- **Date:** 2026-11-13
+- **Date:** 2026-11-07
 
 **Technical Story:** Let users author, test, and export chains from pinned remote skills and agents without first opening or modifying an existing project.
 
 ## Draft Rules
 
-- **MUST:** Persist drafts independently from project chains and reusable global templates.
+- **MUST:** Persist drafts independently from project chains. The global template library was later removed by ADR-0027 and ADR-0028.
 - **MUST:** Reuse the versioned chain model and service behavior rather than introducing a separate chain format.
 - **MUST:** Pin selected remote skills and agents to their verified source snapshots; never execute repository files during registration, refresh, or cataloging.
 - **MUST:** Create test workspaces from a draft without modifying another project.
@@ -35,7 +33,7 @@ status: Accepted; web UI superseded in part by ADR-0027 and ADR-0028
 
 ## Considered Options
 
-- Store drafts in the global template library.
+- Store drafts in the global template library. (Retired: the library was removed by ADR-0027 and ADR-0028.)
 - Store drafts inside a placeholder project.
 - Store drafts in a separate config-owned directory while reusing the chain service.
 

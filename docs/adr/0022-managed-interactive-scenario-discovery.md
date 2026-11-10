@@ -2,11 +2,7 @@
 id: ADR-0022
 applies_to:
   - "src/server/runs/discovery-workspaces.ts"
-  - "src/server/routes/discovery.ts"
-  - "src/server/routes/runs.ts"
   - "src/server/config/schema.ts"
-  - "src/web/routes/DiscoveryPage.tsx"
-  - "src/web/routes/RunPage.tsx"
   - ".github/skills/scenario-discovery/"
 status: Accepted; web UI superseded in part by ADR-0027 and ADR-0028
 ---
@@ -65,4 +61,4 @@ Automatic import is an explicit opt-in. It creates a new global draft only after
 ## Links
 
 - Related: [ADR-0015](0015-pinned-remote-skill-snapshots.md), [ADR-0017](0017-managed-disposable-test-workspaces.md), [ADR-0019](0019-project-independent-chain-drafts.md), and [ADR-0021](0021-validated-project-independent-discovery-handoff.md).
-- Regression coverage: discovery workspace route/service tests, run-route supervised-only tests, and discovery Playwright flows.
+- Regression coverage: discovery workspace service and control-operation tests, and supervised-only run-control tests. Browser flows were retired with the multi-screen UI.

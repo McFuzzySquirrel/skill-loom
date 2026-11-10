@@ -93,7 +93,7 @@ A bundle contains the chain and the complete packages of every referenced skill 
 
 Install the `loom-run-bundle` skill into the target project's `.agents/skills/` (build it with `npm run build:portable-skill` in a checkout, or copy `dist/skills/loom-run-bundle/`). In your harness session, invoke it with an absolute path to the `.loom.json` bundle. It inspects, asks you to review and confirm installation, then runs exactly one step at a time. See the [standalone skill guide](standalone-skill-guide.md) for the full procedure, recovery, and caveats.
 
-Portable runs are supervised by default: confirm each step, then record its outcome. Outcomes are agent-reported, not verified process exits. Only one unfinished portable run may exist in a project, and Skill Loom cannot lock a project against other runners, so ensure nothing else is using it. To inspect project coordination use `skill-loom project coordination-review`; it does not stop or change runs.
+Portable runs are supervised by default: confirm each step, then record its outcome. Outcomes are agent-reported, not verified process exits. Only one unfinished portable run may exist in a project, and the helper records a project-local SQLite claim so current helpers reject a second preparation or step. This does not coordinate with managed runs, other profiles, or older helpers, so ensure nothing else is using the project. To inspect project coordination use `skill-loom project coordination-review`; it does not stop or change runs.
 
 ### Test in a disposable workspace
 
@@ -121,11 +121,11 @@ skill-loom run events           # JSON Lines status stream
 
 Preflight checks the harness executable, authentication evidence, Copilot trust, skill resolution, and inputs, and never edits files. CLI-managed starts are currently limited to reviewed instruction-only chains: skill-bearing chains and selected native agents are rejected, and OpenCode automatic starts are blocked pending live signal verification.
 
-A step never advances because output went quiet. **Supervised** runs advance on explicit `run action` calls (done, failed, skipped, retry, skip, abort). **Automatic** runs advance only on the harness's declared signal: an OpenCode `OSC 7501` working-to-idle event, or exit of the Copilot headless step process. A missing signal, a non-zero exit, or the 30-minute per-step timeout pauses the run.
+A step never advances because output went quiet. **Supervised** runs advance on explicit `run action` calls (`done`, `failed`, `skip`, `retry`, `abort`, or `pause`). **Automatic** runs advance only on the harness's declared signal: an OpenCode `OSC 7501` working-to-idle event, or exit of the Copilot headless step process. A missing signal, a non-zero exit, or the 30-minute per-step timeout pauses the run.
 
 ### Recover an interrupted run
 
-If the service stops, startup recovery marks the active run `interrupted`. Use `run show` to read the bounded step tail and reason, then `run action` to retry the interrupted step, continue from the next pending step, or restart from the frozen snapshot. Do not edit run JSON by hand.
+If the service stops, startup recovery marks the active run `interrupted`. Use `run show` to read the bounded step tail and reason, then use `run review-action` and `run action` to retry the interrupted step, continue from the next pending step, or restart from the frozen snapshot. Do not edit run JSON by hand.
 
 ## Accessibility
 

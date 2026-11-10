@@ -42,7 +42,7 @@ Start with the [user guide](docs/user-guide.md) to design and share a workflow, 
 
 ## About
 
-Agent CLIs such as OpenCode and GitHub Copilot can load installed skills, but turning a set of skills into a repeatable, ordered workflow is manual and easy to get wrong. Skill Loom is driven by its CLI and companion skills (which install the CLI when missing); its only web screen is a visual chain editor, opened with `skill-loom edit`, for changing step order, instructions, and inputs. It provides a local workspace to inspect available skills, assemble and save chains, keep reusable templates in a library, and export reviewed bundles for use in other repositories. Register a project when you want its skill catalog for authoring or optional local tests.
+Agent CLIs such as OpenCode and GitHub Copilot can load installed skills, but turning a set of skills into a repeatable, ordered workflow is manual and easy to get wrong. Skill Loom is driven by its CLI and companion skills (which install the CLI when missing); its only web screen is a visual chain editor, opened with `skill-loom edit`, for changing step order, instructions, and inputs. It provides a local workspace to inspect available skills, assemble and save chains as drafts or project chains, and export reviewed bundles for use in other repositories. Register a project when you want its skill catalog for authoring or optional local tests.
 
 The product promise is deliberately narrow:
 
@@ -77,14 +77,14 @@ skill-loom catalog --help                     # list/refresh Git sources, search
 skill-loom run preflight                      # no model call
 ```
 
-Unix uses a private socket; Windows uses mutually authenticated loopback TLS and requires a protected private profile on local NTFS/ReFS storage (PowerShell 7, or Windows PowerShell 5.1 with .NET 4.7.2+). Unsafe existing Windows profiles are rejected, not reconfigured; see the [administrator guide](docs/admin-guide.md#cli-flags). Remaining planned capabilities are in the [tracked plan](docs/standalone-cli-plan.md).
+Unix uses a private socket; Windows uses mutually authenticated loopback TLS and requires a protected private profile on local NTFS/ReFS storage (PowerShell 7, or Windows PowerShell 5.1 with .NET 4.7.2+). Unsafe existing Windows profiles are rejected, not reconfigured; see the [administrator guide](docs/admin-guide.md#cli-flags). Remaining blocked and unverified capabilities are listed in [known gaps](docs/current-gaps.md).
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
 | Runtime | Node.js `>=24`; npm |
-| Server | Fastify `5.12.8`, `@fastify/websocket` `11.3.6`, `@fastify/static` `10.1.9`, `ws` `8.22.1` |
+| Server | Fastify `5.12.8`, `@fastify/static` `10.1.9` |
 | Language | TypeScript `7.0.2` (server and web project configs) |
 | Chain editor | React `19.3.1`, React DOM `19.3.1`, Vite `8.3.5`, `@vitejs/plugin-react` `6.2.1` |
 | Terminal | `node-pty` `1.1.0` (server-owned PTY; `run attach` streams it to the CLI) |
@@ -118,7 +118,7 @@ flowchart LR
   PTY --> Copilot
 ```
 
-A one-page [end-to-end explainer](docs/skill-loom-end-to-end.html) walks through the components, the folder-to-run journey, the step request path, and the OpenCode/Copilot differences. It predates the CLI-driven pivot: read its "Browser" participant as the `skill-loom` CLI or the chain editor, and its project and builder screens as CLI commands.
+The pre-pivot end-to-end explainer is kept in the [documentation archive](docs/archive/README.md) for history only; its browser and project screens no longer exist.
 
 Key boundaries and the decisions behind them:
 
@@ -172,7 +172,7 @@ The [administrator guide](docs/admin-guide.md#installation) covers the native to
 
 ## Requirements
 
-- **Node.js 24 or newer** (`package.json` declares `>=24`; the validation recorded for 0.1.0 ran on Node 26.13.0, while Node 24.22.2 was used earlier in development).
+- **Node.js 24 or newer** (`package.json` declares `>=24`; recorded live evidence spans Node 26.13.0 on Linux ARM64 and Node 26.12.0 for the latest passing Linux x64 execution probe).
 - npm.
 - A native build toolchain for `node-pty`: Python 3, `make`, and a C++ compiler. On Debian/Ubuntu install `build-essential` and `python3`; on macOS install the Xcode Command Line Tools.
 - **Stable OpenCode CLI 2.2.5 or newer** for OpenCode chains, installed and authenticated. Live signal verification is still required for automatic advancement.
@@ -314,7 +314,7 @@ The full workflow, run controls, statuses, recovery, accessibility, and privacy 
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `LOOM_CONFIG_DIR` | `~/.config/loom` | Global config, recent projects, active-run pointer, and global chain templates. |
+| `LOOM_CONFIG_DIR` | `~/.config/loom` | Global config, recent projects, active-run pointer, drafts, and catalog snapshots. |
 | `LOOM_HOST` | `127.0.0.1` | Loopback bind host. Any non-loopback value aborts startup. |
 | `LOOM_PORT` | `7373` | TCP port from 1 to 65535. |
 | `LOOM_WEB_ROOT` | discovered `dist/web` | Optional built-editor directory override for controlled deployments and tests. |
@@ -353,12 +353,7 @@ Skill Loom is released under the [MIT License](LICENSE). Contributions are accep
 
 ## What's Next
 
-There is no committed roadmap. These are known gaps and possible follow-up work, not shipped behavior:
-
-- Verify a managed multi-step automatic OpenCode journey before enabling the blocked CLI path. The record-aware parser passed the [user-supplied OpenCode 2.2.6 live probe](docs/evidence/live-execution-2026-11-10-opencode-2.2.6-passed.json), including advancement, recall and cleanup.
-- Expand live evidence beyond the recorded Linux ARM64 and Linux x64 setups; the latest execution probe uses OpenCode 2.2.6 and Copilot CLI 1.0.107.
-- Decide whether to publish `skill-loom-cli`; add repository/release metadata and a published upgrade path.
-- Consider per-step model or harness selection only as a new product decision; it is not supported today.
+There is no committed roadmap. [Known gaps](docs/current-gaps.md) lists the blocked and unverified capabilities, including the managed multi-step automatic OpenCode journey and the publication decision. Per-step model or harness selection is not supported and would require a new product decision.
 
 ## License
 
@@ -366,7 +361,7 @@ Skill Loom is licensed under the [MIT License](LICENSE). The npm package remains
 
 ## Acknowledgements
 
-Skill Loom builds on Fastify, React, Vite, TypeScript, Zod, YAML, `ws`, `node-pty`, Vitest, and `tsx`. It integrates with OpenCode and GitHub Copilot CLI, whose own licenses and terms govern those tools. The live evidence and support workflow were produced by the project's agent team, documented in [docs/SUPPORT.md](docs/SUPPORT.md).
+Skill Loom builds on Fastify, React, Vite, TypeScript, Zod, YAML, `node-pty`, Vitest, and `tsx`. It integrates with OpenCode and GitHub Copilot CLI, whose own licenses and terms govern those tools. The live evidence and support workflow were produced by the project's agent team, documented in [docs/SUPPORT.md](docs/SUPPORT.md).
 
 ## Author
 
@@ -375,11 +370,13 @@ Maintained by **McFuzzySquirrel** ([GitHub](https://github.com/McFuzzySquirrel))
 ## Operations guide
 
 - [Visual tour](docs/visual-tour.md) — the visual chain editor.
-- [End-to-end explainer](docs/skill-loom-end-to-end.html) — one-page visual tour of the components, run journey, step path, and harness differences (predates the CLI-driven pivot).
+- [Documentation map](docs/README.md) — canonical, evidence, skill, and archived documents.
 - [User guide](docs/user-guide.md) — build, preflight, run, recover, accessibility, and privacy.
 - [Administrator guide](docs/admin-guide.md) — install, configure, back up, upgrade, monitor, and harden.
 - [Operations guide](docs/OPERATIONS.md) — the full operator contract: data locations, harness prerequisites, Copilot trust, permissions, fork behavior, and troubleshooting.
+- [Known gaps](docs/current-gaps.md) — blocked, partial, and unverified capabilities.
 - [Architecture decision records](docs/adr/README.md) — one record per durable decision, with agent rules and verification.
 - [Draft release notes for package version 0.1.0](docs/releases/0.1.0.md) — highlights, compatibility, limitations, and validation status; not a published release.
 - [Changelog](CHANGELOG.md) — Keep a Changelog history.
 - [Support](docs/SUPPORT.md) — ownership, intake, and escalation.
+- [Documentation archive](docs/archive/README.md) — retired plans and generated material kept for history.

@@ -22,9 +22,13 @@ the first CLI command, run `skill-loom --version`.
   toolchain for `node-pty`. After approval, install from the project repository:
   `git clone https://github.com/McFuzzySquirrel/skill-loom.git <temp-dir>`, then in
   that directory `npm install`, `npm run build`, `npm pack`, and
-  `npm install -g ./skill-loom-cli-<version>.tgz`. Show each command's result,
-  verify `skill-loom --version`, and remove the temporary clone only after the
-  user agrees. If any step fails, stop and report it; do not work around it.
+  `npm install -g ./skill-loom-cli-<version>.tgz`. On npm 11.20 and newer, allow
+  the tarball install scripts by path so the advisory clears:
+  `--allow-scripts="file:$PWD/skill-loom-cli-<version>.tgz,node-pty"`. A
+  name-only list covers `node-pty` but not the tarball package. Show each
+  command's result, verify `skill-loom --version`, and remove the temporary
+  clone only after the user agrees. If any step fails, stop and report it; do
+  not work around it.
 - The only interactive screen is the chain editor. When the user wants to change
   step order, instructions, or inputs visually, run
   `skill-loom edit --draft <id>` or `skill-loom edit --project <id> --chain <id>`

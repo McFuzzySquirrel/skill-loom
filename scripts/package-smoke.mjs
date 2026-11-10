@@ -419,57 +419,11 @@ async function main() {
     if (JSON.parse(control.stdout).result?.state !== 'running') {
       throw new Error('The installed CLI could not authenticate to the packaged server.');
     }
-    const workflowResponse = await fetch(
-      `http://127.0.0.1:${String(port)}/api/portable-skill/loom-chain-workflow`,
-    );
-    if (!workflowResponse.ok ||
-        workflowResponse.headers.get('content-type') !== 'application/zip' ||
-        workflowResponse.headers.get('cache-control') !== 'no-store' ||
-        !Buffer.from(await workflowResponse.arrayBuffer()).equals(
-          await readFile(join(repoRoot, 'dist', 'skills', 'loom-chain-workflow.zip')),
-        )) {
-      throw new Error('The packaged server did not serve the chain workflow skill archive.');
-    }
-
-    const projectPath = join(temporaryRoot, 'scenario-project');
-    await mkdir(projectPath, { recursive: true });
-    const projectResponse = await fetch(`http://127.0.0.1:${String(port)}/api/projects`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'open', path: projectPath }),
-    });
-    if (!projectResponse.ok) {
-      throw new Error(`Could not register the packaged scenario project: HTTP ${projectResponse.status}.`);
-    }
-    const projectBody = await projectResponse.json();
-    const projectId = projectBody?.project?.id;
-    if (typeof projectId !== 'string' || projectId === '') {
-      throw new Error('Packaged server returned no project id for the scenario smoke test.');
-    }
-
-    const skillResponse = await fetch(
-      `http://127.0.0.1:${String(port)}/api/projects/${encodeURIComponent(projectId)}/catalog/scenario-skills/minimax-xlsx/copy`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ harness: 'opencode' }),
-      },
-    );
-    if (skillResponse.status !== 201) {
-      throw new Error(`Packaged server could not copy the bundled scenario skill: HTTP ${skillResponse.status}.`);
-    }
-    const skill = await skillResponse.json();
-    const sourceNotice = await readFile(
-      join(projectPath, '.agents', 'skills', 'minimax-xlsx', 'SKILL-LOOM-SOURCE.md'),
-      'utf8',
-    );
-    if (
-      skill?.name !== 'minimax-xlsx' ||
-      typeof skill.revision !== 'string' ||
-      !sourceNotice.includes(skill.revision)
-    ) {
-      throw new Error('Packaged scenario copy is missing its source attribution.');
-    }
+    // The packaged server exposes only health, lifecycle, draft/chain save,
+    // and the authenticated control channel. Project, catalog, and
+    // portable-skill HTTP routes were removed with the multi-screen UI, so the
+    // smoke test verifies startup, control authentication, and clean stop here;
+    // CLI contract coverage lives in the unit and integration suites.
     const stopped = await execFileAsync(process.execPath, [
       installedCli, 'service', 'stop', '--config-dir', configDirectory,
     ], { cwd: installedRoot, timeout: 30_000 });

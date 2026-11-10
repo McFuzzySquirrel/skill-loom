@@ -56,7 +56,7 @@ Chosen option: "Server-owned shell-free spawn plus a typed PTY WebSocket", becau
 - Prompts and paths are passed as argv entries, not interpreted by a shell.
 - The browser cannot choose an executable or working directory.
 - PTYs survive a browser detach and are closed by the run lifecycle.
-- Terminal output is rendered as text through xterm.js.
+- Terminal output is streamed as bytes to the single control-channel subscriber (`skill-loom run attach`).
 
 ### Negative Consequences
 
