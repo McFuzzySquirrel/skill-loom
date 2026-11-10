@@ -36,6 +36,7 @@ Start with the [user guide](docs/user-guide.md) to design and share a workflow, 
 - [How to Contribute](#how-to-contribute)
 - [What's Next](#whats-next)
 - [License](#license)
+- [Third-party skills and licenses](#third-party-skills-and-licenses)
 - [Acknowledgements](#acknowledgements)
 - [Author](#author)
 - [Operations guide](#operations-guide)
@@ -360,6 +361,18 @@ There is no committed roadmap. [Known gaps](docs/current-gaps.md) lists the bloc
 ## License
 
 Skill Loom is licensed under the [MIT License](LICENSE). The npm package remains `"private": true`, so there is still no registry release or supported upgrade path.
+
+## Third-party skills and licenses
+
+Skill Loom's own code is MIT-licensed. Skills are independent third-party packages: Skill Loom does not author, audit, or guarantee skills you install yourself, or skills a harness discovers in project or global skill directories. Review their source, license, scripts, and prerequisites before use.
+
+For the scenario skills bundled as pinned snapshots, provenance and license evidence are tracked:
+
+- [Bundled-package notice](src/server/chains/scenario-skills/THIRD_PARTY_NOTICES.md) — upstream repository, pinned revision, and license evidence for every package.
+- [Scenario chain examples](docs/scenario-chains.md) — per-skill upstream link, reviewed license, and alternative install command.
+- A `SKILL-LOOM-SOURCE.md` attribution notice is written next to each copied scenario package.
+
+Skill Loom does not establish redistribution rights or collect license evidence for arbitrary installed skills; that review remains yours — see [ADR-0020](docs/adr/0020-local-shared-bundle-library.md).
 
 ## Acknowledgements
 
