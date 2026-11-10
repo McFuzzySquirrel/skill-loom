@@ -704,13 +704,17 @@ root summary from child status records. User-supplied OpenCode 2.2.6 evidence
 prompt, loose signal, recall and cleanup checks but failed product advancement.
 Upstream clears child records before root idle; the record-aware parser fix
 preserves root working across that child clear, with regression coverage.
-Automatic OpenCode advancement remains unverified until a fresh live probe of
-the changed parser passes; CLI guards remain in place.
+A subsequent user-supplied probe
+(`docs/evidence/live-execution-2026-11-10-opencode-2.2.6-passed.json`) passed
+with explicit root and child records, product advancement, recall and cleanup.
+The signal mismatch is resolved on that Linux x64 / OpenCode 2.2.6 setup.
+The managed multi-step automatic journey remains unverified; CLI guards remain
+in place until that separate acceptance gate passes.
 The discovery skill documents the partial CLI catalog and draft workflow;
 skill-bearing CLI starts and recovery are not yet integrated. Restricted instruction-only start supports supervised
 mode and automatic process-exit mode; automatic progression and reported broad
 permissions each need separate confirmation. OSC-based automatic CLI starts
-and execution actions remain blocked pending live verification. The start binds the chain,
+and execution actions remain blocked pending managed multi-step verification. The start binds the chain,
 project identity, inputs, and preflight evidence and requires execution
 confirmation plus separate live-test confirmation for a test workspace.
 Fake process-exit CLI tests cover completion, nonzero-exit pause, reviewed

@@ -287,7 +287,8 @@ exclude discovery workspaces. Automatic starts additionally require
 `"automaticConfirmed":true` and, when preflight reports broad permissions,
 `"broadPermissionsConfirmed":true`; the chain's own permission opt-in remains
 mandatory. Only adapters with process-exit advancement currently qualify;
-OpenCode automatic CLI starts remain blocked pending live signal verification.
+OpenCode automatic CLI starts remain blocked pending managed multi-step verification;
+the record-aware signal parser has passed a live OpenCode 2.2.6 probe.
 Skill-bearing starts are not yet available through the CLI. This is not a
 sandbox or a lock against external filesystem changes. Review output and run
 records can contain sensitive inputs. Confirmation records caller intent, not
@@ -620,14 +621,14 @@ Config, chain, run, and active-run documents carry explicit versions. Unknown ve
 
 ## Known Limitations
 
-- **Automatic OpenCode advancement is not proven end-to-end.** The parser now accepts colon-separated `OSC 7501` parameters and preserves root working across child-record clear. A successful live rerun of the record-aware fix is still required. Supervised OpenCode runs are unaffected; automatic CLI starts remain blocked.
+- **Automatic OpenCode advancement is not proven end-to-end.** The record-aware parser passed a user-supplied OpenCode 2.2.6 live probe, including product advancement and cleanup. The managed multi-step automatic journey remains unverified; automatic CLI starts remain blocked. Supervised runs are unaffected.
 - **One harness per chain; no per-step harness or model selection.**
 - **Native fork is available only on OpenCode's headless surface.** Supervised OpenCode and all Copilot forks use a deterministic handoff note, not a native session fork.
 - **One active run globally.** A second start is rejected while a run is starting, running, paused, or awaiting user input.
 - **Run history is bounded.** A step tail is at most 200 lines or 32 KiB; there is no full transcript.
 - **No authentication, TLS, or remote access.** This is intentional, not a missing configuration.
 - **No published npm package or Git release tag.** Version `0.1.0` is declared locally and the package is private.
-- **Live evidence is platform-specific.** The recorded probes ran on Linux ARM64 with OpenCode 2.2.5 and Copilot CLI 1.0.105; other platforms and versions are unverified.
+- **Live evidence is platform-specific.** Historical probes cover Linux ARM64 with OpenCode 2.2.5 and Copilot CLI 1.0.105. The supplied passing execution probe covers Linux x64 with OpenCode 2.2.6 and Copilot CLI 1.0.107, with a Copilot exact-version warning. Other platforms and versions remain unverified.
 
 ## Troubleshooting
 

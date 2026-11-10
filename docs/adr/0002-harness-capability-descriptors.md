@@ -52,7 +52,9 @@ The live probes use stable OpenCode >=2.2.5 as their minimum version policy,
 not an exact-version pin. They retain the observed version and exact baseline
 comparison in evidence. Passing the version threshold does not establish
 capability compatibility: live signal and session checks remain necessary,
-and OpenCode automatic CLI starts remain blocked pending that verification.
+and OpenCode automatic CLI starts remain blocked pending managed multi-step
+verification. The user-supplied OpenCode 2.2.6 probe passes signal and session
+checks but does not exercise that full managed journey.
 
 ### Positive Consequences
 

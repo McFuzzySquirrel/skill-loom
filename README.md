@@ -329,8 +329,8 @@ Skill Loom is released under the [MIT License](LICENSE). Contributions are accep
 
 There is no committed roadmap. These are known gaps and possible follow-up work, not shipped behavior:
 
-- Rerun the live execution probe before claiming automatic OpenCode advancement; the parser now accepts the colon-separated form and preserves root working across child-record clear, but the record-aware fix is not yet live-verified.
-- Expand live evidence beyond Linux ARM64 and the pinned OpenCode 2.2.5 / Copilot CLI 1.0.105 versions.
+- Verify a managed multi-step automatic OpenCode journey before enabling the blocked CLI path. The record-aware parser passed the [user-supplied OpenCode 2.2.6 live probe](docs/evidence/live-execution-2026-11-10-opencode-2.2.6-passed.json), including advancement, recall and cleanup.
+- Expand live evidence beyond the recorded Linux ARM64 and Linux x64 setups; the latest execution probe uses OpenCode 2.2.6 and Copilot CLI 1.0.107.
 - Decide whether to publish `skill-loom-cli`; add repository/release metadata and a published upgrade path.
 - Consider per-step model or harness selection only as a new product decision; it is not supported today.
 

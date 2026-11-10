@@ -271,7 +271,7 @@ Automatic mode advances only on the signal declared by the selected harness:
 
 Automatic controls include **Pause**, **Resume**, **Run next**, **Retry**, **Skip**, and **Abort** as available. A missing completion signal, a non-zero exit, or the 30-minute per-step timeout pauses the run. Output-idle heuristics, animation quiescence, and fixed sleeps never advance a step.
 
-> **Current OpenCode limitation:** the parser accepts colon-separated `OSC 7501` parameters and now distinguishes child clear from root clear. The record-aware fix still needs a successful live rerun; do not rely on automatic OpenCode advancement yet. Supervised OpenCode runs are unaffected by this gap.
+> **Current OpenCode limitation:** the record-aware parser passed a live OpenCode 2.2.6 prompt, advancement, recall and cleanup probe. Managed multi-step automatic execution is still unverified; automatic CLI starts remain blocked. Supervised runs are unaffected.
 
 ### Recover an interrupted run
 

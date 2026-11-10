@@ -58,8 +58,12 @@ The [OpenCode 2.2.6 implementation](https://github.com/anomalyco/opencode/blob/v
 clears removed child records before publishing the root summary. This explains
 the user-supplied [Linux x64 evidence](../evidence/live-execution-2026-11-10-opencode-2.2.6.json),
 which passed the prompt, loose signal, recall and cleanup checks but failed
-product advancement. The record-aware fix has regression coverage; a new live
-probe of the changed parser is still required. Automatic CLI starts remain blocked.
+product advancement. A subsequent user-supplied [passing probe](../evidence/live-execution-2026-11-10-opencode-2.2.6-passed.json)
+on Linux x64 with OpenCode 2.2.6 verifies the changed parser: child clear
+precedes root idle, product advancement passes, session recall passes and
+cleanup succeeds. This closes the observed signal mismatch, not end-to-end
+managed chain acceptance. Automatic CLI starts remain blocked until the
+managed multi-step automatic journey is verified.
 
 ### Positive Consequences
 
@@ -93,5 +97,5 @@ probe of the changed parser is still required. Automatic CLI starts remain block
 ## Links
 
 - Implemented by `src/server/runs/osc.ts`, `src/server/runs/automatic.ts`, and the adapter descriptors.
-- **Known live gap:** Historical OpenCode 2.2.5 evidence recorded colon-separated parameters and `clear` between `working` and `idle`. The parser accepts both parameter formats and now distinguishes child clear from root clear. The supplied 2.2.6 evidence predates the record-aware fix; automatic OpenCode advancement must not be claimed as working until the changed parser passes a new live probe.
+- **Remaining live gap:** The record-aware parser passed the supplied OpenCode 2.2.6 live probe. End-to-end managed multi-step automatic chain execution remains unverified; this probe does not establish that broader guarantee.
 - Related: [ADR-0002](0002-harness-capability-descriptors.md) and [release notes](../releases/0.1.0.md#known-limitations).
