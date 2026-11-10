@@ -23,7 +23,8 @@ You need:
 Skill Loom does not install or authenticate harnesses for you, and it does not send prompts to a hosted service of its own.
 
 On Windows, service startup also requires a protected private profile on a
-local fixed NTFS/ReFS drive, Windows PowerShell 5.1 and .NET 4.7.2+. Unsafe
+local fixed NTFS/ReFS drive and either stable PowerShell 7 in its standard
+Program Files installation or Windows PowerShell 5.1 with .NET 4.7.2+. Unsafe
 existing profile ACLs are refused rather than silently changed. See the
 [administrator's profile instructions](admin-guide.md#identity-secrets-and-tls)
 before choosing a fresh profile or migrating an existing one.
