@@ -300,6 +300,8 @@ The packed package contains `dist/src`, `dist/web`, the compiled package metadat
 
 The default live probes exercise real OpenCode and Copilot CLIs. They fail with a clear diagnostic when a required CLI is absent; they do not silently skip. Run them only when you intend to use the installed harnesses and credentials. For an OpenCode-only execution probe, see the [verification guide](docs/OPERATIONS.md#opencode-only-live-verification); it does not invoke Copilot and writes separate evidence.
 
+Pull requests run `npm run check`, `npm run typecheck`, `npm test`, and `npm run test:package` on Ubuntu, macOS, and Windows with Node 24, plus a Node 26 Ubuntu job. Live probes and the privileged native-containment tests are not run in pull-request CI; they stay manual and evidence-backed.
+
 ## First run
 
 1. Install and start: `npm run build`, then `skill-loom service start` (or let a companion skill install the CLI and start it).

@@ -43,6 +43,7 @@ requirements and execution tooling have been retired.
 ## Release checklist
 
 - [ ] Owned checks pass.
+- [ ] Pull-request CI passes on Ubuntu, macOS, Windows (Node 24) and Ubuntu (Node 26).
 - [ ] Changelog or release notes updated.
 - [ ] Version bumped when the project publishes one.
 - [ ] No open blocker or accepted-risk item without an owner.
