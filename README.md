@@ -14,7 +14,7 @@ Skill Loom does not author skills and does not execute a skill as a callable com
 
 See the [visual tour](docs/visual-tour.md) for captions and full-size screenshots.
 
-Start with the [user guide](docs/user-guide.md) to design and share a workflow, or the [administrator guide](docs/admin-guide.md) to install, configure, back up, and upgrade the application.
+Start with the [user guide](docs/user-guide.md) to design and share a workflow, or the [administrator guide](docs/admin-guide.md) to install, configure, back up, and upgrade the application. To run chains with only the companion Agent Skills and no Skill Loom server, see the [standalone skill guide](docs/standalone-skill-guide.md).
 
 ## Table of Contents
 
@@ -187,7 +187,7 @@ The [administrator guide](docs/admin-guide.md#installation) covers the native to
 - **Node.js 24 or newer** (`package.json` declares `>=24`; the validation recorded for 0.1.0 ran on Node 26.13.0, while Node 24.22.2 was used earlier in development).
 - npm.
 - A native build toolchain for `node-pty`: Python 3, `make`, and a C++ compiler. On Debian/Ubuntu install `build-essential` and `python3`; on macOS install the Xcode Command Line Tools.
-- **OpenCode CLI 2.2.5** for OpenCode chains, installed and authenticated.
+- **Stable OpenCode CLI 2.2.5 or newer** for OpenCode chains, installed and authenticated. Live signal verification is still required for automatic advancement.
 - **GitHub Copilot CLI 1.0.105** for Copilot chains, installed and authenticated.
 - Git, optional but used for the `git init` option and the dirty-tree preflight warning.
 - A Chromium browser for Playwright e2e; install it once with `npx playwright install chromium`.
@@ -200,7 +200,7 @@ npm install
 
 `node-pty` compiles native code during installation. If the install fails at that step, install the native toolchain above and run `npm install` again (or `npm rebuild node-pty`). Skill Loom does not hide a native build failure behind a generic install success message.
 
-Harness CLIs are deliberately not installed by this project. Install OpenCode 2.2.5 and/or GitHub Copilot CLI 1.0.105 with their own installers, then confirm they are on `PATH`; alternatively set `harnessCommands.opencode` or `harnessCommands.copilot` in the Skill Loom config.
+Harness CLIs are deliberately not installed by this project. Install stable OpenCode 2.2.5 or newer and/or GitHub Copilot CLI 1.0.105 with their own installers, then confirm they are on `PATH`; alternatively set `harnessCommands.opencode` or `harnessCommands.copilot` in the Skill Loom config.
 
 ## Development
 
@@ -329,7 +329,7 @@ Skill Loom is released under the [MIT License](LICENSE). Contributions are accep
 
 There is no committed roadmap. These are known gaps and possible follow-up work, not shipped behavior:
 
-- Resolve the observed OpenCode `OSC 7501` `clear` ordering and rerun the live execution probe before claiming automatic OpenCode advancement; the parser now accepts the observed colon-separated form.
+- Rerun the live execution probe before claiming automatic OpenCode advancement; the parser now accepts the colon-separated form and preserves root working across child-record clear, but the record-aware fix is not yet live-verified.
 - Expand live evidence beyond Linux ARM64 and the pinned OpenCode 2.2.5 / Copilot CLI 1.0.105 versions.
 - Decide whether to publish `skill-loom-cli`; add repository/release metadata and a published upgrade path.
 - Consider per-step model or harness selection only as a new product decision; it is not supported today.

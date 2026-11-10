@@ -39,13 +39,15 @@ investigating the reported error.
 - The bearer capability must not be shared or included in backups. It provides
   no boundary between processes running under the same operating-system user.
 - The browser's loopback HTTP interface remains unauthenticated.
-- Windows control is unsupported until a user-private named-pipe and ACL
-  implementation is verified. Windows UI and read-only inspection remain.
+- Windows uses mutually authenticated loopback TLS on a protected private
+  profile on local NTFS/ReFS storage; unsafe existing profiles are rejected
+  rather than reconfigured (see the administrator guide).
 - Control covers service and catalog settings, project registration, draft
-  creation, bundle export and reviewed no-conflict import, preflight,
-  test-workspace lifecycle, run status, and explicit abort. Draft editing,
-  managed-run start and other actions, event streams, and terminal attachment
-  remain unimplemented.
+  creation and editing, bundle export and reviewed import, preflight,
+  test-workspace lifecycle and evaluation, run status, event streams, terminal
+  attachment, and restricted reviewed starts and actions
+  ([ADR-0025](0025-reviewed-cli-approval-contract.md)).
+  Skill-bearing CLI starts and OSC-based automatic execution remain blocked.
 - The profile ownership lock and this transport alone do not coordinate the
   portable runner. A separate opt-in project claim protocol now coordinates
   participating managed and portable runners; older clients remain outside it.

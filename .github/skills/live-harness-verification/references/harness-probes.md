@@ -14,7 +14,7 @@ Use the interactive entry in a PTY so the state signal is observable. Generate a
 Assertions, in order:
 
 1. Stream contains `PINEAPPLE`.
-2. Stream contains `OSC 7501;state=working` before `OSC 7501;state=idle`; a `clear` resets the requirement.
+2. Stream contains `OSC 7501;state=working` before `OSC 7501;state=idle` for the same record; a root `clear` resets the requirement, while child clear must not reset root working.
 3. Session id is captured and begins with `ses_`.
 4. A second process with `--session ses_...` and a recall prompt contains `PINEAPPLE`.
 

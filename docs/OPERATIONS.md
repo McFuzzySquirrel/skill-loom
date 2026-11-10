@@ -2,7 +2,7 @@
 
 This guide is the operator contract for the local Skill Loom v1 application and its standalone skills. It covers configuration, on-disk data, harness prerequisites, Copilot trust and automatic permissions, the security model, backup and cleanup, known limitations, fork handoff behavior, and troubleshooting.
 
-Read [README.md](../README.md) first for install, development, build, start, and test commands. For task-oriented guidance, see the [user guide](user-guide.md) and [administrator guide](admin-guide.md). The durable decisions behind this contract are in the [ADR index](adr/README.md), and release validation is in [the 0.1.0 release notes](releases/0.1.0.md).
+Read [README.md](../README.md) first for install, development, build, start, and test commands. For task-oriented guidance, see the [user guide](user-guide.md), the [standalone skill guide](standalone-skill-guide.md) for the skill-only path, and [administrator guide](admin-guide.md). The durable decisions behind this contract are in the [ADR index](adr/README.md), and release validation is in [the 0.1.0 release notes](releases/0.1.0.md).
 
 ## Configuration
 
@@ -148,7 +148,7 @@ Automatic Copilot mode requires an explicit per-chain opt-in. It is off by defau
 
 OpenCode automatic mode does not pass broad permission flags. Its intended advancement signal is OpenCode's terminal state sequence `OSC 7501` `state=working` followed by `state=idle`; Copilot automatic mode advances on process exit. A missing completion signal, non-zero exit, or a 30-minute per-step timeout pauses the run. Output-idle heuristics, animation quiescence, and fixed sleeps never advance a chain. At most one run can be active across the server; a second start is rejected while a run is starting, running, paused, or awaiting user input.
 
-> **Live-verification gap:** the product parser now accepts the observed colon-separated OSC parameters, but prior OpenCode 2.2.5 evidence also included `clear` between `working` and `idle`, which resets the product's observation. Do not rely on automatic OpenCode chains until the signal contract is resolved and the live probe is rerun. See [Known live-verification gaps](#known-live-verification-gaps).
+> **Live-verification gap:** the parser now accepts colon-separated OSC parameters and distinguishes child clear from root clear. The record-aware fix still requires a successful live rerun. Do not rely on automatic OpenCode chains yet. See [Known live-verification gaps](#known-live-verification-gaps).
 
 Starting a run opens the dedicated terminal page at `/runs/<runId>/terminal`, which keeps the xterm surface and compact controls visible without scrolling. **Run details** opens `/runs/<runId>` for the step rail, full controls, and recovery guidance. Both routes request the same run snapshot and event stream; neither starts, advances, or replays a step on load.
 
@@ -201,14 +201,14 @@ A handoff is not a byte-for-byte copy of the prior harness session. Treat it as 
 
 These are current gaps between the intended contract and what was observed with the verified CLIs. They are not shipped claims.
 
-- **Automatic OpenCode advancement:** `docs/evidence/live-execution.json` records the historical `OSC7501_PRODUCT_PARSER_MISMATCH` and `OSC7501_CLEAR_BEFORE_IDLE` observations. The product parser now accepts the observed colon-separated parameters, but `clear` still resets its working observation before `idle`. Supervised OpenCode runs are unaffected, but automatic OpenCode advancement is not proven end-to-end.
+- **Automatic OpenCode advancement:** Historical evidence recorded `OSC7501_PRODUCT_PARSER_MISMATCH` and `OSC7501_CLEAR_BEFORE_IDLE`. The parser now accepts colon-separated parameters and preserves root working across child-record clear. The supplied [2.2.6 evidence](evidence/live-execution-2026-11-10-opencode-2.2.6.json) predates the record-aware fix. Supervised runs are unaffected, but automatic advancement still needs a successful live rerun.
 - **Platform coverage:** the recorded live probes ran on Linux ARM64 with OpenCode 2.2.5 and Copilot CLI 1.0.105. Other platforms and CLI versions are unverified.
 - **Package release:** version `0.1.0` is declared in `package.json`, but the package is private and has no Git release tag or npm publication.
 
 ## OpenCode-only live verification
 
 Run this from the `feature/standalone-cli-agent-workflow` checkout on a machine
-with Node 24+, dependencies installed, OpenCode 2.2.5 on `PATH`, and an
+with Node 24+, dependencies installed, stable OpenCode 2.2.5 or newer on `PATH`, and an
 authenticated, available model provider. This makes real network/model calls
 and may incur charges. It creates a disposable project in the user cache and
 an OpenCode session in the normal OpenCode session store; it attempts to delete
@@ -242,14 +242,26 @@ The probe checks a seeded interactive prompt, an observed OSC sequence, recall
 in a second process using the same session, and the product's actual OSC state
 machine. It removes the temporary skills before recall. Inspect the console and
 the evidence file: `scope` must be `opencode`, `result` must be `passed`,
-`opencode.product-advancement` must pass, the expected version must match, and
+`opencode.product-advancement` must pass, the observed OpenCode version must be
+a stable release at least 2.2.5, and
 cleanup must report the temporary root removed, no tracked processes or PTYs
-remaining, and the probe session deleted. A `clear` between `working` and
-`idle` can make the product check fail even when the looser signal observation
-passes. Inspect `harnesses.opencode.signal`, checks, and warnings; do not treat
+remaining, and the probe session deleted. A root `clear` between root `working`
+and `idle` still resets observation; clearing a child record does not.
+Inspect `harnesses.opencode.signal.records` (the first 64 records, with
+`recordId: null` for root and `recordsTruncated` indicating omitted records),
+checks, and warnings; do not treat
 that mismatch, a version warning, a failed cleanup, or a failed/blocked check
 as a pass. A successful session-delete command is not enough if the subsequent
 session list cannot verify absence; that cleanup result fails closed.
+
+Both live probes accept stable OpenCode releases >=2.2.5, including 2.2.6.
+Prereleases do not qualify. Evidence retains the exact observed version;
+`expectedVersion` is the 2.2.5 baseline and `versionMatches` remains an exact
+equality check for historical compatibility. Thus `versionMatches: false`
+alone is not a failure for a newer stable OpenCode release. Older or prerelease
+versions still produce a version warning; the probe continues diagnostically,
+but their results do not establish supported-version acceptance. Meeting the
+minimum version does not prove signal compatibility or unblock automatic runs.
 
 This verifies the captured interactive signal and session recall, **not** an
 end-to-end automatic chain or actual skill invocation. A passing result alone

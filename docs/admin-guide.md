@@ -21,7 +21,7 @@ See [Architecture decisions](adr/README.md) for the durable choices behind this 
 - **Node.js 24 or newer.** `package.json` declares `node >= 24`. The build, typecheck, Node test suites, and package smoke test for the 0.1.0 documentation refresh ran on Node 26.13.0, the same version recorded in the live evidence. A Node 24.22.2 toolchain was used earlier in development.
 - **npm**.
 - **A native build toolchain for `node-pty`:** Python 3, `make`, and a C++ compiler. Debian/Ubuntu: `sudo apt install build-essential python3`. macOS: Xcode Command Line Tools.
-- **OpenCode CLI 2.2.5** for OpenCode chains, installed and authenticated.
+- **Stable OpenCode CLI 2.2.5 or newer** for OpenCode chains, installed and authenticated. The minimum does not establish automatic signal compatibility.
 - **GitHub Copilot CLI 1.0.105** for Copilot chains, installed and authenticated.
 - **A desktop browser.** The application uses xterm.js and a desktop-oriented layout.
 - **Git**, optional. It is used for the `git init` option and the dirty-tree preflight warning.
@@ -620,7 +620,7 @@ Config, chain, run, and active-run documents carry explicit versions. Unknown ve
 
 ## Known Limitations
 
-- **Automatic OpenCode advancement is not proven end-to-end.** The parser now accepts the observed colon-separated `OSC 7501` parameters, but OpenCode 2.2.5 also emitted `clear` between `working` and `idle`, resetting the product's observation. Supervised OpenCode runs are unaffected. Do not rely on automatic OpenCode chains until the signal contract is resolved and the live probe is rerun.
+- **Automatic OpenCode advancement is not proven end-to-end.** The parser now accepts colon-separated `OSC 7501` parameters and preserves root working across child-record clear. A successful live rerun of the record-aware fix is still required. Supervised OpenCode runs are unaffected; automatic CLI starts remain blocked.
 - **One harness per chain; no per-step harness or model selection.**
 - **Native fork is available only on OpenCode's headless surface.** Supervised OpenCode and all Copilot forks use a deterministic handoff note, not a native session fork.
 - **One active run globally.** A second start is rejected while a run is starting, running, paused, or awaiting user input.

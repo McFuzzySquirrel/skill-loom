@@ -712,7 +712,32 @@ describe('automatic OpenCode advancement', () => {
     expect(harness.spawner.spawns).toHaveLength(2);
   });
 
-  it('requires a fresh working signal after clear resets the step observation', async () => {
+  it('advances across child clear but never reuses root working in the next step', async () => {
+    const harness = makeHarness();
+    await harness.runner.start();
+    const process = harness.spawner.lastProcess;
+
+    process.emitData(
+      OSC_IDLE + OSC_WORKING +
+      '\x1b]7501;state=working;id=ses_child\x07' +
+      '\x1b]7501;state=clear;id=ses_child\x07' +
+      OSC_IDLE + OSC_CLEAR,
+    );
+    await harness.runner.whenSettled();
+
+    expect(harness.runner.getRun().currentStepIndex).toBe(1);
+    expect(harness.runner.getRun().steps[0]!.status).toBe('done');
+    expect(harness.spawner.spawns).toHaveLength(2);
+    expect(process.isRunning()).toBe(false);
+
+    harness.spawner.lastProcess.emitData(OSC_IDLE);
+    await harness.runner.whenSettled();
+    expect(harness.runner.getRun().currentStepIndex).toBe(1);
+    expect(harness.runner.getRun().steps[1]!.status).toBe('running');
+    expect(harness.spawner.spawns).toHaveLength(2);
+  });
+
+  it('requires a fresh working signal after root clear resets the step observation', async () => {
     const harness = makeHarness();
     await harness.runner.start();
     const process = harness.spawner.lastProcess;

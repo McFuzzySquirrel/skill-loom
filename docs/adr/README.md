@@ -28,6 +28,8 @@
 | [ADR-0022](0022-managed-interactive-scenario-discovery.md) | Run scenario discovery in a retained managed workspace | Accepted | 2026-11-08 |
 | [ADR-0023](0023-profile-owner-lock.md) | Acquire profile ownership before server recovery | Accepted | 2026-11-08 |
 | [ADR-0024](0024-local-control-transport.md) | Authenticate local control of the profile owner | Accepted | 2026-11-08 |
+| [ADR-0025](0025-reviewed-cli-approval-contract.md) | Require reviewed digests and explicit confirmations for CLI mutations | Accepted | 2026-11-10 |
+| [ADR-0026](0026-bounded-opt-in-workspace-evaluation.md) | Evaluate retained workspaces only with explicit bounded checks | Accepted | 2026-11-10 |
 
 ## Rules
 

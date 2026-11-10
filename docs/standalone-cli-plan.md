@@ -698,9 +698,14 @@ The UI, CLI, and project-chain/draft HTTP update and delete endpoints require
 content-bound revision preconditions and reject stale changes. Legacy HTTP
 clients must load and send the revision. External filesystem writes remain
 uncoordinated, so this is not an unconditional concurrency guarantee.
-The OSC parser now recognizes the observed colon-separated format in tests,
-but prior live evidence also includes `clear` before `idle`; automatic OpenCode
-advancement remains unverified until the signal contract and live gate pass.
+The OSC parser recognizes colon-separated parameters and now distinguishes
+root summary from child status records. User-supplied OpenCode 2.2.6 evidence
+(`docs/evidence/live-execution-2026-11-10-opencode-2.2.6.json`) passed the
+prompt, loose signal, recall and cleanup checks but failed product advancement.
+Upstream clears child records before root idle; the record-aware parser fix
+preserves root working across that child clear, with regression coverage.
+Automatic OpenCode advancement remains unverified until a fresh live probe of
+the changed parser passes; CLI guards remain in place.
 The discovery skill documents the partial CLI catalog and draft workflow;
 skill-bearing CLI starts and recovery are not yet integrated. Restricted instruction-only start supports supervised
 mode and automatic process-exit mode; automatic progression and reported broad

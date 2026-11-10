@@ -290,6 +290,42 @@ describe('OSC 7501 completion state machine', () => {
     expect(machine.completed).toBe(true);
   });
 
+  it.each([false, true])('preserves root working across child removal (split=%s)', (split) => {
+    const machine = new Osc7501StateMachine();
+    const stream =
+      sequence('idle') +
+      sequence('working') +
+      sequence('working', 'ses_child') +
+      sequence('clear', 'ses_child') +
+      sequence('idle') +
+      sequence('clear');
+    const changes = (split ? [...stream] : [stream]).flatMap((chunk) => machine.push(chunk));
+    expect(changes.filter((change) => change.advanced)).toHaveLength(1);
+    expect(machine.completed).toBe(false);
+  });
+
+  it('does not complete root working from an unrelated child idle', () => {
+    const machine = new Osc7501StateMachine();
+    machine.push(sequence('working'));
+    machine.push(sequence('working', 'ses_child'));
+    expect(machine.push(sequence('idle', 'ses_child'))).toEqual([]);
+    expect(machine.completed).toBe(false);
+    expect(machine.push(sequence('idle'))[0]?.advanced).toBe(true);
+  });
+
+  it('requires matching records and new working after record clear or step reset', () => {
+    const machine = new Osc7501StateMachine();
+    machine.push(sequence('working', 'ses_child'));
+    expect(machine.push(sequence('idle', 'ses_other'))).toEqual([]);
+    machine.push(sequence('clear', 'ses_child'));
+    expect(machine.push(sequence('idle', 'ses_child'))).toEqual([]);
+    machine.push(sequence('working'));
+    machine.push(sequence('clear', 'ses_other'));
+    machine.reset();
+    expect(machine.push(sequence('idle'))).toEqual([]);
+    expect(machine.completed).toBe(false);
+  });
+
   it('tracks the optional session id and keeps parsing across id changes', () => {
     const machine = new Osc7501StateMachine();
     machine.push(sequence('working', 'ses_first'));

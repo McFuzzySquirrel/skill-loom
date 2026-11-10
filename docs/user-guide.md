@@ -15,7 +15,7 @@ You need:
 - Skill Loom running locally and its loopback URL open in a desktop browser. The default URL is `http://127.0.0.1:7373` for a production build or `http://127.0.0.1:5173` for `npm run dev`.
 - A project folder you are willing to let a harness read and modify. Chain and run data is written under `<project>/.loom/`.
 - The harness you intend to use installed, authenticated, and resolvable from the `PATH` that launched Skill Loom:
-  - OpenCode 2.2.5 for OpenCode chains.
+  - Stable OpenCode 2.2.5 or newer for OpenCode chains.
   - GitHub Copilot CLI 1.0.105 for Copilot chains.
 - For Copilot, the project folder trusted in Copilot's own trust dialog before the first run.
 - Optional: a Git repository in the project if you want the dirty-tree preflight warning. A non-Git project skips that warning.
@@ -194,6 +194,8 @@ The recipient still needs the selected harness and any external tools, services,
 
 ### Run an exported chain inside a harness
 
+For a step-by-step walkthrough that does not need Skill Loom running, see the [standalone skill guide](standalone-skill-guide.md).
+
 The export dialog and shared bundle library offer **Download reusable runner skill**. The separate discovery page offers **Download scenario-discovery v1**. The runner ZIP contains the generic `loom-run-bundle` Agent Skill, its references, a dependency-bundled helper, and license notices; the discovery ZIP contains the scenario-discovery skill and standalone handoff helpers. Neither ZIP contains a user chain. A recipient needs Node.js 24+ and a host that can read project skills, invoke Node with arguments, and request confirmation. Skill Loom does not need to be installed or running during handoff review or portable chain inspection.
 
 Extract the ZIP and install its `loom-run-bundle/` directory into the target project's `.agents/skills/` directory, unless that skill already exists. Alternatively, in a Skill Loom checkout run `npm run build:portable-skill` and copy the generated `dist/skills/loom-run-bundle/` directory into that location. Do not merge over an existing runner package. Refresh or restart the host if it does not discover the new skill. The helper also needs to be invokable from the skill directory reported by the host; if the host cannot locate it or pass structured stdin, stop rather than guessing a global path.
@@ -269,7 +271,7 @@ Automatic mode advances only on the signal declared by the selected harness:
 
 Automatic controls include **Pause**, **Resume**, **Run next**, **Retry**, **Skip**, and **Abort** as available. A missing completion signal, a non-zero exit, or the 30-minute per-step timeout pauses the run. Output-idle heuristics, animation quiescence, and fixed sleeps never advance a step.
 
-> **Current OpenCode limitation:** the parser now accepts the colon-separated `OSC 7501` parameters seen in OpenCode 2.2.5, but live evidence also showed `clear` between `working` and `idle`, which resets the product's observation. Until that signal contract is resolved and the live probe is rerun, do not rely on automatic OpenCode advancement. Supervised OpenCode runs are unaffected by this gap.
+> **Current OpenCode limitation:** the parser accepts colon-separated `OSC 7501` parameters and now distinguishes child clear from root clear. The record-aware fix still needs a successful live rerun; do not rely on automatic OpenCode advancement yet. Supervised OpenCode runs are unaffected by this gap.
 
 ### Recover an interrupted run
 
@@ -366,6 +368,7 @@ A non-loopback `LOOM_HOST` aborts startup by design. Use `127.0.0.1`, `::1`, or 
 ## Getting Help
 
 - [Administrator guide](admin-guide.md) — installation, configuration, backup, upgrades, and operational troubleshooting.
+- [Standalone skill guide](standalone-skill-guide.md) — discover, inspect, and run chains using only the companion skills, without the Skill Loom server.
 - [Operations guide](OPERATIONS.md) — the full operator contract, data locations, trust and permissions, security model, fork behavior, and troubleshooting.
 - [Support](SUPPORT.md) — ownership, intake, and escalation for this repository.
 - [Architecture decisions](adr/README.md) — why the application is local-only, harness-agnostic, prompt-ordered, snapshot-based, and shell-free.

@@ -48,6 +48,19 @@ An interactive agent CLI produces terminal animation, partial redraws, and long 
 
 Chosen option: "Adapter-declared explicit advancement signals with a bounded timeout and pause on failure", because it is the only option that distinguishes completion from quiet output.
 
+OpenCode status records are scoped by `id`: the root summary has no `id`;
+child records have an `id`. Prefer root `working` and require root `idle` to
+complete it. Clearing a child must not erase the root observation. A root
+clear still resets observation; when only an identified record is observed,
+its idle and clear must match its ID. Reset all observation before each step.
+
+The [OpenCode 2.2.6 implementation](https://github.com/anomalyco/opencode/blob/v2.2.6/packages/tui/src/context/program-status.ts)
+clears removed child records before publishing the root summary. This explains
+the user-supplied [Linux x64 evidence](../evidence/live-execution-2026-11-10-opencode-2.2.6.json),
+which passed the prompt, loose signal, recall and cleanup checks but failed
+product advancement. The record-aware fix has regression coverage; a new live
+probe of the changed parser is still required. Automatic CLI starts remain blocked.
+
 ### Positive Consequences
 
 - Automatic runs cannot race ahead because output paused.
@@ -80,5 +93,5 @@ Chosen option: "Adapter-declared explicit advancement signals with a bounded tim
 ## Links
 
 - Implemented by `src/server/runs/osc.ts`, `src/server/runs/automatic.ts`, and the adapter descriptors.
-- **Known live gap:** The historical `docs/evidence/live-execution-2026-11-04.json` records that OpenCode 2.2.5 emitted colon-separated parameters which the earlier product parser did not recognize. The parser now accepts that format in unit tests, but that change has not been live-verified. The same evidence also records `clear` between `working` and `idle`, which resets the product state machine; the product's OpenCode automatic path remains unverified and must not be claimed as working until this signal contract is resolved and live-tested. The latest `docs/evidence/live-execution.json` records a later failed attempt with OpenCode unavailable.
+- **Known live gap:** Historical OpenCode 2.2.5 evidence recorded colon-separated parameters and `clear` between `working` and `idle`. The parser accepts both parameter formats and now distinguishes child clear from root clear. The supplied 2.2.6 evidence predates the record-aware fix; automatic OpenCode advancement must not be claimed as working until the changed parser passes a new live probe.
 - Related: [ADR-0002](0002-harness-capability-descriptors.md) and [release notes](../releases/0.1.0.md#known-limitations).

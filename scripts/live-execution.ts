@@ -50,6 +50,7 @@ import { checkFolderTrust, type TrustCheckResult } from '../src/server/preflight
 import { Osc7501Parser, Osc7501StateMachine } from '../src/server/runs/osc.js';
 import { createTerminalSession, type TerminalSession } from '../src/server/terminal/pty.js';
 import { classifyFailure, type FailureClass } from './live-failure.js';
+import { MINIMUM_OPENCODE_VERSION, supportsOpenCodeVersion } from './opencode-version.js';
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const EVIDENCE_PATH = join(PROJECT_ROOT, 'docs', 'evidence', 'live-execution.json');
@@ -57,7 +58,7 @@ const EVIDENCE_PATH = join(PROJECT_ROOT, 'docs', 'evidence', 'live-execution.jso
 const TASK_ID = 'RUN-08';
 const PROBE_SKILL_NAME = 'loom-live-probe';
 const PROBE_TOKEN = 'PINEAPPLE';
-const EXPECTED_OPENCODE_VERSION = '2.2.5';
+const EXPECTED_OPENCODE_VERSION = MINIMUM_OPENCODE_VERSION;
 const EXPECTED_COPILOT_VERSION = '1.0.105';
 
 const VERSION_TIMEOUT_MS = 10_000;
@@ -167,6 +168,8 @@ interface SignalEvidence {
   idleEventCount: number;
   clearEventCount: number;
   sequence: string[];
+  records: Array<{ state: 'working' | 'idle' | 'clear'; recordId: string | null }>;
+  recordsTruncated: boolean;
   sessionIdFromSignal: string | null;
   firstWorkingAtMs: number | null;
   firstIdleAfterWorkingAtMs: number | null;
@@ -837,6 +840,8 @@ function emptySignalEvidence(): SignalEvidence {
     idleEventCount: 0,
     clearEventCount: 0,
     sequence: [],
+    records: [],
+    recordsTruncated: false,
     sessionIdFromSignal: null,
     firstWorkingAtMs: null,
     firstIdleAfterWorkingAtMs: null,
@@ -1249,7 +1254,15 @@ function updateSignalEvidence(
     }
   }
 
-  signal.productParser.eventCount += productParser.push(chunk).length;
+  const productEvents = productParser.push(chunk);
+  signal.productParser.eventCount += productEvents.length;
+  for (const event of productEvents) {
+    if (signal.records.length >= 64) {
+      signal.recordsTruncated = true;
+      break;
+    }
+    signal.records.push({ state: event.state, recordId: event.sessionId });
+  }
   signal.productParser.recognized = signal.productParser.eventCount > 0;
   const changes = productState.push(chunk);
   signal.productStateMachine = {
@@ -2149,11 +2162,11 @@ async function main(): Promise<number> {
     addPrerequisiteCheck(report, openCodeVersion, 'opencode', openCodeAdapter.installHint);
     if (copilotVersion !== undefined) addPrerequisiteCheck(report, copilotVersion, 'copilot', copilotAdapter.installHint);
 
-    if (openCodeVersion.available && !openCodeVersion.versionMatches) {
+    if (openCodeVersion.available && !supportsOpenCodeVersion(openCodeVersion.version)) {
       report.warnings.push({
         code: 'CLI_VERSION_MISMATCH',
         harness: 'opencode',
-        message: `Expected ${openCodeVersion.expectedVersion}, observed ${
+        message: `Expected stable OpenCode >=${openCodeVersion.expectedVersion}, observed ${
           openCodeVersion.version ?? 'unknown'
         }. The probe continued against the installed version.`,
       });
@@ -2693,7 +2706,7 @@ async function runOpenCodeProbe(input: {
       code: 'OSC7501_CLEAR_BEFORE_IDLE',
       harness: 'opencode',
       message:
-        'Live OpenCode emitted clear between working and idle. The product Osc7501StateMachine resets its working observation on clear, so this live order cannot advance. The probe asserts the CLI order (working before idle) without weakening the no-idle-only rule. Report this contract mismatch to the backend engineer.',
+        'The captured stream contains clear events but no qualifying product advancement. Inspect signal.records: child clear must not reset root working, while root clear or a matching record clear requires fresh working before idle. Keep automatic OpenCode advancement unverified.',
     });
   }
 

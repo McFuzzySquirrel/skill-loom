@@ -8,6 +8,14 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Added
 
+- Standalone skill guide for the skill-only path: discover, inspect, run, and recover chains with `scenario-discovery`, `loom-run-bundle`, and `loom-chain-workflow` without the Skill Loom server.
+- `loom-chain-workflow` companion skill, with a downloadable package, coordinating reviewed discovery, optional workspace testing, bundle import, and current-session execution.
+- Shared-owner CLI (`service`, `catalog`, `project`, `chain`, `bundle`, `discovery`, `run`, `workspace`) with versioned JSON envelopes, stdin payloads, paginated catalog snapshots, a 1,000-skill / 20,000-file catalog budget, and read-only `bundle inspect`.
+- Profile ownership lock and authenticated local control transport (Unix socket; mutually authenticated loopback TLS on Windows) so the UI and CLI share one owner ([ADR-0023](docs/adr/0023-profile-owner-lock.md), [ADR-0024](docs/adr/0024-local-control-transport.md)).
+- Reviewed CLI approvals for bundle import, run start and actions, and workspace removal using review digests and explicit confirmations ([ADR-0025](docs/adr/0025-reviewed-cli-approval-contract.md)); managed `run events` streams and `run attach` terminal attachment.
+- Opt-in project claim protocol and coordination review for managed and portable runners.
+- Bounded `workspace inspect` and `workspace evaluate` checks that never execute workspace content ([ADR-0026](docs/adr/0026-bounded-opt-in-workspace-evaluation.md)).
+
 - Global remote skill-repository registration with explicit pinned refresh, bounded package snapshots, and catalog visibility for either supported harness.
 - Project-independent drafts start from an outcome, register and explicitly refresh optional remote repositories, and select pinned skills and agents without installing them into an existing project.
 - A configurable local shared bundle library supports reviewed no-overwrite publication, browsing, and import of portable bundles.
@@ -38,6 +46,8 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Changed
 
+- Live discovery and execution probes accept stable OpenCode versions >=2.2.5, including 2.2.6, while retaining exact observed versions in evidence. Older and prerelease versions still warn; automatic advancement remains subject to live signal verification.
+- CLI-managed starts remain limited to instruction-only chains without native agents; OpenCode automatic starts stay blocked until the `clear` signal between `working` and `idle` is live-verified ([ADR-0007](docs/adr/0007-explicit-advancement-signals.md)).
 - Copilot trust guidance now distinguishes persistent folder trust from session-only approval.
 - Persisted chain documents now use version 3 for exact remote skill snapshot bindings and migrate valid version 1 and 2 chains while preserving their existing fields.
 - Portable bundle export uses version 2 for chains with a selected native agent, while preserving version 1 for agent-free chains; import is no-overwrite and rollback-safe for both packages and agent definitions.
@@ -48,6 +58,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Fixed
 
+- OpenCode OSC advancement now distinguishes root summary and child record IDs: child removal no longer erases root working, while root clear, matching-record clear, idle-only streams and per-step reset retain their fail-closed behavior. Live probe evidence now includes up to 64 status records and a truncation flag; automatic CLI starts remain blocked pending a successful rerun.
 - Health reporting now reads the existing run owner or persisted active-run pointer instead of always returning an inactive placeholder; invalid pointer files surface an error without being modified.
 - Chain bundle export no longer rejects a valid project package merely because another enabled package with the same name exists outside the project.
 - Bundle import no longer treats a same-name personal or remote catalog entry as an installed project conflict when the target package directory is empty.
