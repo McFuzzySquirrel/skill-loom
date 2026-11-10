@@ -116,8 +116,22 @@ test('refreshes an explicitly selected saved commit', async ({ page, request }) 
   });
   try {
     await page.goto('/sources');
+    const friendlyName = page.getByLabel('Friendly catalog name');
+    await friendlyName.fill('Example catalog');
+    await page.getByRole('button', { name: 'Save name' }).click();
+    await expect(page.getByRole('heading', { name: 'Example catalog' })).toBeVisible();
+    const configured = await request.get('/api/settings/remote-skill-sources');
+    expect(await configured.json()).toMatchObject({
+      remoteSkillSources: [expect.objectContaining({ id: source.id, name: 'Example catalog' })],
+    });
+
+    const refreshSaved = page.getByRole('button', { name: `Refresh saved commit ${revision}` });
+    await expect(refreshSaved).toBeHidden();
+    const summary = page.locator('summary').filter({ hasText: revision });
+    await expect(summary).toBeVisible();
+    await summary.click();
     await expect(page.getByText('(1 files, 0.001234 MB)', { exact: false })).toBeVisible();
-    const button = page.getByRole('button', { name: `Refresh saved commit ${revision}` });
+    const button = refreshSaved;
     await button.focus();
     await page.keyboard.press('Enter');
     await expect(button).toBeDisabled();
@@ -125,7 +139,7 @@ test('refreshes an explicitly selected saved commit', async ({ page, request }) 
     await expect.poll(() => body).toEqual({ revision });
     releaseRefresh();
     await expect(button).toBeEnabled();
-    await expect(page.getByRole('status')).toContainText(`Refreshed ${repository} at commit ${revision.slice(0, 12)}`);
+    await expect(page.getByRole('status')).toContainText(`Refreshed Example catalog at commit ${revision.slice(0, 12)}`);
   } finally {
     releaseRefresh();
     await request.delete(`/api/settings/remote-skill-sources/${source.id}`);

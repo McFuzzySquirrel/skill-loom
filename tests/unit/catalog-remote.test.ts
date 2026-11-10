@@ -394,7 +394,27 @@ describe('remote skill source snapshots', () => {
     await refresh;
     await removal;
     expect((await store.get()).remoteSkillSources).toEqual([]);
-    expect(await listRemoteSkillSnapshots(store.getConfigDir(), 'queued')).toHaveLength(1);
+    expect(await listRemoteSkillSnapshots(store.getConfigDir(), 'queued')).toHaveLength(0);
+    await expect(readdir(join(store.getConfigDir(), 'catalog-sources'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('refuses to unregister through a symlinked snapshot directory', async () => {
+    const root = await makeRoot();
+    const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
+    await store.update({
+      remoteSkillSources: [{ id: 'linked-source', repository: 'https://example.com/skills.git' }],
+    });
+    const catalogRoot = join(store.getConfigDir(), 'catalog-sources');
+    const outside = join(root, 'outside');
+    await mkdir(catalogRoot, { recursive: true });
+    await mkdir(outside);
+    await writeFile(join(outside, 'keep.txt'), 'outside data');
+    await symlink(outside, join(catalogRoot, 'linked-source'), process.platform === 'win32' ? 'junction' : 'dir');
+
+    await expect(unregisterRemoteSkillSource(store, 'linked-source'))
+      .rejects.toMatchObject({ code: REMOTE_SOURCE_ERROR_CODES.INVALID });
+    expect(await readFile(join(outside, 'keep.txt'), 'utf8')).toBe('outside data');
+    expect((await store.get()).remoteSkillSources).toHaveLength(1);
   });
 
   it('applies per-source limits and keeps larger snapshots readable after limits are lowered', async () => {

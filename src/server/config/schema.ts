@@ -172,6 +172,7 @@ const RemoteSkillSourceV1Schema = z.strictObject({
   ref: GitRefSchema.optional(),
 });
 export const RemoteSkillSourceSchema = RemoteSkillSourceV1Schema.extend({
+  name: NonEmptyStringSchema.max(120).optional(),
   limits: RemoteCatalogLimitOverridesSchema.optional(),
 });
 export type RemoteSkillSource = z.infer<typeof RemoteSkillSourceSchema>;

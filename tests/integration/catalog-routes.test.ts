@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -521,7 +521,32 @@ describe('remote skill source settings and catalog snapshots', () => {
     expect((await configStore.get()).remoteCatalogLimits.maxPackages).toBe(1_000);
   });
 
-  it('registers sources, catalogs pinned packages for both harnesses, and unregisters without deleting snapshots', async () => {
+  it('saves an optional friendly name for a source', async () => {
+    const app = await buildTestApp();
+    const add = await app.inject({
+      method: 'POST',
+      url: '/api/settings/remote-skill-sources',
+      payload: { repository: 'https://example.com/acme/skills.git' },
+    });
+    const source = add.json<{ source: { id: string } }>().source;
+    const save = await app.inject({
+      method: 'PUT',
+      url: `/api/settings/remote-skill-sources/${source.id}/name`,
+      payload: { name: '  Team skills  ' },
+    });
+    expect(save.statusCode).toBe(200);
+    expect(save.json()).toMatchObject({ source: { name: 'Team skills' } });
+
+    const clear = await app.inject({
+      method: 'PUT',
+      url: `/api/settings/remote-skill-sources/${source.id}/name`,
+      payload: { name: '' },
+    });
+    expect(clear.statusCode).toBe(200);
+    expect(clear.json<{ source: { name?: string } }>().source.name).toBeUndefined();
+  });
+
+  it('registers sources, catalogs pinned packages for both harnesses, and unregisters with their snapshots', async () => {
     const app = await buildTestApp();
     const registered = await openProject(app);
     const repository = 'https://example.com/acme/remote-skills.git';
@@ -647,7 +672,8 @@ describe('remote skill source settings and catalog snapshots', () => {
     });
     expect(remove.statusCode).toBe(200);
     expect(remove.json<{ remoteSkillSources: unknown[] }>().remoteSkillSources).toEqual([]);
-    expect(await listRemoteSkillSnapshots(configDirectory, source.id)).toHaveLength(1);
+    expect(await listRemoteSkillSnapshots(configDirectory, source.id)).toHaveLength(0);
+    await expect(readdir(join(configDirectory, 'catalog-sources'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('rejects credential-bearing remotes and never returns their values', async () => {

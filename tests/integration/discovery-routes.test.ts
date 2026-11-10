@@ -754,5 +754,6 @@ describe('discovery handoff route', () => {
     await expect(stat(workspace.path)).rejects.toMatchObject({ code: 'ENOENT' });
     expect((await app.inject({ method: 'DELETE', url: `/api/discovery/workspaces/${workspace.id}` })).statusCode).toBe(200);
     expect((await store.get()).discoveryWorkspaces).toEqual([]);
+    await expect(stat(join(store.getConfigDir(), 'discovery-workspaces'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });

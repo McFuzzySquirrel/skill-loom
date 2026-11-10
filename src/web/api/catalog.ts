@@ -148,6 +148,7 @@ export interface RemoteSkillSource {
   id: string;
   repository: string;
   ref?: string;
+  name?: string;
   limits?: RemoteCatalogLimitOverrides;
 }
 
@@ -224,6 +225,7 @@ export interface CatalogApi {
   listRemoteSources: (options?: { signal?: AbortSignal }) => Promise<RemoteSkillSource[]>;
   getRemoteCatalogLimits: () => Promise<RemoteCatalogSettings>;
   setRemoteCatalogLimits: (limits: RemoteCatalogLimitOverrides) => Promise<RemoteCatalogSettings>;
+  setRemoteSourceName: (sourceId: string, name: string) => Promise<RemoteSkillSource>;
   setRemoteSourceLimits: (sourceId: string, limits: RemoteCatalogLimitOverrides | null) => Promise<RemoteSkillSource>;
   addRemoteSource: (
     repository: string,
@@ -552,6 +554,7 @@ function decodeRemoteSource(value: unknown): RemoteSkillSource {
     !isRecord(value) ||
     !isNonEmptyString(value.id) ||
     !isNonEmptyString(value.repository) ||
+    (value.name !== undefined && !isNonEmptyString(value.name)) ||
     (value.ref !== undefined && !isNonEmptyString(value.ref))
   ) {
     throw invalidResponse('remote skill source');
@@ -559,6 +562,7 @@ function decodeRemoteSource(value: unknown): RemoteSkillSource {
   return {
     id: value.id,
     repository: value.repository,
+    ...(typeof value.name === 'string' ? { name: value.name } : {}),
     ...(typeof value.ref === 'string' ? { ref: value.ref } : {}),
     ...(value.limits === undefined ? {} : { limits: decodeRemoteLimitOverrides(value.limits) }),
   };
@@ -837,6 +841,16 @@ export function createCatalogApi(fetchImpl: FetchLike = fetch): CatalogApi {
         { method: 'PUT', body: { limits } },
         fetchImpl,
       ));
+    },
+
+    async setRemoteSourceName(sourceId, name): Promise<RemoteSkillSource> {
+      const value = await requestJson<unknown>(
+        `/api/settings/remote-skill-sources/${encodeURIComponent(sourceId)}/name`,
+        { method: 'PUT', body: { name } },
+        fetchImpl,
+      );
+      if (!isRecord(value)) throw invalidResponse('remote source name');
+      return decodeRemoteSource(value.source);
     },
 
     async setRemoteSourceLimits(sourceId, limits): Promise<RemoteSkillSource> {

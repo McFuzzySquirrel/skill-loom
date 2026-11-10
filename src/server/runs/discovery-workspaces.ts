@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, readdir, realpath, rm, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, realpath, rm, rmdir, unlink } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
@@ -215,7 +215,7 @@ async function previewResult(
   options: DiscoveryWorkspaceServiceOptions,
 ): Promise<{ bundle: ChainBundle; fingerprint: string }> {
   const { record, path } = await ownedWorkspace(id, options);
-  const handoff = await readVerifiedHandoff(path, record, options);
+  const handoff = await readVerifiedHandoff(path, record);
   const resultPath = join(path, 'discovery-output', 'approved-result.loom.json');
   let raw: unknown;
   let resultText: string;
@@ -435,7 +435,7 @@ async function importResultOnce(
     );
   }
 
-  const handoff = await readVerifiedHandoff(path, record, options);
+  const handoff = await readVerifiedHandoff(path, record);
   const boundSteps = bundle.chain.steps.map((step) => {
     if (step.kind === 'instruction') return step;
     const matches = handoff.candidates.filter((candidate) => candidate.name === step.skillName);
@@ -555,7 +555,6 @@ async function ownedWorkspace(
 async function readVerifiedHandoff(
   path: string,
   record: DiscoveryWorkspaceRecord,
-  options: DiscoveryWorkspaceServiceOptions,
 ): Promise<DiscoveryHandoff> {
   const handoffPath = join(path, 'skill-loom-discovery.loom-discovery.json');
   try {
@@ -577,26 +576,18 @@ async function readVerifiedHandoff(
     const handoff = DiscoveryHandoffSchema.parse(JSON.parse(text));
     const { fingerprint, ...body } = handoff;
     const actualFingerprint = createHash('sha256').update(JSON.stringify(body), 'utf8').digest('hex');
-    if (fingerprint !== actualFingerprint || fingerprint !== record.handoffFingerprint) {
+    if (
+      fingerprint !== actualFingerprint ||
+      fingerprint !== record.handoffFingerprint ||
+      handoff.harness !== record.harness
+    ) {
       throw new Error('handoff fingerprint mismatch');
     }
-    const verified = await prepareDiscoveryHandoff(options.configStore, {
-      goal: handoff.goal,
-      harness: handoff.harness,
-      createdAt: handoff.createdAt,
-      candidates: handoff.candidates.map((candidate) => ({
-        sourceId: candidate.sourceId,
-        revision: candidate.revision,
-        repositoryPath: candidate.repositoryPath,
-        fingerprint: candidate.fingerprint,
-      })),
-    }, { allowUnregisteredSources: true });
-    if (verified.fingerprint !== fingerprint) throw new Error('pinned packages changed');
-    return verified;
+    return handoff;
   } catch (error) {
     throw new DiscoveryWorkspaceError(
       DISCOVERY_WORKSPACE_ERROR_CODES.INVALID,
-      'The reviewed handoff is missing, modified, or no longer matches its pinned snapshots.',
+      'The reviewed handoff is missing, modified, or inconsistent with its retained workspace metadata.',
       { id: record.id },
       { cause: error },
     );
@@ -736,6 +727,15 @@ async function removeWorkspaceLocked(
       ...(record.retirement === undefined ? {} : { evidence: record.retirement }),
     });
     workspaceExists = false;
+    if (config.discoveryWorkspaces.length === 1) {
+      try {
+        await rmdir(workspaceRoot);
+      } catch (error) {
+        if (!isErrno(error, 'ENOENT') && !isErrno(error, 'ENOTEMPTY') && !isErrno(error, 'EEXIST')) {
+          throw error;
+        }
+      }
+    }
     await options.configStore.update((current) => ({
       discoveryWorkspaces: current.discoveryWorkspaces.filter((candidate) => candidate.id !== id),
       recentProjects: current.recentProjects.filter((candidate) => candidate.id !== record.projectId),

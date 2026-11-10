@@ -36,6 +36,7 @@ import {
   refreshRemoteSkillSource,
   registerRemoteSkillSource,
   setRemoteCatalogLimits,
+  setRemoteSourceName,
   setRemoteSourceLimits,
   unregisterRemoteSkillSource,
 } from '../catalog/remote.js';
@@ -91,6 +92,9 @@ const extraDirectoryDeleteSchema = z.object({
 const remoteSourceBodySchema = z.strictObject({
   repository: z.string().min(1).max(2_048),
   ref: z.string().min(1).max(255).optional(),
+});
+const remoteSourceNameBodySchema = z.strictObject({
+  name: z.string().trim().max(120),
 });
 const remoteLimitsBodySchema = z.strictObject({ limits: RemoteCatalogLimitOverridesSchema });
 const remoteSourceLimitsBodySchema = z.strictObject({ limits: RemoteCatalogLimitOverridesSchema.nullable() });
@@ -614,6 +618,29 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRoutesOptions> = async (
         return sendCatalogFailure(reply, error);
       }
     });
+
+    app.put<{ Params: { sourceId: string }; Body: unknown }>(
+      '/api/settings/remote-skill-sources/:sourceId/name',
+      async (request, reply) => {
+        const parsed = remoteSourceNameBodySchema.safeParse(request.body);
+        if (!parsed.success) {
+          return reply.code(422).send(createApiErrorEnvelope(
+            API_ERROR_CODES.VALIDATION_ERROR,
+            'The remote source name is not valid.',
+            { issues: toValidationIssues(parsed.error.issues) },
+          ));
+        }
+        try {
+          return reply.send({ source: await setRemoteSourceName(
+            options.configStore,
+            request.params.sourceId,
+            parsed.data.name,
+          ) });
+        } catch (error) {
+          return sendCatalogFailure(reply, error);
+        }
+      },
+    );
 
     app.put<{ Params: { sourceId: string }; Body: unknown }>(
       '/api/settings/remote-skill-sources/:sourceId/limits',

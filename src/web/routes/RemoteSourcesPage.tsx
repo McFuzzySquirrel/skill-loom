@@ -22,62 +22,66 @@ function SnapshotContents({ snapshot, disabled, refreshing, onRefresh }: {
   const [shown, setShown] = useState(50);
   const [shownAgents, setShownAgents] = useState(50);
   return (
-    <section aria-label={`Snapshot ${snapshot.revision}`}>
-      <h4>Commit <code>{snapshot.revision}</code></h4>
-      <button
-        type="button"
-        className="button button--secondary"
-        aria-label={`Refresh saved commit ${snapshot.revision}`}
-        disabled={disabled}
-        onClick={onRefresh}
-      >
-        {refreshing ? 'Refreshing saved commit…' : 'Refresh this saved commit'}
-      </button>
-      {snapshot.packages.length === 0 ? (
-        <p>No skill packages were found at this commit.</p>
-      ) : (
-        <>
-          <ul>
-            {snapshot.packages.slice(0, shown).map((item) => (
-              <li key={`${item.repositoryPath}-${item.fingerprint}`}>
-                <strong>{item.name}</strong>
-                {' — '}{item.description || 'No description'}
-                {' '}<code>{item.repositoryPath}</code>
-                {' '}({item.files} files, {formatMegabytes(item.bytes)})
-              </li>
-            ))}
-          </ul>
-          {shown < snapshot.packages.length ? (
-            <button type="button" className="button button--secondary" onClick={() => setShown((count) => count + 50)}>
-              Show more packages ({String(shown)} of {String(snapshot.packages.length)} shown)
-            </button>
-          ) : null}
-        </>
-      )}
-      {snapshot.agents.length === 0 ? (
-        <p>No native agent definitions were found at this commit.</p>
-      ) : (
-        <>
-          <h4>Native agent definitions</h4>
-          <ul>
-            {snapshot.agents.slice(0, shownAgents).map((agent) => (
-              <li key={`${agent.harness}-${agent.repositoryPath}-${agent.fingerprint}`}>
-                <strong>{agent.name}</strong>
-                {' — '}{agent.description || 'No description'}
-                {' '}({agent.harness}; {agent.status})
-                {' '}<code>{agent.repositoryPath}</code>
-                {agent.statusReason === null ? null : ` — ${agent.statusReason}`}
-              </li>
-            ))}
-          </ul>
-          {shownAgents < snapshot.agents.length ? (
-            <button type="button" className="button button--secondary" onClick={() => setShownAgents((count) => count + 50)}>
-              Show more agents ({String(shownAgents)} of {String(snapshot.agents.length)} shown)
-            </button>
-          ) : null}
-        </>
-      )}
-    </section>
+    <details>
+      <summary>
+        Commit <code>{snapshot.revision}</code> — {snapshot.packages.length} skill packages, {snapshot.agents.length} native agents
+      </summary>
+      <section aria-label={`Snapshot ${snapshot.revision}`}>
+        <button
+          type="button"
+          className="button button--secondary"
+          aria-label={`Refresh saved commit ${snapshot.revision}`}
+          disabled={disabled}
+          onClick={onRefresh}
+        >
+          {refreshing ? 'Refreshing saved commit…' : 'Refresh this saved commit'}
+        </button>
+        {snapshot.packages.length === 0 ? (
+          <p>No skill packages were found at this commit.</p>
+        ) : (
+          <>
+            <ul>
+              {snapshot.packages.slice(0, shown).map((item) => (
+                <li key={`${item.repositoryPath}-${item.fingerprint}`}>
+                  <strong>{item.name}</strong>
+                  {' — '}{item.description || 'No description'}
+                  {' '}<code>{item.repositoryPath}</code>
+                  {' '}({item.files} files, {formatMegabytes(item.bytes)})
+                </li>
+              ))}
+            </ul>
+            {shown < snapshot.packages.length ? (
+              <button type="button" className="button button--secondary" onClick={() => setShown((count) => count + 50)}>
+                Show more packages ({String(shown)} of {String(snapshot.packages.length)} shown)
+              </button>
+            ) : null}
+          </>
+        )}
+        {snapshot.agents.length === 0 ? (
+          <p>No native agent definitions were found at this commit.</p>
+        ) : (
+          <>
+            <h4>Native agent definitions</h4>
+            <ul>
+              {snapshot.agents.slice(0, shownAgents).map((agent) => (
+                <li key={`${agent.harness}-${agent.repositoryPath}-${agent.fingerprint}`}>
+                  <strong>{agent.name}</strong>
+                  {' — '}{agent.description || 'No description'}
+                  {' '}({agent.harness}; {agent.status})
+                  {' '}<code>{agent.repositoryPath}</code>
+                  {agent.statusReason === null ? null : ` — ${agent.statusReason}`}
+                </li>
+              ))}
+            </ul>
+            {shownAgents < snapshot.agents.length ? (
+              <button type="button" className="button button--secondary" onClick={() => setShownAgents((count) => count + 50)}>
+                Show more agents ({String(shownAgents)} of {String(snapshot.agents.length)} shown)
+              </button>
+            ) : null}
+          </>
+        )}
+      </section>
+    </details>
   );
 }
 
@@ -89,6 +93,7 @@ export function RemoteSourcesPage({ api = catalogApi }: { api?: CatalogApi }) {
   const [sources, setSources] = useState<RemoteSkillSource[]>([]);
   const [limitsDirty, setLimitsDirty] = useState(false);
   const [snapshots, setSnapshots] = useState<Record<string, RemoteSkillSnapshot[]>>({});
+  const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
   const [repository, setRepository] = useState('');
   const [ref, setRef] = useState('');
   const [loading, setLoading] = useState(true);
@@ -101,6 +106,7 @@ export function RemoteSourcesPage({ api = catalogApi }: { api?: CatalogApi }) {
     try {
       const current = await api.listRemoteSources();
       setSources(current);
+      setNameDrafts(Object.fromEntries(current.map((source) => [source.id, source.name ?? ''])));
       const snapshotEntries = await Promise.all(current.map(async (source) => [
         source.id,
         await api.listRemoteSnapshots(source.id),
@@ -151,7 +157,7 @@ export function RemoteSourcesPage({ api = catalogApi }: { api?: CatalogApi }) {
         ],
       }));
       announce(
-        `Refreshed ${source.repository} at commit ${snapshot.revision.slice(0, 12)}. Found ${snapshot.packages.length} skill packages.`,
+        `Refreshed ${source.name ?? source.repository} at commit ${snapshot.revision.slice(0, 12)}. Found ${snapshot.packages.length} skill packages.`,
       );
     } catch (failure) {
       const apiError = toApiClientError(failure, 'The remote repository could not be refreshed.');
@@ -167,11 +173,31 @@ export function RemoteSourcesPage({ api = catalogApi }: { api?: CatalogApi }) {
     setError(null);
     try {
       setSources(await api.removeRemoteSource(source.id));
-      announce(`Unregistered ${source.repository}. Saved snapshots were retained.`);
+      announce(`Unregistered ${source.name ?? source.repository} and deleted its saved snapshots.`);
     } catch (failure) {
       const apiError = toApiClientError(failure, 'The remote repository could not be unregistered.');
       setError(apiError);
       announce(`Remote repository could not be unregistered: ${apiError.message}`, 'assertive');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const saveSourceName = async (source: RemoteSkillSource) => {
+    const name = nameDrafts[source.id] ?? '';
+    setBusyId(`${source.id}:name`);
+    setError(null);
+    try {
+      const updated = await api.setRemoteSourceName(source.id, name);
+      setSources((current) => current.map((candidate) => candidate.id === source.id ? updated : candidate));
+      setNameDrafts((current) => ({ ...current, [source.id]: updated.name ?? '' }));
+      announce(updated.name === undefined
+        ? `Removed the friendly name for ${source.repository}.`
+        : `Saved ${updated.name} as the friendly name for ${source.repository}.`);
+    } catch (failure) {
+      const apiError = toApiClientError(failure, 'The catalog name could not be saved.');
+      setError(apiError);
+      announce(`Catalog name could not be saved: ${apiError.message}`, 'assertive');
     } finally {
       setBusyId(null);
     }
@@ -264,9 +290,31 @@ export function RemoteSourcesPage({ api = catalogApi }: { api?: CatalogApi }) {
         <div className="chain-list">
           {sources.map((source) => (
             <article className="chain-list__item" key={source.id}>
-              <h3>{source.repository}</h3>
+              <h3>{source.name || source.repository}</h3>
               <p>{source.ref === undefined ? 'Default branch' : `Ref: ${source.ref}`}</p>
+              <div className="field">
+                <label className="field__label" htmlFor={`remote-source-name-${source.id}`}>Friendly catalog name</label>
+                <input
+                  className="input"
+                  id={`remote-source-name-${source.id}`}
+                  value={nameDrafts[source.id] ?? ''}
+                  onChange={(event) => setNameDrafts((current) => ({ ...current, [source.id]: event.target.value }))}
+                  maxLength={120}
+                  disabled={busyId !== null}
+                />
+              </div>
               <div className="panel__actions">
+                <button
+                  type="button"
+                  className="button button--secondary"
+                  onClick={() => void saveSourceName(source)}
+                  disabled={
+                    busyId !== null ||
+                    (nameDrafts[source.id] ?? '') === (source.name ?? '')
+                  }
+                >
+                  Save name
+                </button>
                 <button
                   type="button"
                   className="button button--secondary"

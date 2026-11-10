@@ -8,6 +8,7 @@ import {
   mkdir,
   mkdtemp,
   open,
+  rmdir,
   readFile,
   readdir,
   realpath,
@@ -180,6 +181,32 @@ export async function setRemoteSourceLimits(configStore: ConfigStore, sourceId: 
   });
 }
 
+export async function setRemoteSourceName(configStore: ConfigStore, sourceId: string, raw: unknown) {
+  const parsed = z.string().trim().max(120).safeParse(raw);
+  if (!parsed.success) {
+    throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.INVALID, 'The remote source name is not valid.');
+  }
+  return withSourceLock(configStore, sourceId, async () => {
+    const config = await configStore.update((current) => {
+      if (!current.remoteSkillSources.some((source) => source.id === sourceId)) {
+        throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.NOT_FOUND, 'The configured remote skill source was not found.');
+      }
+      return {
+        remoteSkillSources: current.remoteSkillSources.map((source) => {
+          if (source.id !== sourceId) return source;
+          const { name: _name, ...rest } = source;
+          return parsed.data === '' ? rest : { ...rest, name: parsed.data };
+        }),
+      };
+    });
+    const source = config.remoteSkillSources.find((candidate) => candidate.id === sourceId);
+    if (source === undefined) {
+      throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.NOT_FOUND, 'The configured remote skill source was not found.');
+    }
+    return source;
+  });
+}
+
 export async function registerRemoteSkillSource(
   configStore: ConfigStore,
   input: { repository: string; ref?: string },
@@ -226,20 +253,65 @@ export async function unregisterRemoteSkillSource(
   sourceId: string,
 ): Promise<void> {
   return withSourceLock(configStore, sourceId, async () => {
-    let removed = false;
-    await configStore.update((current) => {
-      const remaining = current.remoteSkillSources.filter((source) => source.id !== sourceId);
-      removed = remaining.length !== current.remoteSkillSources.length;
-      return removed ? { remoteSkillSources: remaining } : {};
-    });
-    if (!removed) {
+    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(sourceId)) {
+      throw new RemoteSourceError(
+        REMOTE_SOURCE_ERROR_CODES.NOT_FOUND,
+        'The remote source id is invalid.',
+        { sourceId },
+      );
+    }
+    const current = await configStore.get();
+    if (!current.remoteSkillSources.some((source) => source.id === sourceId)) {
       throw new RemoteSourceError(
         REMOTE_SOURCE_ERROR_CODES.NOT_FOUND,
         'The configured remote skill source was not found.',
         { sourceId },
       );
     }
+    await removeRemoteSourceStorage(configStore.getConfigDir(), sourceId);
+    await configStore.update((latest) => {
+      const remaining = latest.remoteSkillSources.filter((source) => source.id !== sourceId);
+      return remaining.length !== latest.remoteSkillSources.length
+        ? { remoteSkillSources: remaining }
+        : {};
+    });
   });
+}
+
+async function removeRemoteSourceStorage(configDirectory: string, sourceId: string): Promise<void> {
+  const configRoot = await realpath(configDirectory);
+  const sourcesRoot = join(configRoot, 'catalog-sources');
+  let sourcesInfo;
+  try {
+    sourcesInfo = await lstat(sourcesRoot);
+  } catch (error) {
+    if (isErrno(error, 'ENOENT')) return;
+    throw error;
+  }
+  if (!sourcesInfo.isDirectory() || sourcesInfo.isSymbolicLink() || await realpath(sourcesRoot) !== sourcesRoot) {
+    throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.INVALID, 'The remote source storage path is unsafe.');
+  }
+
+  const sourceRoot = join(sourcesRoot, sourceId);
+  let sourceInfo;
+  try {
+    sourceInfo = await lstat(sourceRoot);
+  } catch (error) {
+    if (!isErrno(error, 'ENOENT')) throw error;
+    sourceInfo = undefined;
+  }
+  if (sourceInfo !== undefined &&
+      (!sourceInfo.isDirectory() || sourceInfo.isSymbolicLink() || await realpath(sourceRoot) !== sourceRoot)) {
+    throw new RemoteSourceError(REMOTE_SOURCE_ERROR_CODES.INVALID, 'The remote source storage path is unsafe.');
+  }
+  if (sourceInfo !== undefined) await rm(sourceRoot, { recursive: true });
+  try {
+    await rmdir(sourcesRoot);
+  } catch (error) {
+    if (!isErrno(error, 'ENOENT') && !isErrno(error, 'ENOTEMPTY') && !isErrno(error, 'EEXIST')) {
+      throw error;
+    }
+  }
 }
 
 /**

@@ -8318,7 +8318,10 @@ var Of = ["opencode", "copilot"], kf = I(Of), G = M().trim().min(1), Af = F({
 	id: M().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),
 	repository: Ff,
 	ref: If.optional()
-}), Wf = Uf.extend({ limits: Vf.optional() }), Gf = oc(M(), Js()), Kf = {
+}), Wf = Uf.extend({
+	name: G.max(120).optional(),
+	limits: Vf.optional()
+}), Gf = oc(M(), Js()), Kf = {
 	harnessCommands: Af.default({}),
 	extraSkillDirectories: P(G).default([]),
 	sharedBundleDirectory: G.optional(),
