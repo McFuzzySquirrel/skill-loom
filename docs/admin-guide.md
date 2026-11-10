@@ -114,9 +114,12 @@ Configuration writes use an atomic same-directory temporary-file replacement. A 
 The original default budgets remain 100 skill packages, 100 native agents,
 2,000 files, 20 MiB per package and per snapshot, 128 MiB / 10,000 entries
 of Git staging, and 2 MiB of Git command output. To refresh a larger catalog,
-raise the appropriate budgets together on **Remote skill repositories**; for
+expand **Remote catalog limits** on **Remote skill repositories** (collapsed
+initially) and raise the appropriate budgets together; for
 example, a 1,000-package, 20,000-file source also needs sufficient Git output,
-staging, total snapshot bytes, and timeouts. Each setting has a finite maximum.
+staging, total snapshot size, and timeouts. Each setting has a finite maximum.
+The UI edits and displays sizes in decimal MB (1 MB = 1,000,000 bytes);
+configuration and API values remain integer bytes, with no change to budgets.
 Staging is polled during Git operations and checked again afterward, so it is
 not a hard filesystem quota. Existing snapshots remain readable when budgets
 are lowered. Discovery handoffs and bundles retain their independent limits.

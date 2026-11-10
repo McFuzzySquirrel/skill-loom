@@ -11,6 +11,7 @@ import { InlineError } from '../components/InlineError';
 import { RemoteCatalogLimits } from '../components/RemoteCatalogLimits';
 import { useStatusAnnouncer } from '../components/StatusRegion';
 import { Link } from '../router';
+import { formatMegabytes } from '../utils/size';
 
 function SnapshotContents({ snapshot, disabled, refreshing, onRefresh }: {
   snapshot: RemoteSkillSnapshot;
@@ -42,7 +43,7 @@ function SnapshotContents({ snapshot, disabled, refreshing, onRefresh }: {
                 <strong>{item.name}</strong>
                 {' — '}{item.description || 'No description'}
                 {' '}<code>{item.repositoryPath}</code>
-                {' '}({item.files} files, {item.bytes} bytes)
+                {' '}({item.files} files, {formatMegabytes(item.bytes)})
               </li>
             ))}
           </ul>

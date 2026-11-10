@@ -47,6 +47,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Changed
 
+- Remote repository sizing settings start collapsed and can be expanded for editing. Size limits, maximums, and saved package sizes display in decimal MB instead of bytes; stored and API budgets are unchanged.
 - Live discovery and execution probes accept stable OpenCode versions >=2.2.5, including 2.2.6, while retaining exact observed versions in evidence. Older and prerelease versions still warn; automatic advancement remains subject to live signal verification.
 - CLI-managed starts remain limited to instruction-only chains without native agents; OpenCode automatic starts stay blocked until the `clear` signal between `working` and `idle` is live-verified ([ADR-0007](docs/adr/0007-explicit-advancement-signals.md)).
 - Copilot trust guidance now distinguishes persistent folder trust from session-only approval.

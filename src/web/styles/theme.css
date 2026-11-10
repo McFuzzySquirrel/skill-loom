@@ -3753,6 +3753,14 @@ main:focus {
   border-bottom: 1px solid var(--border);
 }
 
+.remote-catalog-limits > summary {
+  cursor: pointer;
+}
+
+.remote-catalog-limits > summary > .section-title {
+  display: inline;
+}
+
 .project-details summary,
 .builder-meta__summary {
   width: fit-content;
