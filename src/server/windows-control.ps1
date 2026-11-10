@@ -122,7 +122,7 @@ try {
         $security.AddAccessRule($rule)
         if ($PSVersionTable.PSEdition -eq 'Core') {
             $directoryInfo = [System.IO.DirectoryInfo]::new($path)
-            $null = [System.IO.FileSystemAclExtensions]::CreateDirectory($directoryInfo, $security)
+            $null = [System.IO.FileSystemAclExtensions]::Create($directoryInfo, $security)
         } else {
             $null = [System.IO.Directory]::CreateDirectory($path, $security)
         }
