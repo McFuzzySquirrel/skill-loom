@@ -710,6 +710,13 @@ with explicit root and child records, product advancement, recall and cleanup.
 The signal mismatch is resolved on that Linux x64 / OpenCode 2.2.6 setup.
 The managed multi-step automatic journey remains unverified; CLI guards remain
 in place until that separate acceptance gate passes.
+The checkout command `npm run test:live:managed -- --confirm-live` now probes
+the production automatic command surface, two ordered artifact-producing
+steps, pause, active abort and orderly shutdown/recovery. It uses its own
+locked profile and real PTYs, stops on the first failure without replay, and
+writes bounded redacted evidence. Executable fixtures cover its checks and
+failure paths; a real run on the user's OpenCode machine is still required.
+See `docs/OPERATIONS.md#managed-opencode-acceptance`.
 The discovery skill documents the partial CLI catalog and draft workflow;
 skill-bearing CLI starts and recovery are not yet integrated. Restricted instruction-only start supports supervised
 mode and automatic process-exit mode; automatic progression and reported broad

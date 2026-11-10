@@ -270,6 +270,84 @@ JSON and failure codes; inspect it for sensitive information first, and never
 share credentials or full terminal transcripts. If cleanup reports failure,
 follow its remediation for the specific recorded session or temporary path.
 
+## Managed OpenCode acceptance
+
+The interactive signal probe above does not exercise the automatic runner's
+actual `opencode run` invocation. From a current checkout, after `npm install`,
+use the dedicated managed probe on a machine with stable OpenCode >=2.2.5 and
+an authenticated model provider:
+
+```bash
+# Optional: uncomment with an already-authenticated provider/model ID.
+# export LOOM_LIVE_OPENCODE_MODEL=provider/model
+npm run test:live:managed -- --confirm-live
+```
+
+`--confirm-live` explicitly approves real model calls (possibly paid) and a
+temporary project configuration allowing file read/edit/search tools while
+denying other tools and external-directory access. This is not an OS sandbox:
+the installed harness still runs as you, with its normal provider credentials
+and session store. No credentials are copied. The probe does not run Copilot.
+It always creates its own Loom profile and Copilot home, ignoring inherited
+profile overrides, strips inherited OpenCode session/config overrides, and
+acquires the production profile lock before startup recovery. The optional
+model setting is written only into the disposable project's config.
+
+The probe uses production services, preflight, the run owner, persistence and
+real PTYs. It does not replace the harness adapter, inject completion signals,
+change automatic command selection, or enable the blocked CLI route. It runs:
+
+1. A two-instruction shared-session automatic chain. Step one creates a small
+   random-token artifact; step two reads it and creates a matching artifact.
+   Both must complete once, in order, with the same session ID, matching files,
+   one advancement edge per launch and completed persisted records.
+2. A separate run paused during step one. The first step may finish, but the
+   second must stay pending without its artifact. The probe then aborts it.
+3. A separate active run aborted before step two. No second launch or artifact
+   is allowed.
+4. A separate active run stopped with orderly owner shutdown. A new owner
+   recovers the interrupted record without starting any process or replaying.
+
+Control scenarios wait for an observed `working` record before acting, not
+just a running status or an elapsed startup delay.
+
+There are at most five step launches; earlier failure stops subsequent
+scenarios instead of retrying. Each step has a 180-second timeout. Use
+`--timeout-ms 300000` for slower models (allowed range 500–600000 milliseconds).
+The chain deadline accounts for both sequential steps. A missing OSC signal,
+including a zero process exit without the declared OSC edge, is a failure—not
+permission to substitute silence or an exit heuristic. In particular,
+`opencode run` may behave differently from interactive `--prompt`, or may
+reject the production session setup; preserve that diagnostic evidence rather
+than pre-seeding a session or bypassing the guard.
+
+The default evidence file is `docs/evidence/live-managed-opencode.json`;
+`--evidence /absolute/path/result.json` selects another destination. The file
+is atomically replaced and the command exits nonzero on any failed check or
+cleanup. Review `checks` (none may remain `not-run`), `launches`, `runs` and
+`cleanup`, not just the top-level result. Evidence includes redacted argument
+vectors, bounded OSC records, artifact-match booleans and status summaries,
+not prompts, token values, frozen inputs or terminal tails.
+
+Cleanup stops the owner and tracked processes, deletes and verifies only the
+observed OpenCode sessions, releases the profile lock and removes the temporary
+tree. Failed cleanup retains its path as `retainedTemporaryRoot`; inspect the
+specific session IDs and cleanup errors before removing retained work. Counts
+cover tracked processes and PTYs, not escaped descendants.
+
+Missing-signal, idle-only, nonzero-exit and timeout behavior is additionally
+checked with deterministic executable fixtures:
+
+```bash
+npx vitest run tests/integration/live-managed-opencode.test.ts
+```
+
+Fixture results are not live evidence. The restart scenario is orderly
+shutdown/recovery, not abrupt owner death. This probe does not establish
+native-agent, skill-invocation, fresh/fork, cross-platform containment or
+reviewed CLI start/action acceptance. Automatic CLI guards remain until live
+managed evidence has passed and that reviewed CLI contract is verified.
+
 ## Troubleshooting
 
 ### Missing harness CLI

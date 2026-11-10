@@ -11,7 +11,7 @@ status: Accepted
 # ADR-0007: Advance automatic steps only on explicit harness signals
 
 - **Deciders:** McFuzzySquirrel and the Skill Loom agent team
-- **Date:** 2026-11-04
+- **Date:** 2026-11-10
 
 **Technical Story:** EXEC-02 required automatic advancement without output-idle heuristics, animation quiescence, or fixed sleeps.
 
@@ -65,6 +65,13 @@ cleanup succeeds. This closes the observed signal mismatch, not end-to-end
 managed chain acceptance. Automatic CLI starts remain blocked until the
 managed multi-step automatic journey is verified.
 
+`npm run test:live:managed -- --confirm-live` now exercises that managed journey
+using the production `opencode run` invocation, plus pause, abort and orderly
+shutdown/recovery. Its [procedure](../OPERATIONS.md#managed-opencode-acceptance)
+distinguishes real probe evidence from deterministic executable-fixture tests.
+Implementation and fixture success do not establish live acceptance or enable
+the CLI guard.
+
 ### Positive Consequences
 
 - Automatic runs cannot race ahead because output paused.
@@ -75,7 +82,7 @@ managed multi-step automatic journey is verified.
 
 - The runner depends on the harness signal remaining stable; a CLI format change pauses runs.
 - A 30-minute step can occupy the only run slot until the timeout fires.
-- Live verification found a current OpenCode format mismatch (see below), so automatic OpenCode advancement is not yet proven end-to-end.
+- Historical OpenCode format mismatches are fixed and the interactive signal probe passes, but the managed automatic command surface remains unverified end-to-end.
 
 ## Pros and Cons of the Options
 

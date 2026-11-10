@@ -621,7 +621,7 @@ Config, chain, run, and active-run documents carry explicit versions. Unknown ve
 
 ## Known Limitations
 
-- **Automatic OpenCode advancement is not proven end-to-end.** The record-aware parser passed a user-supplied OpenCode 2.2.6 live probe, including product advancement and cleanup. The managed multi-step automatic journey remains unverified; automatic CLI starts remain blocked. Supervised runs are unaffected.
+- **Automatic OpenCode advancement is not proven end-to-end.** The record-aware parser passed a user-supplied OpenCode 2.2.6 live probe, including product advancement and cleanup. The managed multi-step automatic journey remains unverified; automatic CLI starts remain blocked. The opt-in [managed acceptance procedure](OPERATIONS.md#managed-opencode-acceptance) exercises the actual command surface, artifacts and controls. Supervised runs are unaffected.
 - **One harness per chain; no per-step harness or model selection.**
 - **Native fork is available only on OpenCode's headless surface.** Supervised OpenCode and all Copilot forks use a deterministic handoff note, not a native session fork.
 - **One active run globally.** A second start is rejected while a run is starting, running, paused, or awaiting user input.

@@ -44,6 +44,7 @@
     "docs:capture": "node scripts/capture-tour.mjs",
     "test:live:discovery": "tsx scripts/live-discovery.ts",
     "test:live:execution": "tsx scripts/live-execution.ts",
+    "test:live:managed": "tsx scripts/live-managed-opencode.ts",
     "check": "node scripts/check-docs.mjs"
   },
   "dependencies": {

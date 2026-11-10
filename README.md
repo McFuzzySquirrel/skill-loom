@@ -264,6 +264,7 @@ The packed package contains `dist/src`, `dist/web`, the compiled package metadat
 | Package smoke test | `npm run test:package` | Packs, inspects, and starts the packaged CLI on a spare loopback port. |
 | Live discovery probe | `npm run test:live:discovery` | Requires real harness CLIs. |
 | Live execution probe | `npm run test:live:execution` | Requires real harness CLIs and may make paid model calls. |
+| Managed OpenCode acceptance | `npm run test:live:managed -- --confirm-live` | Checkout-only; uses the production managed runner, makes paid calls and grants temporary-project read/edit permissions. See the [procedure](docs/OPERATIONS.md#managed-opencode-acceptance). |
 | Documentation gate | `npm run check` | Runs `scripts/check-docs.mjs`. |
 | Capture docs visuals | `npm run docs:capture` | Builds the app, captures the visual-tour screenshots, and assembles the slow README GIF under `docs/assets/`. |
 

@@ -8,6 +8,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Added
 
+- Opt-in `test:live:managed -- --confirm-live` OpenCode acceptance probe using the production profile lock, preflight, orchestrator, persistence and PTYs. It checks ordered two-step artifacts, shared sessions, pause, abort, orderly recovery and verified tracked-resource/session cleanup, with bounded redacted evidence and no automatic CLI guard changes.
 - Standalone skill guide for the skill-only path: discover, inspect, run, and recover chains with `scenario-discovery`, `loom-run-bundle`, and `loom-chain-workflow` without the Skill Loom server.
 - `loom-chain-workflow` companion skill, with a downloadable package, coordinating reviewed discovery, optional workspace testing, bundle import, and current-session execution.
 - Shared-owner CLI (`service`, `catalog`, `project`, `chain`, `bundle`, `discovery`, `run`, `workspace`) with versioned JSON envelopes, stdin payloads, paginated catalog snapshots, a 1,000-skill / 20,000-file catalog budget, and read-only `bundle inspect`.
