@@ -51,6 +51,23 @@ node --disable-warning=ExperimentalWarning <skill-dir>/scripts/loom-bundle.mjs \
   inspect --bundle /abs/path/chain.loom.json --project /abs/path/project
 ```
 
+Ordinary `inspect` does not read stdin. If the host's own skill catalog already reports a global package for a bundled skill, you can reuse that package instead of copying it. Resolve the exact directory from the host catalog; do not guess a global path. Repeat the inspection with `--stdin-json` and the catalog-resolved package paths on stdin:
+
+```bash
+node --disable-warning=ExperimentalWarning <skill-dir>/scripts/loom-bundle.mjs \
+  inspect --bundle /abs/path/chain.loom.json --project /abs/path/project --stdin-json
+```
+
+```json
+{
+  "globalSkillPaths": {
+    "review": "/abs/path/from/host/catalog/review"
+  }
+}
+```
+
+The helper fingerprints each selected package, includes its path, fingerprint, file inventory, and `SKILL.md` in the inspection output, and binds its path and fingerprint into `reviewDigest`. Review those files as untrusted content too. A symlinked, non-canonical, or name-mismatched package directory is rejected.
+
 ### 3. Prepare
 
 Installing packages and starting the chain are separate decisions. After you confirm, the host sends JSON on stdin (never in arguments) to `prepare`:
@@ -67,11 +84,17 @@ Installing packages and starting the chain are separate decisions. After you con
     "description": "Continue in the current host conversation.",
     "confirmed": true
   },
-  "inputs": { "task": "the reviewed task" }
+  "inputs": { "task": "the reviewed task" },
+  "globalSkillPaths": {
+    "review": "/abs/path/from/host/catalog/review"
+  },
+  "reuseSkills": ["review"]
 }
 ```
 
-Packages are installed under `<project>/.agents/skills/` without overwriting. Reusing an installed package needs `reuseSkills`, and differing contents also need `differingReuseConfirmed: true`. A host different from the authored harness needs `hostSwitchConfirmed: true`. `prepare` returns a `runId` and `revision`.
+Packages not selected for global reuse are installed under `<project>/.agents/skills/` without overwriting. A package passed in `globalSkillPaths` is referenced in place and is not copied; add every such name to `reuseSkills`. Supply the same `globalSkillPaths` map used for inspection, plus `differingReuseConfirmed: true` if the reviewed global contents differ from the bundle. The helper rechecks the reviewed path and fingerprint at `prepare` and re-fingerprints each reused package before every step, so a later edit blocks the run rather than mixing unreviewed content into it.
+
+Reusing a project package also needs `reuseSkills`, and differing contents also need `differingReuseConfirmed: true`. A host different from the authored harness needs `hostSwitchConfirmed: true`. `prepare` returns a `runId` and `revision`.
 
 Input values are stored locally under `<project>/.loom/portable-runs/` (ignored by Git). Do not put secrets in inputs unless you accept that.
 
@@ -79,7 +102,7 @@ Input values are stored locally under `<project>/.loom/portable-runs/` (ignored 
 
 Repeat until the run completes:
 
-1. `step` with `{"revision": N, "confirmed": true}` starts one attempt and returns the resolved instruction and the installed skill path, if any.
+1. `step` with `{"revision": N, "confirmed": true}` starts one attempt and returns the resolved instruction and the project or global skill path, if any.
 2. The host performs the work with its own tools.
 3. `record` with `{"revision": N+1, "outcome": "done", "confirmed": true, "summary": "..."}`. Use `"failed"`, or `"skipped"` with a `reason`. Between steps, `action: "pause"`, `"abort"`, or (after a failure) `"retry"` are available.
 
@@ -105,7 +128,9 @@ When a Skill Loom owner is running (`skill-loom service start`), `loom-chain-wor
 |---|---|
 | The host cannot find the helper | Ask the host for the installed `loom-run-bundle` directory; do not guess a global path. |
 | `inspect` rejects the bundle | It may be invalid, oversized, a symlink, or contain unsafe paths. Obtain a clean export. |
-| Preparation reports a stale digest | The bundle, project, or installed packages changed. Inspect and review again. |
+| A global path is rejected | Use the exact canonical directory the host catalog reports. Symlinked, relative, or non-matching package directories are not accepted. |
+| Preparation reports a stale digest | The bundle, project, existing package, or selected global package changed. Inspect and review again. |
+| A step reports `PACKAGE_CHANGED` | A reused global package was edited after review. Inspect it again and prepare a new run; do not restore the old fingerprint. |
 | A skill is not visible after installation | Refresh or restart the host before starting a step. |
 | Run from an older helper cannot continue | Reconcile any unresolved attempt, abort it, then inspect and prepare a new run. |
 

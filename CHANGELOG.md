@@ -13,6 +13,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 - A single visual chain editor opened with `skill-loom edit` for reordering steps, editing instructions, managing `{{inputs}}`, and saving back to a draft or project chain.
 - Project-independent drafts and project chains with revision preconditions and atomic versioned persistence.
 - Portable `.loom.json` bundles with complete referenced skill packages, project-local source preference, bounded validation, explicit conflict handling, and no-overwrite import. Version 2 preserves one selected native agent.
+- Portable bundle runs can reuse a catalog-resolved host-global skill package instead of copying it into the project. Reuse is explicit, the reviewed path and fingerprint are bound into the review digest, and the package is re-fingerprinted before every step; an edited package blocks the run.
 - Local and pinned remote skill catalogs with explicit HTTPS/SSH source registration, bounded refresh, pagination, candidate inspection, and no execution of package content.
 - Validated discovery handoffs prepared from pinned snapshots and consumed offline by the standalone discovery skill.
 - Managed disposable test workspaces and discovery workspaces with retained output and explicit `skill-loom workspace remove` cleanup.
@@ -28,7 +29,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 - The web application is reduced to the chain editor. Projects, catalogs, discovery, libraries, test workspaces, runs, themes, and the terminal are CLI-, skill-, or harness-driven.
 - Chain documents use version 3 for exact remote skill bindings and optional native-agent identity. Valid version 1 and 2 records migrate on read.
 - Portable bundle export uses version 2 for chains with a selected native agent and version 1 for agent-free chains.
-- OpenCode discovery includes the shared `.agents/skills/` directory while retaining legacy `.opencode/skills/` discovery. Copilot discovery remains CLI-authoritative.
+- OpenCode catalog discovery covers project `.agents/skills/` and legacy `.opencode/skills/`, plus personal `~/.agents/skills` and `~/.config/opencode/skills`. Copilot discovery remains CLI-authoritative and now reports project and host-global locations.
 - Windows profile security prefers stable PowerShell 7 and retains Windows PowerShell 5.1 with .NET 4.7.2+ as an availability-only fallback.
 - Live discovery and execution probes accept stable OpenCode versions >=2.2.5, including 2.2.6, while retaining exact observed versions in evidence.
 - README, user, administrator, operations, release, and evidence documentation now distinguish supported behavior, blocked gates, and unpublished status.

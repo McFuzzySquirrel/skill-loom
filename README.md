@@ -60,7 +60,7 @@ The product promise is deliberately narrow:
 | Companion skills | `scenario-discovery`, `loom-chain-workflow`, and `loom-run-bundle` discover skills, coordinate testing and import, and run a bundle in the current agent session. The first two offer to install the CLI when `skill-loom` is missing. |
 | Visual chain editor | `skill-loom edit` opens a local editor to drag steps into a new order, edit instructions, manage `{{inputs}}`, and save back to the draft or project chain. It is the only web screen. |
 | Chain drafts and project chains | Create, validate, update, and remove project-independent drafts and project chains with `skill-loom chain`. |
-| Portable chain bundles | Export a chain with complete referenced skill packages as `.loom.json` (version 2 also preserves one native agent); inspect, review, and import it into another project. |
+| Portable chain bundles | Export a chain with complete referenced skill packages as `.loom.json` (version 2 also preserves one native agent); inspect, review, and import it into another project, or run it in the current host session with optional reuse of a reviewed host-global package. |
 | Skill catalog and remote repositories | Search local and pinned remote skill catalogs, and register HTTPS/SSH Git repositories that are refreshed only on explicit request and never executed. |
 | Discovery handoff | Prepare a reviewed, project-independent handoff from pinned snapshots for an agent session. |
 | Optional local testing | Test a chain in a managed disposable workspace (`skill-loom workspace`); it is separate from the source project, not an OS sandbox. |
@@ -136,6 +136,7 @@ Key boundaries and the decisions behind them:
 - Processes are spawned without a shell and PTYs are server-owned — [ADR-0011](docs/adr/0011-shell-free-process-and-pty-transport.md).
 - New project skill copies share `.agents/skills/`, with legacy OpenCode discovery preserved — [ADR-0012](docs/adr/0012-shared-project-skill-installation-root.md).
 - Bundle export prefers one project-local package and rejects remaining ambiguity — [ADR-0013](docs/adr/0013-deterministic-chain-bundle-skill-resolution.md).
+- Portable runs reuse a host-global package only when the host catalog resolves it and review binds its path and fingerprint; otherwise the package is installed into the project — [ADR-0029](docs/adr/0029-catalog-resolved-global-skill-reuse.md).
 
 The full decision directory is in [docs/adr/README.md](docs/adr/README.md).
 
