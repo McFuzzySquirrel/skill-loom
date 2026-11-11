@@ -20,6 +20,7 @@ LOOM_CONFIG_DIR=/absolute/path/to/loom-profile npm start
 | `LOOM_HOST` | `127.0.0.1` | Bind host. Only `127.0.0.0/8`, `::1`, and `localhost` (normalized to `127.0.0.1`) are accepted; any other value aborts startup. |
 | `LOOM_PORT` | `7373` | TCP port from 1 to 65535. |
 | `LOOM_WEB_ROOT` | discovered `dist/web` | Optional override for the built chain editor directory; intended for controlled deployments and tests. |
+| `LOOM_CAPABILITY_INDEX` | unset | Set to `1` to enable the derived, disposable capability index for chain-authoring services. The catalog page command does not consume it until the authoring-integration phase; when unset, retrieval uses the existing fresh catalog scan. |
 
 The versioned config document contains `version`, `harnessCommands`, `extraSkillDirectories`, `remoteSkillSources`, `recentProjects`, and `uiPreferences`. `remoteSkillSources` stores validated credential-free Git URLs and optional refs; pinned package snapshots are retained below `<LOOM_CONFIG_DIR>/catalog-sources/`. `harnessCommands` may override the executable name or absolute path for `opencode` or `copilot`; a missing entry resolves from `PATH`. The config schema is strict: credential-like fields such as `apiKey`, `token`, or `secret` are invalid and are never stored there. Configuration writes use an atomic temporary-file replacement. A corrupt or unsupported-version config is reported rather than silently rewritten.
 
@@ -36,6 +37,8 @@ npx --yes --package=./skill-loom-cli-0.1.0.tgz skill-loom
 ```
 
 The CLI supports `--help`, `--version`, `--no-open`, `--port <number>`, and `--config-dir <path>`. It starts the same loopback-only production server as `npm start`, prints the resolved config directory and URL, and opens the default browser only when stdout is a TTY and `CI` is unset. `--no-open` disables that behavior entirely.
+
+The derived capability index is a local retrieval cache, not a new source of truth. It reads package metadata and bounded text, never executes skill content, and never sends it off the machine. Deleting `capability-index.sqlite` loses no user data and simply forces the next retrieval to rebuild it or use the fresh scan.
 
 `--port` sets `LOOM_PORT`; `--config-dir` sets `LOOM_CONFIG_DIR`. Environment variables remain authoritative when a flag is omitted. The package contains the compiled server, built chain editor, compiled package metadata, the macOS PTY installation helper, `docs/OPERATIONS.md`, and the manifest; source, tests, build scripts, and the other documentation files are excluded. Installing the package may build the native `node-pty` module, so the Python/make/C++ toolchain is required.
 
@@ -76,6 +79,7 @@ proof that a person reviewed the content.
 | `~/.config/loom/config.json` | Global config, harness command overrides, extra skill directories, remote sources, recent projects, and UI preferences (unused by the chain editor). | Override the whole directory with `LOOM_CONFIG_DIR`. |
 | `~/.config/loom/drafts/*.json` | Project-independent chain drafts. | Independent of projects; back up with the config directory. |
 | `~/.config/loom/profile-owner.sqlite` | Profile ownership lock. | One owner per profile. Do not remove while the service is running; the OS releases the lock on exit. |
+| `~/.config/loom/capability-index.sqlite` | Derived capability index for chain authoring: bounded names, descriptions, frontmatter, headings, file paths, and body excerpts, with package fingerprints and remote binding identity. | Disposable and excluded from backups. Owner-only, capped at 64 MiB, and safe to delete at any time. A missing, corrupt, unsafe, unsupported, or too-large index falls back to the fresh catalog scan. |
 | `~/.config/loom/control.json` | Temporary local control endpoint and bearer capability; Windows also holds client TLS credentials. | Private to the owning process. Do not commit, back up, or remove while the service is running. |
 | `~/.config/loom/test-workspaces/<uuid>/` | Retained managed test project, including its `.loom/chains/` and `.loom/runs/` data. | Hidden from the ordinary recent-project list. Remove with `skill-loom workspace remove` after inspecting results; active-run ownership blocks cleanup. |
 | `~/.config/loom/discovery-workspaces/<uuid>/` | Reviewed discovery handoff, bundled `scenario-discovery` package, managed project, result file, and run state. | Retained until explicit CLI cleanup; cleanup refuses the workspace that owns the active run. |

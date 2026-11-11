@@ -8,6 +8,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Added
 
+- A derived, disposable SQLite capability index for chain authoring. It searches bounded names, descriptions, frontmatter, headings, file paths, and body excerpts with FTS5 ranking (or a deterministic token table), fingerprints packages for invalidation, preserves remote binding identity, and falls back to the fresh catalog scan when the index is disabled, missing, corrupt, unsafe, unsupported, or too large. It is opt-in with `LOOM_CAPABILITY_INDEX=1`; no catalog command uses it until the authoring-integration phase.
 - Skill Loom is CLI- and skill-driven. A shared-owner CLI (`service`, `project`, `chain`, `catalog`, `discovery`, `bundle`, `run`, `workspace`) provides versioned JSON envelopes, stdin payloads, reviewed digests, and explicit confirmations.
 - Companion skills: `scenario-discovery` discovers candidates and builds reviewed bundles, `loom-chain-workflow` coordinates discovery, optional workspace testing, import, and current-session execution, and `loom-run-bundle` runs a bundle in the current host session. The first two offer to install the CLI when it is missing.
 - A single visual chain editor opened with `skill-loom edit` for reordering steps, editing instructions, managing `{{inputs}}`, and saving back to a draft or project chain.

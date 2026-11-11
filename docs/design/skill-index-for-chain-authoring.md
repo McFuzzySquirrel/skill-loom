@@ -1,13 +1,13 @@
 # Skill index for chain authoring
 
-**Status:** Accepted design. Phase 0 is complete; Phase 1 has not started. The decision is recorded in [ADR-0030](../adr/0030-capability-index-and-model-reranking.md).
+**Status:** Accepted design. Phases 0 and 1 are complete; Phase 2 has not started. The decision is recorded in [ADR-0030](../adr/0030-capability-index-and-model-reranking.md).
 
 ## Progress
 
 | Phase | Status | Evidence |
 |---|---|---|
 | 0 — Baseline and evaluation | Complete — 2026-11-11 | [baseline](../evidence/retrieval-baseline-2026-11-11.json), `npm run eval:retrieval` |
-| 1 — Capability index | Not started | |
+| 1 — Capability index | Complete — 2026-11-11 | `tests/unit/capability-index.test.ts`, `npx vitest run tests/unit/capability-index.test.ts` |
 | 2 — Authoring integration | Not started | |
 | 3 — Structured metadata | Not started | |
 | 4 — Optional local embeddings | Not started | |
@@ -156,6 +156,8 @@ The runner needs no service, model, credentials, or network access. It uses a te
 
 ## Phase 1: Capability index
 
+**Status:** Complete — 2026-11-11.
+
 **Deliverables**
 
 - `src/server/catalog/capability-index.ts` (name is indicative) with build, validate, read, rebuild, and dispose operations.
@@ -167,11 +169,18 @@ The runner needs no service, model, credentials, or network access. It uses a te
 
 **Exit criteria**
 
-- The index builds for the repository's local roots and the packaged scenario skills.
-- A changed `SKILL.md` invalidates its row and the next query refreshes it.
-- A corrupt or unsafe index degrades to the scan without hiding skills.
-- Search latency meets the agreed budget at the corpus size.
-- The feature is disabled by default behind a configuration or build flag.
+- [x] The index builds for the repository's local roots and the packaged scenario skills.
+- [x] A changed `SKILL.md` invalidates its row and the next query refreshes it.
+- [x] A corrupt or unsafe index degrades to the scan without hiding skills.
+- [x] Search latency meets the agreed budget at the corpus size.
+- [x] The feature is disabled by default behind a configuration or build flag.
+
+**Implementation notes**
+
+- The index is created only when a caller opts in. `LOOM_CAPABILITY_INDEX=1` enables the capability search service; no catalog command consumes it until Phase 2.
+- One query merges OpenCode project, personal, extra-directory, and packaged scenario packages with verified pinned remote snapshots. Copilot discovery remains CLI-authoritative and falls back to the fresh scan.
+- Tests cover FTS5 and token-table ranking, stat and content-hash invalidation, missing/corrupt/unsafe fallback, unicode, bounded sizes, project scoping, remote manifest verification and binding identity, the bundled scenario root, and the 250 ms query budget.
+- The database is `~/.config/loom/capability-index.sqlite`, owner-only, capped at 64 MiB, and excluded from backups. Deleting it is always safe.
 
 ## Phase 2: Authoring integration
 
