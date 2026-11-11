@@ -192,9 +192,10 @@ It does not execute content or freeze files against later changes; inspect all
 selected files as untrusted data and revalidate before a later action.
 With the owner running, `catalog project page` accepts a registered `projectId`,
 `harness`, optional `query`, `offset`, `limit` (up to 100), `warningsOffset`,
-and optional `sources`, `enabled`, `tags`, `tools`, `inputs`, and `outputs`
-filters as JSON on stdin. Pass the returned `snapshotId` with the same project,
-harness, query, and filter set for subsequent entry and warning pages. The owner retains at most
+and optional `sources`, `enabled`, `tags`, `tools`, `inputs`, `outputs`,
+`hasTags`, `hasTools`, `hasInputs`, and `hasOutputs` filters as JSON on stdin.
+Pass the returned `snapshotId` with the same project, harness, query, and filter
+set for subsequent entry and warning pages. The owner retains at most
 four snapshots, with a combined 64 MiB serialized-data budget and a two-minute
 expiry. An expired or evicted snapshot returns `CATALOG_PAGE_EXPIRED`; start
 again. With `LOOM_CAPABILITY_INDEX=1`, the first page uses the derived capability
@@ -202,8 +203,9 @@ index and returns ranked `match.snippet` and `match.score` values, a
 `fingerprint`, and the exact remote binding identity; the response reports
 `retrieval.mode`, `retrieval.ranking`, and any fallback reason. Indexed entries
 also include declared `metadata` (tags, tools, inputs, outputs, and
-`whenToUse`), and the response includes `metadataCoverage` counts. Metadata
-filters are part of the snapshot identity. The first query after a missing index
+`whenToUse`), and the response includes `metadataCoverage` counts plus
+`metadataFacets` with every unique declared tag, tool, input, and output.
+Metadata filters are part of the snapshot identity. The first query after a missing index
 builds it and reports the scan fallback; later queries use the index. Any
 indexed failure or result set too large for the bounded indexed snapshot uses
 the fresh scan instead of truncating or hiding skills; a scan response warns

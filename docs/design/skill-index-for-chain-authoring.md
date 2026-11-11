@@ -102,7 +102,7 @@ Rules:
 
 1. The authoring skill states the outcome, harness, and source constraints.
 2. The model expands the outcome into capabilities, synonyms, and constraints.
-3. The server searches the index with a bounded, sanitized query and optional source, enabled-state, tag, tool, input, and output filters.
+3. The server searches the index with a bounded, sanitized query and optional source, enabled-state, tag, tool, input, output, and metadata-presence filters. The same response carries facets for discovering declared values.
 4. Results include score, snippet, canonical path, harness, source, declared metadata, and the remote binding identity when applicable.
 5. The model reranks the shortlist and proposes skill steps.
 6. The authoring skill reads every selected package in full.
@@ -254,8 +254,8 @@ The exit criteria are met with the expanded corpus. The scan numbers differ from
 
 - `src/server/catalog/skill-metadata.ts` extracts bounded, deduplicated metadata from decoded frontmatter. It accepts `tags` (top-level or `metadata.tags`), `allowed-tools`/`allowed_tools`/`tools`, `inputs`, `outputs`, and `when_to_use`/`when-to-use`/`whenToUse`. A field with an invalid shape is ignored and recorded as a field-level issue; it never rejects the package.
 - The index stores capability rows for `tag`, `tool`, `input`, `output`, `when_to_use`, and `metadata_issue`, and adds a dedicated FTS metadata column and token weights. Schema version 2 forces an existing index to rebuild; package files are unchanged.
-- `catalog project page` accepts optional `sources`, `enabled`, `tags`, `tools`, `inputs`, and `outputs` filters. Filters are ANDed, are part of the snapshot identity, and are applied to the indexed path. A scan fallback applies source and enabled filters, reports `METADATA_FILTER_UNSUPPORTED`, and never pretends a metadata filter held.
-- Results add a `metadata` object with tags, tools, inputs, outputs, and `whenToUse`. The page response adds `metadataCoverage` with counts for descriptions, headings, each metadata kind, invalid fields, and skills without structured metadata.
+- `catalog project page` accepts optional `sources`, `enabled`, `tags`, `tools`, `inputs`, `outputs`, `hasTags`, `hasTools`, `hasInputs`, and `hasOutputs` filters. Filters are ANDed, are part of the snapshot identity, and are applied to the indexed path. Presence filters require or exclude a declared metadata kind. A scan fallback applies source and enabled filters, reports `METADATA_FILTER_UNSUPPORTED`, and never pretends a metadata filter held.
+- Results add a `metadata` object with tags, tools, inputs, outputs, and `whenToUse`. The page response adds `metadataCoverage` with counts for descriptions, headings, each metadata kind, invalid fields, and skills without structured metadata, plus `metadataFacets` with every unique declared tag, tool, input, and output and its count over the filtered scope.
 - The corpus now has 39 tasks and 16 candidates. Metadata fixtures and tasks cover tag, tool, input, and output filters; `precision@10` was added to the metric set.
 
 **Comparison — 2026-11-11**

@@ -73,6 +73,7 @@ export const CAPABILITY_MAX_OFFSET = 10_000;
 export const CAPABILITY_MAX_SNIPPET_CHARS = 240;
 export const CAPABILITY_MAX_FILTER_VALUES = 20;
 export const CAPABILITY_MAX_FILTER_VALUE_LENGTH = 120;
+export const CAPABILITY_MAX_FACET_VALUES = 100;
 export const CAPABILITY_QUERY_BUDGET_MS = 250;
 
 const DEFAULT_MAX_DEPTH = 12;
@@ -160,6 +161,11 @@ export interface CapabilitySearchFilters {
   tools?: string[] | undefined;
   inputs?: string[] | undefined;
   outputs?: string[] | undefined;
+  /** `true` requires at least one declared tag; `false` requires none. */
+  hasTags?: boolean | undefined;
+  hasTools?: boolean | undefined;
+  hasInputs?: boolean | undefined;
+  hasOutputs?: boolean | undefined;
 }
 
 export interface CapabilityIndexQuery extends CapabilitySearchFilters {
@@ -194,6 +200,19 @@ export interface CapabilityCandidate {
   metadataIssues?: string[];
 }
 
+export interface CapabilityFacetValue {
+  value: string;
+  count: number;
+}
+
+/** Unique declared metadata values over the filtered scope. */
+export interface CapabilityMetadataFacets {
+  tags: CapabilityFacetValue[];
+  tools: CapabilityFacetValue[];
+  inputs: CapabilityFacetValue[];
+  outputs: CapabilityFacetValue[];
+}
+
 /** Counts over every skill in the indexed scope, independent of the query or page. */
 export interface CapabilityMetadataCoverage {
   total: number;
@@ -223,6 +242,8 @@ export interface CapabilitySearchResponse {
   ranking?: CapabilityRanking;
   /** Present only when the indexed path answered. */
   coverage?: CapabilityMetadataCoverage;
+  /** Present only when the indexed path answered. */
+  facets?: CapabilityMetadataFacets;
 }
 
 export type CapabilityFallback = (
@@ -817,6 +838,7 @@ export class CapabilityIndex {
         elapsedMs: Math.round((performance.now() - started) * 100) / 100,
         ranking,
         coverage: readCoverage(database, filter, bindings),
+        facets: readFacets(database, filter, bindings),
       };
     } finally {
       database.close();
@@ -1357,6 +1379,10 @@ export interface NormalizedCapabilityFilters {
   tools: string[];
   inputs: string[];
   outputs: string[];
+  hasTags?: boolean;
+  hasTools?: boolean;
+  hasInputs?: boolean;
+  hasOutputs?: boolean;
 }
 
 export function normalizeCapabilityFilters(request: CapabilitySearchFilters): NormalizedCapabilityFilters {
@@ -1369,6 +1395,10 @@ export function normalizeCapabilityFilters(request: CapabilitySearchFilters): No
     tools: normalizeFilterValues(request.tools),
     inputs: normalizeFilterValues(request.inputs),
     outputs: normalizeFilterValues(request.outputs),
+    ...(typeof request.hasTags === 'boolean' ? { hasTags: request.hasTags } : {}),
+    ...(typeof request.hasTools === 'boolean' ? { hasTools: request.hasTools } : {}),
+    ...(typeof request.hasInputs === 'boolean' ? { hasInputs: request.hasInputs } : {}),
+    ...(typeof request.hasOutputs === 'boolean' ? { hasOutputs: request.hasOutputs } : {}),
   };
 }
 
@@ -1393,7 +1423,9 @@ function normalizeFilterValues(values: readonly string[] | undefined): string[] 
 
 export function hasMetadataFilters(filters: CapabilitySearchFilters): boolean {
   return (filters.tags?.length ?? 0) > 0 || (filters.tools?.length ?? 0) > 0 ||
-    (filters.inputs?.length ?? 0) > 0 || (filters.outputs?.length ?? 0) > 0;
+    (filters.inputs?.length ?? 0) > 0 || (filters.outputs?.length ?? 0) > 0 ||
+    typeof filters.hasTags === 'boolean' || typeof filters.hasTools === 'boolean' ||
+    typeof filters.hasInputs === 'boolean' || typeof filters.hasOutputs === 'boolean';
 }
 
 function buildFilter(
@@ -1426,6 +1458,20 @@ function buildFilter(
       );
       bindings.push(kind, value);
     }
+  }
+  for (const [kind, presence] of [
+    ['tag', filters.hasTags],
+    ['tool', filters.hasTools],
+    ['input', filters.hasInputs],
+    ['output', filters.hasOutputs],
+  ] as const) {
+    if (presence === undefined) continue;
+    clauses.push(
+      `${presence ? 'EXISTS' : 'NOT EXISTS'} (
+        SELECT 1 FROM capabilities c WHERE c.skill_id = s.id AND c.kind = ?
+      )`,
+    );
+    bindings.push(kind);
   }
   return { sql: clauses.join(' AND '), bindings };
 }
@@ -1468,6 +1514,44 @@ function readCoverage(
     withIssues: value('with_issues'),
     withoutStructuredMetadata: value('without_structured_metadata'),
   };
+}
+
+function readFacets(
+  database: DatabaseSync,
+  filter: string,
+  bindings: Array<string | number>,
+): CapabilityMetadataFacets {
+  const facets: CapabilityMetadataFacets = {
+    tags: [], tools: [], inputs: [], outputs: [],
+  };
+  const kinds = [
+    ['tag', facets.tags],
+    ['tool', facets.tools],
+    ['input', facets.inputs],
+    ['output', facets.outputs],
+  ] as const;
+  for (const [kind, target] of kinds) {
+    const rows = database.prepare(`
+      SELECT min(cap.value) AS value, count(*) AS count
+      FROM skills s
+      JOIN capabilities cap ON cap.skill_id = s.id
+      WHERE cap.kind = ? AND ${filter}
+      GROUP BY lower(cap.value)
+      ORDER BY count DESC, value COLLATE NOCASE
+      LIMIT ?
+    `).all(kind, ...bindings, CAPABILITY_MAX_FACET_VALUES) as unknown as Array<{
+      value: unknown;
+      count: unknown;
+    }>;
+    for (const row of rows) {
+      if (typeof row.value !== 'string') continue;
+      const count = typeof row.count === 'number'
+        ? row.count
+        : typeof row.count === 'bigint' ? Number(row.count) : 0;
+      if (count > 0) target.push({ value: row.value, count });
+    }
+  }
+  return facets;
 }
 
 function readCandidateMetadata(

@@ -623,6 +623,12 @@ describe('capability index', () => {
     });
     expect(all.candidates.find((candidate) => candidate.name === 'invalid-metadata')?.metadataIssues)
       .toEqual(['tags']);
+    expect(all.facets).toEqual({
+      tags: [{ value: 'release', count: 1 }, { value: 'remote', count: 1 }],
+      tools: [{ value: 'Grep', count: 1 }, { value: 'Read', count: 1 }],
+      inputs: [{ value: 'release_manifest', count: 1 }, { value: 'target_channel', count: 1 }],
+      outputs: [{ value: 'attestation_bundle', count: 1 }, { value: 'release_notes', count: 1 }],
+    });
 
     const filtered = await index.search({
       harness: 'opencode', projectPath: project, query: '',
@@ -640,6 +646,26 @@ describe('capability index', () => {
     expect(projectOnly.candidates.map((candidate) => candidate.name)).toEqual([
       'invalid-metadata', 'plain-skill', 'release-audit',
     ]);
+    const withTools = await index.search({
+      harness: 'opencode', projectPath: project, query: '', hasTools: true,
+    });
+    expect(withTools.candidates.map((candidate) => candidate.name)).toEqual(['release-audit']);
+    const withoutTools = await index.search({
+      harness: 'opencode', projectPath: project, query: '', hasTools: false,
+    });
+    expect(withoutTools.candidates.map((candidate) => candidate.name)).toEqual([
+      'invalid-metadata', 'plain-skill',
+    ]);
+    for (const filter of [
+      { hasTags: true },
+      { hasInputs: true },
+      { hasOutputs: true },
+    ]) {
+      const result = await index.search({
+        harness: 'opencode', projectPath: project, query: '', ...filter,
+      });
+      expect(result.candidates.map((candidate) => candidate.name)).toEqual(['release-audit']);
+    }
     const disabled = await index.search({
       harness: 'opencode', projectPath: project, query: '', enabled: false,
     });

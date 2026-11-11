@@ -6,6 +6,7 @@ import {
   normalizeCapabilityFilters,
   type CapabilityCandidate,
   type CapabilityMetadataCoverage,
+  type CapabilityMetadataFacets,
   type CapabilitySearchResponse,
   type CapabilitySearchService,
   type NormalizedCapabilityFilters,
@@ -50,6 +51,10 @@ interface PageRequest {
   tools?: string[] | undefined;
   inputs?: string[] | undefined;
   outputs?: string[] | undefined;
+  hasTags?: boolean | undefined;
+  hasTools?: boolean | undefined;
+  hasInputs?: boolean | undefined;
+  hasOutputs?: boolean | undefined;
 }
 
 /** How the first page was produced. Cached snapshots retain the same value. */
@@ -74,6 +79,7 @@ interface Snapshot {
   warnings: CatalogWarning[];
   retrieval: PageRetrieval;
   coverage?: CapabilityMetadataCoverage;
+  facets?: CapabilityMetadataFacets;
   size: number;
   expiresAt: number;
 }
@@ -83,6 +89,7 @@ interface DiscoveryResult {
   warnings: CatalogWarning[];
   retrieval: PageRetrieval;
   coverage?: CapabilityMetadataCoverage;
+  facets?: CapabilityMetadataFacets;
 }
 
 /** The subset of the capability service the page cache needs. */
@@ -152,6 +159,7 @@ export class ProjectCatalogPages {
         projectDevice: project.device, projectInode: project.inode,
         query, filtersKey, entries, warnings: discovery.warnings, retrieval: discovery.retrieval,
         ...(discovery.coverage === undefined ? {} : { coverage: discovery.coverage }),
+        ...(discovery.facets === undefined ? {} : { facets: discovery.facets }),
         size, expiresAt: this.now() + SNAPSHOT_TTL_MS,
       };
       if (size <= this.maxCacheBytes) {
@@ -177,6 +185,7 @@ export class ProjectCatalogPages {
         ? request.warningsOffset + warnings.length : null,
       retrieval: snapshot.retrieval,
       metadataCoverage: snapshot.coverage ?? null,
+      metadataFacets: snapshot.facets ?? null,
       snapshotId,
       snapshotExpiresAt: snapshotId === null ? null : new Date(snapshot.expiresAt).toISOString(),
       ...(snapshotId === null ? {
@@ -296,6 +305,7 @@ export class ProjectCatalogPages {
         elapsedMs: Math.round((performance.now() - started) * 100) / 100,
       },
       ...(first.coverage === undefined ? {} : { coverage: first.coverage }),
+      ...(first.facets === undefined ? {} : { facets: first.facets }),
     };
   }
 
@@ -359,5 +369,9 @@ function pageFiltersKey(filters: NormalizedCapabilityFilters): string {
     tools: [...filters.tools].sort(),
     inputs: [...filters.inputs].sort(),
     outputs: [...filters.outputs].sort(),
+    hasTags: filters.hasTags ?? null,
+    hasTools: filters.hasTools ?? null,
+    hasInputs: filters.hasInputs ?? null,
+    hasOutputs: filters.hasOutputs ?? null,
   });
 }

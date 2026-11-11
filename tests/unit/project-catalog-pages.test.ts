@@ -7,6 +7,7 @@ import type {
   CapabilityFallbackReason,
   CapabilityIndexQuery,
   CapabilityMetadataCoverage,
+  CapabilityMetadataFacets,
   CapabilitySearchResponse,
 } from '../../src/server/catalog/capability-index.js';
 import type { CatalogService } from '../../src/server/catalog/merge.js';
@@ -69,6 +70,7 @@ function capability(candidates: CapabilityCandidate[], options: {
   reason?: CapabilityFallbackReason;
   total?: number;
   coverage?: CapabilityMetadataCoverage;
+  facets?: CapabilityMetadataFacets;
   warnings?: CapabilitySearchResponse['warnings'];
 } = {}) {
   const search = vi.fn(async (input: CapabilityIndexQuery): Promise<CapabilitySearchResponse> => ({
@@ -85,9 +87,17 @@ function capability(candidates: CapabilityCandidate[], options: {
     elapsedMs: 1,
     ...(options.mode === 'scan' ? {} : { ranking: 'fts5' as const }),
     ...(options.coverage === undefined ? {} : { coverage: options.coverage }),
+    ...(options.facets === undefined ? {} : { facets: options.facets }),
   }));
   return { enabled: true as const, search };
 }
+
+const facets: CapabilityMetadataFacets = {
+  tags: [{ value: 'release', count: 1 }],
+  tools: [{ value: 'Grep', count: 1 }, { value: 'Read', count: 1 }],
+  inputs: [{ value: 'release_manifest', count: 1 }],
+  outputs: [{ value: 'attestation_bundle', count: 1 }],
+};
 
 const coverage: CapabilityMetadataCoverage = {
   total: 2,
@@ -206,16 +216,18 @@ describe('project catalog page snapshots', () => {
           whenToUse: 'Use before a remote release.',
         },
       }),
-    ], { coverage });
+    ], { coverage, facets });
     const pages = new ProjectCatalogPages(catalog, Date.now, undefined, undefined, indexed);
     const first = await pages.page({
       ...request(), query: 'attestation', sources: ['project'], tags: ['release'], tools: ['grep'],
+      hasTools: true,
     });
     expect(indexed.search).toHaveBeenCalledWith(expect.objectContaining({
-      sources: ['project'], enabled: true, tags: ['release'], tools: ['grep'],
+      sources: ['project'], enabled: true, tags: ['release'], tools: ['grep'], hasTools: true,
     }));
     expect(first).toMatchObject({
       metadataCoverage: coverage,
+      metadataFacets: facets,
       entries: [{
         name: 'release-audit',
         metadata: {
@@ -231,9 +243,13 @@ describe('project catalog page snapshots', () => {
       ...request(), query: 'attestation', sources: ['project'], tags: ['different'],
       snapshotId: first.snapshotId!,
     })).rejects.toMatchObject({ code: 'CATALOG_PAGE_MISMATCH' });
+    await expect(pages.page({
+      ...request(), query: 'attestation', sources: ['project'], tags: ['release'], tools: ['grep'],
+      hasTools: false, snapshotId: first.snapshotId!,
+    })).rejects.toMatchObject({ code: 'CATALOG_PAGE_MISMATCH' });
     expect((await pages.page({
       ...request(), query: 'attestation', sources: ['project'], tags: ['release'], tools: ['grep'],
-      snapshotId: first.snapshotId!,
+      hasTools: true, snapshotId: first.snapshotId!,
     })).entries[0]?.name).toBe('release-audit');
     expect(indexed.search).toHaveBeenCalledTimes(1);
   });
@@ -251,6 +267,7 @@ describe('project catalog page snapshots', () => {
     const result = await pages.page({ ...request(), query: 'review', tags: ['release'] });
     expect(result.warnings.map((warning) => warning.code)).toContain('METADATA_FILTER_UNSUPPORTED');
     expect(result.metadataCoverage).toBeNull();
+    expect(result.metadataFacets).toBeNull();
   });
 
   it('uses the fresh scan when the indexed path fails or reports a fallback', async () => {

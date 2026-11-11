@@ -82,11 +82,12 @@ the first CLI command, run `skill-loom --version`.
    shortlist, and respect `retrieval.mode`: when it reports `scan` or a
    `CAPABILITY_INDEX_FALLBACK` warning, use concrete name and description terms
    and do not treat the result as ranked body-text evidence. Add only
-   outcome-justified `sources`, `enabled`, `tags`, `tools`, `inputs`, and
-   `outputs` filters, and treat `METADATA_FILTER_UNSUPPORTED` as an instruction
-   to verify metadata from packages rather than assuming the filter held. Use
-   `metadataCoverage` to explain a weak shortlist, not to infer missing values.
-   Merge duplicates by
+   outcome-justified `sources`, `enabled`, `tags`, `tools`, `inputs`, `outputs`,
+   and `hasTags`/`hasTools`/`hasInputs`/`hasOutputs` presence filters, and treat
+   `METADATA_FILTER_UNSUPPORTED` as an instruction to verify metadata from
+   packages rather than assuming the filter held. Use `metadataFacets` to
+   discover declared values and `metadataCoverage` to explain a weak shortlist,
+   not to infer missing values. Merge duplicates by
    exact identity rather than name, and stop rather than resolving same-named
    remote packages by name. Then use `scenario-discovery` for full
    candidate inspection, proposals, explicit chain and redistribution review,

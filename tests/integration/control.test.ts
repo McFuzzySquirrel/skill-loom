@@ -163,6 +163,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       const response = await callControl(configDirectory, 'catalog.project.page', {
         projectId, harness: 'opencode', query: 'attestation bundle',
         sources: ['project'], tags: ['release'], tools: ['grep'], inputs: ['release_manifest'],
+        hasTools: true,
       });
       expect(response).toMatchObject({
         ok: true,
@@ -170,6 +171,12 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
           retrieval: { mode: 'index', ranking: 'fts5' },
           metadataCoverage: {
             total: 1, withTags: 1, withTools: 1, withInputs: 1, withoutStructuredMetadata: 0,
+          },
+          metadataFacets: {
+            tags: [{ value: 'release', count: 1 }, { value: 'review', count: 1 }],
+            tools: [{ value: 'Grep', count: 1 }, { value: 'Read', count: 1 }],
+            inputs: [{ value: 'release_manifest', count: 1 }],
+            outputs: [],
           },
           entries: [{
             name: 'body-only-review',

@@ -72,6 +72,7 @@ Useful response fields:
 ... | jq '.result | {
   retrieval,
   metadataCoverage,
+  metadataFacets,
   total,
   entries: [.entries[] | {
     name,
@@ -100,6 +101,7 @@ Use the same outcomes for every run so results are comparable.
 | Metadata tag | Outcome names a domain | `tags` |
 | Metadata tool | Outcome names a tool | `tools` |
 | Metadata input or output | Outcome names a required artifact | `inputs` or `outputs` |
+| Metadata presence | List skills that declare any tool or tag | `hasTools` or `hasTags` |
 | Composition | Needs two skills in one chain | none |
 | Negative | Should return nothing | none |
 | Remote-only | Candidate exists only in a pinned snapshot | `sources: ["remote"]` |
@@ -115,6 +117,7 @@ printf '%s' '{
   "sources":["project","remote"],
   "tags":["release"],
   "tools":["grep"],
+  "hasTools":true,
   "limit":10
 }' | skill-loom catalog project page
 ```
@@ -135,7 +138,9 @@ Remote repositories that do not declare metadata should show a high `withoutStru
 
 ### Filters
 
-Confirm that `sources`, `enabled`, `tags`, `tools`, `inputs`, and `outputs` narrow the result set. Filters are combined with AND.
+Confirm that `sources`, `enabled`, `tags`, `tools`, `inputs`, and `outputs` narrow the result set. Filters are combined with AND. Use `hasTags`, `hasTools`, `hasInputs`, or `hasOutputs` to require or exclude a metadata kind; `true` requires at least one value and `false` requires none.
+
+Use `metadataFacets` to discover every declared tag, tool, input, and output in the filtered scope, with counts. The facets are a discovery aid, not a package review.
 
 If the index falls back to the scan, confirm the response contains `METADATA_FILTER_UNSUPPORTED`. The scan does not pretend a metadata filter held; the authoring skill must verify those claims from the package.
 

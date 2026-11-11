@@ -710,6 +710,10 @@ async function dispatch(
           .max(CAPABILITY_MAX_FILTER_VALUES).optional(),
         outputs: z.array(z.string().trim().min(1).max(CAPABILITY_MAX_FILTER_VALUE_LENGTH))
           .max(CAPABILITY_MAX_FILTER_VALUES).optional(),
+        hasTags: z.boolean().optional(),
+        hasTools: z.boolean().optional(),
+        hasInputs: z.boolean().optional(),
+        hasOutputs: z.boolean().optional(),
       }));
       const project = isProjectId(request.projectId)
         ? await services.projectRegistry.findRecentProject(request.projectId) : undefined;
