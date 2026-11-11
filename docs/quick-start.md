@@ -4,7 +4,7 @@ Go from an idea to a completed skill workflow. You need Node.js 24 or newer and 
 
 ## 1. Add the Loom skills to your project
 
-Make sure these companion skills are available in your target project's `.agents/skills/` directory: `scenario-discovery`, `loom-chain-workflow`, and `loom-run-bundle`. From a Skill Loom checkout, run `npm run build:portable-skill`, then copy the three matching directories from `dist/skills/` into `.agents/skills/`. Do not merge over existing skill packages; refresh your agent host so it discovers them. See the [standalone skill guide](standalone-skill-guide.md#install-the-skills) for details.
+Make sure these companion skills are available in your target project's `.agents/skills/` directory: `scenario-discovery`, `loom-chain-workflow`, `loom-run-bundle`, and `loom-skill-catalog`. From a Skill Loom checkout, run `npm run build:portable-skill`, then copy the four matching directories from `dist/skills/` into `.agents/skills/`. Do not merge over existing skill packages; refresh your agent host so it discovers them. The first three work without the Skill Loom owner; `loom-skill-catalog` needs the CLI and running service. See the [standalone skill guide](standalone-skill-guide.md#install-the-skills) for details.
 
 ## 2. Start Skill Loom
 

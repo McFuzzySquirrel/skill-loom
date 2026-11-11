@@ -202,6 +202,108 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
     }
   });
 
+  it('reviews and installs a catalog skill into the shared project root', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'loom-skill-install-'));
+    const project = join(root, 'project');
+    const configDirectory = join(root, 'config');
+    const home = join(root, 'home');
+    const extra = join(root, 'extra-skills');
+    const packagePath = join(extra, 'note-writer');
+    await mkdir(project, { recursive: true });
+    await mkdir(home, { recursive: true });
+    await mkdir(packagePath, { recursive: true });
+    await writeFile(
+      join(packagePath, 'SKILL.md'),
+      '---\nname: note-writer\ndescription: Writes review notes.\n---\n\nWrite review notes.\n',
+    );
+    const config = createConfigStore({ env: { LOOM_CONFIG_DIR: configDirectory } });
+    await config.update({ extraSkillDirectories: [extra] });
+    const services = createLoomServices({
+      configStore: config,
+      preflightEnv: { LOOM_CAPABILITY_INDEX: '1' },
+      preflightHomeDirectory: home,
+    });
+    const server = await startControlServer(config, { services });
+    try {
+      const opened = await callControl(configDirectory, 'project.open', { path: project });
+      if (!opened.ok) throw new Error('Project registration failed.');
+      const projectId = (opened.result as { project: { id: string } }).project.id;
+      const page = await callControl(configDirectory, 'catalog.project.page', {
+        projectId, harness: 'opencode', query: 'note-writer', sources: ['loom-extra'], limit: 10,
+      });
+      if (!page.ok) throw new Error('Catalog page failed.');
+      const entries = (page.result as {
+        entries: Array<{ id: string; source: string; name: string; fingerprint: string }>;
+      }).entries;
+      expect(entries).toHaveLength(1);
+      const found = entries[0]!;
+      const candidate = {
+        id: found.id,
+        source: found.source,
+        ...(/^[a-f0-9]{64}$/.test(found.fingerprint) ? { fingerprint: found.fingerprint } : {}),
+      };
+      const request = { projectId, harness: 'opencode', candidate };
+      const review = await callControl(configDirectory, 'catalog.skill.review', request);
+      expect(review).toMatchObject({
+        ok: true,
+        result: {
+          destination: {
+            path: join(project, '.agents', 'skills', 'note-writer'),
+            conflict: null,
+          },
+          candidate: { name: 'note-writer', source: 'loom-extra' },
+          totalFiles: 1,
+          reviewDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
+      });
+      const reviewDigest = (review as { result: { reviewDigest: string } }).result.reviewDigest;
+
+      expect(await callControl(configDirectory, 'catalog.skill.install', {
+        ...request, reviewDigest,
+      })).toMatchObject({ ok: false, error: { code: 'CONTROL_INVALID_REQUEST' } });
+      expect(await callControl(configDirectory, 'catalog.skill.install', {
+        ...request, reviewDigest: 'a'.repeat(64), confirmed: true,
+      })).toMatchObject({ ok: false, error: { code: 'SKILL_INSTALL_REVIEW_STALE' } });
+
+      const installed = await callControl(configDirectory, 'catalog.skill.install', {
+        ...request, reviewDigest, confirmed: true,
+      });
+      expect(installed).toMatchObject({
+        ok: true,
+        result: {
+          name: 'note-writer',
+          source: 'loom-extra',
+          destinationPath: join(project, '.agents', 'skills', 'note-writer'),
+          totalFiles: 1,
+          fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
+      });
+      expect(await readFile(join(project, '.agents', 'skills', 'note-writer', 'SKILL.md'), 'utf8'))
+        .toContain('Write review notes.');
+
+      const conflict = await callControl(configDirectory, 'catalog.skill.review', request);
+      expect(conflict).toMatchObject({ ok: true, result: { destination: { conflict: 'EXISTS' } } });
+
+      let output = '';
+      let error = '';
+      expect(await runCli(['catalog', 'skill', 'review', '--config-dir', configDirectory], {
+        env: {},
+        stdin: Readable.from([JSON.stringify(request)]),
+        stdout: { write: (chunk) => { output += String(chunk); return true; }, isTTY: false },
+        stderr: { write: (chunk) => { error += String(chunk); return true; } },
+      })).toBe(0);
+      expect(error).toBe('');
+      expect(JSON.parse(output)).toMatchObject({
+        ok: true,
+        result: { destination: { conflict: 'EXISTS' }, reviewDigest: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      });
+    } finally {
+      await server.close();
+      await services.capabilitySearchService.dispose({ deleteIndex: true });
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('refuses startup without deleting a corrupt active-run pointer', async () => {
     const root = await mkdtemp(join(tmpdir(), 'loom-corrupt-active-pointer-'));
     try {

@@ -110,6 +110,22 @@ describe('copySkillIntoProject', () => {
     expect(await readdir(copied.destinationPath)).not.toContain('nested');
   });
 
+  it('uses an explicit destination name and reports the installed fingerprint', async () => {
+    const copied = await copySkillIntoProject({
+      projectPath, harness: 'opencode', entry: entry(), destinationName: 'notes-helper',
+      allowNameSuffix: false,
+    });
+    expect(copied.destinationPath).toBe(join(projectPath, '.agents', 'skills', 'notes-helper'));
+    expect(copied.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    await expectCopyError(
+      copySkillIntoProject({
+        projectPath, harness: 'opencode', entry: entry(), destinationName: 'notes-helper',
+        allowNameSuffix: false,
+      }),
+      CATALOG_COPY_ERROR_CODES.SOURCE_ALREADY_PROJECT,
+    );
+  });
+
   it('binds a remote copy to the verified snapshot and removes altered copies', async () => {
     const skill = await readFile(join(sourcePath, 'SKILL.md'));
     const template = await readFile(join(sourcePath, 'templates', 'note.md'));

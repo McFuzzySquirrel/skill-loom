@@ -80,6 +80,11 @@ export interface CopySkillIntoProjectInput {
   harness: SkillHarness;
   /** Entry from the fresh server-side catalog discovery. */
   entry: SkillEntry;
+  /**
+   * Exact destination directory name. Defaults to a slug of the skill name.
+   * The value is slugged again, so callers cannot escape the skill root.
+   */
+  destinationName?: string;
   /** Whether to suffix the destination if the skill directory already exists. */
   allowNameSuffix?: boolean;
 }
@@ -88,6 +93,8 @@ export interface CopySkillIntoProjectResult {
   name: string;
   source: SkillEntry['source'];
   destinationPath: string;
+  /** Fingerprint of the installed package tree, after publication. */
+  fingerprint: string;
 }
 
 /** Shared project-local root discovered by both supported harnesses. */
@@ -105,7 +112,7 @@ async function copySkillIntoProjectWithNotice(
   input: CopySkillIntoProjectInput,
   notice?: string,
 ): Promise<CopySkillIntoProjectResult> {
-  const { entry, projectPath, harness, allowNameSuffix = true } = input;
+  const { entry, projectPath, harness, destinationName, allowNameSuffix = true } = input;
 
   const remoteContent = entry[REMOTE_SNAPSHOT_CONTENT];
   if (entry.source === 'remote' && remoteContent === undefined) {
@@ -184,12 +191,13 @@ async function copySkillIntoProjectWithNotice(
 
   const destination = await reserveDestination(
     destinationRoot,
-    safePackageName(entry.name || basename(sourceDirectory)),
+    safePackageName(destinationName ?? (entry.name || basename(sourceDirectory))),
     allowNameSuffix,
   );
 
   const budget: CopyBudget = { files: 0, bytes: 0, entries: 0, skillEntries: [], copiedFiles: [] };
   let modeReceipt: InstalledModeReceipt | undefined;
+  let installedFingerprint = '';
   try {
     const sourceModes = await readInstalledModeIndex(sourceDirectory);
     await copyDirectory(sourceDirectory, destination, budget, 0, '', sourceModes);
@@ -266,6 +274,7 @@ async function copySkillIntoProjectWithNotice(
         );
       }
     }
+    installedFingerprint = await treeFingerprint(destination);
   } catch (error) {
     await removePartialCopy(
       destination,
@@ -345,6 +354,7 @@ async function copySkillIntoProjectWithNotice(
     name: entry.name,
     source: entry.source,
     destinationPath: destination,
+    fingerprint: installedFingerprint,
   };
 }
 
@@ -630,7 +640,7 @@ async function copyDirectory(
   }
 }
 
-function safePackageName(value: string): string {
+export function safePackageName(value: string): string {
   const slug = value
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')

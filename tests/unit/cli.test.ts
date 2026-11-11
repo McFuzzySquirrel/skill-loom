@@ -246,6 +246,8 @@ describe('CLI output and environment', () => {
       [['chain', 'draft', 'create', '--help'], 'Validate checks the chain model only'],
       [['catalog', 'snapshot', 'page', '--help'], 'Project catalog discovery'],
       [['catalog', 'snapshot', '-h'], 'snapshot page'],
+      [['catalog', 'skill', '-h'], 'skill review'],
+      [['catalog', 'skill', 'install', '--help'], 'reviewDigest'],
       [['project', '-h'], 'Coordination review'],
     ] as const) {
       const stdout = captureOutput();

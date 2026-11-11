@@ -476,6 +476,7 @@ function checkSkillMirrors(root, failures) {
     'scenario-discovery',
     'loom-chain-workflow',
     'loom-run-bundle',
+    'loom-skill-catalog',
   ]) {
     compareDirectories(
       root,

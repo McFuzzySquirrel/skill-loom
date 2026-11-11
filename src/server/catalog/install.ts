@@ -1,0 +1,602 @@
+import { createHash } from 'node:crypto';
+import { constants } from 'node:fs';
+import { lstat, open, opendir, realpath } from 'node:fs/promises';
+import { join } from 'node:path';
+import {
+  installedExecutableFlag,
+  readInstalledModeIndex,
+  type InstalledModeIndex,
+} from '../../portable/installed-modes.js';
+import {
+  CATALOG_COPY_ERROR_CODES,
+  CatalogCopyError,
+  MAX_SKILL_PACKAGE_BYTES,
+  MAX_SKILL_PACKAGE_FILES,
+  copySkillIntoProject,
+  projectSkillRootFor,
+  safePackageName,
+} from './copy.js';
+import type { CatalogService } from './merge.js';
+import { snapshotPackageFingerprint, snapshotReviewFingerprint } from './snapshot-fingerprint.js';
+import {
+  REMOTE_SNAPSHOT_CONTENT,
+  type CatalogWarning,
+  type SkillEntry,
+  type SkillHarness,
+  type SkillSource,
+} from './types.js';
+
+/**
+ * Review and install a catalog skill package into the project's shared
+ * `.agents/skills/` root.
+ *
+ * Review is read-only. It re-resolves the candidate through a fresh catalog
+ * discovery pass, walks the package with the same bounds and symlink refusals
+ * as the copy layer, and returns a digest over the exact package inventory and
+ * destination. Install repeats that review and rejects a changed package, a
+ * stale digest, or an existing destination. There is no name suffixing and no
+ * overwrite.
+ */
+
+export const SKILL_INSTALL_ERROR_CODES = {
+  CANDIDATE_NOT_FOUND: 'SKILL_INSTALL_CANDIDATE_NOT_FOUND',
+  CANDIDATE_CHANGED: 'SKILL_INSTALL_CANDIDATE_CHANGED',
+  DESTINATION_CONFLICT: 'SKILL_INSTALL_DESTINATION_CONFLICT',
+  REVIEW_STALE: 'SKILL_INSTALL_REVIEW_STALE',
+  SOURCE_UNSUPPORTED: 'SKILL_INSTALL_SOURCE_UNSUPPORTED',
+} as const;
+
+export type SkillInstallErrorCode =
+  (typeof SKILL_INSTALL_ERROR_CODES)[keyof typeof SKILL_INSTALL_ERROR_CODES];
+
+export class CatalogInstallError extends Error {
+  readonly code: SkillInstallErrorCode;
+  readonly details: Record<string, unknown>;
+
+  constructor(
+    code: SkillInstallErrorCode,
+    message: string,
+    details: Record<string, unknown> = {},
+    options: { cause?: unknown } = {},
+  ) {
+    super(message, options.cause === undefined ? undefined : { cause: options.cause });
+    this.name = new.target.name;
+    this.code = code;
+    this.details = details;
+  }
+}
+
+const MAX_COPY_DEPTH = 32;
+const MAX_PACKAGE_ENTRIES = MAX_SKILL_PACKAGE_FILES * (MAX_COPY_DEPTH + 1);
+const LICENSE_FILE = /^(?:licen[cs]e|copying)(?:\..*)?$/i;
+
+export interface SkillInstallCandidate {
+  /** Stable catalog entry id. */
+  id: string;
+  source: SkillSource;
+  /**
+   * Optional identity check. A local candidate uses the derived capability
+   * index fingerprint; a remote candidate uses the pinned snapshot
+   * fingerprint. The review rejects a package that no longer matches.
+   */
+  fingerprint?: string | undefined;
+  sourceId?: string | undefined;
+  revision?: string | undefined;
+  repositoryPath?: string | undefined;
+}
+
+export interface SkillInstallReviewRequest {
+  projectId: string;
+  /** Canonical project directory resolved by the control server. */
+  projectPath: string;
+  harness: SkillHarness;
+  candidate: SkillInstallCandidate;
+  /** Exact destination directory name; defaults to a slug of the skill name. */
+  destinationName?: string | undefined;
+}
+
+export interface SkillInstallRequest extends SkillInstallReviewRequest {
+  reviewDigest: string;
+}
+
+export interface SkillPackageFile {
+  path: string;
+  bytes: number;
+  executable: boolean;
+  sha256: string;
+}
+
+export interface SkillInstallReview {
+  project: { id: string; path: string };
+  harness: SkillHarness;
+  candidate: {
+    id: string;
+    name: string;
+    description: string;
+    source: SkillSource;
+    sourceId: string | null;
+    repository: string | null;
+    revision: string | null;
+    repositoryPath: string | null;
+    /** Full-package fingerprint of the reviewed contents. */
+    fingerprint: string;
+    /** True when the source is a personal/global package that will now diverge. */
+    personalSource: boolean;
+  };
+  destination: {
+    root: string;
+    name: string;
+    path: string;
+    conflict: 'EXISTS' | null;
+  };
+  files: SkillPackageFile[];
+  directories: string[];
+  totalFiles: number;
+  totalBytes: number;
+  licenseFiles: string[];
+  warnings: CatalogWarning[];
+  reviewDigest: string;
+  elapsedMs: number;
+}
+
+export interface SkillInstallResult {
+  name: string;
+  source: SkillSource;
+  destinationPath: string;
+  fingerprint: string;
+  totalFiles: number;
+  totalBytes: number;
+}
+
+interface WalkedFile extends SkillPackageFile {
+  content: Buffer;
+}
+
+interface WalkedPackage {
+  files: WalkedFile[];
+  directories: string[];
+  totalBytes: number;
+}
+
+interface InstallOptions {
+  catalogService: CatalogService;
+}
+
+interface ResolvedReview {
+  review: SkillInstallReview;
+  entry: SkillEntry;
+  walked: WalkedPackage;
+}
+
+function invalid(message: string, details: Record<string, unknown> = {}, cause?: unknown): never {
+  throw new CatalogInstallError(
+    SKILL_INSTALL_ERROR_CODES.CANDIDATE_CHANGED,
+    message,
+    details,
+    cause === undefined ? {} : { cause },
+  );
+}
+
+function errnoCode(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string') return code;
+  }
+  return 'UNKNOWN';
+}
+
+async function destinationConflict(path: string): Promise<'EXISTS' | null> {
+  try {
+    await lstat(path);
+    return 'EXISTS';
+  } catch (error) {
+    if (errnoCode(error) === 'ENOENT') return null;
+    throw new CatalogInstallError(
+      SKILL_INSTALL_ERROR_CODES.DESTINATION_CONFLICT,
+      'The project skill destination could not be inspected.',
+      { path, reason: errnoCode(error) },
+      { cause: error },
+    );
+  }
+}
+
+async function resolveCandidate(
+  options: InstallOptions,
+  request: SkillInstallReviewRequest,
+): Promise<{ entry: SkillEntry; warnings: CatalogWarning[] }> {
+  const { candidate } = request;
+  if (candidate.source === 'project') {
+    throw new CatalogInstallError(
+      SKILL_INSTALL_ERROR_CODES.SOURCE_UNSUPPORTED,
+      'A skill that already belongs to the project cannot be installed again.',
+      { skillId: candidate.id, source: candidate.source },
+    );
+  }
+  if (candidate.source === 'builtin') {
+    throw new CatalogInstallError(
+      SKILL_INSTALL_ERROR_CODES.SOURCE_UNSUPPORTED,
+      'Bundled scenario packages are installed through the scenario chain workflow, not the catalog installer.',
+      { skillId: candidate.id, source: candidate.source },
+    );
+  }
+  if (candidate.source === 'remote' &&
+      (candidate.sourceId === undefined || candidate.revision === undefined ||
+        candidate.repositoryPath === undefined)) {
+    throw new CatalogInstallError(
+      SKILL_INSTALL_ERROR_CODES.CANDIDATE_NOT_FOUND,
+      'A remote candidate requires its exact source, revision, and repository path.',
+      { skillId: candidate.id },
+    );
+  }
+
+  const catalog = await options.catalogService.getCatalog({
+    projectPath: request.projectPath,
+    harness: request.harness,
+    query: '',
+  });
+  const matches = catalog.groups
+    .flatMap((group) => group.entries)
+    .filter((entry) => entry.id === candidate.id && entry.source === candidate.source);
+  if (matches.length !== 1) {
+    throw new CatalogInstallError(
+      SKILL_INSTALL_ERROR_CODES.CANDIDATE_NOT_FOUND,
+      matches.length === 0
+        ? 'The candidate is not present in the current project catalog; search again.'
+        : 'The candidate identity is ambiguous; search again and select one exact result.',
+      { skillId: candidate.id, source: candidate.source, matches: matches.length },
+    );
+  }
+  const entry = matches[0]!;
+  if (entry.source === 'remote') {
+    if (entry.sourceId !== candidate.sourceId || entry.revision !== candidate.revision ||
+        entry.repositoryPath !== candidate.repositoryPath) {
+      throw new CatalogInstallError(
+        SKILL_INSTALL_ERROR_CODES.CANDIDATE_CHANGED,
+        'The remote candidate no longer matches its pinned source identity; review it again.',
+        { skillId: candidate.id },
+      );
+    }
+  }
+  return { entry, warnings: catalog.warnings };
+}
+
+async function readPackageFile(
+  path: string,
+  limit: number,
+): Promise<{ content: Buffer; mode: bigint }> {
+  const before = await lstat(path, { bigint: true });
+  if (!before.isFile() || before.isSymbolicLink() || before.ino === 0n || before.size > BigInt(limit)) {
+    invalid('The skill package contains an unsafe or oversized file.', { path });
+  }
+  let handle;
+  try {
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const info = await handle.stat({ bigint: true });
+    if (!info.isFile() || info.dev !== before.dev || info.ino !== before.ino || info.size !== before.size) {
+      invalid('The skill package changed while it was reviewed.', { path });
+    }
+    const content = Buffer.alloc(Number(info.size) + 1);
+    let length = 0;
+    while (length < content.length) {
+      const result = await handle.read(content, length, content.length - length, length);
+      if (result.bytesRead === 0) break;
+      length += result.bytesRead;
+    }
+    const after = await handle.stat({ bigint: true });
+    const current = await lstat(path, { bigint: true });
+    if (length !== Number(info.size) || after.size !== info.size || after.mtimeNs !== info.mtimeNs ||
+        after.mode !== info.mode || !current.isFile() || current.isSymbolicLink() ||
+        current.dev !== info.dev || current.ino !== info.ino) {
+      invalid('The skill package changed while it was reviewed.', { path });
+    }
+    return { content: content.subarray(0, length), mode: info.mode };
+  } finally {
+    await handle?.close();
+  }
+}
+
+async function walkPackage(directory: string): Promise<WalkedPackage> {
+  const root = await realpath(directory);
+  const modeIndex: InstalledModeIndex | null = await readInstalledModeIndex(root);
+  const files: WalkedFile[] = [];
+  const directories: string[] = [];
+  let bytes = 0;
+  let entries = 0;
+
+  async function visit(current: string, prefix: string, depth: number): Promise<void> {
+    if (depth > MAX_COPY_DEPTH || await realpath(current) !== current) {
+      invalid('The skill package has an unsafe directory or exceeds the depth limit.', { path: current });
+    }
+    const dirents = [];
+    for await (const entry of await opendir(current)) dirents.push(entry);
+    dirents.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
+    for (const entry of dirents) {
+      entries += 1;
+      if (entries > MAX_PACKAGE_ENTRIES) {
+        invalid('The skill package exceeds the review entry limit.', { path: current });
+      }
+      if (prefix === '' && entry.name === '.loom' && modeIndex?.metadataDirectory === join(root, '.loom')) {
+        continue;
+      }
+      const path = join(current, entry.name);
+      const relativePath = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
+      const info = await lstat(path);
+      if (info.isSymbolicLink()) {
+        invalid('The skill package contains a symbolic link; it cannot be installed.', {
+          path: relativePath,
+        });
+      }
+      if (info.isDirectory()) {
+        directories.push(relativePath);
+        await visit(path, relativePath, depth + 1);
+        continue;
+      }
+      if (!info.isFile()) {
+        invalid('The skill package contains an unsupported filesystem entry.', {
+          path: relativePath,
+        });
+      }
+      if (files.length >= MAX_SKILL_PACKAGE_FILES) {
+        invalid('The skill package exceeds the review file limit.', { path: relativePath });
+      }
+      const checked = await readPackageFile(path, MAX_SKILL_PACKAGE_BYTES - bytes);
+      if (bytes + checked.content.length > MAX_SKILL_PACKAGE_BYTES) {
+        invalid('The skill package exceeds the review size limit.', { path: relativePath });
+      }
+      bytes += checked.content.length;
+      const executable = (checked.mode & 0o111n) !== 0n;
+      files.push({
+        path: relativePath,
+        bytes: checked.content.length,
+        executable: modeIndex === null
+          ? executable
+          : installedExecutableFlag(modeIndex, relativePath, executable),
+        sha256: createHash('sha256').update(checked.content).digest('hex'),
+        content: checked.content,
+      });
+    }
+  }
+
+  await visit(root, '', 0);
+  files.sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+  directories.sort();
+  return { files, directories, totalBytes: bytes };
+}
+
+function localIndexFingerprint(entry: SkillEntry, walked: WalkedPackage): string {
+  const skill = walked.files.find((file) => file.path === 'SKILL.md');
+  if (skill === undefined) {
+    invalid('The skill package does not contain a SKILL.md entry.', { skillId: entry.id });
+  }
+  return createHash('sha256')
+    .update('skill-loom-capability-index-v1\0')
+    .update(entry.path, 'utf8')
+    .update('\0')
+    .update(skill.content)
+    .digest('hex');
+}
+
+function verifyRemoteSnapshot(entry: SkillEntry, walked: WalkedPackage): void {
+  const snapshot = entry[REMOTE_SNAPSHOT_CONTENT];
+  if (snapshot === undefined) {
+    invalid('The remote package has no verified snapshot fingerprint; refresh the source and retry.', {
+      skillId: entry.id,
+    });
+  }
+  const contentFingerprint = snapshotPackageFingerprint(walked.files);
+  if (contentFingerprint !== snapshot.fingerprint ||
+      snapshotReviewFingerprint(walked.files) !== snapshot.reviewFingerprint) {
+    invalid('The remote package differs from its verified snapshot; refresh and review it again.', {
+      skillId: entry.id,
+    });
+  }
+  const remaining = snapshot.executablePaths === undefined
+    ? undefined : new Set(snapshot.executablePaths);
+  if (remaining !== undefined) {
+    for (const file of walked.files) {
+      const recorded = remaining.delete(file.path);
+      if (process.platform !== 'win32' && recorded !== undefined && recorded !== file.executable) {
+        invalid('The remote package executable modes differ from its verified snapshot.', {
+          skillId: entry.id,
+        });
+      }
+    }
+    if (remaining.size !== 0) {
+      invalid('The remote package is missing files recorded by its verified snapshot.', {
+        skillId: entry.id,
+      });
+    }
+  }
+}
+
+function canonicalReview(
+  review: Omit<SkillInstallReview, 'reviewDigest'>,
+): string {
+  return createHash('sha256').update(JSON.stringify({
+    version: 1,
+    project: review.project,
+    harness: review.harness,
+    candidate: review.candidate,
+    destination: review.destination,
+    files: review.files,
+    directories: review.directories,
+    totalFiles: review.totalFiles,
+    totalBytes: review.totalBytes,
+    licenseFiles: review.licenseFiles,
+  })).digest('hex');
+}
+
+async function resolveReview(
+  options: InstallOptions,
+  request: SkillInstallReviewRequest,
+): Promise<ResolvedReview> {
+  const started = performance.now();
+  const { entry, warnings } = await resolveCandidate(options, request);
+  if (entry.packagePath.trim() === '') {
+    throw new CatalogInstallError(
+      SKILL_INSTALL_ERROR_CODES.CANDIDATE_NOT_FOUND,
+      'The catalog did not report a package directory for this skill.',
+      { skillId: entry.id },
+    );
+  }
+
+  let walked: WalkedPackage;
+  try {
+    const info = await lstat(entry.packagePath);
+    if (!info.isDirectory() || info.isSymbolicLink()) {
+      invalid('The skill package is not a real directory.', { skillId: entry.id });
+    }
+    walked = await walkPackage(entry.packagePath);
+  } catch (error) {
+    if (error instanceof CatalogInstallError) throw error;
+    if (errnoCode(error) === 'ENOENT') {
+      throw new CatalogInstallError(
+        SKILL_INSTALL_ERROR_CODES.CANDIDATE_NOT_FOUND,
+        'The skill package is no longer available; search again.',
+        { skillId: entry.id },
+        { cause: error },
+      );
+    }
+    throw error;
+  }
+  if (!walked.files.some((file) => file.path === 'SKILL.md')) {
+    invalid('The skill package does not contain a SKILL.md entry.', { skillId: entry.id });
+  }
+
+  const fingerprint = snapshotPackageFingerprint(walked.files);
+  if (entry.source === 'remote') verifyRemoteSnapshot(entry, walked);
+  if (request.candidate.fingerprint !== undefined) {
+    const observed = entry.source === 'remote' ? fingerprint : localIndexFingerprint(entry, walked);
+    if (observed !== request.candidate.fingerprint) {
+      throw new CatalogInstallError(
+        SKILL_INSTALL_ERROR_CODES.CANDIDATE_CHANGED,
+        'The candidate changed since it was discovered; review it again.',
+        { skillId: entry.id },
+      );
+    }
+  }
+
+  const root = projectSkillRootFor(request.harness, request.projectPath);
+  const name = safePackageName(request.destinationName ?? entry.name);
+  const path = join(root, name);
+  const conflict = await destinationConflict(path);
+
+  const evidence: Omit<SkillInstallReview, 'reviewDigest'> = {
+    project: { id: request.projectId, path: request.projectPath },
+    harness: request.harness,
+    candidate: {
+      id: entry.id,
+      name: entry.name,
+      description: entry.description,
+      source: entry.source,
+      sourceId: entry.sourceId ?? null,
+      repository: entry.repository ?? null,
+      revision: entry.revision ?? null,
+      repositoryPath: entry.repositoryPath ?? null,
+      fingerprint,
+      personalSource: entry.source === 'personal',
+    },
+    destination: { root, name, path, conflict },
+    files: walked.files.map((file) => ({
+      path: file.path,
+      bytes: file.bytes,
+      executable: file.executable,
+      sha256: file.sha256,
+    })),
+    directories: [...walked.directories],
+    totalFiles: walked.files.length,
+    totalBytes: walked.totalBytes,
+    licenseFiles: walked.files
+      .map((file) => file.path)
+      .filter((file) => LICENSE_FILE.test(file.split('/').at(-1) ?? '')),
+    warnings,
+    elapsedMs: Math.round((performance.now() - started) * 100) / 100,
+  };
+  return {
+    entry,
+    walked,
+    review: { ...evidence, reviewDigest: canonicalReview(evidence) },
+  };
+}
+
+/** Read-only review of one exact candidate and its project destination. */
+export async function reviewSkillInstall(
+  options: InstallOptions,
+  request: SkillInstallReviewRequest,
+): Promise<SkillInstallReview> {
+  return (await resolveReview(options, request)).review;
+}
+
+function inventoryMismatch(
+  reviewed: SkillInstallReview,
+  installed: WalkedPackage,
+): boolean {
+  const compareExecutable = process.platform !== 'win32';
+  const filesMatch = reviewed.files.length === installed.files.length &&
+    reviewed.files.every((file, index) => {
+      const actual = installed.files[index];
+      return actual !== undefined && actual.path === file.path && actual.bytes === file.bytes &&
+        actual.sha256 === file.sha256 &&
+        (!compareExecutable || actual.executable === file.executable);
+    });
+  const directoriesMatch = reviewed.directories.length === installed.directories.length &&
+    reviewed.directories.every((directory, index) => installed.directories[index] === directory);
+  return !filesMatch || !directoriesMatch;
+}
+
+/** Install the reviewed package after rechecking its digest and destination. */
+export async function installSkillIntoProject(
+  options: InstallOptions,
+  request: SkillInstallRequest,
+): Promise<SkillInstallResult> {
+  const { review, entry } = await resolveReview(options, request);
+  if (request.reviewDigest !== review.reviewDigest) {
+    throw new CatalogInstallError(
+      SKILL_INSTALL_ERROR_CODES.REVIEW_STALE,
+      'The review digest does not match the current package and destination; review it again.',
+      { skillId: entry.id },
+    );
+  }
+  if (review.destination.conflict !== null) {
+    throw new CatalogInstallError(
+      SKILL_INSTALL_ERROR_CODES.DESTINATION_CONFLICT,
+      'A skill package already exists at the destination; nothing was installed.',
+      { path: review.destination.path, name: review.destination.name },
+    );
+  }
+
+  const copied = await copySkillIntoProject({
+    projectPath: request.projectPath,
+    harness: request.harness,
+    entry,
+    destinationName: review.destination.name,
+    allowNameSuffix: false,
+  }).catch((error: unknown) => {
+    if (error instanceof CatalogCopyError &&
+        error.code === CATALOG_COPY_ERROR_CODES.SOURCE_ALREADY_PROJECT) {
+      throw new CatalogInstallError(
+        SKILL_INSTALL_ERROR_CODES.DESTINATION_CONFLICT,
+        'A skill package appeared at the destination during installation; nothing was overwritten.',
+        { path: review.destination.path, name: review.destination.name },
+        { cause: error },
+      );
+    }
+    throw error;
+  });
+  const installed = await walkPackage(copied.destinationPath);
+  if (inventoryMismatch(review, installed)) {
+    throw new CatalogInstallError(
+      SKILL_INSTALL_ERROR_CODES.REVIEW_STALE,
+      'The installed package differs from the reviewed package. Review it again.',
+      { path: copied.destinationPath },
+    );
+  }
+  return {
+    name: review.destination.name,
+    source: entry.source,
+    destinationPath: copied.destinationPath,
+    fingerprint: snapshotPackageFingerprint(installed.files),
+    totalFiles: installed.files.length,
+    totalBytes: installed.totalBytes,
+  };
+}

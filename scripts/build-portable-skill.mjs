@@ -18,6 +18,10 @@ const workflowSource = join(root, '.github', 'skills', 'loom-chain-workflow');
 const workflowMirror = join(root, 'skill', 'loom-chain-workflow');
 const workflowOutput = join(root, 'dist', 'skills', 'loom-chain-workflow');
 const workflowArchive = join(root, 'dist', 'skills', 'loom-chain-workflow.zip');
+const catalogSource = join(root, '.github', 'skills', 'loom-skill-catalog');
+const catalogMirror = join(root, 'skill', 'loom-skill-catalog');
+const catalogOutput = join(root, 'dist', 'skills', 'loom-skill-catalog');
+const catalogArchive = join(root, 'dist', 'skills', 'loom-skill-catalog.zip');
 const fixedTime = new Date('2000-01-01T00:00:00.000Z');
 
 await rm(output, { recursive: true, force: true });
@@ -26,6 +30,8 @@ await rm(discoveryOutput, { recursive: true, force: true });
 await rm(discoveryArchive, { force: true });
 await rm(workflowOutput, { recursive: true, force: true });
 await rm(workflowArchive, { force: true });
+await rm(catalogOutput, { recursive: true, force: true });
+await rm(catalogArchive, { force: true });
 await mkdir(join(output, 'scripts'), { recursive: true });
 await build({ configFile: join(root, 'vite.portable.config.ts'), root });
 await rename(join(output, 'scripts', 'loom-bundle.js'), join(output, 'scripts', 'loom-bundle.mjs'));
@@ -101,3 +107,18 @@ for (const path of await listFiles(workflowOutput)) {
 }
 await writeFile(workflowArchive, zipSync(workflowFiles, { level: 9 }));
 console.log(`Built ${relative(root, workflowOutput)} and ${relative(root, workflowArchive)}.`);
+
+await rm(catalogMirror, { recursive: true, force: true });
+await cp(catalogSource, catalogMirror, { recursive: true });
+await cp(catalogSource, catalogOutput, { recursive: true });
+await cp(join(root, 'LICENSE'), join(catalogOutput, 'LICENSE'));
+const catalogFiles = {};
+for (const path of await listFiles(catalogOutput)) {
+  const relativePath = relative(catalogOutput, path).split('\\').join('/');
+  catalogFiles[`loom-skill-catalog/${relativePath}`] = [
+    new Uint8Array(await readFile(path)),
+    { mtime: fixedTime, os: 3, attrs: 0o100644 << 16 },
+  ];
+}
+await writeFile(catalogArchive, zipSync(catalogFiles, { level: 9 }));
+console.log(`Built ${relative(root, catalogOutput)} and ${relative(root, catalogArchive)}.`);

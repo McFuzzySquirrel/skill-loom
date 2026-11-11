@@ -19,6 +19,7 @@ On Windows, service startup also requires a protected private profile on a local
 | You want to | Use |
 |---|---|
 | Find skills and propose a workflow | The `scenario-discovery` skill, or `skill-loom catalog` and `discovery` |
+| Add one reviewed skill to a project | The `loom-skill-catalog` skill, or `skill-loom catalog skill review` and `install` |
 | Coordinate discovery, testing, import, and running | The `loom-chain-workflow` skill |
 | Create, inspect, or edit chain data | `skill-loom chain ...` |
 | Change step order, instructions, or inputs visually | `skill-loom edit` |
@@ -51,6 +52,19 @@ skill-loom service stop
 ### Discover candidate skills
 
 Ask an agent: **"Use scenario-discovery to propose a workflow for reviewing our API changes."** The skill asks for the outcome and whether remote repositories are in scope. It expands the outcome into a few short capability queries, searches project and approved remote skills, and reranks the shortlist before inspecting it. `catalog project page` uses the derived capability index by default and returns ranked matches with bounded snippets, a content fingerprint, declared tags/tools/inputs/outputs, `metadataCoverage` counts, and the exact remote `sourceId`, `revision`, and `repositoryPath`; `retrieval.mode` shows whether the index or the fresh scan answered. Set `LOOM_CAPABILITY_INDEX=0` to force the scan. You can narrow a search by source, enabled state, tag, tool, input, or output, or by whether a skill declares any tag, tool, input, or output. The response includes `metadataFacets`, which lists every declared value in the filtered scope with its count, so you can discover a tool or tag before filtering by it. Metadata filters are applied only by the indexed path: if the fresh scan answers, a `METADATA_FILTER_UNSUPPORTED` warning tells the skill to verify those claims from the packages. Treat a snippet as a ranking signal only: the skill reads every selected package in full, as untrusted data without running its scripts, then proposes ordered steps and inputs and shows every package file for your review before anything is packaged. Its result is a reviewed `.loom.json` bundle or a draft; it never imports or runs one.
+
+### Install a reviewed skill into a project
+
+Ask an agent: **"Find a skill for writing release notes and add it to this project."** The `loom-skill-catalog` skill searches only registered sources, reads the complete package, and installs one candidate into `<project>/.agents/skills/`. It does not create a chain. For public registry discovery, use the separate `find-skills` skill; Skill Loom does not browse a marketplace.
+
+To drive it yourself, send the exact candidate identity from `catalog project page` to the review command:
+
+```sh
+printf '%s' '{"projectId":"...","harness":"opencode","candidate":{"id":"...","source":"remote","sourceId":"...","revision":"...","repositoryPath":"...","fingerprint":"..."}}' \
+  | skill-loom catalog skill review
+```
+
+Review the returned `reviewDigest`, complete file inventory, executable bits, `licenseFiles`, destination, and any `personalSource` warning. Then repeat the same request with the digest and `"confirmed":true` through `catalog skill install`. Installation targets the shared `.agents/skills/` root for either harness, never overwrites, and never suffixes a conflicting name. A stale digest, a changed package, or an existing destination fails closed; review again and ask before retrying. Refresh or restart the harness afterwards. Discovery does not guarantee that the model or harness invokes a named skill, and removal or updates of an installed package are manual.
 
 ### Create and edit a chain
 

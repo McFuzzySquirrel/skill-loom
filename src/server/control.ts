@@ -20,6 +20,12 @@ import {
   unregisterRemoteSkillSource,
 } from './catalog/remote.js';
 import { CatalogError, SKILL_SOURCES } from './catalog/types.js';
+import { CatalogCopyError } from './catalog/copy.js';
+import {
+  CatalogInstallError,
+  installSkillIntoProject,
+  reviewSkillInstall,
+} from './catalog/install.js';
 import {
   CAPABILITY_MAX_FILTER_VALUES,
   CAPABILITY_MAX_FILTER_VALUE_LENGTH,
@@ -88,6 +94,21 @@ const requestSchema = z.strictObject({
 });
 const sourceId = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/);
 const revision = z.string().regex(/^[a-f0-9]{64}$/);
+const skillDestinationName = z.string().regex(/^(?:[a-z0-9]|[a-z0-9][a-z0-9-]{0,62}[a-z0-9])$/);
+const skillInstallCandidateSchema = z.strictObject({
+  id: z.string().min(1).max(512),
+  source: z.enum(SKILL_SOURCES),
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  sourceId: sourceId.optional(),
+  revision: z.string().regex(/^[a-f0-9]{40,64}$/).optional(),
+  repositoryPath: z.string().min(1).max(4096).optional(),
+});
+const skillInstallReviewSchema = z.strictObject({
+  projectId: z.string().min(1).max(255),
+  harness: z.enum(HARNESS_IDS),
+  candidate: skillInstallCandidateSchema,
+  destinationName: skillDestinationName.optional(),
+});
 
 function withRevision(chain: Chain) {
   return { chain, revision: chainRevision(chain) };
@@ -115,6 +136,7 @@ function failure(error: unknown): ControlResponse {
       error instanceof FolderPathError || error instanceof ProjectRegistryError || error instanceof BundleError ||
       error instanceof TestWorkspaceError || error instanceof RunOrchestratorError || error instanceof RunStoreError ||
       error instanceof RunOwnerError || error instanceof CatalogError || error instanceof ProjectCatalogPageError || error instanceof HarnessError ||
+      error instanceof CatalogCopyError || error instanceof CatalogInstallError ||
       error instanceof RunError || error instanceof AutomaticRunnerError ||
       error instanceof SupervisedRunnerError || error instanceof RunPromptError ||
       error instanceof TerminalTransportError || error instanceof DiscoveryWorkspaceError ||
@@ -719,6 +741,25 @@ async function dispatch(
         ? await services.projectRegistry.findRecentProject(request.projectId) : undefined;
       if (project === undefined) throw new ControlError('PROJECT_NOT_FOUND', 'The project is not registered.');
       return catalogPages.page({ ...request, projectPath: project.canonicalPath });
+    }
+    case 'catalog.skill.review': {
+      const request = parse(skillInstallReviewSchema);
+      const path = await projectPath(request.projectId);
+      return reviewSkillInstall(
+        { catalogService: services.catalogService },
+        { ...request, projectPath: path },
+      );
+    }
+    case 'catalog.skill.install': {
+      const request = parse(skillInstallReviewSchema.extend({
+        reviewDigest: z.string().regex(/^[a-f0-9]{64}$/),
+        confirmed: z.literal(true),
+      }));
+      const path = await projectPath(request.projectId);
+      return installSkillIntoProject(
+        { catalogService: services.catalogService },
+        { ...request, projectPath: path },
+      );
     }
     case 'catalog.source.add': {
       const request = parse(z.strictObject({ repository: z.string().max(2048), ref: z.string().max(255).optional() }));
