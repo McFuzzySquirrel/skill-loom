@@ -8,7 +8,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Added
 
-- A derived, disposable SQLite capability index for chain authoring. It searches bounded names, descriptions, frontmatter, headings, file paths, and body excerpts with FTS5 ranking (or a deterministic token table), fingerprints packages for invalidation, preserves remote binding identity, and falls back to the fresh catalog scan when the index is disabled, missing, corrupt, unsafe, unsupported, or too large. It is opt-in with `LOOM_CAPABILITY_INDEX=1`.
+- A derived, disposable SQLite capability index for chain authoring. It searches bounded names, descriptions, frontmatter, headings, file paths, and body excerpts with FTS5 ranking (or a deterministic token table), fingerprints packages for invalidation, preserves remote binding identity, and falls back to the fresh catalog scan when the index is disabled, missing, corrupt, unsafe, unsupported, or too large. It is enabled by default; set `LOOM_CAPABILITY_INDEX=0` to force the scan.
 - `catalog project page` now uses the capability index when it is enabled. Entries carry bounded `match.snippet` and `match.score` values, indexed `fingerprint` provenance, and the exact remote `sourceId`, `revision`, and `repositoryPath`. The response reports `retrieval.mode`, `retrieval.ranking`, and any fallback reason while keeping the existing paging, `snapshotId`, warning-cursor, and cache-limit contract. Large indexed result sets and any indexed failure use the fresh scan instead of truncating or hiding skills.
 - `scenario-discovery` and `loom-chain-workflow` now expand an outcome into bounded capability queries and rerank the shortlist with the harness model before reading complete packages. They treat snippets as ranking signals, surface scan fallback, and keep the exact remote binding identity.
 - The retrieval corpus adds a pinned remote candidate with exact-binding checks and a source-policy exclusion case. `npm run eval:retrieval` compares the scan and indexed paths and reports binding accuracy, excluded violations, fallbacks, and build time.
@@ -35,6 +35,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Changed
 
+- Indexed retrieval is the default for `catalog project page`. `LOOM_CAPABILITY_INDEX=0` forces the fresh scan. The index includes project, personal, extra-directory, bundled, and pinned remote sources.
 - The web application is reduced to the chain editor. Projects, catalogs, discovery, libraries, test workspaces, runs, themes, and the terminal are CLI-, skill-, or harness-driven.
 - Chain documents use version 3 for exact remote skill bindings and optional native-agent identity. Valid version 1 and 2 records migrate on read.
 - Portable bundle export uses version 2 for chains with a selected native agent and version 1 for agent-free chains.

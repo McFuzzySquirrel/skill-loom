@@ -20,11 +20,12 @@ Use a separate profile so dogfooding does not change your normal configuration:
 
 ```bash
 export LOOM_CONFIG_DIR="$HOME/.config/loom-dogfood"
+# Indexed retrieval is enabled by default. Use LOOM_CAPABILITY_INDEX=0 to force the scan.
 export LOOM_CAPABILITY_INDEX=1
 skill-loom service start
 ```
 
-Run the service in its own terminal. The environment variable must be present in the service process, not only in the CLI client that talks to it. If a service is already running without `LOOM_CAPABILITY_INDEX=1`, stop it and start it again with the variable set. The commands below are Bash examples; on Windows, use an equivalent protected local fixed NTFS/ReFS profile and set the variable in the service environment.
+Run the service in its own terminal. Indexed retrieval is enabled by default; if you set `LOOM_CAPABILITY_INDEX`, it must be present in the service process, not only in the CLI client that talks to it. If a service is already running with a different setting, stop it and start it again. To compare the scan path, restart with `LOOM_CAPABILITY_INDEX=0`. The commands below are Bash examples; on Windows, use an equivalent protected local fixed NTFS/ReFS profile and set the variable in the service environment.
 
 Check the profile:
 

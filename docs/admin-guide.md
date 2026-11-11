@@ -198,9 +198,10 @@ Pass the returned `snapshotId` with the same project, harness, query, and filter
 set for subsequent entry and warning pages. The owner retains at most
 four snapshots, with a combined 64 MiB serialized-data budget and a two-minute
 expiry. An expired or evicted snapshot returns `CATALOG_PAGE_EXPIRED`; start
-again. With `LOOM_CAPABILITY_INDEX=1`, the first page uses the derived capability
-index and returns ranked `match.snippet` and `match.score` values, a
-`fingerprint`, and the exact remote binding identity; the response reports
+again. The first page uses the derived capability index by default and returns
+ranked `match.snippet` and `match.score` values, a `fingerprint`, and the exact
+remote binding identity; set `LOOM_CAPABILITY_INDEX=0` to force the scan. The
+response reports
 `retrieval.mode`, `retrieval.ranking`, and any fallback reason. Indexed entries
 also include declared `metadata` (tags, tools, inputs, outputs, and
 `whenToUse`), and the response includes `metadataCoverage` counts plus
@@ -569,7 +570,7 @@ If you need multi-user or remote access, this project does not provide it. Treat
 | `~/.config/loom/discovery-workspaces/<uuid>/` | Reviewed handoff, bundled `scenario-discovery` package, managed project, result file, and run state for interactive scenario discovery (managed through the CLI control channel). | Retained until explicit cleanup. Cleanup refuses the workspace holding the global active run. |
 | `~/.config/loom/active-run.json` | Single global active-run pointer. | Holds the active run's project path, run id, and status. Do not edit while a run is live. |
 | `~/.config/loom/profile-owner.sqlite` | Profile ownership lock. | One server may own a profile at a time. Do not remove or replace this file while the server is running; the operating system releases the lock on process exit. Store the profile on a filesystem that supports SQLite locking. |
-| `~/.config/loom/capability-index.sqlite` | Derived capability index for chain authoring, containing bounded package metadata and text, declared tags/tools/inputs/outputs, fingerprints, and remote binding identity. | Disposable and excluded from backups. Owner-only and capped at 64 MiB; safe to delete while the service is stopped. Schema version 2 rebuilds older indexes. Corrupt, unsafe, unsupported, or oversized data falls back to the fresh catalog scan. Enabled only with `LOOM_CAPABILITY_INDEX=1`; `catalog project page` uses it for ranked snippets, metadata filters, coverage, and exact remote binding identity. |
+| `~/.config/loom/capability-index.sqlite` | Derived capability index for chain authoring, containing bounded package metadata and text, declared tags/tools/inputs/outputs, fingerprints, and remote binding identity. | Disposable and excluded from backups. Owner-only and capped at 64 MiB; safe to delete while the service is stopped. Schema version 2 rebuilds older indexes. Corrupt, unsafe, unsupported, or oversized data falls back to the fresh catalog scan. Enabled by default; set `LOOM_CAPABILITY_INDEX=0` to force the scan. `catalog project page` uses it for ranked snippets, metadata filters, facets, coverage, and exact remote binding identity. |
 | `~/.config/loom/control.json` | Temporary local control endpoint and bearer capability; Windows also includes client TLS credentials. | Private to the profile owner; do not share, commit, back up, or remove while the server is running. |
 | `~/.config/loom/chains/*.json` (legacy) | Chains written by the removed global-template library. | No current command reads or writes this directory; keep it only when preserving an old installation. |
 | `<project>/.loom/chains/*.json` | Saved project chains. | Versioned JSON, atomic writes. Back up or version these recipes. |

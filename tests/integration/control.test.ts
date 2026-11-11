@@ -647,7 +647,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
     await new Promise<void>((done, reject) => reservation.close((error) => error ? reject(error) : done()));
     const started = await startServer({
       host: '127.0.0.1', port, serveStatic: false,
-      env: { ...process.env, LOOM_CONFIG_DIR: root },
+      env: { ...process.env, LOOM_CONFIG_DIR: root, LOOM_CAPABILITY_INDEX: '0' },
       configStore,
       catalogService: createCatalogService({
         configStore,

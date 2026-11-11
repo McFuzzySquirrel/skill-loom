@@ -123,8 +123,8 @@ function fallbackResponse(
 }
 
 describe('capability index', () => {
-  it('requires an explicit opt-in flag', () => {
-    expect(capabilityIndexEnabled({})).toBe(false);
+  it('is enabled by default with an explicit opt-out', () => {
+    expect(capabilityIndexEnabled({})).toBe(true);
     expect(capabilityIndexEnabled({ LOOM_CAPABILITY_INDEX: '0' })).toBe(false);
     expect(capabilityIndexEnabled({ LOOM_CAPABILITY_INDEX: '1' })).toBe(true);
   });

@@ -69,6 +69,8 @@ A chain author starts from an outcome, not a skill name. A user asking to "harde
 
 Chosen option: "Build a content-addressed FTS5 capability index with structured metadata, then let the authoring skill expand the query and rerank the shortlist", because it improves candidate recall and returns exact binding identity without introducing a remote model, a heavyweight local embedding runtime, or a second source of truth.
 
+Indexed retrieval is the default for `catalog project page` after the Phase 2 and Phase 3 evaluations. `LOOM_CAPABILITY_INDEX=0` restores the fresh scan, and deleting the derived index is always safe.
+
 ### Positive Consequences
 
 - Capability language in headings and body excerpts becomes searchable during chain authoring.

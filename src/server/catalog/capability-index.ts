@@ -329,9 +329,12 @@ interface ReadSkill {
   inode: string;
 }
 
-/** True only when a caller explicitly opts into the derived index. */
+/**
+ * The derived index is enabled by default. `LOOM_CAPABILITY_INDEX=0` forces
+ * the fresh catalog scan and is the documented rollback.
+ */
 export function capabilityIndexEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.LOOM_CAPABILITY_INDEX === '1';
+  return env.LOOM_CAPABILITY_INDEX !== '0';
 }
 
 /**

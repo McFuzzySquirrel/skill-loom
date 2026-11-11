@@ -179,11 +179,11 @@ The runner needs no service, model, credentials, or network access. It uses a te
 - [x] A changed `SKILL.md` invalidates its row and the next query refreshes it.
 - [x] A corrupt or unsafe index degrades to the scan without hiding skills.
 - [x] Search latency meets the agreed budget at the corpus size.
-- [x] The feature is disabled by default behind a configuration or build flag.
+- [x] The feature is gated by a configuration flag. It is enabled by default after the Phase 3 rollout and can be disabled with `LOOM_CAPABILITY_INDEX=0`.
 
 **Implementation notes**
 
-- The index is created only when a caller opts in. `LOOM_CAPABILITY_INDEX=1` enables the capability search service; Phase 2 wires `catalog project page` to it.
+- The index is gated by `LOOM_CAPABILITY_INDEX`. It is enabled by default and `LOOM_CAPABILITY_INDEX=0` forces the fresh scan. Phase 2 wires `catalog project page` to it.
 - One query merges OpenCode project, personal, extra-directory, and packaged scenario packages with verified pinned remote snapshots. Copilot discovery remains CLI-authoritative and falls back to the fresh scan.
 - Tests cover FTS5 and token-table ranking, stat and content-hash invalidation, missing/corrupt/unsafe fallback, unicode, bounded sizes, project scoping, remote manifest verification and binding identity, the bundled scenario root, and the 250 ms query budget.
 - The database is `~/.config/loom/capability-index.sqlite`, owner-only, capped at 64 MiB, and excluded from backups. Deleting it is always safe.
@@ -209,7 +209,7 @@ The runner needs no service, model, credentials, or network access. It uses a te
 
 **Implementation notes**
 
-- `ProjectCatalogPages` accepts the capability search service and uses it for the first page when `LOOM_CAPABILITY_INDEX=1`. Entries add bounded `match.snippet` and `match.score`, a `fingerprint`, and the exact remote binding fields. The response adds `retrieval.mode`, `retrieval.ranking`, and any fallback reason without changing `total`, `entries`, `nextOffset`, `snapshotId`, or the warning cursors.
+- `ProjectCatalogPages` accepts the capability search service and uses it for the first page by default. `LOOM_CAPABILITY_INDEX=0` forces the scan. Entries add bounded `match.snippet` and `match.score`, a `fingerprint`, and the exact remote binding fields. The response adds `retrieval.mode`, `retrieval.ranking`, and any fallback reason without changing `total`, `entries`, `nextOffset`, `snapshotId`, or the warning cursors.
 - The control request still caps a query at 200 characters, the index caps a sanitized query at 500 characters and 16 terms, snippets stay at 240 characters, each indexed search returns at most 50 candidates, and the page snapshot composes at most 500 candidates before using the scan.
 - The cached snapshot still makes later pages stable. The indexed path builds at most 500 entries; a larger result set, an unexpected indexed failure, or a mid-paging mode change uses the fresh scan instead of truncating or hiding a skill.
 - The first query after a missing or invalid index builds it and truthfully reports the scan fallback. Later queries use the index; the authoring skill expands an outcome into more than one query, so a single authoring request normally reaches the indexed path. `retrieval.mode` and the `CAPABILITY_INDEX_FALLBACK` warning keep the distinction visible.
@@ -331,10 +331,10 @@ Suggested acceptance threshold, calibrated against the baseline: a meaningful ca
 
 ## Rollout and rollback
 
-- Start behind a configuration or build flag. The existing scan remains the default.
-- Compare indexed and scanned results in the evaluation before enabling by default.
+- Indexed retrieval is the default. `LOOM_CAPABILITY_INDEX=0` forces the existing fresh scan and is the supported opt-out.
+- The Phase 2 and Phase 3 evaluations compared indexed and scanned results before the default changed. Project, personal, extra-directory, bundled, and pinned remote sources are included by default; the index remains local, owner-only, bounded, and disposable.
 - Log local counts only: build time, hit rate, fallback count, query latency, empty results. No telemetry.
-- Rollback is disabling the flag and deleting the derived index; no persisted user data changes.
+- Rollback is setting `LOOM_CAPABILITY_INDEX=0` and deleting the derived index; no persisted user data changes.
 
 ## Acceptance criteria
 
@@ -349,7 +349,7 @@ Suggested acceptance threshold, calibrated against the baseline: a meaningful ca
 
 ## Open questions
 
-- Should body excerpts be indexed for personal skills by default, or only for project and bundled sources?
+- ~~Should body excerpts be indexed for personal skills by default, or only for project and bundled sources?~~ Resolved: personal, project, extra-directory, bundled, and pinned remote sources are included by default; excerpts remain bounded, owner-only, local, and the whole index is disabled with `LOOM_CAPABILITY_INDEX=0`.
 - Should the index live in the profile directory or be derived per project to simplify deletion?
 - ~~Reuse the per-snapshot remote index or fold remote entries into one profile index?~~ Resolved: the profile capability index folds verified remote entries in and preserves the snapshot binding identity.
 - ~~How should `scenario-discovery` treat personal/global candidates when its policy limits repository skills?~~ Resolved: the authoring flow applies a source policy to the provenance returned by the page; the corpus has a project-only exclusion case.

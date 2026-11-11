@@ -79,9 +79,11 @@ the first CLI command, run `skill-loom --version`.
    Expand the outcome into one to three bounded capability queries with likely
    synonyms, artifacts, and constraints, and query `catalog project page` for
    each one. Use `entries[].match.snippet` and `match.score` only to rerank a
-   shortlist, and respect `retrieval.mode`: when it reports `scan` or a
-   `CAPABILITY_INDEX_FALLBACK` warning, use concrete name and description terms
-   and do not treat the result as ranked body-text evidence. Add only
+   shortlist, and respect `retrieval.mode`: indexed retrieval is the default
+   when available, and when it reports `scan` or a
+   `CAPABILITY_INDEX_FALLBACK` warning, the index may not be built yet or may be
+   unavailable. Use concrete name and description terms and do not treat the
+   result as ranked body-text evidence. Add only
    outcome-justified `sources`, `enabled`, `tags`, `tools`, `inputs`, `outputs`,
    and `hasTags`/`hasTools`/`hasInputs`/`hasOutputs` presence filters, and treat
    `METADATA_FILTER_UNSUPPORTED` as an instruction to verify metadata from
