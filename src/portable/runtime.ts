@@ -692,7 +692,7 @@ function parseGlobalSkillPaths(value: unknown, bundle: ChainBundle): Record<stri
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     fail('REUSE_INVALID', 'Global skill paths must be an object mapping skill names to absolute package paths.');
   }
-  const paths: Record<string, string> = {};
+  const paths = Object.create(null) as Record<string, string>;
   for (const [name, path] of Object.entries(value)) {
     if (!bundle.skills.some((skill) => skill.name === name) ||
         typeof path !== 'string' || path.length > 4_096 ||

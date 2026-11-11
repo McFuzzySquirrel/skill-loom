@@ -199,6 +199,52 @@ describe('portable bundle execution', () => {
       .rejects.toMatchObject({ code: 'PACKAGE_CHANGED' });
   });
 
+  it('inspects a global skill named __proto__ safely', async () => {
+    const protoBundle = structuredClone(bundle);
+    protoBundle.chain.steps[0]!.skillName = '__proto__';
+    protoBundle.skills[0]!.name = '__proto__';
+    const protoSkillText = skillText.replace('name: review', 'name: __proto__');
+    protoBundle.skills[0]!.files[0]!.content = Buffer.from(protoSkillText).toString('base64');
+    await writeFile(bundlePath, JSON.stringify(protoBundle));
+
+    const globalDirectory = join(root, 'global-skills', 'review');
+    await mkdir(globalDirectory, { recursive: true });
+    await writeFile(join(globalDirectory, 'SKILL.md'), protoSkillText);
+    await writeFile(join(globalDirectory, 'check.bin'), Buffer.from([0, 1, 128, 255]));
+    if (process.platform !== 'win32') await chmod(join(globalDirectory, 'check.bin'), 0o755);
+
+    const input = JSON.parse(JSON.stringify({
+      globalSkillPaths: Object.fromEntries([['__proto__', globalDirectory]]),
+    }));
+    const inspected = await executePortableRequest({
+      command: 'inspect', projectPath: project, bundlePath, input,
+    }) as { skills: Array<{ name: string; globalReuse: { path: string } | null }> };
+    expect(inspected.skills[0]).toMatchObject({
+      name: '__proto__',
+      globalReuse: { path: globalDirectory },
+    });
+  });
+
+  it('requires explicit confirmation to reuse differing global skill contents', async () => {
+    const globalDirectory = join(root, 'global-skills', 'review');
+    await mkdir(globalDirectory, { recursive: true });
+    await writeFile(join(globalDirectory, 'SKILL.md'), `${skillText}\nGlobal edits\n`);
+    await writeFile(join(globalDirectory, 'check.bin'), Buffer.from([0, 1, 128, 255]));
+    if (process.platform !== 'win32') await chmod(join(globalDirectory, 'check.bin'), 0o755);
+
+    const reuse = {
+      globalSkillPaths: { review: globalDirectory },
+      reuseSkills: ['review'],
+    };
+    await expect(prepare(reuse)).rejects.toMatchObject({
+      code: 'REUSE_CONTENT_CONFIRMATION_REQUIRED',
+    });
+
+    const prepared = await prepare({ ...reuse, differingReuseConfirmed: true }) as { runId: string };
+    expect(prepared.runId).toBeTruthy();
+    await expect(access(join(project, '.agents', 'skills', 'review'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it.runIf(process.platform === 'win32')('preserves executable intent through both standalone helper mirrors', async () => {
     const executableBundle = structuredClone(bundle);
     executableBundle.skills[0]!.files[1]!.executable = true;
