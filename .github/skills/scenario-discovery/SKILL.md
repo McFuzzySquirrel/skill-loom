@@ -62,7 +62,10 @@ Once the CLI is installed (see above), use
 `skill-loom catalog --help` and `skill-loom project --help` for the installed
 version's command contract. On Unix-like systems, an explicitly started
 `skill-loom service start` owns the profile; do not start a second owner or
-remove its lock or control metadata. Windows control is not yet supported.
+remove its lock or control metadata. Windows supports the same CLI control
+through an authenticated loopback service. Its profile must be protected and
+on a local NTFS/ReFS drive without reparse points; PowerShell 7 or Windows
+PowerShell 5.1 with .NET 4.7.2 or newer is required.
 
 - List configured sources and pinned revisions with `catalog source list` and
   `catalog snapshot list`; page and search exact revisions with `catalog
