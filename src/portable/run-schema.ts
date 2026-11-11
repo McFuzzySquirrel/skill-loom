@@ -47,6 +47,8 @@ export const RunSchema = z.strictObject({
     directory: z.string(),
     fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
     reused: z.boolean(),
+    source: z.enum(['project', 'global']).optional(),
+    path: z.string().min(1).max(4_096).optional(),
   })),
   status: z.enum(['ready', 'running', 'paused', 'failed', 'completed', 'aborted', 'interrupted']),
   currentStepIndex: z.number().int().min(0),

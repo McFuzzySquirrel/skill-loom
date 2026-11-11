@@ -450,7 +450,7 @@ describe('managed test workspaces', () => {
       await expect(service.create({ sourceProjectId: source.id, sourceChainId: skillChain.id }))
         .rejects.toMatchObject({
           code: TEST_WORKSPACE_ERROR_CODES.CREATE_FAILED,
-          message: expect.stringContaining('Installed executable-mode metadata'),
+          message: expect.stringContaining('Windows cannot determine Git executable modes'),
         });
       await writeInstalledModeIndex(join(source.canonicalPath, '.agents', 'skills', skillName), [
         { path: 'SKILL.md', executable: false, content: Buffer.from(skillText) },

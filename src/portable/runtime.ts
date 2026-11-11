@@ -351,19 +351,52 @@ async function installSkills(
   project: string,
   reuseSkills: string[],
   differingReuseConfirmed: boolean,
-  reviewedFingerprints: ReadonlyMap<string, string | null>,
+  reviewedSkills: ReadonlyMap<string, {
+    existingFingerprint: string | null;
+    globalReuse: { path: string; fingerprint: string } | null;
+  }>,
+  globalSkillPaths: Readonly<Record<string, string>>,
 ): Promise<{ installedSkills: PortableRun['installedSkills']; createdDirectories: string[]; createdModes: InstalledModeReceipt[] }> {
-  const root = await ensureSkillRoot(project);
+  let root: string | null = null;
   const reuse = new Set(reuseSkills);
   if (reuse.size !== reuseSkills.length || [...reuse].some((name) =>
     !bundle.skills.some((skill) => skill.name === name))) {
     fail('REUSE_INVALID', 'Reuse choices must name distinct skills included in the bundle.');
+  }
+  if (Object.keys(globalSkillPaths).some((name) => !bundle.skills.some((skill) => skill.name === name))) {
+    fail('REUSE_INVALID', 'Global skill paths must name skills included in the bundle.');
   }
   const installed: PortableRun['installedSkills'] = [];
   const created: string[] = [];
   const createdModes: InstalledModeReceipt[] = [];
   try {
     for (const skill of bundle.skills) {
+      const globalPath = globalSkillPaths[skill.name];
+      if (globalPath !== undefined) {
+        if (!reuse.has(skill.name)) {
+          fail('GLOBAL_REUSE_CONFIRMATION_REQUIRED', `Explicitly choose reuse for global skill "${skill.name}".`);
+        }
+        const reviewed = reviewedSkills.get(skill.name)?.globalReuse;
+        if (reviewed?.path !== globalPath) fail('REVIEW_STALE', `Global skill "${skill.name}" changed since inspection; inspect it again.`);
+        const existing = await inspectGlobalSkill(skill, globalPath);
+        if (existing.fingerprint !== reviewed.fingerprint) {
+          fail('REVIEW_STALE', `Global skill "${skill.name}" changed since inspection; inspect it again.`);
+        }
+        if (existing.fingerprint !== packageFingerprint(skill.files) && !differingReuseConfirmed) {
+          fail('REUSE_CONTENT_CONFIRMATION_REQUIRED', `Global "${skill.name}" differs from the bundle; explicitly confirm reuse of its installed contents.`);
+        }
+        installed.push({
+          name: skill.name,
+          directory: skill.directory,
+          fingerprint: existing.fingerprint,
+          reused: true,
+          source: 'global',
+          path: globalPath,
+        });
+        continue;
+      }
+
+      root ??= await ensureSkillRoot(project);
       const destination = join(root, skill.directory);
       if (relative(root, destination).startsWith(`..${sep}`) || relative(root, destination) === '..') {
         fail('PATH_UNSAFE', 'A skill destination escapes the project skill directory.');
@@ -389,7 +422,7 @@ async function installSkills(
         const name = frontmatterString(metadata.data, 'name') ?? skill.directory;
         if (name !== skill.name) fail('PACKAGE_CONFLICT', `Existing skill directory does not contain "${skill.name}".`);
         const existingFingerprint = await treeFingerprint(destination);
-        if (existingFingerprint !== reviewedFingerprints.get(skill.name)) {
+        if (existingFingerprint !== reviewedSkills.get(skill.name)?.existingFingerprint) {
           fail('REVIEW_STALE', `Existing "${skill.name}" changed since inspection; inspect and review it again.`);
         }
         if (existingFingerprint !== packageFingerprint(skill.files) && !differingReuseConfirmed) {
@@ -403,7 +436,7 @@ async function installSkills(
         });
         continue;
       }
-      if (reviewedFingerprints.get(skill.name) !== null) {
+      if (reviewedSkills.get(skill.name)?.existingFingerprint !== null) {
         fail('REVIEW_STALE', `Existing "${skill.name}" changed since inspection; inspect and review it again.`);
       }
       if (reuse.has(skill.name)) fail('REUSE_MISSING', `Skill "${skill.name}" selected for reuse is missing.`);
@@ -606,9 +639,18 @@ async function verifyInstalledSkills(run: PortableRun, project: string): Promise
     fail('PACKAGE_REVIEW_REQUIRED', 'This run uses an older package fingerprint. Abort it and inspect and prepare a new run.');
   }
   for (const skill of run.installedSkills) {
-    const directory = join(project, '.agents', 'skills', skill.directory);
+    if (skill.source === 'global' && (!skill.path || !isAbsolute(skill.path) || resolve(skill.path) !== skill.path)) {
+      fail('RUN_FILE_INVALID', `Global skill "${skill.name}" has an invalid recorded path.`);
+    }
+    if (skill.source !== 'global' && skill.path !== undefined) {
+      fail('RUN_FILE_INVALID', `Project skill "${skill.name}" has an unexpected external path.`);
+    }
+    const directory = skill.source === 'global'
+      ? skill.path!
+      : join(project, '.agents', 'skills', skill.directory);
     const info = await lstat(directory);
-    if (!info.isDirectory() || info.isSymbolicLink() || await treeFingerprint(directory) !== skill.fingerprint) {
+    if (!info.isDirectory() || info.isSymbolicLink() || await realpath(directory) !== directory ||
+        await treeFingerprint(directory) !== skill.fingerprint) {
       fail('PACKAGE_CHANGED', `Installed skill "${skill.name}" changed since this run was prepared; review it and prepare a new run.`);
     }
   }
@@ -641,7 +683,25 @@ export interface PortableRequest {
   bundlePath?: string;
   projectPath?: string;
   runId?: string;
+  stdinJson?: boolean;
   input?: unknown;
+}
+
+function parseGlobalSkillPaths(value: unknown, bundle: ChainBundle): Record<string, string> {
+  if (value === undefined) return {};
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    fail('REUSE_INVALID', 'Global skill paths must be an object mapping skill names to absolute package paths.');
+  }
+  const paths = Object.create(null) as Record<string, string>;
+  for (const [name, path] of Object.entries(value)) {
+    if (!bundle.skills.some((skill) => skill.name === name) ||
+        typeof path !== 'string' || path.length > 4_096 ||
+        !isAbsolute(path) || resolve(path) !== path) {
+      fail('GLOBAL_SKILL_PATH_INVALID', 'Global skill paths must use bundled skill names and canonical absolute paths.');
+    }
+    paths[name] = path;
+  }
+  return paths;
 }
 
 async function loadPortableBundle(path: string | undefined): Promise<ChainBundle> {
@@ -674,8 +734,42 @@ async function loadPortableBundle(path: string | undefined): Promise<ChainBundle
   }
 }
 
-async function inspectBundle(bundle: ChainBundle, project: string | null) {
+async function inspectGlobalSkill(
+  skill: BundleSkill,
+  directory: string,
+  inventory?: PackageTreeEntry[],
+): Promise<{ fingerprint: string; skillMarkdown: string }> {
+  if (!isAbsolute(directory) || resolve(directory) !== directory) {
+    fail('GLOBAL_SKILL_PATH_INVALID', `Global skill "${skill.name}" needs a canonical absolute path.`);
+  }
+  const info = await lstat(directory);
+  if (!info.isDirectory() || info.isSymbolicLink() || await realpath(directory) !== directory) {
+    fail('GLOBAL_SKILL_UNSAFE', `Global skill "${skill.name}" must be a canonical directory without symlinks.`);
+  }
+  const entry = join(directory, 'SKILL.md');
+  const entryInfo = await lstat(entry);
+  if (!entryInfo.isFile() || entryInfo.isSymbolicLink()) {
+    fail('GLOBAL_SKILL_INVALID', `Global "${skill.name}" is missing a regular SKILL.md.`);
+  }
+  const skillMarkdown = (await readBoundedFile(entry, MAX_BUNDLE_BYTES)).content.toString('utf8');
+  const metadata = parseSkillFrontmatter(skillMarkdown);
+  const name = frontmatterString(metadata.data, 'name') ?? basename(directory);
+  if (name !== skill.name) fail('GLOBAL_SKILL_INVALID', `Global skill directory does not contain "${skill.name}".`);
+  return { fingerprint: await treeFingerprint(directory, inventory), skillMarkdown };
+}
+
+async function inspectBundle(
+  bundle: ChainBundle,
+  project: string | null,
+  globalSkillPaths: Readonly<Record<string, string>> = {},
+) {
   const skills = [];
+  if (Object.keys(globalSkillPaths).some((name) => !bundle.skills.some((skill) => skill.name === name))) {
+    fail('REUSE_INVALID', 'Global skill paths must name skills included in the bundle.');
+  }
+  if (new Set(Object.values(globalSkillPaths)).size !== Object.values(globalSkillPaths).length) {
+    fail('REUSE_INVALID', 'Each global skill path must be unique.');
+  }
   for (const skill of bundle.skills) {
     let existing: string | null = null;
     if (project !== null) {
@@ -688,6 +782,23 @@ async function inspectBundle(bundle: ChainBundle, project: string | null) {
         if (!isErrno(error, 'ENOENT')) throw error;
       }
     }
+    const globalPath = globalSkillPaths[skill.name];
+    let globalReuse: {
+      path: string;
+      fingerprint: string;
+      files: PackageTreeEntry[];
+      skillMarkdown: string;
+    } | null = null;
+    if (globalPath !== undefined) {
+      const files: PackageTreeEntry[] = [];
+      const inspected = await inspectGlobalSkill(skill, globalPath, files);
+      globalReuse = {
+        path: globalPath,
+        fingerprint: inspected.fingerprint,
+        files,
+        skillMarkdown: inspected.skillMarkdown,
+      };
+    }
     skills.push({
       name: skill.name,
       directory: skill.directory,
@@ -695,6 +806,7 @@ async function inspectBundle(bundle: ChainBundle, project: string | null) {
       skillMarkdown: Buffer.from(skill.files.find((file) => file.path === 'SKILL.md')!.content, 'base64').toString('utf8'),
       existingFingerprint: existing,
       bundledFingerprint: packageFingerprint(skill.files),
+      globalReuse,
     });
   }
   const agents = bundle.version === 2
@@ -737,7 +849,11 @@ async function inspectBundle(bundle: ChainBundle, project: string | null) {
       projectDevice: String(info.dev),
       projectInode: String(info.ino),
       bundleFingerprint,
-      skills: skills.map(({ name, directory, existingFingerprint }) => ({ name, directory, existingFingerprint })),
+      skills: skills.map(({ name, directory, existingFingerprint, globalReuse }) => ({
+        name, directory, existingFingerprint,
+        globalPath: globalReuse?.path ?? null,
+        globalFingerprint: globalReuse?.fingerprint ?? null,
+      })),
       agents: agents.map(({ harness, agentPath, existingFingerprint }) => ({ harness, agentPath, existingFingerprint })),
     }));
   }
@@ -748,7 +864,9 @@ export async function executePortableRequest(request: PortableRequest): Promise<
   if (request.command === 'inspect') {
     const bundle = await loadPortableBundle(request.bundlePath);
     const project = request.projectPath ? await canonicalProject(request.projectPath) : null;
-    return inspectBundle(bundle, project);
+    const input = await readJsonInput(request.input);
+    const globalSkillPaths = parseGlobalSkillPaths(input.globalSkillPaths, bundle);
+    return inspectBundle(bundle, project, globalSkillPaths);
   }
 
   if (!request.projectPath || !isAbsolute(request.projectPath)) fail('PROJECT_INVALID', 'Provide an absolute project path.');
@@ -818,7 +936,8 @@ export async function executePortableRequest(request: PortableRequest): Promise<
     if (!Array.isArray(reuseSkills) || reuseSkills.some((name) => typeof name !== 'string')) {
       fail('REUSE_INVALID', 'Reuse choices must be a list of skill names.');
     }
-    const reviewed = await inspectBundle(bundle, project);
+    const globalSkillPaths = parseGlobalSkillPaths(input.globalSkillPaths, bundle);
+    const reviewed = await inspectBundle(bundle, project, globalSkillPaths);
     if (reviewed.reviewDigest !== input.reviewDigest) {
       fail('REVIEW_STALE', 'The bundle, project, or existing package state changed since inspection; review it again.');
     }
@@ -826,7 +945,7 @@ export async function executePortableRequest(request: PortableRequest): Promise<
     const id = randomUUID();
     return beginCoordinatedProjectRun(project, 'portable', id, () => withRunLock(directory, async () => {
       await assertNoOtherPortableRun(directory, project);
-      const current = await inspectBundle(bundle, project);
+      const current = await inspectBundle(bundle, project, globalSkillPaths);
       if (current.reviewDigest !== input.reviewDigest) {
         fail('REVIEW_STALE', 'The bundle, project, or existing package state changed since inspection; review it again.');
       }
@@ -835,7 +954,13 @@ export async function executePortableRequest(request: PortableRequest): Promise<
         project,
         reuseSkills as string[],
         input.differingReuseConfirmed === true,
-        new Map(current.skills.map((skill) => [skill.name, skill.existingFingerprint])),
+        new Map(current.skills.map((skill) => [skill.name, {
+          existingFingerprint: skill.existingFingerprint,
+          globalReuse: skill.globalReuse === null
+            ? null
+            : { path: skill.globalReuse.path, fingerprint: skill.globalReuse.fingerprint },
+        }])),
+        globalSkillPaths,
       );
       const timestamp = now();
       const run: PortableRun = {
@@ -957,7 +1082,11 @@ export async function executePortableRequest(request: PortableRequest): Promise<
           label: chainStepName(step),
           kind: step.kind === 'instruction' ? 'instruction' : 'skill',
           skillName: 'skillName' in step ? step.skillName : null,
-          skillPath: installed ? join(project, '.agents', 'skills', installed.directory) : null,
+          skillPath: installed
+            ? installed.source === 'global'
+              ? installed.path!
+              : join(project, '.agents', 'skills', installed.directory)
+            : null,
           instruction: prompt,
           handoffNote,
         },

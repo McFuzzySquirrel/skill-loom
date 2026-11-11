@@ -131,7 +131,9 @@ export async function exportBundle(
     }
     const skill: BundleSkill = { name, directory, files: [] };
     const snapshotContent = selected[REMOTE_SNAPSHOT_CONTENT];
-    const installedModes = await readInstalledModeIndex(source);
+    const installedModes = await readInstalledModeIndex(source, {
+      allowMissingForGitFallback: process.platform === 'win32',
+    });
     if (process.platform === 'win32' && selected.source === 'remote' && snapshotContent?.executablePaths === undefined) {
       throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', 'The remote package modes cannot be verified on Windows. Refresh the source and retry.');
     }

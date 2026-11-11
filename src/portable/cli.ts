@@ -17,11 +17,18 @@ type Command = (typeof COMMANDS)[number];
 export function parsePortableArgs(argv: readonly string[]): PortableRequest {
   const command = argv[0];
   if (!COMMANDS.includes(command as Command)) {
-    throw new PortableRunError('USAGE', `Usage: loom-bundle <${COMMANDS.join('|')}> [--bundle PATH] [--project PATH] [--run-id ID]`);
+    throw new PortableRunError('USAGE', `Usage: loom-bundle <${COMMANDS.join('|')}> [--bundle PATH] [--project PATH] [--run-id ID] [--stdin-json]`);
   }
   const request: PortableRequest = { command: command as Command };
   for (let index = 1; index < argv.length; index += 1) {
     const option = argv[index]!;
+    if (option === '--stdin-json') {
+      if (request.command !== 'inspect') {
+        throw new PortableRunError('USAGE', 'Option "--stdin-json" is only valid for inspect.');
+      }
+      request.stdinJson = true;
+      continue;
+    }
     if (option !== '--bundle' && option !== '--project' && option !== '--run-id') {
       throw new PortableRunError('USAGE', `Unknown option "${option}".`);
     }
@@ -55,7 +62,7 @@ export async function runPortableCli(
   const stderr = streams.stderr ?? process.stderr;
   try {
     const request = parsePortableArgs(argv);
-    const inputText = request.command === 'inspect'
+    const inputText = request.command === 'inspect' && request.stdinJson !== true
       ? ''
       : await readStdin(streams.stdin ?? process.stdin);
     if (inputText.trim() !== '') request.input = JSON.parse(inputText) as unknown;

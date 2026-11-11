@@ -168,7 +168,10 @@ export async function discardInstalledModeIndex(receipt: InstalledModeReceipt): 
 }
 
 /** Read both copies; neither missing metadata nor a partial install is repaired. */
-export async function readInstalledModeIndex(directory: string): Promise<InstalledModeIndex | null> {
+export async function readInstalledModeIndex(
+  directory: string,
+  options: { allowMissingForGitFallback?: boolean } = {},
+): Promise<InstalledModeIndex | null> {
   const packageRoot = sharedPackageRoot(directory);
   if (packageRoot === null) return null;
   const location = paths(packageRoot);
@@ -191,7 +194,7 @@ export async function readInstalledModeIndex(directory: string): Promise<Install
     } catch (error) {
       if (!missing(error)) throw error;
     }
-    if (process.platform === 'win32') {
+    if (process.platform === 'win32' && options.allowMissingForGitFallback !== true) {
       try {
         await lstat(join(directory, 'SKILL.md'));
       } catch (error) {

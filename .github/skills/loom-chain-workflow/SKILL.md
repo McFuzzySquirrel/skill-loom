@@ -54,6 +54,11 @@ the first CLI command, run `skill-loom --version`.
   exact pinned identities, the full chain, inputs, session behavior, destination,
   permissions, and conflicts. Keep secrets out of command arguments and chain
   defaults. Pass structured input as JSON on stdin.
+- On Windows, project-local packages without intact Skill Loom mode records need
+  every package file present in the Git index for executable-mode verification.
+  Staging new files is sufficient; a commit is not required. If files are
+  untracked, tell the user which package needs staging and wait for their
+  direction. Never stage or commit on the user's behalf.
 - Bundle creation, redistribution, live testing, installation or reuse,
   execution, automatic progression, replay, and broad permissions are separate
   decisions. An approval of one is not approval of another. Stop on a stale
@@ -76,7 +81,10 @@ the first CLI command, run `skill-loom --version`.
    construction. Preserve each selected candidate's identity and fingerprint,
    including source, revision, and repository path for remote candidates.
    Create and validate a CLI draft with exact bindings for remote skill steps;
-   verify that its exported bundle matches the approved chain and packages.
+   on Windows, confirm project-local package files are in the Git index when
+   installed-mode records are absent; verify that its exported bundle matches
+   the approved chain and packages. If files need staging, get the user's
+   direction before they stage them; do not commit as a workflow requirement.
    Do not execute candidate content during this phase.
 2. Offer a retained test workspace. If the user approves creating it, pass
    `{"sourceDraftId":"<draft-id>"}` on stdin to `skill-loom workspace create`.
