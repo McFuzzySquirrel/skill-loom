@@ -245,6 +245,14 @@ describe('installed executable-mode records', () => {
     else expect(await readInstalledModeIndex(destination)).toBeNull();
   });
 
+  it('allows Git-index fallback only when installed-mode records are entirely absent', async () => {
+    const { destination } = await setup();
+    await writeFile(join(destination, 'SKILL.md'), files[0]!.content);
+    await expect(readInstalledModeIndex(destination, { allowMissingForGitFallback: true })).resolves.toBeNull();
+    await mkdir(join(destination, '.loom'));
+    await expect(readInstalledModeIndex(destination, { allowMissingForGitFallback: true })).rejects.toThrow(/metadata/);
+  });
+
   it.runIf(process.platform === 'win32')('does not silently infer non-executable intent after both records disappear', async () => {
     const { destination, local } = await setup();
     const receipt = await writeBundleSkillFiles(destination, bundleFiles, {
