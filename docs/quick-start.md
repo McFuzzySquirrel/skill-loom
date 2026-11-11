@@ -40,7 +40,7 @@ The agent will propose a workflow, inspect selected skill packages, and prepare 
 
 ## 5. Review, edit, and import
 
-Read the complete chain, inputs, and selected skill contents before approving them. If you want to change the order or instructions, open the draft in the editor with `skill-loom edit --draft <draft-id>`, save your changes, then have the agent export the updated bundle.
+Read the complete chain, inputs, and selected skill contents before approving them. For a project-local discovery bundle, ask the agent to revise the workflow and rebuild the `.loom.json` bundle; this flow does not create a CLI draft. For a draft created through the CLI, open it in the editor with `skill-loom edit --draft <draft-id>`, save your changes, then export the updated bundle.
 
 Review the bundle and its destination when prompted. Approve import only after checking the review details; importing saves the chain and installs any new skills in the project, but does not run it.
 
