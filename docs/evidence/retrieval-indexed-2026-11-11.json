@@ -1,0 +1,2737 @@
+{
+  "version": 2,
+  "generatedAt": "2026-11-11T19:48:48.080Z",
+  "node": "v26.12.0",
+  "corpus": "tests/fixtures/retrieval/chain-authoring-corpus.json",
+  "candidates": 16,
+  "tasks": 35,
+  "modes": [
+    {
+      "mode": "scan",
+      "buildMs": 0,
+      "metrics": {
+        "tasks": 35,
+        "positiveTasks": 33,
+        "negativeTasks": 2,
+        "recallAt5": 0.697,
+        "recallAt10": 0.697,
+        "fullRecallAt10": 0.6364,
+        "mrr": 0.697,
+        "emptyResultRate": 0.303,
+        "falsePositiveRate": 0,
+        "meanLatencyMs": 5.8054,
+        "p95LatencyMs": 8.3794,
+        "bindingCases": 1,
+        "bindingAccuracy": 0,
+        "excludedCases": 1,
+        "excludedViolationRate": 0,
+        "fallbackCount": 0
+      },
+      "byCategory": {
+        "description-match": {
+          "tasks": 20,
+          "positiveTasks": 20,
+          "recallAt10": 1,
+          "fullRecallAt10": 1
+        },
+        "body-only": {
+          "tasks": 9,
+          "positiveTasks": 9,
+          "recallAt10": 0,
+          "fullRecallAt10": 0
+        },
+        "compose": {
+          "tasks": 2,
+          "positiveTasks": 2,
+          "recallAt10": 1,
+          "fullRecallAt10": 0
+        },
+        "remote": {
+          "tasks": 1,
+          "positiveTasks": 1,
+          "recallAt10": 0,
+          "fullRecallAt10": 0
+        },
+        "filter": {
+          "tasks": 1,
+          "positiveTasks": 1,
+          "recallAt10": 1,
+          "fullRecallAt10": 1
+        },
+        "negative": {
+          "tasks": 2,
+          "positiveTasks": 0,
+          "recallAt10": 0,
+          "fullRecallAt10": 0
+        }
+      },
+      "perTask": [
+        {
+          "id": "a11y-keyboard",
+          "category": "description-match",
+          "query": "keyboard reordering",
+          "outcome": "Review the chain editor for keyboard and focus regressions.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "accessible-react-workflows"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "accessible-react-workflows",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 19.5
+        },
+        {
+          "id": "a11y-aria",
+          "category": "description-match",
+          "query": "aria-live announcements",
+          "outcome": "Make save status announcements reach assistive technology.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "accessible-react-workflows"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "accessible-react-workflows",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 8
+        },
+        {
+          "id": "a11y-screen-reader",
+          "category": "body-only",
+          "query": "screen reader",
+          "outcome": "Check how the editor behaves for a screen reader user.",
+          "expectNoResult": false,
+          "resultCount": 0,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "accessible-react-workflows"
+          ],
+          "expectedRanks": [
+            null
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [],
+          "elapsedMs": 8.38
+        },
+        {
+          "id": "json-persistence",
+          "category": "description-match",
+          "query": "json persistence",
+          "outcome": "Persist configuration safely across crashes.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "atomic-json-persistence"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "atomic-json-persistence",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 8.12
+        },
+        {
+          "id": "json-quarantine",
+          "category": "description-match",
+          "query": "corrupt-file quarantine",
+          "outcome": "Recover from a corrupt config file without losing the original.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "atomic-json-persistence"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "atomic-json-persistence",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7.13
+        },
+        {
+          "id": "adapter-contract",
+          "category": "description-match",
+          "query": "harness adapter contract",
+          "outcome": "Add a new harness adapter without leaking harness details into routes.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "harness-adapter-contract"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "harness-adapter-contract",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 6.7
+        },
+        {
+          "id": "live-recall",
+          "category": "description-match",
+          "query": "session-continuation token recall",
+          "outcome": "Prove session continuation with a live harness probe.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "live-harness-verification"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "live-harness-verification",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 5.4
+        },
+        {
+          "id": "pty-subscriber",
+          "category": "description-match",
+          "query": "one-subscriber terminals",
+          "outcome": "Attach a terminal while keeping one subscriber.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "pty-run-lifecycle"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "pty-run-lifecycle",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 5.78
+        },
+        {
+          "id": "pty-pause",
+          "category": "description-match",
+          "query": "explicit pause and retry",
+          "outcome": "Pause a run and retry a failed step safely.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "pty-run-lifecycle"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "pty-run-lifecycle",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 5.51
+        },
+        {
+          "id": "discovery-skills",
+          "category": "description-match",
+          "query": "discover project-local skills",
+          "outcome": "Inventory project skills and propose a workflow.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "scenario-discovery"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "scenario-discovery",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 5.29
+        },
+        {
+          "id": "workflow-coordinate",
+          "category": "description-match",
+          "query": "coordinate reviewed cli discovery",
+          "outcome": "Coordinate discovery, import review, and current-session execution.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "loom-chain-workflow"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "loom-chain-workflow",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 6.2
+        },
+        {
+          "id": "bundle-run",
+          "category": "description-match",
+          "query": "run an exported skill loom chain bundle",
+          "outcome": "Run an exported bundle in the current harness session.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "loom-run-bundle"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "loom-run-bundle",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 4.7
+        },
+        {
+          "id": "docs-readme",
+          "category": "description-match",
+          "query": "readme, adrs",
+          "outcome": "Refresh the README, ADRs, and guides.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "create-project-documentation"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "create-project-documentation",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 4.5
+        },
+        {
+          "id": "docs-release",
+          "category": "description-match",
+          "query": "release notes",
+          "outcome": "Prepare release notes and a changelog entry.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "create-project-documentation"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "create-project-documentation",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 4.1
+        },
+        {
+          "id": "shell-free",
+          "category": "description-match",
+          "query": "shell-free spawning",
+          "outcome": "Spawn a harness process without a shell.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "pty-run-lifecycle"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "pty-run-lifecycle",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 4.4
+        },
+        {
+          "id": "bounded-tails",
+          "category": "description-match",
+          "query": "bounded tails",
+          "outcome": "Keep only a bounded terminal tail per step.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "pty-run-lifecycle"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "pty-run-lifecycle",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 5.43
+        },
+        {
+          "id": "api-input",
+          "category": "body-only",
+          "query": "input validation",
+          "outcome": "Harden an API against invalid input.",
+          "expectNoResult": false,
+          "resultCount": 0,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "api-security-review"
+          ],
+          "expectedRanks": [
+            null
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [],
+          "elapsedMs": 6.83
+        },
+        {
+          "id": "api-auth",
+          "category": "body-only",
+          "query": "authorization",
+          "outcome": "Review an API's authentication and authorization boundaries.",
+          "expectNoResult": false,
+          "resultCount": 0,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "api-security-review"
+          ],
+          "expectedRanks": [
+            null
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [],
+          "elapsedMs": 6.04
+        },
+        {
+          "id": "browser-playwright",
+          "category": "body-only",
+          "query": "playwright",
+          "outcome": "Automate a browser journey with Playwright.",
+          "expectNoResult": false,
+          "resultCount": 0,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "browser-test-automation"
+          ],
+          "expectedRanks": [
+            null
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [],
+          "elapsedMs": 5.31
+        },
+        {
+          "id": "sqlite-schema",
+          "category": "body-only",
+          "query": "schema migration",
+          "outcome": "Write a safe SQLite schema migration.",
+          "expectNoResult": false,
+          "resultCount": 0,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "sqlite-migration"
+          ],
+          "expectedRanks": [
+            null
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [],
+          "elapsedMs": 4.89
+        },
+        {
+          "id": "sqlite-journal",
+          "category": "body-only",
+          "query": "journal mode",
+          "outcome": "Choose a SQLite journal mode for local coordination.",
+          "expectNoResult": false,
+          "resultCount": 0,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "sqlite-migration"
+          ],
+          "expectedRanks": [
+            null
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [],
+          "elapsedMs": 4.24
+        },
+        {
+          "id": "release-rollback",
+          "category": "body-only",
+          "query": "rollback",
+          "outcome": "Prepare rollback steps before shipping.",
+          "expectNoResult": false,
+          "resultCount": 0,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "release-checklist"
+          ],
+          "expectedRanks": [
+            null
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [],
+          "elapsedMs": 3.84
+        },
+        {
+          "id": "incident-metrics",
+          "category": "body-only",
+          "query": "metrics",
+          "outcome": "Triage an incident using logs and metrics.",
+          "expectNoResult": false,
+          "resultCount": 0,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "incident-triage"
+          ],
+          "expectedRanks": [
+            null
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [],
+          "elapsedMs": 3.58
+        },
+        {
+          "id": "release-version",
+          "category": "body-only",
+          "query": "version bump",
+          "outcome": "Bump the package version and update the changelog.",
+          "expectNoResult": false,
+          "resultCount": 0,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "release-checklist"
+          ],
+          "expectedRanks": [
+            null
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [],
+          "elapsedMs": 5.2
+        },
+        {
+          "id": "api-security",
+          "category": "description-match",
+          "query": "security issues",
+          "outcome": "Review an API for security issues.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "api-security-review"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "api-security-review",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 5.27
+        },
+        {
+          "id": "browser-test",
+          "category": "description-match",
+          "query": "browser test",
+          "outcome": "Set up browser test automation.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "browser-test-automation"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "browser-test-automation",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 5.36
+        },
+        {
+          "id": "sqlite-storage",
+          "category": "description-match",
+          "query": "database storage",
+          "outcome": "Manage local database storage.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "sqlite-migration"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "sqlite-migration",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 4.31
+        },
+        {
+          "id": "release-prep",
+          "category": "description-match",
+          "query": "prepare a release",
+          "outcome": "Prepare a release with a checklist.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "release-checklist"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "release-checklist",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 3.96
+        },
+        {
+          "id": "incident-triage",
+          "category": "description-match",
+          "query": "triage an incident",
+          "outcome": "Triage an incident and assign a severity.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "incident-triage"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "incident-triage",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 4.33
+        },
+        {
+          "id": "compose-discovery-run",
+          "category": "compose",
+          "query": "discover project-local skills",
+          "outcome": "Discover project skills, propose a workflow, then run the exported bundle.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "scenario-discovery",
+            "loom-run-bundle"
+          ],
+          "expectedRanks": [
+            1,
+            null
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "scenario-discovery",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 4.65
+        },
+        {
+          "id": "compose-live-workflow",
+          "category": "compose",
+          "query": "session-continuation token recall",
+          "outcome": "Verify the live harness, then coordinate the chain workflow.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "live-harness-verification",
+            "loom-chain-workflow"
+          ],
+          "expectedRanks": [
+            1,
+            null
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "live-harness-verification",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 3.92
+        },
+        {
+          "id": "remote-attestation",
+          "category": "remote",
+          "query": "attestation bundle",
+          "outcome": "Audit a pinned remote release and record its attestation bundle.",
+          "expectNoResult": false,
+          "resultCount": 0,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "remote-release-audit"
+          ],
+          "expectedRanks": [
+            null
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [
+            {
+              "skill": "remote-release-audit",
+              "expected": {
+                "sourceId": "eval-remote-team",
+                "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repositoryPath": "collection/remote-release-audit"
+              },
+              "actual": null,
+              "correct": false
+            }
+          ],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [],
+          "elapsedMs": 4.46
+        },
+        {
+          "id": "filter-project-only",
+          "category": "filter",
+          "query": "project-local skills",
+          "outcome": "Inventory only project-local skills for a repository workflow.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project"
+          ],
+          "expectedSkills": [
+            "scenario-discovery"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [
+            "personal-skill-inventory"
+          ],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [
+            {
+              "name": "scenario-discovery",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 5.82
+        },
+        {
+          "id": "negative-quantum",
+          "category": "negative",
+          "query": "quantum entanglement",
+          "outcome": "Run a quantum entanglement experiment.",
+          "expectNoResult": true,
+          "resultCount": 0,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [],
+          "expectedRanks": [],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [],
+          "elapsedMs": 5.44
+        },
+        {
+          "id": "negative-translate",
+          "category": "negative",
+          "query": "translate French",
+          "outcome": "Translate this document into French.",
+          "expectNoResult": true,
+          "resultCount": 0,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [],
+          "expectedRanks": [],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "scan"
+          },
+          "topResults": [],
+          "elapsedMs": 6.59
+        }
+      ]
+    },
+    {
+      "mode": "index",
+      "buildMs": 64.68,
+      "metrics": {
+        "tasks": 35,
+        "positiveTasks": 33,
+        "negativeTasks": 2,
+        "recallAt5": 1,
+        "recallAt10": 1,
+        "fullRecallAt10": 0.9697,
+        "mrr": 1,
+        "emptyResultRate": 0,
+        "falsePositiveRate": 0,
+        "meanLatencyMs": 7.4703,
+        "p95LatencyMs": 8.9816,
+        "bindingCases": 1,
+        "bindingAccuracy": 1,
+        "excludedCases": 1,
+        "excludedViolationRate": 0,
+        "fallbackCount": 0
+      },
+      "byCategory": {
+        "description-match": {
+          "tasks": 20,
+          "positiveTasks": 20,
+          "recallAt10": 1,
+          "fullRecallAt10": 1
+        },
+        "body-only": {
+          "tasks": 9,
+          "positiveTasks": 9,
+          "recallAt10": 1,
+          "fullRecallAt10": 1
+        },
+        "compose": {
+          "tasks": 2,
+          "positiveTasks": 2,
+          "recallAt10": 1,
+          "fullRecallAt10": 0.5
+        },
+        "remote": {
+          "tasks": 1,
+          "positiveTasks": 1,
+          "recallAt10": 1,
+          "fullRecallAt10": 1
+        },
+        "filter": {
+          "tasks": 1,
+          "positiveTasks": 1,
+          "recallAt10": 1,
+          "fullRecallAt10": 1
+        },
+        "negative": {
+          "tasks": 2,
+          "positiveTasks": 0,
+          "recallAt10": 0,
+          "fullRecallAt10": 0
+        }
+      },
+      "perTask": [
+        {
+          "id": "a11y-keyboard",
+          "category": "description-match",
+          "query": "keyboard reordering",
+          "outcome": "Review the chain editor for keyboard and focus regressions.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "accessible-react-workflows"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "accessible-react-workflows",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 9
+        },
+        {
+          "id": "a11y-aria",
+          "category": "description-match",
+          "query": "aria-live announcements",
+          "outcome": "Make save status announcements reach assistive technology.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "accessible-react-workflows"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "accessible-react-workflows",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7.99
+        },
+        {
+          "id": "a11y-screen-reader",
+          "category": "body-only",
+          "query": "screen reader",
+          "outcome": "Check how the editor behaves for a screen reader user.",
+          "expectNoResult": false,
+          "resultCount": 2,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "accessible-react-workflows"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "accessible-react-workflows",
+              "source": "project"
+            },
+            {
+              "name": "scenario-discovery",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7.59
+        },
+        {
+          "id": "json-persistence",
+          "category": "description-match",
+          "query": "json persistence",
+          "outcome": "Persist configuration safely across crashes.",
+          "expectNoResult": false,
+          "resultCount": 2,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "atomic-json-persistence"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "atomic-json-persistence",
+              "source": "project"
+            },
+            {
+              "name": "loom-run-bundle",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7
+        },
+        {
+          "id": "json-quarantine",
+          "category": "description-match",
+          "query": "corrupt-file quarantine",
+          "outcome": "Recover from a corrupt config file without losing the original.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "atomic-json-persistence"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "atomic-json-persistence",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7.21
+        },
+        {
+          "id": "adapter-contract",
+          "category": "description-match",
+          "query": "harness adapter contract",
+          "outcome": "Add a new harness adapter without leaking harness details into routes.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "harness-adapter-contract"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "harness-adapter-contract",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 8.73
+        },
+        {
+          "id": "live-recall",
+          "category": "description-match",
+          "query": "session-continuation token recall",
+          "outcome": "Prove session continuation with a live harness probe.",
+          "expectNoResult": false,
+          "resultCount": 2,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "live-harness-verification"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "live-harness-verification",
+              "source": "project"
+            },
+            {
+              "name": "scenario-discovery",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 8.49
+        },
+        {
+          "id": "pty-subscriber",
+          "category": "description-match",
+          "query": "one-subscriber terminals",
+          "outcome": "Attach a terminal while keeping one subscriber.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "pty-run-lifecycle"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "pty-run-lifecycle",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7.38
+        },
+        {
+          "id": "pty-pause",
+          "category": "description-match",
+          "query": "explicit pause and retry",
+          "outcome": "Pause a run and retry a failed step safely.",
+          "expectNoResult": false,
+          "resultCount": 3,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "pty-run-lifecycle"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "pty-run-lifecycle",
+              "source": "project"
+            },
+            {
+              "name": "loom-run-bundle",
+              "source": "project"
+            },
+            {
+              "name": "scenario-discovery",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7.2
+        },
+        {
+          "id": "discovery-skills",
+          "category": "description-match",
+          "query": "discover project-local skills",
+          "outcome": "Inventory project skills and propose a workflow.",
+          "expectNoResult": false,
+          "resultCount": 4,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "scenario-discovery"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "scenario-discovery",
+              "source": "project"
+            },
+            {
+              "name": "loom-chain-workflow",
+              "source": "project"
+            },
+            {
+              "name": "loom-run-bundle",
+              "source": "project"
+            },
+            {
+              "name": "live-harness-verification",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 6.97
+        },
+        {
+          "id": "workflow-coordinate",
+          "category": "description-match",
+          "query": "coordinate reviewed cli discovery",
+          "outcome": "Coordinate discovery, import review, and current-session execution.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "loom-chain-workflow"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "loom-chain-workflow",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7.46
+        },
+        {
+          "id": "bundle-run",
+          "category": "description-match",
+          "query": "run an exported skill loom chain bundle",
+          "outcome": "Run an exported bundle in the current harness session.",
+          "expectNoResult": false,
+          "resultCount": 3,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "loom-run-bundle"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "loom-run-bundle",
+              "source": "project"
+            },
+            {
+              "name": "loom-chain-workflow",
+              "source": "project"
+            },
+            {
+              "name": "scenario-discovery",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7.83
+        },
+        {
+          "id": "docs-readme",
+          "category": "description-match",
+          "query": "readme, adrs",
+          "outcome": "Refresh the README, ADRs, and guides.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "create-project-documentation"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "create-project-documentation",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 6.34
+        },
+        {
+          "id": "docs-release",
+          "category": "description-match",
+          "query": "release notes",
+          "outcome": "Prepare release notes and a changelog entry.",
+          "expectNoResult": false,
+          "resultCount": 2,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "create-project-documentation"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "create-project-documentation",
+              "source": "project"
+            },
+            {
+              "name": "scenario-discovery",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7.41
+        },
+        {
+          "id": "shell-free",
+          "category": "description-match",
+          "query": "shell-free spawning",
+          "outcome": "Spawn a harness process without a shell.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "pty-run-lifecycle"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "pty-run-lifecycle",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 6.48
+        },
+        {
+          "id": "bounded-tails",
+          "category": "description-match",
+          "query": "bounded tails",
+          "outcome": "Keep only a bounded terminal tail per step.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "pty-run-lifecycle"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "pty-run-lifecycle",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 6.7
+        },
+        {
+          "id": "api-input",
+          "category": "body-only",
+          "query": "input validation",
+          "outcome": "Harden an API against invalid input.",
+          "expectNoResult": false,
+          "resultCount": 6,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "api-security-review"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "api-security-review",
+              "source": "project"
+            },
+            {
+              "name": "scenario-discovery",
+              "source": "project"
+            },
+            {
+              "name": "loom-chain-workflow",
+              "source": "project"
+            },
+            {
+              "name": "pty-run-lifecycle",
+              "source": "project"
+            },
+            {
+              "name": "atomic-json-persistence",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7.27
+        },
+        {
+          "id": "api-auth",
+          "category": "body-only",
+          "query": "authorization",
+          "outcome": "Review an API's authentication and authorization boundaries.",
+          "expectNoResult": false,
+          "resultCount": 3,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "api-security-review"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "api-security-review",
+              "source": "project"
+            },
+            {
+              "name": "live-harness-verification",
+              "source": "project"
+            },
+            {
+              "name": "create-project-documentation",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 6.57
+        },
+        {
+          "id": "browser-playwright",
+          "category": "body-only",
+          "query": "playwright",
+          "outcome": "Automate a browser journey with Playwright.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "browser-test-automation"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "browser-test-automation",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 6.04
+        },
+        {
+          "id": "sqlite-schema",
+          "category": "body-only",
+          "query": "schema migration",
+          "outcome": "Write a safe SQLite schema migration.",
+          "expectNoResult": false,
+          "resultCount": 2,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "sqlite-migration"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "sqlite-migration",
+              "source": "project"
+            },
+            {
+              "name": "atomic-json-persistence",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 6.53
+        },
+        {
+          "id": "sqlite-journal",
+          "category": "body-only",
+          "query": "journal mode",
+          "outcome": "Choose a SQLite journal mode for local coordination.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "sqlite-migration"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "sqlite-migration",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7.69
+        },
+        {
+          "id": "release-rollback",
+          "category": "body-only",
+          "query": "rollback",
+          "outcome": "Prepare rollback steps before shipping.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "release-checklist"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "release-checklist",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 6.71
+        },
+        {
+          "id": "incident-metrics",
+          "category": "body-only",
+          "query": "metrics",
+          "outcome": "Triage an incident using logs and metrics.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "incident-triage"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "incident-triage",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 8.84
+        },
+        {
+          "id": "release-version",
+          "category": "body-only",
+          "query": "version bump",
+          "outcome": "Bump the package version and update the changelog.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "release-checklist"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "release-checklist",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7.15
+        },
+        {
+          "id": "api-security",
+          "category": "description-match",
+          "query": "security issues",
+          "outcome": "Review an API for security issues.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "api-security-review"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "api-security-review",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 6.62
+        },
+        {
+          "id": "browser-test",
+          "category": "description-match",
+          "query": "browser test",
+          "outcome": "Set up browser test automation.",
+          "expectNoResult": false,
+          "resultCount": 4,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "browser-test-automation"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "browser-test-automation",
+              "source": "project"
+            },
+            {
+              "name": "accessible-react-workflows",
+              "source": "project"
+            },
+            {
+              "name": "pty-run-lifecycle",
+              "source": "project"
+            },
+            {
+              "name": "scenario-discovery",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7.12
+        },
+        {
+          "id": "sqlite-storage",
+          "category": "description-match",
+          "query": "database storage",
+          "outcome": "Manage local database storage.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "sqlite-migration"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "sqlite-migration",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7
+        },
+        {
+          "id": "release-prep",
+          "category": "description-match",
+          "query": "prepare a release",
+          "outcome": "Prepare a release with a checklist.",
+          "expectNoResult": false,
+          "resultCount": 3,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "release-checklist"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "release-checklist",
+              "source": "project"
+            },
+            {
+              "name": "create-project-documentation",
+              "source": "project"
+            },
+            {
+              "name": "scenario-discovery",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 8.08
+        },
+        {
+          "id": "incident-triage",
+          "category": "description-match",
+          "query": "triage an incident",
+          "outcome": "Triage an incident and assign a severity.",
+          "expectNoResult": false,
+          "resultCount": 1,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "incident-triage"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "incident-triage",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 8.98
+        },
+        {
+          "id": "compose-discovery-run",
+          "category": "compose",
+          "query": "discover project-local skills",
+          "outcome": "Discover project skills, propose a workflow, then run the exported bundle.",
+          "expectNoResult": false,
+          "resultCount": 4,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "scenario-discovery",
+            "loom-run-bundle"
+          ],
+          "expectedRanks": [
+            1,
+            3
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "scenario-discovery",
+              "source": "project"
+            },
+            {
+              "name": "loom-chain-workflow",
+              "source": "project"
+            },
+            {
+              "name": "loom-run-bundle",
+              "source": "project"
+            },
+            {
+              "name": "live-harness-verification",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7.64
+        },
+        {
+          "id": "compose-live-workflow",
+          "category": "compose",
+          "query": "session-continuation token recall",
+          "outcome": "Verify the live harness, then coordinate the chain workflow.",
+          "expectNoResult": false,
+          "resultCount": 2,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "live-harness-verification",
+            "loom-chain-workflow"
+          ],
+          "expectedRanks": [
+            1,
+            null
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "live-harness-verification",
+              "source": "project"
+            },
+            {
+              "name": "scenario-discovery",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7.48
+        },
+        {
+          "id": "remote-attestation",
+          "category": "remote",
+          "query": "attestation bundle",
+          "outcome": "Audit a pinned remote release and record its attestation bundle.",
+          "expectNoResult": false,
+          "resultCount": 2,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [
+            "remote-release-audit"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [
+            {
+              "skill": "remote-release-audit",
+              "expected": {
+                "sourceId": "eval-remote-team",
+                "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repositoryPath": "collection/remote-release-audit"
+              },
+              "actual": {
+                "sourceId": "eval-remote-team",
+                "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repositoryPath": "collection/remote-release-audit"
+              },
+              "correct": true
+            }
+          ],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "remote-release-audit",
+              "source": "remote"
+            },
+            {
+              "name": "scenario-discovery",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 7.31
+        },
+        {
+          "id": "filter-project-only",
+          "category": "filter",
+          "query": "project-local skills",
+          "outcome": "Inventory only project-local skills for a repository workflow.",
+          "expectNoResult": false,
+          "resultCount": 5,
+          "allowedSources": [
+            "project"
+          ],
+          "expectedSkills": [
+            "scenario-discovery"
+          ],
+          "expectedRanks": [
+            1
+          ],
+          "excludedSkills": [
+            "personal-skill-inventory"
+          ],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [
+            {
+              "name": "scenario-discovery",
+              "source": "project"
+            },
+            {
+              "name": "loom-chain-workflow",
+              "source": "project"
+            },
+            {
+              "name": "loom-run-bundle",
+              "source": "project"
+            },
+            {
+              "name": "live-harness-verification",
+              "source": "project"
+            },
+            {
+              "name": "create-project-documentation",
+              "source": "project"
+            }
+          ],
+          "elapsedMs": 8.76
+        },
+        {
+          "id": "negative-quantum",
+          "category": "negative",
+          "query": "quantum entanglement",
+          "outcome": "Run a quantum entanglement experiment.",
+          "expectNoResult": true,
+          "resultCount": 0,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [],
+          "expectedRanks": [],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [],
+          "elapsedMs": 8.28
+        },
+        {
+          "id": "negative-translate",
+          "category": "negative",
+          "query": "translate French",
+          "outcome": "Translate this document into French.",
+          "expectNoResult": true,
+          "resultCount": 0,
+          "allowedSources": [
+            "project",
+            "personal",
+            "custom",
+            "plugin",
+            "builtin",
+            "loom-extra",
+            "remote"
+          ],
+          "expectedSkills": [],
+          "expectedRanks": [],
+          "excludedSkills": [],
+          "excludedPresent": [],
+          "bindings": [],
+          "retrieval": {
+            "mode": "index"
+          },
+          "topResults": [],
+          "elapsedMs": 7.58
+        }
+      ]
+    }
+  ],
+  "comparison": {
+    "recallAt5Delta": 0.303,
+    "recallAt10Delta": 0.303,
+    "fullRecallAt10Delta": 0.3333,
+    "mrrDelta": 0.303,
+    "emptyResultRateDelta": -0.303,
+    "p95LatencyMsDelta": 0.6022,
+    "meetsExitCriteria": {
+      "candidateRecallImproved": true,
+      "emptyResultRateNotWorse": true,
+      "bindingAccuracyComplete": true,
+      "excludedPolicyHeld": true,
+      "p95WithinBudget": true
+    }
+  }
+}

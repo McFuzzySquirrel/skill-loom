@@ -50,7 +50,7 @@ skill-loom service stop
 
 ### Discover candidate skills
 
-Ask an agent: **"Use scenario-discovery to propose a workflow for reviewing our API changes."** The skill asks for the outcome and whether remote repositories are in scope, inspects skills as untrusted data without running their scripts, proposes ordered steps and inputs, and shows every package file for your review before anything is packaged. Its result is a reviewed `.loom.json` bundle or a draft; it never imports or runs one.
+Ask an agent: **"Use scenario-discovery to propose a workflow for reviewing our API changes."** The skill asks for the outcome and whether remote repositories are in scope. It expands the outcome into a few short capability queries, searches project and approved remote skills, and reranks the shortlist before inspecting it. When the profile enables the derived capability index, `catalog project page` returns ranked matches with bounded snippets, a content fingerprint, and the exact remote `sourceId`, `revision`, and `repositoryPath`; `retrieval.mode` shows whether the index or the fresh scan answered. Treat a snippet as a ranking signal only: the skill reads every selected package in full, as untrusted data without running its scripts, then proposes ordered steps and inputs and shows every package file for your review before anything is packaged. Its result is a reviewed `.loom.json` bundle or a draft; it never imports or runs one.
 
 ### Create and edit a chain
 

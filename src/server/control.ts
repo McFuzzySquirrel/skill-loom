@@ -759,7 +759,9 @@ export async function startControlServer(
   const requestedRoot = resolve(configStore.getConfigDir());
   const root = await realpath(requestedRoot);
   const services = options.services ?? createLoomServices({ configStore });
-  const catalogPages = new ProjectCatalogPages(services.catalogService);
+  const catalogPages = new ProjectCatalogPages(
+    services.catalogService, Date.now, undefined, undefined, services.capabilitySearchService,
+  );
   if (process.platform !== 'win32') await assertPrivateDirectory(root, true);
   const previous = await readMetadata(process.platform === 'win32' ? requestedRoot : root);
   if (previous !== null) await removeStaleEndpoint(previous);

@@ -48,4 +48,57 @@ describe('chain-authoring retrieval corpus', () => {
 
     expect(result.success).toBe(false);
   });
+
+  it('covers remote bindings and source-policy exclusions', async () => {
+    const corpus = await loadRetrievalCorpus(corpusPath);
+    const remoteCandidate = corpus.candidates.find((candidate) => candidate.name === 'remote-release-audit');
+    expect(remoteCandidate).toMatchObject({
+      location: 'remote',
+      remote: {
+        sourceId: 'eval-remote-team',
+        revision: 'a'.repeat(40),
+        repositoryPath: 'collection/remote-release-audit',
+      },
+    });
+    expect(corpus.tasks.some((task) => task.category === 'remote')).toBe(true);
+    const filterTask = corpus.tasks.find((task) => task.category === 'filter');
+    expect(filterTask).toMatchObject({
+      allowedSources: ['project'],
+      excludedSkills: ['personal-skill-inventory'],
+    });
+  });
+
+  it('rejects a remote candidate without a binding and a mismatched expected binding', () => {
+    const missing = RetrievalCorpusSchema.safeParse({
+      version: 1,
+      description: 'invalid fixture',
+      candidates: [{ name: 'remote', source: 'skills/remote', location: 'remote' }],
+      tasks: [{
+        id: 'invalid-task',
+        outcome: 'Do something',
+        query: 'something',
+        expectedSkills: ['remote'],
+      }],
+    });
+    expect(missing.success).toBe(false);
+
+    const mismatched = RetrievalCorpusSchema.safeParse({
+      version: 1,
+      description: 'invalid fixture',
+      candidates: [{
+        name: 'remote', source: 'skills/remote', location: 'remote',
+        remote: { sourceId: 'team', revision: 'a'.repeat(40), repositoryPath: 'collection/remote' },
+      }],
+      tasks: [{
+        id: 'invalid-task',
+        outcome: 'Do something',
+        query: 'something',
+        expectedSkills: ['remote'],
+        expectedBindings: {
+          remote: { sourceId: 'team', revision: 'b'.repeat(40), repositoryPath: 'collection/remote' },
+        },
+      }],
+    });
+    expect(mismatched.success).toBe(false);
+  });
 });

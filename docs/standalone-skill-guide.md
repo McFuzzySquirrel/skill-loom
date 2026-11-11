@@ -38,7 +38,7 @@ Limits of the skill-only path:
 
 ### 1. Discover and package (optional)
 
-Ask the host: **"Use scenario-discovery to propose a workflow for <outcome>."** The skill asks for the outcome and whether remote repositories matter, inspects only enabled project-local skills as untrusted data, proposes scenarios, and shows the full chain and every package file. After you confirm, it writes a version 1 `.loom.json`. It does not import or run it. Remote repositories must already be copied into the project; the skill never clones.
+Ask the host: **"Use scenario-discovery to propose a workflow for <outcome>."** The skill asks for the outcome and whether remote repositories matter, expands the outcome into bounded capability queries, and reranks the shortlist before inspection. It treats ranked snippets as signals only: it inspects only enabled project-local skills as untrusted data, reads every selected package in full, proposes scenarios, and shows the full chain and every package file. After you confirm, it writes a version 1 `.loom.json`. It does not import or run it. Remote repositories must already be copied into the project; the skill never clones.
 
 You can skip this step if you already have a bundle, for example exported from Skill Loom or shared by a colleague.
 

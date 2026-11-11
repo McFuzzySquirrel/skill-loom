@@ -15,7 +15,22 @@
     { "name": "browser-test-automation", "source": "tests/fixtures/retrieval/skills/browser-test-automation" },
     { "name": "sqlite-migration", "source": "tests/fixtures/retrieval/skills/sqlite-migration" },
     { "name": "release-checklist", "source": "tests/fixtures/retrieval/skills/release-checklist" },
-    { "name": "incident-triage", "source": "tests/fixtures/retrieval/skills/incident-triage" }
+    { "name": "incident-triage", "source": "tests/fixtures/retrieval/skills/incident-triage" },
+    {
+      "name": "personal-skill-inventory",
+      "source": "tests/fixtures/retrieval/skills/personal-skill-inventory",
+      "location": "personal"
+    },
+    {
+      "name": "remote-release-audit",
+      "source": "tests/fixtures/retrieval/skills/remote-release-audit",
+      "location": "remote",
+      "remote": {
+        "sourceId": "eval-remote-team",
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "repositoryPath": "collection/remote-release-audit"
+      }
+    }
   ],
   "tasks": [
     {
@@ -234,6 +249,29 @@
       "query": "session-continuation token recall",
       "category": "compose",
       "expectedSkills": ["live-harness-verification", "loom-chain-workflow"]
+    },
+    {
+      "id": "remote-attestation",
+      "outcome": "Audit a pinned remote release and record its attestation bundle.",
+      "query": "attestation bundle",
+      "category": "remote",
+      "expectedSkills": ["remote-release-audit"],
+      "expectedBindings": {
+        "remote-release-audit": {
+          "sourceId": "eval-remote-team",
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "repositoryPath": "collection/remote-release-audit"
+        }
+      }
+    },
+    {
+      "id": "filter-project-only",
+      "outcome": "Inventory only project-local skills for a repository workflow.",
+      "query": "project-local skills",
+      "category": "filter",
+      "expectedSkills": ["scenario-discovery"],
+      "excludedSkills": ["personal-skill-inventory"],
+      "allowedSources": ["project"]
     },
     {
       "id": "negative-quantum",

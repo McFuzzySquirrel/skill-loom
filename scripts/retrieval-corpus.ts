@@ -1,19 +1,53 @@
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 
+const RemoteBindingSchema = z.strictObject({
+  sourceId: z.string().trim().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),
+  revision: z.string().trim().regex(/^[a-f0-9]{40,64}$/),
+  repositoryPath: z.string().trim().min(1).max(4_096),
+});
+
 const CandidateSchema = z.strictObject({
   name: z.string().trim().min(1).max(255),
   source: z.string().trim().min(1).max(4_096),
+  /** Where the evaluation places the fixture. Remote candidates use a pinned snapshot. */
+  location: z.enum(['project', 'personal', 'remote']).default('project'),
+  /** Exact pinned snapshot identity for a remote candidate. */
+  remote: RemoteBindingSchema.optional(),
+}).superRefine((candidate, context) => {
+  if (candidate.location === 'remote' && candidate.remote === undefined) {
+    context.addIssue({
+      code: 'custom',
+      message: 'A remote candidate must declare its exact remote binding.',
+      path: ['remote'],
+    });
+  }
+  if (candidate.location !== 'remote' && candidate.remote !== undefined) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Only a remote candidate may declare a remote binding.',
+      path: ['remote'],
+    });
+  }
 });
 
 const TaskSchema = z.strictObject({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
   outcome: z.string().trim().min(1).max(2_000),
   query: z.string().trim().min(1).max(500),
-  category: z.enum(['description-match', 'body-only', 'compose', 'negative']).default('description-match'),
+  category: z.enum(['description-match', 'body-only', 'compose', 'remote', 'filter', 'negative'])
+    .default('description-match'),
   harness: z.enum(['opencode', 'copilot']).default('opencode'),
   expectedSkills: z.array(z.string().trim().min(1)).max(20).default([]),
   acceptableSkills: z.array(z.string().trim().min(1)).max(20).default([]),
+  /** Consumer-side source policy; results outside this list are discarded before ranking. */
+  allowedSources: z.array(z.enum([
+    'project', 'personal', 'custom', 'plugin', 'builtin', 'loom-extra', 'remote',
+  ])).default(['project', 'personal', 'custom', 'plugin', 'builtin', 'loom-extra', 'remote']),
+  /** Skills that the source policy must remove from the candidate list. */
+  excludedSkills: z.array(z.string().trim().min(1)).max(20).default([]),
+  /** Exact remote identity each named skill must carry. */
+  expectedBindings: z.record(z.string(), RemoteBindingSchema).default({}),
   expectNoResult: z.boolean().default(false),
 }).superRefine((task, context) => {
   if (task.expectNoResult && task.expectedSkills.length !== 0) {
@@ -38,6 +72,24 @@ const TaskSchema = z.strictObject({
       path: ['acceptableSkills'],
     });
   }
+  const excludedOverlap = task.excludedSkills.filter((name) =>
+    task.expectedSkills.includes(name) || task.acceptableSkills.includes(name));
+  if (excludedOverlap.length > 0) {
+    context.addIssue({
+      code: 'custom',
+      message: `Excluded skills overlap selected skills: ${excludedOverlap.join(', ')}.`,
+      path: ['excludedSkills'],
+    });
+  }
+  for (const name of Object.keys(task.expectedBindings)) {
+    if (!task.expectedSkills.includes(name)) {
+      context.addIssue({
+        code: 'custom',
+        message: `An expected binding names "${name}", which is not an expected skill.`,
+        path: ['expectedBindings', name],
+      });
+    }
+  }
 });
 
 export const RetrievalCorpusSchema = z.strictObject({
@@ -46,7 +98,7 @@ export const RetrievalCorpusSchema = z.strictObject({
   candidates: z.array(CandidateSchema).min(1),
   tasks: z.array(TaskSchema).min(1),
 }).superRefine((corpus, context) => {
-  const names = new Set<string>();
+  const names = new Map<string, z.infer<typeof CandidateSchema>>();
   corpus.candidates.forEach((candidate, index) => {
     if (names.has(candidate.name)) {
       context.addIssue({
@@ -55,7 +107,7 @@ export const RetrievalCorpusSchema = z.strictObject({
         path: ['candidates', index, 'name'],
       });
     }
-    names.add(candidate.name);
+    names.set(candidate.name, candidate);
   });
   const ids = new Set<string>();
   corpus.tasks.forEach((task, index) => {
@@ -67,7 +119,11 @@ export const RetrievalCorpusSchema = z.strictObject({
       });
     }
     ids.add(task.id);
-    for (const skill of [...task.expectedSkills, ...task.acceptableSkills]) {
+    for (const skill of [
+      ...task.expectedSkills,
+      ...task.acceptableSkills,
+      ...task.excludedSkills,
+    ]) {
       if (!names.has(skill)) {
         context.addIssue({
           code: 'custom',
@@ -76,11 +132,33 @@ export const RetrievalCorpusSchema = z.strictObject({
         });
       }
     }
+    for (const [skill, binding] of Object.entries(task.expectedBindings)) {
+      const candidate = names.get(skill);
+      if (candidate?.remote === undefined) {
+        context.addIssue({
+          code: 'custom',
+          message: `Task "${task.id}" expects a remote binding for non-remote skill "${skill}".`,
+          path: ['tasks', index, 'expectedBindings', skill],
+        });
+        continue;
+      }
+      if (candidate.remote.sourceId !== binding.sourceId ||
+          candidate.remote.revision !== binding.revision ||
+          candidate.remote.repositoryPath !== binding.repositoryPath) {
+        context.addIssue({
+          code: 'custom',
+          message: `Task "${task.id}" expects a binding that does not match the candidate "${skill}".`,
+          path: ['tasks', index, 'expectedBindings', skill],
+        });
+      }
+    }
   });
 });
 
 export type RetrievalCorpus = z.infer<typeof RetrievalCorpusSchema>;
 export type RetrievalTask = RetrievalCorpus['tasks'][number];
+export type RetrievalCandidate = RetrievalCorpus['candidates'][number];
+export type RetrievalRemoteBinding = z.infer<typeof RemoteBindingSchema>;
 
 export async function loadRetrievalCorpus(path: string): Promise<RetrievalCorpus> {
   const raw = await readFile(path, 'utf8');

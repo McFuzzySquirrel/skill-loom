@@ -63,6 +63,34 @@ describe('retrieval metrics', () => {
     });
   });
 
+  it('reports exact-binding accuracy, excluded-policy violations, and fallbacks', () => {
+    const metrics = computeMetrics([
+      {
+        id: 'remote', category: 'remote', expectNoResult: false, resultCount: 1,
+        expectedRanks: [1], elapsedMs: 1,
+        bindingCases: 2, bindingCorrect: 1, excludedCases: 2, excludedPresent: 1,
+      },
+      {
+        id: 'scan-fallback', category: 'body-only', expectNoResult: false, resultCount: 1,
+        expectedRanks: [1], elapsedMs: 1, fallback: true,
+      },
+    ]);
+
+    expect(metrics.bindingCases).toBe(2);
+    expect(metrics.bindingAccuracy).toBe(0.5);
+    expect(metrics.excludedCases).toBe(2);
+    expect(metrics.excludedViolationRate).toBe(0.5);
+    expect(metrics.fallbackCount).toBe(1);
+  });
+
+  it('treats absent binding cases as fully accurate and absent exclusions as clean', () => {
+    const metrics = computeMetrics([
+      { id: 'a', category: 'description-match', expectNoResult: false, resultCount: 1, expectedRanks: [1], elapsedMs: 1 },
+    ]);
+    expect(metrics.bindingAccuracy).toBe(1);
+    expect(metrics.excludedViolationRate).toBe(0);
+  });
+
   it('returns zero for an empty percentile sample', () => {
     expect(percentile([], 0.95)).toBe(0);
   });

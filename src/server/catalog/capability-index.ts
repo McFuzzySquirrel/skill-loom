@@ -1453,10 +1453,11 @@ export function createCapabilitySearchService(
         return withFallback(started, options.fallback, normalized, reason);
       }
       try {
-        await capabilityIndex.refresh(collection);
+        const warnings = await capabilityIndex.refresh(collection);
         const result = await capabilityIndex.search(normalized);
         return {
           ...result,
+          warnings,
           elapsedMs: Math.round((performance.now() - started) * 100) / 100,
         };
       } catch (error) {

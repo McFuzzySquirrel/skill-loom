@@ -22,6 +22,7 @@ import { CHAIN_VERSION, parseChain } from '../../src/server/chains/model.js';
 import { createRunRecord } from '../../src/server/runs/model.js';
 import { createRunOwner } from '../../src/server/runs/owner.js';
 import { createRunStore } from '../../src/server/runs/store.js';
+import { createLoomServices } from '../../src/server/services.js';
 import { createTerminalManager, TerminalSubscriberConflictError } from '../../src/server/terminal/pty.js';
 
 describe.skipIf(process.platform === 'win32')('local control transport', () => {
@@ -115,6 +116,67 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
         .toMatchObject({ ok: false, error: { code: 'PROJECT_CLAIM_UNSAFE' } });
     } finally {
       await server.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('serves ranked capability-index entries through the project catalog page', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'loom-capability-page-'));
+    const project = join(root, 'project');
+    const configDirectory = join(root, 'config');
+    const home = join(root, 'home');
+    const skill = join(project, '.agents', 'skills', 'body-only-review');
+    await mkdir(skill, { recursive: true });
+    await mkdir(home, { recursive: true });
+    await writeFile(join(skill, 'SKILL.md'), [
+      '---',
+      'name: body-only-review',
+      'description: Review a generic helper.',
+      '---',
+      '',
+      '## Attestation bundle',
+      '',
+      'Verify the attestation bundle and record the pinned revision.',
+      '',
+    ].join('\n'));
+    const config = createConfigStore({ env: { LOOM_CONFIG_DIR: configDirectory } });
+    await config.update({});
+    const services = createLoomServices({
+      configStore: config,
+      preflightEnv: { LOOM_CAPABILITY_INDEX: '1' },
+      preflightHomeDirectory: home,
+    });
+    const server = await startControlServer(config, { services });
+    try {
+      // The first capability query builds the index and truthfully reports the
+      // scan fallback; later queries use the indexed path.
+      await services.capabilitySearchService.search({
+        harness: 'opencode', projectPath: project, query: 'warm', offset: 0, limit: 1,
+      });
+      const opened = await callControl(configDirectory, 'project.open', { path: project });
+      if (!opened.ok) throw new Error('Project registration failed.');
+      const projectId = (opened.result as { project: { id: string } }).project.id;
+      const response = await callControl(configDirectory, 'catalog.project.page', {
+        projectId, harness: 'opencode', query: 'attestation bundle',
+      });
+      expect(response).toMatchObject({
+        ok: true,
+        result: {
+          retrieval: { mode: 'index', ranking: 'fts5' },
+          entries: [{
+            name: 'body-only-review',
+            source: 'project',
+            fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+            match: {
+              score: expect.any(Number),
+              snippet: expect.stringContaining('attestation'),
+            },
+          }],
+        },
+      });
+    } finally {
+      await server.close();
+      await services.capabilitySearchService.dispose({ deleteIndex: true });
       await rm(root, { recursive: true, force: true });
     }
   });

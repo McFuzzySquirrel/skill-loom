@@ -34,6 +34,17 @@ export const REMOTE_SNAPSHOT_CONTENT = Symbol('remote-snapshot-content');
 /** Display and grouping order from the skill-catalog feature document. */
 export const SKILL_SOURCE_ORDER: readonly SkillSource[] = SKILL_SOURCES;
 
+/**
+ * Ranked retrieval metadata supplied by the derived capability index. A plain
+ * catalog scan omits it because a scan does not rank or excerpt candidates.
+ */
+export interface SkillMatch {
+  /** Ranking score; higher is better for the token table and lower for BM25. */
+  score: number;
+  /** Bounded excerpt around the best matching field. */
+  snippet: string;
+}
+
 /** One discovered skill package. */
 export interface SkillEntry {
   /**
@@ -65,6 +76,14 @@ export interface SkillEntry {
   };
   /** Copilot can report disabled entries; filesystem discovery is enabled. */
   enabled: boolean;
+  /**
+   * Verified package fingerprint from indexed retrieval. A remote entry also
+   * carries it internally in `REMOTE_SNAPSHOT_CONTENT`; the explicit field makes
+   * the exact binding identity available to CLI and skill consumers.
+   */
+  fingerprint?: string;
+  /** Ranked match metadata from the derived capability index. */
+  match?: SkillMatch;
 }
 
 /** A pinned harness-native agent definition from a verified remote snapshot. */

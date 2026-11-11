@@ -6,6 +6,16 @@ export interface TaskOutcome {
   /** 1-based rank of each expected skill, or null when it was not returned. */
   expectedRanks: Array<number | null>;
   elapsedMs: number;
+  /** Number of expected remote bindings checked for this task. */
+  bindingCases?: number;
+  /** Number of checked bindings that carried the exact source, revision, and path. */
+  bindingCorrect?: number;
+  /** Number of excluded skills the source policy was asked to remove. */
+  excludedCases?: number;
+  /** Number of excluded skills that remained in the filtered result list. */
+  excludedPresent?: number;
+  /** True when an indexed-mode request reported that it used the scan fallback. */
+  fallback?: boolean;
 }
 
 export interface RetrievalMetrics {
@@ -20,6 +30,11 @@ export interface RetrievalMetrics {
   falsePositiveRate: number;
   meanLatencyMs: number;
   p95LatencyMs: number;
+  bindingCases: number;
+  bindingAccuracy: number;
+  excludedCases: number;
+  excludedViolationRate: number;
+  fallbackCount: number;
 }
 
 export interface CategoryMetrics {
@@ -77,6 +92,11 @@ export function computeMetrics(outcomes: readonly TaskOutcome[]): RetrievalMetri
   }, 0);
   const empty = positives.filter((outcome) => outcome.resultCount === 0).length;
   const falsePositive = negatives.filter((outcome) => outcome.resultCount > 0).length;
+  const bindingCases = outcomes.reduce((sum, outcome) => sum + (outcome.bindingCases ?? 0), 0);
+  const bindingCorrect = outcomes.reduce((sum, outcome) => sum + (outcome.bindingCorrect ?? 0), 0);
+  const excludedCases = outcomes.reduce((sum, outcome) => sum + (outcome.excludedCases ?? 0), 0);
+  const excludedPresent = outcomes.reduce((sum, outcome) => sum + (outcome.excludedPresent ?? 0), 0);
+  const fallbackCount = outcomes.filter((outcome) => outcome.fallback === true).length;
 
   return {
     tasks: outcomes.length,
@@ -90,6 +110,11 @@ export function computeMetrics(outcomes: readonly TaskOutcome[]): RetrievalMetri
     falsePositiveRate: negatives.length === 0 ? 0 : round(falsePositive / negatives.length),
     meanLatencyMs: latency.length === 0 ? 0 : round(latency.reduce((sum, value) => sum + value, 0) / latency.length),
     p95LatencyMs: round(percentile(latency, 0.95)),
+    bindingCases,
+    bindingAccuracy: bindingCases === 0 ? 1 : round(bindingCorrect / bindingCases),
+    excludedCases,
+    excludedViolationRate: excludedCases === 0 ? 0 : round(excludedPresent / excludedCases),
+    fallbackCount,
   };
 }
 

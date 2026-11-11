@@ -76,11 +76,20 @@ the first CLI command, run `skill-loom --version`.
 ## Workflow
 
 1. Establish the desired outcome, target project, host, and permitted sources.
-   Use `scenario-discovery` for catalog listing, approved refresh, full candidate
-   inspection, proposals, explicit chain and redistribution review, and bundle
-   construction. Preserve each selected candidate's identity and fingerprint,
-   including source, revision, and repository path for remote candidates.
-   Create and validate a CLI draft with exact bindings for remote skill steps;
+   Expand the outcome into one to three bounded capability queries with likely
+   synonyms, artifacts, and constraints, and query `catalog project page` for
+   each one. Use `entries[].match.snippet` and `match.score` only to rerank a
+   shortlist, and respect `retrieval.mode`: when it reports `scan` or a
+   `CAPABILITY_INDEX_FALLBACK` warning, use concrete name and description terms
+   and do not treat the result as ranked body-text evidence. Merge duplicates by
+   exact identity rather than name, and stop rather than resolving same-named
+   remote packages by name. Then use `scenario-discovery` for full
+   candidate inspection, proposals, explicit chain and redistribution review,
+   and bundle construction. Read every selected package in full before
+   packaging; a snippet is not review. Preserve each selected candidate's
+   identity and fingerprint, including source, revision, repository path, and
+   fingerprint for remote candidates. Create and validate a CLI draft with exact
+   bindings for remote skill steps;
    on Windows, confirm project-local package files are in the Git index when
    installed-mode records are absent; verify that its exported bundle matches
    the approved chain and packages. If files need staging, get the user's

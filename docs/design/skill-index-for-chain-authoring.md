@@ -1,6 +1,6 @@
 # Skill index for chain authoring
 
-**Status:** Accepted design. Phases 0 and 1 are complete; Phase 2 has not started. The decision is recorded in [ADR-0030](../adr/0030-capability-index-and-model-reranking.md).
+**Status:** Accepted design. Phases 0, 1, and 2 are complete; Phases 3 and 4 have not started. The decision is recorded in [ADR-0030](../adr/0030-capability-index-and-model-reranking.md).
 
 ## Progress
 
@@ -8,7 +8,7 @@
 |---|---|---|
 | 0 — Baseline and evaluation | Complete — 2026-11-11 | [baseline](../evidence/retrieval-baseline-2026-11-11.json), `npm run eval:retrieval` |
 | 1 — Capability index | Complete — 2026-11-11 | `tests/unit/capability-index.test.ts`, `npx vitest run tests/unit/capability-index.test.ts` |
-| 2 — Authoring integration | Not started | |
+| 2 — Authoring integration | Complete — 2026-11-11 | [indexed comparison](../evidence/retrieval-indexed-2026-11-11.json), `npm run eval:retrieval -- --mode compare`, `tests/unit/project-catalog-pages.test.ts` |
 | 3 — Structured metadata | Not started | |
 | 4 — Optional local embeddings | Not started | |
 
@@ -48,8 +48,8 @@ The chain editor only edits an existing chain; it cannot add skill steps today. 
 ## Current authoring flow
 
 1. The user states the outcome, harness, and permitted sources.
-2. `scenario-discovery` uses `catalog project page` and `catalog snapshot page` to list candidates.
-3. The authoring skill reads complete packages for plausible candidates and proposes chain steps.
+2. `scenario-discovery` uses `catalog project page` (the indexed path when enabled) and `catalog snapshot page` to list candidates.
+3. The authoring skill reranks the shortlist, reads complete packages for plausible candidates, and proposes chain steps.
 4. The user reviews the chain and package contents.
 5. `loom-chain-workflow` creates and validates a CLI draft, then exports or imports the reviewed bundle.
 
@@ -140,11 +140,13 @@ The gap is exactly where expected: description matches retrieve reliably, while 
 
 ```bash
 npm run eval:retrieval
+npm run eval:retrieval -- --mode scan
+npm run eval:retrieval -- --mode index
 npm run eval:retrieval -- --json
-npm run eval:retrieval -- --out docs/evidence/retrieval-baseline-<date>.json
+npm run eval:retrieval -- --out docs/evidence/retrieval-indexed-<date>.json
 ```
 
-The runner needs no service, model, credentials, or network access. It uses a temporary project and profile, then removes them.
+The runner needs no service, model, credentials, or network access. It uses a temporary project and profile, publishes remote fixtures as pinned snapshots, then removes them. The default `compare` mode runs both the scan and the indexed path.
 
 **Exit criteria**
 
@@ -177,12 +179,14 @@ The runner needs no service, model, credentials, or network access. It uses a te
 
 **Implementation notes**
 
-- The index is created only when a caller opts in. `LOOM_CAPABILITY_INDEX=1` enables the capability search service; no catalog command consumes it until Phase 2.
+- The index is created only when a caller opts in. `LOOM_CAPABILITY_INDEX=1` enables the capability search service; Phase 2 wires `catalog project page` to it.
 - One query merges OpenCode project, personal, extra-directory, and packaged scenario packages with verified pinned remote snapshots. Copilot discovery remains CLI-authoritative and falls back to the fresh scan.
 - Tests cover FTS5 and token-table ranking, stat and content-hash invalidation, missing/corrupt/unsafe fallback, unicode, bounded sizes, project scoping, remote manifest verification and binding identity, the bundled scenario root, and the 250 ms query budget.
 - The database is `~/.config/loom/capability-index.sqlite`, owner-only, capped at 64 MiB, and excluded from backups. Deleting it is always safe.
 
 ## Phase 2: Authoring integration
+
+**Status:** Complete — 2026-11-11.
 
 **Deliverables**
 
@@ -194,10 +198,37 @@ The runner needs no service, model, credentials, or network access. It uses a te
 
 **Exit criteria**
 
-- The indexed path beats the baseline on candidate recall without increasing the empty-result rate.
-- Remote steps still bind to one exact snapshot; name-only ambiguity does not reappear.
-- The authoring skill still reads every selected package in full before packaging.
-- The scan fallback remains available and tested.
+- [x] The indexed path beats the baseline on candidate recall without increasing the empty-result rate.
+- [x] Remote steps still bind to one exact snapshot; name-only ambiguity does not reappear.
+- [x] The authoring skill still reads every selected package in full before packaging.
+- [x] The scan fallback remains available and tested.
+
+**Implementation notes**
+
+- `ProjectCatalogPages` accepts the capability search service and uses it for the first page when `LOOM_CAPABILITY_INDEX=1`. Entries add bounded `match.snippet` and `match.score`, a `fingerprint`, and the exact remote binding fields. The response adds `retrieval.mode`, `retrieval.ranking`, and any fallback reason without changing `total`, `entries`, `nextOffset`, `snapshotId`, or the warning cursors.
+- The control request still caps a query at 200 characters, the index caps a sanitized query at 500 characters and 16 terms, snippets stay at 240 characters, each indexed search returns at most 50 candidates, and the page snapshot composes at most 500 candidates before using the scan.
+- The cached snapshot still makes later pages stable. The indexed path builds at most 500 entries; a larger result set, an unexpected indexed failure, or a mid-paging mode change uses the fresh scan instead of truncating or hiding a skill.
+- The first query after a missing or invalid index builds it and truthfully reports the scan fallback. Later queries use the index; the authoring skill expands an outcome into more than one query, so a single authoring request normally reaches the indexed path. `retrieval.mode` and the `CAPABILITY_INDEX_FALLBACK` warning keep the distinction visible.
+- `scenario-discovery` expands the outcome into one to three bounded queries, merges candidates by exact identity, reranks the shortlist, and reads every selected package in full. `loom-chain-workflow` performs the same expansion and rerank before delegating to `scenario-discovery`.
+- The corpus now has 35 tasks and 16 candidates, including a pinned remote candidate with an exact-binding check and a project-source policy case. `npm run eval:retrieval` defaults to a scan/index comparison; `--mode scan` and `--mode index` remain available.
+
+**Comparison — 2026-11-11**
+
+| Metric | Scan | Indexed |
+|---|---|---|
+| recall@5 | 0.697 | 1.000 |
+| recall@10 | 0.697 | 1.000 |
+| full recall@10 | 0.636 | 0.970 |
+| MRR | 0.697 | 1.000 |
+| empty-result rate | 0.303 | 0.000 |
+| false-positive rate | 0.000 | 0.000 |
+| binding accuracy | 0.000 (1 case) | 1.000 (1 case) |
+| excluded-policy violations | 0.000 (1 case) | 0.000 (1 case) |
+| mean latency | 5.8 ms | 7.5 ms |
+| p95 latency | 8.4 ms | 9.0 ms |
+| index build | — | 64.7 ms |
+
+The exit criteria are met with the expanded corpus. The scan numbers differ from the Phase 0 baseline because the corpus and candidate set grew; the historical baseline remains recorded at [retrieval-baseline-2026-11-11.json](../evidence/retrieval-baseline-2026-11-11.json).
 
 ## Phase 3: Structured metadata
 
@@ -228,16 +259,16 @@ Only start this phase if the evaluation shows a paraphrase gap that lexical retr
 
 ## Evaluation
 
-The current corpus has 33 tasks and 14 candidates. Its baseline is recorded at [retrieval-baseline-2026-11-11.json](../evidence/retrieval-baseline-2026-11-11.json). Expand it with remote and filter cases before Phase 2 treats a score as acceptance evidence.
+The current corpus has 35 tasks and 16 candidates, including the Phase 2 remote and source-policy cases. The Phase 0 baseline remains recorded at [retrieval-baseline-2026-11-11.json](../evidence/retrieval-baseline-2026-11-11.json), and the Phase 2 comparison is at [retrieval-indexed-2026-11-11.json](../evidence/retrieval-indexed-2026-11-11.json).
 
-The corpus should include chain-authoring tasks such as:
+The corpus includes chain-authoring tasks such as:
 
 - An outcome whose wording matches a skill description.
 - An outcome whose wording appears only in headings or body text.
 - An outcome that needs two skills composed into one chain.
-- A remote candidate that must preserve its exact snapshot binding (Phase 2).
+- A remote candidate that must preserve its exact snapshot binding.
 - An outcome that should return no result.
-- A harness/source filter case (Phase 2).
+- A project-source policy case that excludes a personal candidate with similar wording.
 
 Metrics:
 
@@ -272,21 +303,21 @@ Suggested acceptance threshold, calibrated against the baseline: a meaningful ca
 
 ## Acceptance criteria
 
-- [ ] The evaluation corpus and runner exist and record a baseline.
-- [ ] The index is content-addressed and invalidates on package changes.
-- [ ] A missing, corrupt, unsafe, or unsupported index falls back to a fresh scan.
-- [ ] Results carry provenance and the exact remote binding identity.
-- [ ] Chain authoring still requires full-package review and explicit approval.
-- [ ] The indexed path improves candidate recall without hiding skills.
-- [ ] No skill content leaves the machine for retrieval.
-- [ ] `npm run check`, `npm run typecheck`, and `npm test` pass at every phase.
+- [x] The evaluation corpus and runner exist and record a baseline.
+- [x] The index is content-addressed and invalidates on package changes.
+- [x] A missing, corrupt, unsafe, or unsupported index falls back to a fresh scan.
+- [x] Results carry provenance and the exact remote binding identity.
+- [x] Chain authoring still requires full-package review and explicit approval.
+- [x] The indexed path improves candidate recall without hiding skills.
+- [x] No skill content leaves the machine for retrieval.
+- [x] `npm run check`, `npm run typecheck`, and `npm test` pass at every phase.
 
 ## Open questions
 
 - Should body excerpts be indexed for personal skills by default, or only for project and bundled sources?
 - Should the index live in the profile directory or be derived per project to simplify deletion?
-- Reuse the per-snapshot remote index or fold remote entries into one profile index?
-- How should `scenario-discovery` treat personal/global candidates when its policy limits repository skills?
+- ~~Reuse the per-snapshot remote index or fold remote entries into one profile index?~~ Resolved: the profile capability index folds verified remote entries in and preserves the snapshot binding identity.
+- ~~How should `scenario-discovery` treat personal/global candidates when its policy limits repository skills?~~ Resolved: the authoring flow applies a source policy to the provenance returned by the page; the corpus has a project-only exclusion case.
 - Which local embedding model, if any, meets the packaging and privacy constraints?
 - How much model reranking cost is acceptable per chain-authoring request?
 

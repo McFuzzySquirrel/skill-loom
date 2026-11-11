@@ -299,7 +299,7 @@ The packed package contains `dist/src`, `dist/web`, the compiled package metadat
 | Live discovery probe | `npm run test:live:discovery` | Requires real harness CLIs. |
 | Live execution probe | `npm run test:live:execution` | Requires real harness CLIs and may make paid model calls. |
 | Managed OpenCode acceptance | `npm run test:live:managed -- --confirm-live` | Checkout-only; uses the production managed runner, makes paid calls and grants temporary-project read/edit permissions. See the [procedure](docs/OPERATIONS.md#managed-opencode-acceptance). |
-| Retrieval baseline | `npm run eval:retrieval` | Runs the chain-authoring corpus against current catalog search; no model calls. |
+| Retrieval evaluation | `npm run eval:retrieval` | Compares scan and indexed retrieval on the chain-authoring corpus, including remote binding and source-policy cases; no model calls or network. |
 | Documentation gate | `npm run check` | Runs `scripts/check-docs.mjs`. |
 
 The default live probes exercise real OpenCode and Copilot CLIs. They fail with a clear diagnostic when a required CLI is absent; they do not silently skip. Run them only when you intend to use the installed harnesses and credentials. For an OpenCode-only execution probe, see the [verification guide](docs/OPERATIONS.md#opencode-only-live-verification); it does not invoke Copilot and writes separate evidence.
