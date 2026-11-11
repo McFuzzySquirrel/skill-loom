@@ -1,0 +1,255 @@
+{
+  "version": 1,
+  "description": "Chain-authoring tasks used by scripts/retrieval-eval.ts. Each task states an outcome, the search query a chain author would try, and the skills that should be located. The corpus is intentionally small and reviewed; expand it before treating a score as general evidence.",
+  "candidates": [
+    { "name": "accessible-react-workflows", "source": ".github/skills/accessible-react-workflows" },
+    { "name": "atomic-json-persistence", "source": ".github/skills/atomic-json-persistence" },
+    { "name": "harness-adapter-contract", "source": ".github/skills/harness-adapter-contract" },
+    { "name": "live-harness-verification", "source": ".github/skills/live-harness-verification" },
+    { "name": "loom-chain-workflow", "source": ".github/skills/loom-chain-workflow" },
+    { "name": "loom-run-bundle", "source": ".github/skills/loom-run-bundle" },
+    { "name": "pty-run-lifecycle", "source": ".github/skills/pty-run-lifecycle" },
+    { "name": "scenario-discovery", "source": ".github/skills/scenario-discovery" },
+    { "name": "create-project-documentation", "source": ".agents/skills/create-project-documentation" },
+    { "name": "api-security-review", "source": "tests/fixtures/retrieval/skills/api-security-review" },
+    { "name": "browser-test-automation", "source": "tests/fixtures/retrieval/skills/browser-test-automation" },
+    { "name": "sqlite-migration", "source": "tests/fixtures/retrieval/skills/sqlite-migration" },
+    { "name": "release-checklist", "source": "tests/fixtures/retrieval/skills/release-checklist" },
+    { "name": "incident-triage", "source": "tests/fixtures/retrieval/skills/incident-triage" }
+  ],
+  "tasks": [
+    {
+      "id": "a11y-keyboard",
+      "outcome": "Review the chain editor for keyboard and focus regressions.",
+      "query": "keyboard reordering",
+      "category": "description-match",
+      "expectedSkills": ["accessible-react-workflows"]
+    },
+    {
+      "id": "a11y-aria",
+      "outcome": "Make save status announcements reach assistive technology.",
+      "query": "aria-live announcements",
+      "category": "description-match",
+      "expectedSkills": ["accessible-react-workflows"]
+    },
+    {
+      "id": "a11y-screen-reader",
+      "outcome": "Check how the editor behaves for a screen reader user.",
+      "query": "screen reader",
+      "category": "body-only",
+      "expectedSkills": ["accessible-react-workflows"]
+    },
+    {
+      "id": "json-persistence",
+      "outcome": "Persist configuration safely across crashes.",
+      "query": "json persistence",
+      "category": "description-match",
+      "expectedSkills": ["atomic-json-persistence"]
+    },
+    {
+      "id": "json-quarantine",
+      "outcome": "Recover from a corrupt config file without losing the original.",
+      "query": "corrupt-file quarantine",
+      "category": "description-match",
+      "expectedSkills": ["atomic-json-persistence"]
+    },
+    {
+      "id": "adapter-contract",
+      "outcome": "Add a new harness adapter without leaking harness details into routes.",
+      "query": "harness adapter contract",
+      "category": "description-match",
+      "expectedSkills": ["harness-adapter-contract"]
+    },
+    {
+      "id": "live-recall",
+      "outcome": "Prove session continuation with a live harness probe.",
+      "query": "session-continuation token recall",
+      "category": "description-match",
+      "expectedSkills": ["live-harness-verification"]
+    },
+    {
+      "id": "pty-subscriber",
+      "outcome": "Attach a terminal while keeping one subscriber.",
+      "query": "one-subscriber terminals",
+      "category": "description-match",
+      "expectedSkills": ["pty-run-lifecycle"]
+    },
+    {
+      "id": "pty-pause",
+      "outcome": "Pause a run and retry a failed step safely.",
+      "query": "explicit pause and retry",
+      "category": "description-match",
+      "expectedSkills": ["pty-run-lifecycle"]
+    },
+    {
+      "id": "discovery-skills",
+      "outcome": "Inventory project skills and propose a workflow.",
+      "query": "discover project-local skills",
+      "category": "description-match",
+      "expectedSkills": ["scenario-discovery"]
+    },
+    {
+      "id": "workflow-coordinate",
+      "outcome": "Coordinate discovery, import review, and current-session execution.",
+      "query": "coordinate reviewed cli discovery",
+      "category": "description-match",
+      "expectedSkills": ["loom-chain-workflow"]
+    },
+    {
+      "id": "bundle-run",
+      "outcome": "Run an exported bundle in the current harness session.",
+      "query": "run an exported skill loom chain bundle",
+      "category": "description-match",
+      "expectedSkills": ["loom-run-bundle"]
+    },
+    {
+      "id": "docs-readme",
+      "outcome": "Refresh the README, ADRs, and guides.",
+      "query": "readme, adrs",
+      "category": "description-match",
+      "expectedSkills": ["create-project-documentation"]
+    },
+    {
+      "id": "docs-release",
+      "outcome": "Prepare release notes and a changelog entry.",
+      "query": "release notes",
+      "category": "description-match",
+      "expectedSkills": ["create-project-documentation"]
+    },
+    {
+      "id": "shell-free",
+      "outcome": "Spawn a harness process without a shell.",
+      "query": "shell-free spawning",
+      "category": "description-match",
+      "expectedSkills": ["pty-run-lifecycle"]
+    },
+    {
+      "id": "bounded-tails",
+      "outcome": "Keep only a bounded terminal tail per step.",
+      "query": "bounded tails",
+      "category": "description-match",
+      "expectedSkills": ["pty-run-lifecycle"]
+    },
+    {
+      "id": "api-input",
+      "outcome": "Harden an API against invalid input.",
+      "query": "input validation",
+      "category": "body-only",
+      "expectedSkills": ["api-security-review"]
+    },
+    {
+      "id": "api-auth",
+      "outcome": "Review an API's authentication and authorization boundaries.",
+      "query": "authorization",
+      "category": "body-only",
+      "expectedSkills": ["api-security-review"]
+    },
+    {
+      "id": "browser-playwright",
+      "outcome": "Automate a browser journey with Playwright.",
+      "query": "playwright",
+      "category": "body-only",
+      "expectedSkills": ["browser-test-automation"]
+    },
+    {
+      "id": "sqlite-schema",
+      "outcome": "Write a safe SQLite schema migration.",
+      "query": "schema migration",
+      "category": "body-only",
+      "expectedSkills": ["sqlite-migration"]
+    },
+    {
+      "id": "sqlite-journal",
+      "outcome": "Choose a SQLite journal mode for local coordination.",
+      "query": "journal mode",
+      "category": "body-only",
+      "expectedSkills": ["sqlite-migration"]
+    },
+    {
+      "id": "release-rollback",
+      "outcome": "Prepare rollback steps before shipping.",
+      "query": "rollback",
+      "category": "body-only",
+      "expectedSkills": ["release-checklist"]
+    },
+    {
+      "id": "incident-metrics",
+      "outcome": "Triage an incident using logs and metrics.",
+      "query": "metrics",
+      "category": "body-only",
+      "expectedSkills": ["incident-triage"]
+    },
+    {
+      "id": "release-version",
+      "outcome": "Bump the package version and update the changelog.",
+      "query": "version bump",
+      "category": "body-only",
+      "expectedSkills": ["release-checklist"]
+    },
+    {
+      "id": "api-security",
+      "outcome": "Review an API for security issues.",
+      "query": "security issues",
+      "category": "description-match",
+      "expectedSkills": ["api-security-review"]
+    },
+    {
+      "id": "browser-test",
+      "outcome": "Set up browser test automation.",
+      "query": "browser test",
+      "category": "description-match",
+      "expectedSkills": ["browser-test-automation"]
+    },
+    {
+      "id": "sqlite-storage",
+      "outcome": "Manage local database storage.",
+      "query": "database storage",
+      "category": "description-match",
+      "expectedSkills": ["sqlite-migration"]
+    },
+    {
+      "id": "release-prep",
+      "outcome": "Prepare a release with a checklist.",
+      "query": "prepare a release",
+      "category": "description-match",
+      "expectedSkills": ["release-checklist"]
+    },
+    {
+      "id": "incident-triage",
+      "outcome": "Triage an incident and assign a severity.",
+      "query": "triage an incident",
+      "category": "description-match",
+      "expectedSkills": ["incident-triage"]
+    },
+    {
+      "id": "compose-discovery-run",
+      "outcome": "Discover project skills, propose a workflow, then run the exported bundle.",
+      "query": "discover project-local skills",
+      "category": "compose",
+      "expectedSkills": ["scenario-discovery", "loom-run-bundle"]
+    },
+    {
+      "id": "compose-live-workflow",
+      "outcome": "Verify the live harness, then coordinate the chain workflow.",
+      "query": "session-continuation token recall",
+      "category": "compose",
+      "expectedSkills": ["live-harness-verification", "loom-chain-workflow"]
+    },
+    {
+      "id": "negative-quantum",
+      "outcome": "Run a quantum entanglement experiment.",
+      "query": "quantum entanglement",
+      "category": "negative",
+      "expectedSkills": [],
+      "expectNoResult": true
+    },
+    {
+      "id": "negative-translate",
+      "outcome": "Translate this document into French.",
+      "query": "translate French",
+      "category": "negative",
+      "expectedSkills": [],
+      "expectNoResult": true
+    }
+  ]
+}

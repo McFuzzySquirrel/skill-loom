@@ -1,6 +1,16 @@
 # Skill index for chain authoring
 
-**Status:** Accepted design, not implemented. The decision is recorded in [ADR-0030](../adr/0030-capability-index-and-model-reranking.md).
+**Status:** Accepted design. Phase 0 is complete; Phase 1 has not started. The decision is recorded in [ADR-0030](../adr/0030-capability-index-and-model-reranking.md).
+
+## Progress
+
+| Phase | Status | Evidence |
+|---|---|---|
+| 0 — Baseline and evaluation | Complete — 2026-11-11 | [baseline](../evidence/retrieval-baseline-2026-11-11.json), `npm run eval:retrieval` |
+| 1 — Capability index | Not started | |
+| 2 — Authoring integration | Not started | |
+| 3 — Structured metadata | Not started | |
+| 4 — Optional local embeddings | Not started | |
 
 ## Goal
 
@@ -97,18 +107,52 @@ Rules:
 
 ## Phase 0: Baseline and evaluation
 
+**Status:** Complete — 2026-11-11.
+
 **Deliverables**
 
-- A reviewed corpus of 30–50 chain-authoring tasks. Each task has an outcome, harness, expected skills, acceptable alternatives, and the expected remote bindings where applicable.
-- Instrumentation for the current substring path: query, candidate count, selected skills, rank, empty-result rate, and elapsed time.
-- A repeatable evaluation runner that reports the same metrics for every retrieval variant.
+- A reviewed 33-task corpus in `tests/fixtures/retrieval/chain-authoring-corpus.json`, with 14 candidate packages and description-match, body-only, compose, and negative tasks.
+- Small fixture packages for capability language that is absent from the description, under `tests/fixtures/retrieval/skills/`.
+- `scripts/retrieval-eval.ts`, which copies the candidates into a temporary project, runs the current catalog search, and reports recall, full recall, MRR, empty results, false positives, and latency without model calls.
+- A reusable corpus loader and metric helpers in `scripts/retrieval-corpus.ts` and `scripts/retrieval-metrics.ts`, with unit tests.
+- The recorded baseline at [retrieval-baseline-2026-11-11.json](../evidence/retrieval-baseline-2026-11-11.json).
+
+**Baseline**
+
+| Metric | Current substring search |
+|---|---|
+| Candidate packages | 14 |
+| Tasks | 33 (31 positive, 2 negative) |
+| recall@5 | 0.710 |
+| recall@10 | 0.710 |
+| full recall@10 | 0.645 |
+| MRR | 0.710 |
+| empty-result rate | 0.290 |
+| false-positive rate | 0.000 |
+| mean latency | 5.3 ms |
+| p95 latency | 8.1 ms |
+| body-only recall@10 | 0.000 (9 tasks) |
+| compose full recall@10 | 0.000 (2 tasks) |
+
+The gap is exactly where expected: description matches retrieve reliably, while body-only capability language returns nothing and composed chains retrieve only one component.
+
+**How to run**
+
+```bash
+npm run eval:retrieval
+npm run eval:retrieval -- --json
+npm run eval:retrieval -- --out docs/evidence/retrieval-baseline-<date>.json
+```
+
+The runner needs no service, model, credentials, or network access. It uses a temporary project and profile, then removes them.
 
 **Exit criteria**
 
-- Baseline metrics are recorded.
-- The corpus includes a task whose capability phrase appears only in headings or body text.
-- At least one remote task verifies exact binding identity, not just a name.
-- Lexical variants run without paid model calls; model reranking runs are labeled.
+- [x] Baseline metrics are recorded.
+- [x] The corpus includes tasks whose capability phrase appears only in headings or body text.
+- [x] Lexical variants run without paid model calls.
+- [ ] Remote exact-binding verification is deferred to Phase 2, when indexed results carry remote rows. Phase 0 intentionally uses local fixtures.
+- [x] The runner and metric helpers have unit tests and a documented command.
 
 ## Phase 1: Capability index
 
@@ -175,14 +219,16 @@ Only start this phase if the evaluation shows a paraphrase gap that lexical retr
 
 ## Evaluation
 
+The current corpus has 33 tasks and 14 candidates. Its baseline is recorded at [retrieval-baseline-2026-11-11.json](../evidence/retrieval-baseline-2026-11-11.json). Expand it with remote and filter cases before Phase 2 treats a score as acceptance evidence.
+
 The corpus should include chain-authoring tasks such as:
 
 - An outcome whose wording matches a skill description.
 - An outcome whose wording appears only in headings or body text.
 - An outcome that needs two skills composed into one chain.
-- A remote candidate that must preserve its exact snapshot binding.
+- A remote candidate that must preserve its exact snapshot binding (Phase 2).
 - An outcome that should return no result.
-- A harness/source filter case.
+- A harness/source filter case (Phase 2).
 
 Metrics:
 

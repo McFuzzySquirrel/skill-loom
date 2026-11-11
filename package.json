@@ -39,6 +39,7 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:watch": "vitest",
+    "eval:retrieval": "tsx scripts/retrieval-eval.ts",
     "test:package": "node scripts/package-smoke.mjs",
     "test:live:discovery": "tsx scripts/live-discovery.ts",
     "test:live:execution": "tsx scripts/live-execution.ts",
