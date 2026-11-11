@@ -62,7 +62,10 @@ afterEach(async () => {
 });
 
 async function prepare(extra: Record<string, unknown> = {}) {
-  const review = await executePortableRequest({ command: 'inspect', projectPath: project, bundlePath }) as {
+  const review = await executePortableRequest({
+    command: 'inspect', projectPath: project, bundlePath,
+    input: { globalSkillPaths: extra.globalSkillPaths },
+  }) as {
     reviewDigest: string;
   };
   return await executePortableRequest({
@@ -149,6 +152,51 @@ describe('portable bundle execution', () => {
     expect(await treeFingerprint(destination, inventory)).toBe(packageFingerprint(executableBundle.skills[0]!.files));
     expect(inventory.find((entry) => entry.path === 'check.bin')).toMatchObject({ executable: true });
     expect((await command('step', prepared.runId, prepared.revision, { confirmed: true }))).toMatchObject({ ok: true });
+  });
+
+  it('reuses a reviewed global skill without copying it and blocks later changes', async () => {
+    const globalDirectory = join(root, 'global-skills', 'review');
+    await mkdir(globalDirectory, { recursive: true });
+    await writeFile(join(globalDirectory, 'SKILL.md'), skillText);
+    await writeFile(join(globalDirectory, 'check.bin'), Buffer.from([0, 1, 128, 255]));
+    if (process.platform !== 'win32') await chmod(join(globalDirectory, 'check.bin'), 0o755);
+
+    let inspectOutput = '';
+    let inspectError = '';
+    const inspectCode = await runPortableCli(['inspect', '--project', project, '--bundle', bundlePath, '--stdin-json'], {
+      stdin: Readable.from([JSON.stringify({ globalSkillPaths: { review: globalDirectory } })]),
+      stdout: { write: (chunk) => { inspectOutput += String(chunk); return true; } },
+      stderr: { write: (chunk) => { inspectError += String(chunk); return true; } },
+    });
+    expect(inspectCode, inspectError).toBe(0);
+    const inspected = JSON.parse(inspectOutput) as {
+      reviewDigest: string;
+      skills: Array<{ globalReuse: { path: string; fingerprint: string; files: PackageTreeEntry[] } | null; bundledFingerprint: string }>;
+    };
+    expect(inspected.skills[0]?.globalReuse).toMatchObject({
+      path: globalDirectory,
+      fingerprint: inspected.skills[0]?.bundledFingerprint,
+      files: expect.arrayContaining([expect.objectContaining({ path: 'SKILL.md', kind: 'file' })]),
+    });
+
+    const prepared = await prepare({
+      globalSkillPaths: { review: globalDirectory },
+      reuseSkills: ['review'],
+    });
+    await expect(access(join(project, '.agents', 'skills', 'review'))).rejects.toMatchObject({ code: 'ENOENT' });
+    const started = await command('step', prepared.runId, prepared.revision, { confirmed: true }) as {
+      revision: number;
+    };
+    expect(started).toMatchObject({
+      step: { skillPath: globalDirectory },
+    });
+    const completed = await command('record', prepared.runId, started.revision, {
+      outcome: 'done', confirmed: true,
+    }) as { revision: number };
+
+    await writeFile(join(globalDirectory, 'SKILL.md'), `${skillText}\nChanged after review.\n`);
+    await expect(command('step', prepared.runId, completed.revision, { confirmed: true }))
+      .rejects.toMatchObject({ code: 'PACKAGE_CHANGED' });
   });
 
   it.runIf(process.platform === 'win32')('preserves executable intent through both standalone helper mirrors', async () => {
