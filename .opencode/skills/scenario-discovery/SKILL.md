@@ -64,7 +64,7 @@ version's command contract. On Unix-like systems, an explicitly started
 `skill-loom service start` owns the profile; do not start a second owner or
 remove its lock or control metadata. Windows supports the same CLI control
 through an authenticated loopback service. Its profile must be protected and
-on a local NTFS/ReFS drive without reparse points; PowerShell 7 or Windows
+on a local fixed NTFS/ReFS drive without reparse points; PowerShell 7 or Windows
 PowerShell 5.1 with .NET 4.7.2 or newer is required.
 
 - List configured sources and pinned revisions with `catalog source list` and
