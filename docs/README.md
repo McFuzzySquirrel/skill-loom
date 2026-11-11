@@ -17,7 +17,7 @@ This page lists the canonical documentation and where retired material lives. Ke
 | [Known gaps](current-gaps.md) | everyone | blocked, partial, and unverified capabilities |
 | [Architecture blueprint](../Project_Architecture_Blueprint.md) | maintainers | detected stack, C4 views, component/layer map, data and communication patterns, extension guide |
 | [Architecture diagrams](diagrams/README.md) | maintainers | [system map and run flows](diagrams/skill-loom-architecture.html), [chain save](diagrams/chain-save-sequence.html), [portable handoff](diagrams/portable-handoff-workflow.html) |
-| [Capability retrieval design](design/capability-retrieval.md) | maintainers | phased plan for the capability index, model reranking, and chain-pattern retrieval |
+| [Skill index for chain authoring](design/skill-index-for-chain-authoring.md) | maintainers | phased plan for locating candidate skills during chain creation |
 | [ADR index](adr/README.md) | maintainers | durable architecture decisions |
 | [Release notes](releases/0.1.0.md) | everyone | current release status, compatibility, limitations, evidence |
 | [Changelog](../CHANGELOG.md) | everyone | notable changes |

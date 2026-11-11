@@ -137,8 +137,7 @@ Key boundaries and the decisions behind them:
 - New project skill copies share `.agents/skills/`, with legacy OpenCode discovery preserved — [ADR-0012](docs/adr/0012-shared-project-skill-installation-root.md).
 - Bundle export prefers one project-local package and rejects remaining ambiguity — [ADR-0013](docs/adr/0013-deterministic-chain-bundle-skill-resolution.md).
 - Portable runs reuse a host-global package only when the host catalog resolves it and review binds its path and fingerprint; otherwise the package is installed into the project — [ADR-0029](docs/adr/0029-catalog-resolved-global-skill-reuse.md).
-- Skill discovery ranks a derived capability index and lets the harness model expand and rerank; the index never replaces package review — [ADR-0030](docs/adr/0030-capability-index-and-model-reranking.md).
-- Chain-pattern recommendations stay project-scoped unless cross-project aggregation is explicitly enabled — [ADR-0031](docs/adr/0031-project-scoped-chain-pattern-retrieval.md).
+- Chain authoring locates skills through a derived capability index and lets the harness model expand and rerank; the index never replaces package review or exact remote binding — [ADR-0030](docs/adr/0030-capability-index-and-model-reranking.md).
 
 The full decision directory is in [docs/adr/README.md](docs/adr/README.md).
 
