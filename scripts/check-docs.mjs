@@ -487,6 +487,34 @@ function checkSkillMirrors(root, failures) {
 }
 
 /**
+ * Skills that intentionally live in exactly one project skill root. A second
+ * copy under a mirror root drifts silently and is hard to spot in review.
+ */
+export const SINGLE_SOURCE_SKILLS = Object.freeze([
+  Object.freeze({
+    name: 'create-project-documentation',
+    source: '.agents/skills',
+  }),
+]);
+
+function checkSkillSources(root, failures) {
+  const roots = ['.agents/skills', '.github/skills', '.opencode/skills'];
+  if (!roots.some((relativePath) => existsSync(join(root, relativePath)))) {
+    return;
+  }
+  for (const { name, source } of SINGLE_SOURCE_SKILLS) {
+    if (!existsSync(join(root, source, name, 'SKILL.md'))) {
+      failures.push(`${source}/${name}: required skill is missing`);
+    }
+    for (const duplicate of ['.github/skills', '.opencode/skills']) {
+      if (duplicate !== source && existsSync(join(root, duplicate, name))) {
+        failures.push(`${duplicate}/${name}: duplicate of ${source}/${name}`);
+      }
+    }
+  }
+}
+
+/**
  * Run the documentation gate against a repository root.
  *
  * @param {string} [root] Repository root. Defaults to the directory above this script.
@@ -529,6 +557,7 @@ export function checkDocs(root = DEFAULT_ROOT, options = {}) {
     checkRetiredVocabulary(resolvedRoot, failures);
     checkAdrIndexDates(resolvedRoot, failures);
     checkSkillMirrors(resolvedRoot, failures);
+    checkSkillSources(resolvedRoot, failures);
   }
 
   return { ok: failures.length === 0, root: resolvedRoot, failures };

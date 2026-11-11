@@ -28,9 +28,10 @@ This page lists the canonical documentation and where retired material lives. Ke
 
 ## Skills and agents
 
-- `.github/skills/**` is the canonical companion skill source. `scripts/build-portable-skill.mjs` builds `dist/skills/**` and syncs the checked-in mirrors.
+- `.github/skills/**` is the canonical source for the companion and harness skills. `scripts/build-portable-skill.mjs` builds `dist/skills/**` and syncs the checked-in mirrors.
+- `.agents/skills/create-project-documentation/` is the single tracked copy of the documentation workflow skill and its AGENTS.md maintenance reference. Do not add a second copy under `.github/skills/` or `.opencode/skills/`.
 - `skill/**` is the distributable mirror of `scenario-discovery`, `loom-chain-workflow`, and the generated `loom-run-bundle` helper.
-- `.opencode/skills/**` contains the project-local OpenCode copies of the shared skills.
+- `.opencode/skills/**` contains the project-local OpenCode mirrors of the `.github/skills/**` packages.
 - `.opencode/agents/**` defines the maintainer agent team described in [Support](SUPPORT.md).
 
 ## Archived
@@ -39,6 +40,6 @@ This page lists the canonical documentation and where retired material lives. Ke
 
 ## Maintenance
 
-- `npm run check` validates required headings, commands, and safety statements, plus relative links and anchors, documented npm scripts, retired vocabulary, ADR index dates, and skill mirrors.
+- `npm run check` validates required headings, commands, and safety statements, plus relative links and anchors, documented npm scripts, retired vocabulary, ADR index dates, and skill sources and mirrors.
 - When moving a document, update this map, the README navigation, and any relative links.
 - When an ADR is superseded, update both the record and the index row.
