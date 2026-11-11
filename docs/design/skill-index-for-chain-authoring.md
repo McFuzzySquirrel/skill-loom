@@ -362,5 +362,6 @@ Suggested acceptance threshold, calibrated against the baseline: a meaningful ca
 - [ADR-0013: Resolve bundle skills with project-local precedence](../adr/0013-deterministic-chain-bundle-skill-resolution.md)
 - [ADR-0015: Ingest remote skills as pinned immutable snapshots](../adr/0015-pinned-remote-skill-snapshots.md)
 - [Operations guide](../OPERATIONS.md)
+- [Capability index dogfooding](../capability-index-dogfooding.md)
 - [`scenario-discovery` skill](../../.github/skills/scenario-discovery/SKILL.md)
 - [`loom-chain-workflow` skill](../../.github/skills/loom-chain-workflow/SKILL.md)

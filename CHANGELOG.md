@@ -28,7 +28,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 - Deterministic preflight with hard blocks, warnings, and acknowledgements; preflight makes no model call.
 - Supervised and automatic managed runs with frozen snapshots, one global active run, bounded step tails, explicit interruption recovery, `run events`, and `run attach`.
 - Profile ownership lock and authenticated local control transport: a private socket on Unix and mutually authenticated loopback TLS on Windows.
-- Documentation set: user, administrator, operations, scenario, standalone skill, and visual tour guides; ADR index and records; release notes; [known gaps](docs/current-gaps.md); and a [documentation archive](docs/archive/README.md) for retired plans.
+- Documentation set: user, administrator, operations, scenario, standalone skill, visual tour, and capability-index dogfooding guides; ADR index and records; release notes; [known gaps](docs/current-gaps.md); and a [documentation archive](docs/archive/README.md) for retired plans.
 - Global install guidance for a locally packed tarball, including the npm 11 `allow-scripts` workaround for `file:` dependencies.
 - An extended documentation gate that checks relative links and anchors, documented npm scripts, retired vocabulary, ADR index dates, and checked-in skill mirrors.
 

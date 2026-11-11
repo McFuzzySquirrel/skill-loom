@@ -392,6 +392,7 @@ Maintained by **McFuzzySquirrel** ([GitHub](https://github.com/McFuzzySquirrel))
 - [User guide](docs/user-guide.md) — build, preflight, run, recover, accessibility, and privacy.
 - [Administrator guide](docs/admin-guide.md) — install, configure, back up, upgrade, monitor, and harden.
 - [Operations guide](docs/OPERATIONS.md) — the full operator contract: data locations, harness prerequisites, Copilot trust, permissions, fork behavior, and troubleshooting.
+- [Capability index dogfooding](docs/capability-index-dogfooding.md) — try indexed retrieval with real projects and pinned remote sources.
 - [Known gaps](docs/current-gaps.md) — blocked, partial, and unverified capabilities.
 - [Architecture decision records](docs/adr/README.md) — one record per durable decision, with agent rules and verification.
 - [Draft release notes for package version 0.1.0](docs/releases/0.1.0.md) — highlights, compatibility, limitations, and validation status; not a published release.
