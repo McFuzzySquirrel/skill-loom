@@ -33,6 +33,8 @@
 | [ADR-0027](0027-cli-and-skill-driven-workflow.md) | Drive Skill Loom from the CLI and companion skills | Accepted | 2026-11-10 |
 | [ADR-0028](0028-single-purpose-chain-editor.md) | Limit the web UI to a visual chain editor | Accepted | 2026-11-10 |
 | [ADR-0029](0029-catalog-resolved-global-skill-reuse.md) | Reuse catalog-resolved host-global skill packages in portable runs | Accepted | 2026-11-11 |
+| [ADR-0030](0030-capability-index-and-model-reranking.md) | Rank skill discovery through a derived capability index and model reranking | Accepted | 2026-11-11 |
+| [ADR-0031](0031-project-scoped-chain-pattern-retrieval.md) | Keep chain-pattern retrieval project-scoped and opt-in | Accepted | 2026-11-11 |
 
 ## Rules
 
