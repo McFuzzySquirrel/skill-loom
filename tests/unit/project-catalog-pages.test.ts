@@ -6,6 +6,7 @@ import type {
   CapabilityCandidate,
   CapabilityFallbackReason,
   CapabilityIndexQuery,
+  CapabilityMetadataCoverage,
   CapabilitySearchResponse,
 } from '../../src/server/catalog/capability-index.js';
 import type { CatalogService } from '../../src/server/catalog/merge.js';
@@ -67,6 +68,8 @@ function capability(candidates: CapabilityCandidate[], options: {
   mode?: 'index' | 'scan';
   reason?: CapabilityFallbackReason;
   total?: number;
+  coverage?: CapabilityMetadataCoverage;
+  warnings?: CapabilitySearchResponse['warnings'];
 } = {}) {
   const search = vi.fn(async (input: CapabilityIndexQuery): Promise<CapabilitySearchResponse> => ({
     mode: options.mode ?? 'index',
@@ -78,12 +81,26 @@ function capability(candidates: CapabilityCandidate[], options: {
     limit: input.limit ?? 10,
     nextOffset: null,
     candidates,
-    warnings: [],
+    warnings: options.warnings ?? [],
     elapsedMs: 1,
     ...(options.mode === 'scan' ? {} : { ranking: 'fts5' as const }),
+    ...(options.coverage === undefined ? {} : { coverage: options.coverage }),
   }));
   return { enabled: true as const, search };
 }
+
+const coverage: CapabilityMetadataCoverage = {
+  total: 2,
+  withDescription: 2,
+  withHeadings: 2,
+  withTags: 1,
+  withTools: 1,
+  withInputs: 0,
+  withOutputs: 0,
+  withWhenToUse: 1,
+  withIssues: 0,
+  withoutStructuredMetadata: 1,
+};
 
 describe('project catalog page snapshots', () => {
   it('keeps pages and warning cursors stable without rediscovery', async () => {
@@ -175,6 +192,65 @@ describe('project catalog page snapshots', () => {
     });
     expect(indexed.search).toHaveBeenCalledTimes(1);
     expect(catalog.getCatalog).not.toHaveBeenCalled();
+  });
+
+  it('passes metadata filters through the index and keeps them in the snapshot identity', async () => {
+    const catalog = service([entry('scanned-only')]);
+    const indexed = capability([
+      candidate('release-audit', {
+        metadata: {
+          tags: ['release', 'remote'],
+          tools: ['Read', 'Grep'],
+          inputs: ['release_manifest'],
+          outputs: ['attestation_bundle'],
+          whenToUse: 'Use before a remote release.',
+        },
+      }),
+    ], { coverage });
+    const pages = new ProjectCatalogPages(catalog, Date.now, undefined, undefined, indexed);
+    const first = await pages.page({
+      ...request(), query: 'attestation', sources: ['project'], tags: ['release'], tools: ['grep'],
+    });
+    expect(indexed.search).toHaveBeenCalledWith(expect.objectContaining({
+      sources: ['project'], enabled: true, tags: ['release'], tools: ['grep'],
+    }));
+    expect(first).toMatchObject({
+      metadataCoverage: coverage,
+      entries: [{
+        name: 'release-audit',
+        metadata: {
+          tags: ['release', 'remote'],
+          tools: ['Read', 'Grep'],
+          inputs: ['release_manifest'],
+          outputs: ['attestation_bundle'],
+          whenToUse: 'Use before a remote release.',
+        },
+      }],
+    });
+    await expect(pages.page({
+      ...request(), query: 'attestation', sources: ['project'], tags: ['different'],
+      snapshotId: first.snapshotId!,
+    })).rejects.toMatchObject({ code: 'CATALOG_PAGE_MISMATCH' });
+    expect((await pages.page({
+      ...request(), query: 'attestation', sources: ['project'], tags: ['release'], tools: ['grep'],
+      snapshotId: first.snapshotId!,
+    })).entries[0]?.name).toBe('release-audit');
+    expect(indexed.search).toHaveBeenCalledTimes(1);
+  });
+
+  it('warns when metadata filters reach the scan fallback', async () => {
+    const catalog = service([entry('scanned-entry')]);
+    const pages = new ProjectCatalogPages(
+      catalog, Date.now, undefined, undefined,
+      capability([], { mode: 'scan', reason: 'disabled', warnings: [{
+        code: 'METADATA_FILTER_UNSUPPORTED',
+        message: 'Metadata filters were not applied.',
+        harness: 'opencode',
+      }] }),
+    );
+    const result = await pages.page({ ...request(), query: 'review', tags: ['release'] });
+    expect(result.warnings.map((warning) => warning.code)).toContain('METADATA_FILTER_UNSUPPORTED');
+    expect(result.metadataCoverage).toBeNull();
   });
 
   it('uses the fresh scan when the indexed path fails or reports a fallback', async () => {

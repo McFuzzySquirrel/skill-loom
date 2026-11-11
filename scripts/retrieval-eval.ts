@@ -66,8 +66,15 @@ interface TaskReport {
   expectNoResult: boolean;
   resultCount: number;
   allowedSources: string[];
+  filters: {
+    tags: string[];
+    tools: string[];
+    inputs: string[];
+    outputs: string[];
+  };
   expectedSkills: string[];
   expectedRanks: Array<number | null>;
+  precisionAt10: number;
   excludedSkills: string[];
   excludedPresent: string[];
   bindings: Array<{
@@ -93,11 +100,13 @@ interface Comparison {
   recallAt5Delta: number;
   recallAt10Delta: number;
   fullRecallAt10Delta: number;
+  precisionAt10Delta: number;
   mrrDelta: number;
   emptyResultRateDelta: number;
   p95LatencyMsDelta: number;
   meetsExitCriteria: {
     candidateRecallImproved: boolean;
+    candidatePrecisionImproved: boolean;
     emptyResultRateNotWorse: boolean;
     bindingAccuracyComplete: boolean;
     excludedPolicyHeld: boolean;
@@ -130,8 +139,9 @@ function usage(): string {
     'Runs the chain-authoring retrieval corpus against the current catalog scan and,',
     'when selected, the derived capability index. It copies the corpus candidates into',
     'a temporary project, publishes remote fixtures as pinned snapshots, makes no',
-    'model calls or network requests, and reports recall, MRR, empty results,',
-    'false positives, exact remote bindings, source policy, and latency.',
+    'model calls or network requests, and reports recall, precision, MRR, empty',
+    'results, false positives, exact remote bindings, source and metadata',
+    'filters, and latency.',
   ].join('\n');
 }
 
@@ -178,7 +188,8 @@ function printMode(report: ModeReport): void {
   const build = report.mode === 'index' ? `  build ${report.buildMs} ms` : '';
   console.log(`${report.mode.padEnd(5)} recall@5 ${format(metrics.recallAt5)}  ` +
     `recall@10 ${format(metrics.recallAt10)}  full recall@10 ${format(metrics.fullRecallAt10)}  ` +
-    `MRR ${format(metrics.mrr)}  empty ${format(metrics.emptyResultRate)}  ` +
+    `precision@10 ${format(metrics.precisionAt10)}  MRR ${format(metrics.mrr)}  ` +
+    `empty ${format(metrics.emptyResultRate)}  ` +
     `false-positive ${format(metrics.falsePositiveRate)}  ` +
     `mean ${metrics.meanLatencyMs} ms  p95 ${metrics.p95LatencyMs} ms${build}`);
   if (metrics.bindingCases > 0) {
@@ -229,6 +240,7 @@ function printComparison(comparison: Comparison): void {
   console.log(`  recall@5 ${format(comparison.recallAt5Delta)}  ` +
     `recall@10 ${format(comparison.recallAt10Delta)}  ` +
     `full recall@10 ${format(comparison.fullRecallAt10Delta)}  ` +
+    `precision@10 ${format(comparison.precisionAt10Delta)}  ` +
     `MRR ${format(comparison.mrrDelta)}  ` +
     `empty ${format(comparison.emptyResultRateDelta)}  ` +
     `p95 ${format(comparison.p95LatencyMsDelta)} ms`);
@@ -353,6 +365,11 @@ async function runMode(mode: EvaluationMode, context: EvaluationContext): Promis
     if (mode === 'index') {
       const response = await context.capability.search({
         harness: task.harness, projectPath: context.project, query: task.query, offset: 0, limit: 10,
+        sources: task.allowedSources,
+        tags: task.tags,
+        tools: task.tools,
+        inputs: task.inputs,
+        outputs: task.outputs,
       });
       entries = response.candidates.map((candidate) => ({
         name: candidate.name,
@@ -375,6 +392,10 @@ async function runMode(mode: EvaluationMode, context: EvaluationContext): Promis
     const expectedRanks = task.expectedSkills.map((skill) => rankOfSkill(names, skill));
     const excludedPresent = task.excludedSkills.filter((skill) => names.includes(skill));
     const bindings = bindingChecks(task, allowed);
+    const relevant = new Set([...task.expectedSkills, ...task.acceptableSkills]);
+    const top = allowed.slice(0, 10);
+    const relevantTopCount = top.filter((entry) => relevant.has(entry.name)).length;
+    const precisionAt10 = relevantTopCount / Math.max(1, top.length);
     outcomes.push({
       id: task.id,
       category: task.category,
@@ -382,6 +403,8 @@ async function runMode(mode: EvaluationMode, context: EvaluationContext): Promis
       resultCount: allowed.length,
       expectedRanks,
       elapsedMs,
+      topCount: top.length,
+      relevantTopCount,
       bindingCases: bindings.length,
       bindingCorrect: bindings.filter((binding) => binding.correct).length,
       excludedCases: task.excludedSkills.length,
@@ -396,8 +419,15 @@ async function runMode(mode: EvaluationMode, context: EvaluationContext): Promis
       expectNoResult: task.expectNoResult,
       resultCount: allowed.length,
       allowedSources: [...task.allowedSources],
+      filters: {
+        tags: [...task.tags],
+        tools: [...task.tools],
+        inputs: [...task.inputs],
+        outputs: [...task.outputs],
+      },
       expectedSkills: task.expectedSkills,
       expectedRanks,
+      precisionAt10: Math.round(precisionAt10 * 10_000) / 10_000,
       excludedSkills: [...task.excludedSkills],
       excludedPresent,
       bindings,
@@ -454,12 +484,14 @@ function compare(scan: ModeReport, index: ModeReport): Comparison {
     recallAt5Delta: round(index.metrics.recallAt5 - scan.metrics.recallAt5),
     recallAt10Delta: round(index.metrics.recallAt10 - scan.metrics.recallAt10),
     fullRecallAt10Delta: round(index.metrics.fullRecallAt10 - scan.metrics.fullRecallAt10),
+    precisionAt10Delta: round(index.metrics.precisionAt10 - scan.metrics.precisionAt10),
     mrrDelta: round(index.metrics.mrr - scan.metrics.mrr),
     emptyResultRateDelta: round(index.metrics.emptyResultRate - scan.metrics.emptyResultRate),
     p95LatencyMsDelta: round(index.metrics.p95LatencyMs - scan.metrics.p95LatencyMs),
     meetsExitCriteria: {
       candidateRecallImproved: index.metrics.recallAt10 > scan.metrics.recallAt10 ||
         index.metrics.fullRecallAt10 > scan.metrics.fullRecallAt10,
+      candidatePrecisionImproved: index.metrics.precisionAt10 > scan.metrics.precisionAt10,
       emptyResultRateNotWorse: index.metrics.emptyResultRate <= scan.metrics.emptyResultRate,
       bindingAccuracyComplete: index.metrics.bindingAccuracy === 1,
       excludedPolicyHeld: index.metrics.excludedViolationRate === 0,

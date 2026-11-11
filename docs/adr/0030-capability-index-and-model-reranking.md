@@ -6,6 +6,7 @@ applies_to:
   - ".github/skills/scenario-discovery/**"
   - ".github/skills/loom-chain-workflow/**"
   - "tests/unit/catalog-*.test.ts"
+  - "tests/unit/skill-metadata.test.ts"
   - "tests/unit/project-catalog-pages.test.ts"
 status: Accepted
 ---
@@ -36,8 +37,8 @@ status: Accepted
 
 ## Verify
 
-- **Check:** `npx vitest run tests/unit/capability-index.test.ts tests/unit/catalog-merge.test.ts tests/unit/project-catalog-pages.test.ts` and `npm run eval:retrieval -- --mode compare`.
-- **Expected:** A capability phrase that appears only in headings or body text returns the skill; an indexed `catalog project page` entry carries a bounded snippet, scores, and the exact remote binding identity; a changed package invalidates its entry; an unsafe or corrupt index falls back to a scan; chain authoring still requires full-package review and explicit approval.
+- **Check:** `npx vitest run tests/unit/capability-index.test.ts tests/unit/skill-metadata.test.ts tests/unit/catalog-merge.test.ts tests/unit/project-catalog-pages.test.ts` and `npm run eval:retrieval -- --mode compare`.
+- **Expected:** A capability phrase that appears only in headings or body text returns the skill; an indexed `catalog project page` entry carries a bounded snippet, scores, declared metadata, and the exact remote binding identity; metadata filters narrow the indexed path and a scan fallback reports `METADATA_FILTER_UNSUPPORTED`; a changed package invalidates its entry; an unsafe or corrupt index falls back to a scan; chain authoring still requires full-package review and explicit approval.
 - **Manual check:** Compare baseline substring search and indexed search against the chain-authoring evaluation corpus in the [skill index plan](../design/skill-index-for-chain-authoring.md#evaluation). The Phase 2 comparison is recorded at [retrieval-indexed-2026-11-11.json](../evidence/retrieval-indexed-2026-11-11.json).
 
 ## Context and Problem Statement

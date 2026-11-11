@@ -91,6 +91,24 @@ describe('retrieval metrics', () => {
     expect(metrics.excludedViolationRate).toBe(0);
   });
 
+  it('computes precision@10 across the top candidate window', () => {
+    const metrics = computeMetrics([
+      {
+        id: 'a', category: 'description-match', expectNoResult: false, resultCount: 4,
+        expectedRanks: [1], elapsedMs: 1, topCount: 4, relevantTopCount: 2,
+      },
+      {
+        id: 'b', category: 'body-only', expectNoResult: false, resultCount: 0,
+        expectedRanks: [null], elapsedMs: 1, topCount: 0, relevantTopCount: 0,
+      },
+      {
+        id: 'c', category: 'negative', expectNoResult: true, resultCount: 0,
+        expectedRanks: [], elapsedMs: 1, topCount: 0, relevantTopCount: 0,
+      },
+    ]);
+    expect(metrics.precisionAt10).toBe(0.25);
+  });
+
   it('returns zero for an empty percentile sample', () => {
     expect(percentile([], 0.95)).toBe(0);
   });

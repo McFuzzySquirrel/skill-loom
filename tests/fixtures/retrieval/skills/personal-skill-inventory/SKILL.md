@@ -1,6 +1,8 @@
 ---
 name: personal-skill-inventory
 description: Inventory project-local skills in personal notes.
+metadata:
+  tags: [personal, inventory]
 ---
 
 # Personal skill inventory

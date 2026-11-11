@@ -1,6 +1,10 @@
 ---
 name: sqlite-migration
 description: Manage local database storage.
+inputs: [database_path]
+outputs: [migration_report]
+metadata:
+  tags: [database, sqlite, storage]
 ---
 
 # SQLite migration

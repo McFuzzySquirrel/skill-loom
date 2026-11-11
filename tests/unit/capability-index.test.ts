@@ -61,6 +61,11 @@ async function writeSkill(
   );
 }
 
+async function writeSkillText(packagePath: string, text: string): Promise<void> {
+  await mkdir(packagePath, { recursive: true });
+  await writeFile(join(packagePath, 'SKILL.md'), text, 'utf8');
+}
+
 async function projectRoot(): Promise<{ project: string; skills: string }> {
   const project = join(await makeRoot(), 'project');
   const skills = join(project, '.agents', 'skills');
@@ -195,6 +200,23 @@ describe('capability index', () => {
     await index.dispose({ deleteIndex: true });
   });
 
+  it('rejects an older schema version so the next query rebuilds it', async () => {
+    const { project, skills } = await projectRoot();
+    await writeSkill(join(skills, 'schema-skill'));
+    const source = projectSource(project, skills);
+    const directory = join(project, '.loom-index');
+    const index = new CapabilityIndex(indexOptions(directory));
+    await index.rebuild(await collect([source]));
+    const database = new DatabaseSync(join(directory, CAPABILITY_INDEX_FILE_NAME));
+    try {
+      database.exec('PRAGMA user_version = 1');
+    } finally {
+      database.close();
+    }
+    expect(await index.validate()).toMatchObject({ ok: false, reason: 'corrupt' });
+    await index.dispose({ deleteIndex: true });
+  });
+
   it('falls back to the fresh scan for a disabled, missing, corrupt, or unsafe index', async () => {
     const { project, skills } = await projectRoot();
     await writeSkill(join(skills, 'incident-triage'));
@@ -256,6 +278,23 @@ describe('capability index', () => {
     expect(unsafeResult).toMatchObject({ mode: 'scan', reason: 'unsafe' });
     expect(unsafeResult.candidates[0]?.name).toBe('incident-triage');
     await unsafe.dispose();
+  });
+
+  it('reports metadata filters as unsupported when the scan fallback answers', async () => {
+    const { project, skills } = await projectRoot();
+    await writeSkill(join(skills, 'demo-skill'));
+    const service = createCapabilitySearchService({
+      enabled: false,
+      index: indexOptions(join(project, '.loom-index')),
+      sources: async () => collect([projectSource(project, skills)]),
+      fallback: async (request) => fallbackResponse(request, ['demo-skill']),
+    });
+    const result = await service.search({
+      harness: 'opencode', projectPath: project, query: 'demo', tags: ['release'],
+    });
+    expect(result.mode).toBe('scan');
+    expect(result.warnings.some((warning) => warning.code === 'METADATA_FILTER_UNSUPPORTED')).toBe(true);
+    await service.dispose();
   });
 
   it('rejects unsafe roots, package symlinks, and hard-linked index files', async () => {
@@ -514,6 +553,97 @@ describe('capability index', () => {
     expect(second.candidates.map((candidate) => candidate.name)).toEqual(['second-only']);
     const shared = await index.search({ harness: 'opencode', projectPath: secondProject, query: 'shared-skill' });
     expect(shared.candidates.map((candidate) => candidate.name)).toEqual(['shared-skill']);
+    await index.dispose({ deleteIndex: true });
+  });
+
+  it('extracts structured metadata, filters by it, and reports coverage', async () => {
+    const { project, skills } = await projectRoot();
+    await writeSkillText(join(skills, 'release-audit'), [
+      '---',
+      'name: release-audit',
+      'description: Audit a release before remote redistribution.',
+      'allowed-tools: Read Grep',
+      'inputs: [release_manifest, target_channel]',
+      'outputs:',
+      '  - release_notes',
+      '  - attestation_bundle',
+      'when_to_use: Use before a remote release.',
+      'metadata:',
+      '  tags: [release, remote]',
+      '---',
+      '',
+      '# Release audit',
+      '',
+      'Verify the attestation bundle.',
+    ].join('\n'));
+    await writeSkill(join(skills, 'plain-skill'));
+    await writeSkillText(join(skills, 'invalid-metadata'), [
+      '---',
+      'name: invalid-metadata',
+      'description: Invalid metadata.',
+      'tags:',
+      '  nested: true',
+      '---',
+      '',
+      '# Invalid metadata',
+    ].join('\n'));
+    const disabledSkills = join(project, '.agents', 'disabled-skills');
+    await writeSkill(join(disabledSkills, 'disabled-skill'));
+
+    const source = projectSource(project, skills);
+    const disabledSource: CapabilitySourceRoot = {
+      directory: disabledSkills,
+      harness: 'opencode',
+      source: 'project',
+      projectPath: project,
+      enabled: false,
+    };
+    const index = new CapabilityIndex(indexOptions(join(project, '.loom-index')));
+    await index.rebuild(await collect([source, disabledSource]));
+
+    const all = await index.search({ harness: 'opencode', projectPath: project, query: '', limit: 10 });
+    expect(all.coverage).toMatchObject({
+      total: 3,
+      withDescription: 3,
+      withTags: 1,
+      withTools: 1,
+      withInputs: 1,
+      withOutputs: 1,
+      withWhenToUse: 1,
+      withIssues: 1,
+      withoutStructuredMetadata: 2,
+    });
+    const audit = all.candidates.find((candidate) => candidate.name === 'release-audit');
+    expect(audit?.metadata).toEqual({
+      tags: ['release', 'remote'],
+      tools: ['Read', 'Grep'],
+      inputs: ['release_manifest', 'target_channel'],
+      outputs: ['release_notes', 'attestation_bundle'],
+      whenToUse: 'Use before a remote release.',
+    });
+    expect(all.candidates.find((candidate) => candidate.name === 'invalid-metadata')?.metadataIssues)
+      .toEqual(['tags']);
+
+    const filtered = await index.search({
+      harness: 'opencode', projectPath: project, query: '',
+      tags: ['release'], tools: ['grep'], inputs: ['release_manifest'], outputs: ['attestation_bundle'],
+    });
+    expect(filtered.candidates.map((candidate) => candidate.name)).toEqual(['release-audit']);
+    expect(filtered.total).toBe(1);
+
+    const noMatch = await index.search({ harness: 'opencode', projectPath: project, query: '', tags: ['absent'] });
+    expect(noMatch.total).toBe(0);
+
+    const projectOnly = await index.search({
+      harness: 'opencode', projectPath: project, query: '', sources: ['project'],
+    });
+    expect(projectOnly.candidates.map((candidate) => candidate.name)).toEqual([
+      'invalid-metadata', 'plain-skill', 'release-audit',
+    ]);
+    const disabled = await index.search({
+      harness: 'opencode', projectPath: project, query: '', enabled: false,
+    });
+    expect(disabled.candidates.map((candidate) => candidate.name)).toEqual(['disabled-skill']);
     await index.dispose({ deleteIndex: true });
   });
 

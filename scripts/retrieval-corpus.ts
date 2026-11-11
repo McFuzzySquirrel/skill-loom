@@ -35,8 +35,9 @@ const TaskSchema = z.strictObject({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
   outcome: z.string().trim().min(1).max(2_000),
   query: z.string().trim().min(1).max(500),
-  category: z.enum(['description-match', 'body-only', 'compose', 'remote', 'filter', 'negative'])
-    .default('description-match'),
+  category: z.enum([
+    'description-match', 'body-only', 'compose', 'remote', 'filter', 'metadata', 'negative',
+  ]).default('description-match'),
   harness: z.enum(['opencode', 'copilot']).default('opencode'),
   expectedSkills: z.array(z.string().trim().min(1)).max(20).default([]),
   acceptableSkills: z.array(z.string().trim().min(1)).max(20).default([]),
@@ -44,6 +45,11 @@ const TaskSchema = z.strictObject({
   allowedSources: z.array(z.enum([
     'project', 'personal', 'custom', 'plugin', 'builtin', 'loom-extra', 'remote',
   ])).default(['project', 'personal', 'custom', 'plugin', 'builtin', 'loom-extra', 'remote']),
+  /** Indexed metadata filters. The scan fallback cannot apply these. */
+  tags: z.array(z.string().trim().min(1).max(120)).max(20).default([]),
+  tools: z.array(z.string().trim().min(1).max(120)).max(20).default([]),
+  inputs: z.array(z.string().trim().min(1).max(120)).max(20).default([]),
+  outputs: z.array(z.string().trim().min(1).max(120)).max(20).default([]),
   /** Skills that the source policy must remove from the candidate list. */
   excludedSkills: z.array(z.string().trim().min(1)).max(20).default([]),
   /** Exact remote identity each named skill must carry. */

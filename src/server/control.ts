@@ -19,7 +19,11 @@ import {
   setRemoteSourceLimits,
   unregisterRemoteSkillSource,
 } from './catalog/remote.js';
-import { CatalogError } from './catalog/types.js';
+import { CatalogError, SKILL_SOURCES } from './catalog/types.js';
+import {
+  CAPABILITY_MAX_FILTER_VALUES,
+  CAPABILITY_MAX_FILTER_VALUE_LENGTH,
+} from './catalog/capability-index.js';
 import { ProjectCatalogPageError, ProjectCatalogPages } from './catalog/project-pages.js';
 import { HarnessError } from './harness/types.js';
 import { atomicWriteJson, ConfigError, type ConfigStore } from './config/store.js';
@@ -696,6 +700,16 @@ async function dispatch(
         limit: z.number().int().min(1).max(100).default(50),
         warningsOffset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0),
         snapshotId: z.string().regex(/^[A-Za-z0-9_-]{32}$/).optional(),
+        sources: z.array(z.enum(SKILL_SOURCES)).max(SKILL_SOURCES.length).optional(),
+        enabled: z.boolean().optional(),
+        tags: z.array(z.string().trim().min(1).max(CAPABILITY_MAX_FILTER_VALUE_LENGTH))
+          .max(CAPABILITY_MAX_FILTER_VALUES).optional(),
+        tools: z.array(z.string().trim().min(1).max(CAPABILITY_MAX_FILTER_VALUE_LENGTH))
+          .max(CAPABILITY_MAX_FILTER_VALUES).optional(),
+        inputs: z.array(z.string().trim().min(1).max(CAPABILITY_MAX_FILTER_VALUE_LENGTH))
+          .max(CAPABILITY_MAX_FILTER_VALUES).optional(),
+        outputs: z.array(z.string().trim().min(1).max(CAPABILITY_MAX_FILTER_VALUE_LENGTH))
+          .max(CAPABILITY_MAX_FILTER_VALUES).optional(),
       }));
       const project = isProjectId(request.projectId)
         ? await services.projectRegistry.findRecentProject(request.projectId) : undefined;

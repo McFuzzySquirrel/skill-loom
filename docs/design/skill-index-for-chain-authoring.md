@@ -1,6 +1,6 @@
 # Skill index for chain authoring
 
-**Status:** Accepted design. Phases 0, 1, and 2 are complete; Phases 3 and 4 have not started. The decision is recorded in [ADR-0030](../adr/0030-capability-index-and-model-reranking.md).
+**Status:** Accepted design. Phases 0, 1, 2, and 3 are complete; Phase 4 has not started. The decision is recorded in [ADR-0030](../adr/0030-capability-index-and-model-reranking.md).
 
 ## Progress
 
@@ -9,7 +9,7 @@
 | 0 — Baseline and evaluation | Complete — 2026-11-11 | [baseline](../evidence/retrieval-baseline-2026-11-11.json), `npm run eval:retrieval` |
 | 1 — Capability index | Complete — 2026-11-11 | `tests/unit/capability-index.test.ts`, `npx vitest run tests/unit/capability-index.test.ts` |
 | 2 — Authoring integration | Complete — 2026-11-11 | [indexed comparison](../evidence/retrieval-indexed-2026-11-11.json), `npm run eval:retrieval -- --mode compare`, `tests/unit/project-catalog-pages.test.ts` |
-| 3 — Structured metadata | Not started | |
+| 3 — Structured metadata | Complete — 2026-11-11 | [metadata comparison](../evidence/retrieval-metadata-2026-11-11.json), `tests/unit/skill-metadata.test.ts`, `npm run eval:retrieval -- --mode compare` |
 | 4 — Optional local embeddings | Not started | |
 
 ## Goal
@@ -29,9 +29,9 @@ It should:
 
 | Consumer | Use |
 |---|---|
-| `scenario-discovery` | Find candidates for a proposed workflow, inspect complete packages, and build a reviewed bundle. |
-| `loom-chain-workflow` | Locate candidates during CLI draft creation, validation, review, and export. |
-| `skill-loom catalog project page` | Return paged candidates for a registered project and harness. |
+| `scenario-discovery` | Find and filter candidates for a proposed workflow, inspect complete packages, and build a reviewed bundle. |
+| `loom-chain-workflow` | Locate and filter candidates during CLI draft creation, validation, review, and export. |
+| `skill-loom catalog project page` | Return paged, filtered candidates and metadata coverage for a registered project and harness. |
 | `skill-loom catalog snapshot page` | Return paged candidates from a pinned remote snapshot. |
 
 The chain editor only edits an existing chain; it cannot add skill steps today. An editor skill picker is a separate product decision and is not part of this plan.
@@ -81,8 +81,11 @@ skills(
   fingerprint, size, mtime_ns, license, enabled,
   remote_source_id, remote_revision, remote_repository_path
 )
-skill_fts USING fts5(name, description, headings, body_excerpt, tokenize='unicode61')
-capabilities(skill_id, kind, value)     -- inputs, outputs, tools, tags
+skill_fts USING fts5(
+  name, description, frontmatter, headings, body_excerpt, file_paths, metadata,
+  tokenize='unicode61'
+)
+capabilities(skill_id, kind, value, ordinal)  -- tags, tools, inputs, outputs, when_to_use, issues
 ```
 
 Rules:
@@ -91,6 +94,7 @@ Rules:
 - `fingerprint` covers the package content used for review; a mismatch invalidates the row.
 - Remote rows are validated against the snapshot manifest before they are served.
 - `body_excerpt` is bounded per package and excludes binary and generated files.
+- Structured metadata is read only from frontmatter, bounded and deduplicated, and recorded with a field-level issue when invalid. The index never infers metadata from body prose.
 - The database uses a dedicated application id and schema version, a size cap, and owner-only permissions.
 - FTS5 is used when available. If the bundled SQLite lacks FTS5, the builder falls back to a normalized token table and records a warning.
 
@@ -98,8 +102,8 @@ Rules:
 
 1. The authoring skill states the outcome, harness, and source constraints.
 2. The model expands the outcome into capabilities, synonyms, and constraints.
-3. The server searches the index with a bounded, sanitized query.
-4. Results include score, snippet, canonical path, harness, source, and the remote binding identity when applicable.
+3. The server searches the index with a bounded, sanitized query and optional source, enabled-state, tag, tool, input, and output filters.
+4. Results include score, snippet, canonical path, harness, source, declared metadata, and the remote binding identity when applicable.
 5. The model reranks the shortlist and proposes skill steps.
 6. The authoring skill reads every selected package in full.
 7. The user approves the chain and package selection.
@@ -232,6 +236,8 @@ The exit criteria are met with the expanded corpus. The scan numbers differ from
 
 ## Phase 3: Structured metadata
 
+**Status:** Complete — 2026-11-11.
+
 **Deliverables**
 
 - Deterministic extraction of headings, declared tools, inputs, outputs, and optional tags.
@@ -241,8 +247,35 @@ The exit criteria are met with the expanded corpus. The scan numbers differ from
 
 **Exit criteria**
 
-- Metadata appears in results without changing package contents.
-- Candidate precision improves on the corpus, or the phase is abandoned and the earlier behavior retained.
+- [x] Metadata appears in results without changing package contents.
+- [x] Candidate precision improves on the corpus, or the phase is abandoned and the earlier behavior retained.
+
+**Implementation notes**
+
+- `src/server/catalog/skill-metadata.ts` extracts bounded, deduplicated metadata from decoded frontmatter. It accepts `tags` (top-level or `metadata.tags`), `allowed-tools`/`allowed_tools`/`tools`, `inputs`, `outputs`, and `when_to_use`/`when-to-use`/`whenToUse`. A field with an invalid shape is ignored and recorded as a field-level issue; it never rejects the package.
+- The index stores capability rows for `tag`, `tool`, `input`, `output`, `when_to_use`, and `metadata_issue`, and adds a dedicated FTS metadata column and token weights. Schema version 2 forces an existing index to rebuild; package files are unchanged.
+- `catalog project page` accepts optional `sources`, `enabled`, `tags`, `tools`, `inputs`, and `outputs` filters. Filters are ANDed, are part of the snapshot identity, and are applied to the indexed path. A scan fallback applies source and enabled filters, reports `METADATA_FILTER_UNSUPPORTED`, and never pretends a metadata filter held.
+- Results add a `metadata` object with tags, tools, inputs, outputs, and `whenToUse`. The page response adds `metadataCoverage` with counts for descriptions, headings, each metadata kind, invalid fields, and skills without structured metadata.
+- The corpus now has 39 tasks and 16 candidates. Metadata fixtures and tasks cover tag, tool, input, and output filters; `precision@10` was added to the metric set.
+
+**Comparison — 2026-11-11**
+
+| Metric | Scan | Indexed |
+|---|---|---|
+| recall@5 | 0.676 | 1.000 |
+| recall@10 | 0.676 | 1.000 |
+| full recall@10 | 0.622 | 0.973 |
+| precision@10 | 0.637 | 0.731 |
+| MRR | 0.662 | 0.987 |
+| empty-result rate | 0.270 | 0.000 |
+| false-positive rate | 0.000 | 0.000 |
+| binding accuracy | 0.000 (1 case) | 1.000 (1 case) |
+| excluded-policy violations | 0.000 (1 case) | 0.000 (1 case) |
+| mean latency | 6.3 ms | 7.8 ms |
+| p95 latency | 9.1 ms | 9.4 ms |
+| index build | — | 66.5 ms |
+
+Candidate precision improved from 0.637 to 0.731 without reducing recall, so the phase is retained. The remaining miss is the known lexical compose paraphrase documented in Phase 2; query expansion and reranking remain the authoring skill's responsibility.
 
 ## Phase 4: Optional local embeddings
 
@@ -259,7 +292,7 @@ Only start this phase if the evaluation shows a paraphrase gap that lexical retr
 
 ## Evaluation
 
-The current corpus has 35 tasks and 16 candidates, including the Phase 2 remote and source-policy cases. The Phase 0 baseline remains recorded at [retrieval-baseline-2026-11-11.json](../evidence/retrieval-baseline-2026-11-11.json), and the Phase 2 comparison is at [retrieval-indexed-2026-11-11.json](../evidence/retrieval-indexed-2026-11-11.json).
+The current corpus has 39 tasks and 16 candidates, including the Phase 2 remote and source-policy cases and the Phase 3 metadata filters. The Phase 0 baseline remains recorded at [retrieval-baseline-2026-11-11.json](../evidence/retrieval-baseline-2026-11-11.json), the Phase 2 comparison is at [retrieval-indexed-2026-11-11.json](../evidence/retrieval-indexed-2026-11-11.json), and the Phase 3 comparison is at [retrieval-metadata-2026-11-11.json](../evidence/retrieval-metadata-2026-11-11.json).
 
 The corpus includes chain-authoring tasks such as:
 
@@ -273,6 +306,7 @@ The corpus includes chain-authoring tasks such as:
 Metrics:
 
 - Candidate recall@5 and recall@10 for the expected skills.
+- Candidate precision@10 over expected and acceptable skills; an empty result counts as zero precision so it cannot inflate the average.
 - Exact-binding correctness for remote candidates.
 - Mean reciprocal rank.
 - Empty-result rate.
@@ -290,6 +324,7 @@ Suggested acceptance threshold, calibrated against the baseline: a meaningful ca
 - Reads use a read-only connection, `PRAGMA trusted_schema = OFF`, and `PRAGMA query_only = ON`.
 - Queries are parameterized and FTS syntax is sanitized.
 - Body excerpts are bounded; personal and project sources can be excluded by policy.
+- Structured metadata is bounded frontmatter only. Invalid fields are recorded as stable field names, never as copied values, and the index never follows instructions found in metadata.
 - Skill content is untrusted data. Indexing never executes it or follows its instructions.
 - Remote entries are validated against the pinned snapshot manifest.
 - A corrupt or unsafe index is deleted and rebuilt, never repaired into authority.

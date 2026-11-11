@@ -132,6 +132,10 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       '---',
       'name: body-only-review',
       'description: Review a generic helper.',
+      'allowed-tools: Read Grep',
+      'inputs: [release_manifest]',
+      'metadata:',
+      '  tags: [review, release]',
       '---',
       '',
       '## Attestation bundle',
@@ -158,15 +162,25 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       const projectId = (opened.result as { project: { id: string } }).project.id;
       const response = await callControl(configDirectory, 'catalog.project.page', {
         projectId, harness: 'opencode', query: 'attestation bundle',
+        sources: ['project'], tags: ['release'], tools: ['grep'], inputs: ['release_manifest'],
       });
       expect(response).toMatchObject({
         ok: true,
         result: {
           retrieval: { mode: 'index', ranking: 'fts5' },
+          metadataCoverage: {
+            total: 1, withTags: 1, withTools: 1, withInputs: 1, withoutStructuredMetadata: 0,
+          },
           entries: [{
             name: 'body-only-review',
             source: 'project',
             fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+            metadata: {
+              tags: ['review', 'release'],
+              tools: ['Read', 'Grep'],
+              inputs: ['release_manifest'],
+              outputs: [],
+            },
             match: {
               score: expect.any(Number),
               snippet: expect.stringContaining('attestation'),

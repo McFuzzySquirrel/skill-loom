@@ -66,6 +66,12 @@ describe('chain-authoring retrieval corpus', () => {
       allowedSources: ['project'],
       excludedSkills: ['personal-skill-inventory'],
     });
+    const metadataTask = corpus.tasks.find((task) => task.category === 'metadata');
+    expect(metadataTask).toBeDefined();
+    expect(corpus.tasks.some((task) => task.tags.length > 0)).toBe(true);
+    expect(corpus.tasks.some((task) => task.tools.length > 0)).toBe(true);
+    expect(corpus.tasks.some((task) => task.inputs.length > 0)).toBe(true);
+    expect(corpus.tasks.some((task) => task.outputs.length > 0)).toBe(true);
   });
 
   it('rejects a remote candidate without a binding and a mismatched expected binding', () => {

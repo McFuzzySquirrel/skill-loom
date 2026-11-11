@@ -6,6 +6,10 @@ export interface TaskOutcome {
   /** 1-based rank of each expected skill, or null when it was not returned. */
   expectedRanks: Array<number | null>;
   elapsedMs: number;
+  /** Results included in the precision@10 window. */
+  topCount?: number;
+  /** Expected or acceptable results inside that window. */
+  relevantTopCount?: number;
   /** Number of expected remote bindings checked for this task. */
   bindingCases?: number;
   /** Number of checked bindings that carried the exact source, revision, and path. */
@@ -25,6 +29,7 @@ export interface RetrievalMetrics {
   recallAt5: number;
   recallAt10: number;
   fullRecallAt10: number;
+  precisionAt10: number;
   mrr: number;
   emptyResultRate: number;
   falsePositiveRate: number;
@@ -86,6 +91,10 @@ export function computeMetrics(outcomes: readonly TaskOutcome[]): RetrievalMetri
   const recallAt5 = positives.filter((outcome) => anyWithin(outcome, 5)).length;
   const recallAt10 = positives.filter((outcome) => anyWithin(outcome, 10)).length;
   const fullRecallAt10 = positives.filter((outcome) => allWithin(outcome, 10)).length;
+  const precisionAt10 = positives.length === 0 ? 0 : round(positives.reduce((sum, outcome) => {
+    const denominator = Math.max(1, outcome.topCount ?? 0);
+    return sum + (outcome.relevantTopCount ?? 0) / denominator;
+  }, 0) / positives.length);
   const reciprocalRank = positives.reduce((sum, outcome) => {
     const rank = firstRank(outcome);
     return sum + (rank === null ? 0 : 1 / rank);
@@ -105,6 +114,7 @@ export function computeMetrics(outcomes: readonly TaskOutcome[]): RetrievalMetri
     recallAt5: positives.length === 0 ? 0 : round(recallAt5 / positives.length),
     recallAt10: positives.length === 0 ? 0 : round(recallAt10 / positives.length),
     fullRecallAt10: positives.length === 0 ? 0 : round(fullRecallAt10 / positives.length),
+    precisionAt10,
     mrr: positives.length === 0 ? 0 : round(reciprocalRank / positives.length),
     emptyResultRate: positives.length === 0 ? 0 : round(empty / positives.length),
     falsePositiveRate: negatives.length === 0 ? 0 : round(falsePositive / negatives.length),

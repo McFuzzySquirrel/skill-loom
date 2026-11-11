@@ -1,6 +1,9 @@
 ---
 name: browser-test-automation
 description: Automate browser tests for web projects.
+allowed-tools: Read Write Bash Playwright
+metadata:
+  tags: [browser, testing, playwright]
 ---
 
 # Browser test automation

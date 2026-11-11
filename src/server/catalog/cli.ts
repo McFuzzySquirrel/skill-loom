@@ -36,8 +36,10 @@ const USAGE = `Usage:
 Source and snapshot read-only commands work offline. Project catalog discovery
 and mutations require the running local service. Project page reads
 {"projectId":"...","harness":"opencode","query":"","offset":0,"limit":50};
-warnings use a separate warningsOffset cursor. Pass the returned snapshotId
-with the same project, harness and query for subsequent pages.
+optional sources, enabled, tags, tools, inputs, and outputs filter the indexed
+path. Warnings use a separate warningsOffset cursor. Pass the returned
+snapshotId with the same project, harness, query, and filters for subsequent
+pages.
 Source add reads {"repository":"https://...","ref":"main"}; limits set/source
 read {"limits":{...}} (use null to clear a source override).`;
 

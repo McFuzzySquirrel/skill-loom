@@ -1,6 +1,9 @@
 ---
 name: api-security-review
 description: Review an API for security issues.
+allowed-tools: Read Grep
+metadata:
+  tags: [api, security, authorization]
 ---
 
 # API security review

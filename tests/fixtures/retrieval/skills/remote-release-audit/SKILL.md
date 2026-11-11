@@ -1,6 +1,11 @@
 ---
 name: remote-release-audit
 description: Audit release artifacts before remote redistribution.
+allowed-tools: Read Grep
+inputs: [release_manifest]
+outputs: [attestation_bundle]
+metadata:
+  tags: [release, remote, attestation]
 ---
 
 # Remote release audit

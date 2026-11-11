@@ -1,6 +1,9 @@
 ---
 name: release-checklist
 description: Prepare a release.
+outputs: [release_notes]
+metadata:
+  tags: [release, checklist]
 ---
 
 # Release checklist

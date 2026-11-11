@@ -2,12 +2,22 @@ import { randomBytes } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
 import {
   CAPABILITY_MAX_RESULTS,
+  hasMetadataFilters,
+  normalizeCapabilityFilters,
   type CapabilityCandidate,
+  type CapabilityMetadataCoverage,
   type CapabilitySearchResponse,
   type CapabilitySearchService,
+  type NormalizedCapabilityFilters,
 } from './capability-index.js';
 import type { CatalogService } from './merge.js';
-import { REMOTE_SNAPSHOT_CONTENT, type CatalogWarning, type SkillEntry, type SkillHarness } from './types.js';
+import {
+  REMOTE_SNAPSHOT_CONTENT,
+  type CatalogWarning,
+  type SkillEntry,
+  type SkillHarness,
+  type SkillSource,
+} from './types.js';
 
 const MAX_CACHE_BYTES = 64 * 1024 * 1024;
 const MAX_SNAPSHOTS = 4;
@@ -34,6 +44,12 @@ interface PageRequest {
   offset: number;
   limit: number;
   warningsOffset: number;
+  sources?: SkillSource[] | undefined;
+  enabled?: boolean | undefined;
+  tags?: string[] | undefined;
+  tools?: string[] | undefined;
+  inputs?: string[] | undefined;
+  outputs?: string[] | undefined;
 }
 
 /** How the first page was produced. Cached snapshots retain the same value. */
@@ -53,9 +69,11 @@ interface Snapshot {
   projectInode: string;
   harness: SkillHarness;
   query: string;
+  filtersKey: string;
   entries: SkillEntry[];
   warnings: CatalogWarning[];
   retrieval: PageRetrieval;
+  coverage?: CapabilityMetadataCoverage;
   size: number;
   expiresAt: number;
 }
@@ -64,6 +82,7 @@ interface DiscoveryResult {
   entries: SkillEntry[];
   warnings: CatalogWarning[];
   retrieval: PageRetrieval;
+  coverage?: CapabilityMetadataCoverage;
 }
 
 /** The subset of the capability service the page cache needs. */
@@ -93,6 +112,8 @@ export class ProjectCatalogPages {
 
   async page(request: PageRequest) {
     const query = (request.query ?? '').trim();
+    const filters = normalizeCapabilityFilters(request);
+    const filtersKey = pageFiltersKey(filters);
     const project = await projectIdentity(request.projectPath);
     this.expire();
     let snapshot: Snapshot;
@@ -104,14 +125,15 @@ export class ProjectCatalogPages {
       }
       if (found.projectId !== request.projectId || found.projectPath !== request.projectPath ||
           found.harness !== request.harness || found.query !== query ||
+          found.filtersKey !== filtersKey ||
           found.projectDevice !== project.device || found.projectInode !== project.inode) {
-        throw new ProjectCatalogPageError('CATALOG_PAGE_MISMATCH', 'The catalog page snapshot belongs to a different project, harness, or query.');
+        throw new ProjectCatalogPageError('CATALOG_PAGE_MISMATCH', 'The catalog page snapshot belongs to a different project, harness, query, or filter set.');
       }
       snapshot = found;
       this.snapshots.delete(snapshotId);
       this.snapshots.set(snapshotId, snapshot);
     } else {
-      const discovery = await this.discover(request, query);
+      const discovery = await this.discover(request, query, filters);
       const after = await projectIdentity(request.projectPath);
       if (project.device !== after.device || project.inode !== after.inode) {
         throw new ProjectCatalogPageError('CATALOG_PAGE_PROJECT_CHANGED', 'The catalog project changed during discovery; start a new search.');
@@ -128,7 +150,8 @@ export class ProjectCatalogPages {
       snapshot = {
         projectId: request.projectId, projectPath: request.projectPath, harness: request.harness,
         projectDevice: project.device, projectInode: project.inode,
-        query, entries, warnings: discovery.warnings, retrieval: discovery.retrieval,
+        query, filtersKey, entries, warnings: discovery.warnings, retrieval: discovery.retrieval,
+        ...(discovery.coverage === undefined ? {} : { coverage: discovery.coverage }),
         size, expiresAt: this.now() + SNAPSHOT_TTL_MS,
       };
       if (size <= this.maxCacheBytes) {
@@ -153,6 +176,7 @@ export class ProjectCatalogPages {
       warningsNextOffset: request.warningsOffset + warnings.length < snapshot.warnings.length
         ? request.warningsOffset + warnings.length : null,
       retrieval: snapshot.retrieval,
+      metadataCoverage: snapshot.coverage ?? null,
       snapshotId,
       snapshotExpiresAt: snapshotId === null ? null : new Date(snapshot.expiresAt).toISOString(),
       ...(snapshotId === null ? {
@@ -164,41 +188,69 @@ export class ProjectCatalogPages {
     };
   }
 
-  private async discover(request: PageRequest, query: string): Promise<DiscoveryResult> {
+  private async discover(
+    request: PageRequest,
+    query: string,
+    filters: NormalizedCapabilityFilters,
+  ): Promise<DiscoveryResult> {
     if (this.capability?.enabled === true) {
       try {
-        return await this.discoverIndexed(request, query);
+        return await this.discoverIndexed(request, query, filters);
       } catch {
         // A surprising indexed failure must never hide skills: the scan below is
         // authoritative and reports its own warnings.
       }
     }
-    return this.discoverScan(request, query);
+    return this.discoverScan(request, query, filters);
   }
 
-  private async discoverScan(request: PageRequest, query: string): Promise<DiscoveryResult> {
+  private async discoverScan(
+    request: PageRequest,
+    query: string,
+    filters: NormalizedCapabilityFilters,
+  ): Promise<DiscoveryResult> {
     const catalog = await this.catalog.getCatalog({
       projectPath: request.projectPath, harness: request.harness, query,
     });
+    const warnings = [...catalog.warnings];
+    if (hasMetadataFilters(filters)) {
+      warnings.push({
+        code: 'METADATA_FILTER_UNSUPPORTED',
+        message: 'Metadata filters were not applied because the fresh catalog scan answered this request.',
+        harness: request.harness,
+        reason: 'SCAN_ONLY',
+      });
+    }
     return {
-      entries: catalog.groups.flatMap((group) => group.entries).map(scanEntry),
-      warnings: catalog.warnings,
+      entries: catalog.groups.flatMap((group) => group.entries)
+        .filter((entry) => (filters.sources.length === 0 || filters.sources.includes(entry.source)) &&
+          entry.enabled === filters.enabled)
+        .map(scanEntry),
+      warnings,
       retrieval: { mode: 'scan', elapsedMs: catalog.elapsedMs },
     };
   }
 
-  private async discoverIndexed(request: PageRequest, query: string): Promise<DiscoveryResult> {
+  private async discoverIndexed(
+    request: PageRequest,
+    query: string,
+    filters: NormalizedCapabilityFilters,
+  ): Promise<DiscoveryResult> {
     const capability = this.capability;
-    if (capability === undefined) return this.discoverScan(request, query);
+    if (capability === undefined) return this.discoverScan(request, query, filters);
     const started = performance.now();
-    const first = await capability.search({
+    const searchRequest = {
       harness: request.harness, projectPath: request.projectPath, query,
+      ...filters,
+    };
+    const first = await capability.search({
+      ...searchRequest,
       offset: 0, limit: CAPABILITY_MAX_RESULTS,
     });
     if (first.mode === 'scan') {
       // The service already fell back. Use the catalog once so the page has the
       // complete unranked entry list instead of one sliced fallback page.
-      const scan = await this.discoverScan(request, query);
+      const scan = await this.discoverScan(request, query, filters);
       return {
         ...scan,
         warnings: first.warnings,
@@ -209,7 +261,7 @@ export class ProjectCatalogPages {
         },
       };
     }
-    if (first.total > MAX_INDEXED_SNAPSHOT_ENTRIES) return this.discoverScan(request, query);
+    if (first.total > MAX_INDEXED_SNAPSHOT_ENTRIES) return this.discoverScan(request, query, filters);
 
     const candidates: CapabilityCandidate[] = [...first.candidates];
     const seen = new Set(candidates.map((candidate) => candidate.id));
@@ -217,10 +269,10 @@ export class ProjectCatalogPages {
     while (nextOffset !== null && candidates.length < MAX_INDEXED_SNAPSHOT_ENTRIES) {
       const requestedOffset = nextOffset;
       const next: CapabilitySearchResponse = await capability.search({
-        harness: request.harness, projectPath: request.projectPath, query,
+        ...searchRequest,
         offset: requestedOffset, limit: CAPABILITY_MAX_RESULTS,
       });
-      if (next.mode !== 'index') return this.discoverScan(request, query);
+      if (next.mode !== 'index') return this.discoverScan(request, query, filters);
       for (const candidate of next.candidates) {
         if (seen.has(candidate.id)) continue;
         seen.add(candidate.id);
@@ -230,10 +282,10 @@ export class ProjectCatalogPages {
       nextOffset = next.nextOffset;
       if (nextOffset !== null && nextOffset <= requestedOffset) {
         // A validated query must move forward; otherwise use the complete scan.
-        return this.discoverScan(request, query);
+        return this.discoverScan(request, query, filters);
       }
     }
-    if (nextOffset !== null) return this.discoverScan(request, query);
+    if (nextOffset !== null) return this.discoverScan(request, query, filters);
 
     return {
       entries: candidates.map(candidateToEntry),
@@ -243,6 +295,7 @@ export class ProjectCatalogPages {
         ...(first.ranking === undefined ? {} : { ranking: first.ranking }),
         elapsedMs: Math.round((performance.now() - started) * 100) / 100,
       },
+      ...(first.coverage === undefined ? {} : { coverage: first.coverage }),
     };
   }
 
@@ -292,6 +345,19 @@ function candidateToEntry(candidate: CapabilityCandidate): SkillEntry {
     ...(candidate.revision === undefined ? {} : { revision: candidate.revision }),
     ...(candidate.repositoryPath === undefined ? {} : { repositoryPath: candidate.repositoryPath }),
     ...(candidate.fingerprint === '' ? {} : { fingerprint: candidate.fingerprint }),
+    ...(candidate.metadata === undefined ? {} : { metadata: candidate.metadata }),
     match: { score: candidate.score, snippet: candidate.snippet },
   };
+}
+
+/** Canonical snapshot identity for a filter set. */
+function pageFiltersKey(filters: NormalizedCapabilityFilters): string {
+  return JSON.stringify({
+    sources: [...filters.sources].sort(),
+    enabled: filters.enabled,
+    tags: [...filters.tags].sort(),
+    tools: [...filters.tools].sort(),
+    inputs: [...filters.inputs].sort(),
+    outputs: [...filters.outputs].sort(),
+  });
 }

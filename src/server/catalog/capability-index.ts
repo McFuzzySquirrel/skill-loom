@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import {
   REMOTE_SNAPSHOT_CONTENT,
+  SKILL_SOURCES,
   createSkillId,
   type CatalogWarning,
   type SkillEntry,
@@ -27,6 +28,7 @@ import {
   type SkillSource,
 } from './types.js';
 import { frontmatterString, parseSkillFrontmatter } from './frontmatter.js';
+import { extractSkillMetadata, type SkillMetadata } from './skill-metadata.js';
 import type { CatalogService } from './merge.js';
 import {
   OPENCODE_PERSONAL_SKILLS_SEGMENTS,
@@ -52,7 +54,8 @@ import {
  */
 
 export const CAPABILITY_INDEX_FILE_NAME = 'capability-index.sqlite';
-export const CAPABILITY_INDEX_SCHEMA_VERSION = 1;
+/** Structured metadata added in Phase 3; older indexes rebuild on read. */
+export const CAPABILITY_INDEX_SCHEMA_VERSION = 2;
 /** "SLOM" as a SQLite application id. */
 export const CAPABILITY_INDEX_APPLICATION_ID = 0x534c4f4d;
 export const CAPABILITY_INDEX_MAX_BYTES = 64 * 1024 * 1024;
@@ -68,6 +71,8 @@ export const CAPABILITY_MAX_RESULTS = 50;
 export const CAPABILITY_DEFAULT_RESULTS = 10;
 export const CAPABILITY_MAX_OFFSET = 10_000;
 export const CAPABILITY_MAX_SNIPPET_CHARS = 240;
+export const CAPABILITY_MAX_FILTER_VALUES = 20;
+export const CAPABILITY_MAX_FILTER_VALUE_LENGTH = 120;
 export const CAPABILITY_QUERY_BUDGET_MS = 250;
 
 const DEFAULT_MAX_DEPTH = 12;
@@ -145,7 +150,19 @@ export interface CapabilityCollection {
   warnings: CatalogWarning[];
 }
 
-export interface CapabilityIndexQuery {
+/** Optional retrieval filters. Arrays require every listed value (AND). */
+export interface CapabilitySearchFilters {
+  /** Restrict results to these sources. Empty or absent means no source filter. */
+  sources?: SkillSource[] | undefined;
+  /** `true` (the default) returns enabled rows; `false` returns disabled rows. */
+  enabled?: boolean | undefined;
+  tags?: string[] | undefined;
+  tools?: string[] | undefined;
+  inputs?: string[] | undefined;
+  outputs?: string[] | undefined;
+}
+
+export interface CapabilityIndexQuery extends CapabilitySearchFilters {
   harness: SkillHarness;
   projectPath: string;
   query?: string;
@@ -172,6 +189,23 @@ export interface CapabilityCandidate {
   revision?: string;
   repositoryPath?: string;
   repository?: string;
+  metadata?: SkillMetadata;
+  /** Fields whose declared metadata was invalid or bounded away. */
+  metadataIssues?: string[];
+}
+
+/** Counts over every skill in the indexed scope, independent of the query or page. */
+export interface CapabilityMetadataCoverage {
+  total: number;
+  withDescription: number;
+  withHeadings: number;
+  withTags: number;
+  withTools: number;
+  withInputs: number;
+  withOutputs: number;
+  withWhenToUse: number;
+  withIssues: number;
+  withoutStructuredMetadata: number;
 }
 
 export interface CapabilitySearchResponse {
@@ -187,14 +221,17 @@ export interface CapabilitySearchResponse {
   warnings: CatalogWarning[];
   elapsedMs: number;
   ranking?: CapabilityRanking;
+  /** Present only when the indexed path answered. */
+  coverage?: CapabilityMetadataCoverage;
 }
 
 export type CapabilityFallback = (
-  request: Required<Pick<CapabilityIndexQuery, 'harness' | 'projectPath'>> & {
-    query: string;
-    offset: number;
-    limit: number;
-  },
+  request: Required<Pick<CapabilityIndexQuery, 'harness' | 'projectPath'>> &
+    CapabilitySearchFilters & {
+      query: string;
+      offset: number;
+      limit: number;
+    },
 ) => Promise<CapabilitySearchResponse>;
 
 export interface CapabilityIndexOptions {
@@ -257,6 +294,9 @@ interface SkillRow {
 interface IndexedPackage {
   row: SkillRow;
   tokens: Array<{ token: string; weight: number }>;
+  metadata: SkillMetadata;
+  metadataIssues: string[];
+  metadataText: string;
 }
 
 interface ReadSkill {
@@ -709,8 +749,8 @@ export class CapabilityIndex {
     const database = new DatabaseSync(this.indexPath, { readOnly: true });
     try {
       database.exec('PRAGMA trusted_schema = OFF; PRAGMA query_only = ON');
-      const filter = `s.harness = ? AND s.enabled = 1 AND (s.source <> 'project' OR s.project_path = ?)`;
-      const bindings: Array<string | number> = [request.harness, request.projectPath];
+      const filters = normalizeCapabilityFilters(request);
+      const { sql: filter, bindings } = buildFilter(request, filters);
       let rows: SkillRow[];
       let total: number;
       if (terms.length === 0) {
@@ -725,7 +765,7 @@ export class CapabilityIndex {
           `SELECT count(*) AS value FROM skill_fts JOIN skills s ON s.id = skill_fts.id WHERE skill_fts MATCH ? AND ${filter}`,
         ).get(match, ...bindings)) ?? 0;
         rows = database.prepare(
-          `SELECT s.*, bm25(skill_fts, 0.0, 12.0, 8.0, 4.0, 6.0, 3.0, 2.0) AS rank
+          `SELECT s.*, bm25(skill_fts, 0.0, 12.0, 8.0, 4.0, 6.0, 3.0, 2.0, 7.0) AS rank
            FROM skill_fts JOIN skills s ON s.id = skill_fts.id
            WHERE skill_fts MATCH ? AND ${filter}
            ORDER BY rank ASC, s.name COLLATE NOCASE, s.path LIMIT ? OFFSET ?`,
@@ -746,7 +786,8 @@ export class CapabilityIndex {
            ORDER BY rank DESC, s.name COLLATE NOCASE, s.path LIMIT ? OFFSET ?`,
         ).all(...terms, ...bindings, terms.length, limit, offset) as unknown as SkillRow[];
       }
-      let candidates = rows.map((row) => toCandidate(row, terms));
+      const metadata = readCandidateMetadata(database, rows.map((row) => row.id));
+      let candidates = rows.map((row) => toCandidate(row, terms, metadata.get(row.id)));
       if (this.validateRemote !== undefined) {
         const checked: CapabilityCandidate[] = [];
         for (const candidate of candidates) {
@@ -775,6 +816,7 @@ export class CapabilityIndex {
         warnings: [],
         elapsedMs: Math.round((performance.now() - started) * 100) / 100,
         ranking,
+        coverage: readCoverage(database, filter, bindings),
       };
     } finally {
       database.close();
@@ -878,6 +920,14 @@ export class CapabilityIndex {
     const body = truncateUtf8(normalizeText(frontmatter.body), maxExcerptBytes);
     const headings = extractHeadings(frontmatter.body);
     const frontmatterText = truncateUtf8(describeFrontmatter(frontmatter.data), CAPABILITY_FRONTMATTER_BYTES);
+    const extracted = extractSkillMetadata(frontmatter.data);
+    const metadataText = truncateUtf8([
+      ...extracted.metadata.tags,
+      ...extracted.metadata.tools,
+      ...extracted.metadata.inputs,
+      ...extracted.metadata.outputs,
+      extracted.metadata.whenToUse ?? '',
+    ].join('\n'), CAPABILITY_FRONTMATTER_BYTES);
     const filePaths = truncateUtf8((await listPackageFiles(descriptor.packagePath)).join('\n'), CAPABILITY_FILE_PATHS_BYTES);
     const fingerprint = descriptor.remote?.fingerprint ?? read.fingerprint;
     const id = createSkillId({
@@ -923,12 +973,16 @@ export class CapabilityIndex {
     addTokens(name, 12);
     addTokens(description, 8);
     addTokens(frontmatterText, 4);
+    addTokens(metadataText, 7);
     addTokens(headings, 6);
     addTokens(body, 3);
     addTokens(filePaths, 2);
     return {
       row,
       tokens: [...tokens].map(([token, weight]) => ({ token, weight })),
+      metadata: extracted.metadata,
+      metadataIssues: extracted.issues,
+      metadataText,
     };
   }
 
@@ -971,6 +1025,7 @@ CREATE TABLE capabilities (
   skill_id TEXT NOT NULL,
   kind TEXT NOT NULL,
   value TEXT NOT NULL,
+  ordinal INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (skill_id, kind, value)
 );
 CREATE TABLE skill_tokens (
@@ -991,6 +1046,7 @@ CREATE VIRTUAL TABLE skill_fts USING fts5(
   headings,
   body_excerpt,
   file_paths,
+  metadata,
   tokenize = 'unicode61 remove_diacritics 2'
 );
 `;
@@ -1025,14 +1081,33 @@ function writeRow(database: DatabaseSync, indexed: IndexedPackage, ranking: Capa
   if (ranking === FTS_RANKING) {
     database.prepare('DELETE FROM skill_fts WHERE id = ?').run(row.id);
     database.prepare(
-      'INSERT INTO skill_fts (id, name, description, frontmatter, headings, body_excerpt, file_paths) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    ).run(row.id, row.name, row.description, row.frontmatter, row.headings, row.body_excerpt, row.file_paths);
+      'INSERT INTO skill_fts (id, name, description, frontmatter, headings, body_excerpt, file_paths, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(
+      row.id, row.name, row.description, row.frontmatter, row.headings, row.body_excerpt,
+      row.file_paths, indexed.metadataText,
+    );
   }
   database.prepare('DELETE FROM skill_tokens WHERE skill_id = ?').run(row.id);
   const insertToken = database.prepare(
     'INSERT INTO skill_tokens(skill_id, token, weight) VALUES(?, ?, ?) ON CONFLICT(skill_id, token) DO UPDATE SET weight = MAX(weight, excluded.weight)',
   );
   for (const token of indexed.tokens) insertToken.run(row.id, token.token, token.weight);
+  database.prepare('DELETE FROM capabilities WHERE skill_id = ?').run(row.id);
+  const insertCapability = database.prepare(
+    'INSERT INTO capabilities(skill_id, kind, value, ordinal) VALUES(?, ?, ?, ?) ON CONFLICT(skill_id, kind, value) DO NOTHING',
+  );
+  const { metadata } = indexed;
+  for (const [kind, values] of [
+    ['tag', metadata.tags],
+    ['tool', metadata.tools],
+    ['input', metadata.inputs],
+    ['output', metadata.outputs],
+  ] as const) {
+    values.forEach((value, ordinal) => insertCapability.run(row.id, kind, value, ordinal));
+  }
+  if (metadata.whenToUse !== undefined) insertCapability.run(row.id, 'when_to_use', metadata.whenToUse, 0);
+  indexed.metadataIssues.forEach((issue, ordinal) =>
+    insertCapability.run(row.id, 'metadata_issue', issue, ordinal));
 }
 
 function descriptorMatchesRow(row: SkillRow, descriptor: CapabilityPackageDescriptor): boolean {
@@ -1056,7 +1131,16 @@ function deleteRow(database: DatabaseSync, id: string): void {
   database.prepare('DELETE FROM skills WHERE id = ?').run(id);
 }
 
-function toCandidate(row: SkillRow, terms: readonly string[]): CapabilityCandidate {
+interface CandidateMetadata {
+  metadata: SkillMetadata;
+  issues: string[];
+}
+
+function toCandidate(
+  row: SkillRow,
+  terms: readonly string[],
+  extra?: CandidateMetadata,
+): CapabilityCandidate {
   return {
     id: row.id,
     harness: row.harness as SkillHarness,
@@ -1076,6 +1160,8 @@ function toCandidate(row: SkillRow, terms: readonly string[]): CapabilityCandida
     ...(row.remote_revision === null ? {} : { revision: row.remote_revision }),
     ...(row.remote_repository_path === null ? {} : { repositoryPath: row.remote_repository_path }),
     ...(row.remote_repository === null ? {} : { repository: row.remote_repository }),
+    ...(extra === undefined ? {} : { metadata: extra.metadata }),
+    ...(extra === undefined || extra.issues.length === 0 ? {} : { metadataIssues: extra.issues }),
   };
 }
 
@@ -1264,6 +1350,162 @@ function tokenize(value: string): string[] {
     .match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
+export interface NormalizedCapabilityFilters {
+  sources: SkillSource[];
+  enabled: boolean;
+  tags: string[];
+  tools: string[];
+  inputs: string[];
+  outputs: string[];
+}
+
+export function normalizeCapabilityFilters(request: CapabilitySearchFilters): NormalizedCapabilityFilters {
+  const sources = [...new Set(request.sources ?? [])]
+    .filter((source): source is SkillSource => (SKILL_SOURCES as readonly string[]).includes(source));
+  return {
+    sources,
+    enabled: request.enabled !== false,
+    tags: normalizeFilterValues(request.tags),
+    tools: normalizeFilterValues(request.tools),
+    inputs: normalizeFilterValues(request.inputs),
+    outputs: normalizeFilterValues(request.outputs),
+  };
+}
+
+function normalizeFilterValues(values: readonly string[] | undefined): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values ?? []) {
+    if (typeof value !== 'string') continue;
+    const normalized = value
+      .replace(/[\u0000-\u001f\u007f]/gu, ' ')
+      .replace(/\s+/gu, ' ')
+      .trim()
+      .slice(0, CAPABILITY_MAX_FILTER_VALUE_LENGTH)
+      .toLocaleLowerCase('en-US');
+    if (normalized === '' || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+    if (result.length >= CAPABILITY_MAX_FILTER_VALUES) break;
+  }
+  return result;
+}
+
+export function hasMetadataFilters(filters: CapabilitySearchFilters): boolean {
+  return (filters.tags?.length ?? 0) > 0 || (filters.tools?.length ?? 0) > 0 ||
+    (filters.inputs?.length ?? 0) > 0 || (filters.outputs?.length ?? 0) > 0;
+}
+
+function buildFilter(
+  request: Required<Pick<CapabilityIndexQuery, 'harness' | 'projectPath'>>,
+  filters: NormalizedCapabilityFilters,
+): { sql: string; bindings: Array<string | number> } {
+  const clauses = [
+    's.harness = ?',
+    's.enabled = ?',
+    `(s.source <> 'project' OR s.project_path = ?)`,
+  ];
+  const bindings: Array<string | number> = [
+    request.harness,
+    filters.enabled ? 1 : 0,
+    request.projectPath,
+  ];
+  if (filters.sources.length > 0) {
+    clauses.push(`s.source IN (${filters.sources.map(() => '?').join(', ')})`);
+    bindings.push(...filters.sources);
+  }
+  for (const [kind, values] of [
+    ['tag', filters.tags],
+    ['tool', filters.tools],
+    ['input', filters.inputs],
+    ['output', filters.outputs],
+  ] as const) {
+    for (const value of values) {
+      clauses.push(
+        'EXISTS (SELECT 1 FROM capabilities c WHERE c.skill_id = s.id AND c.kind = ? AND lower(c.value) = ?)',
+      );
+      bindings.push(kind, value);
+    }
+  }
+  return { sql: clauses.join(' AND '), bindings };
+}
+
+function readCoverage(
+  database: DatabaseSync,
+  filter: string,
+  bindings: Array<string | number>,
+): CapabilityMetadataCoverage {
+  const row = database.prepare(`
+    SELECT
+      count(*) AS total,
+      sum(CASE WHEN s.description <> '' THEN 1 ELSE 0 END) AS with_description,
+      sum(CASE WHEN s.headings <> '' THEN 1 ELSE 0 END) AS with_headings,
+      sum(CASE WHEN EXISTS (SELECT 1 FROM capabilities c WHERE c.skill_id = s.id AND c.kind = 'tag') THEN 1 ELSE 0 END) AS with_tags,
+      sum(CASE WHEN EXISTS (SELECT 1 FROM capabilities c WHERE c.skill_id = s.id AND c.kind = 'tool') THEN 1 ELSE 0 END) AS with_tools,
+      sum(CASE WHEN EXISTS (SELECT 1 FROM capabilities c WHERE c.skill_id = s.id AND c.kind = 'input') THEN 1 ELSE 0 END) AS with_inputs,
+      sum(CASE WHEN EXISTS (SELECT 1 FROM capabilities c WHERE c.skill_id = s.id AND c.kind = 'output') THEN 1 ELSE 0 END) AS with_outputs,
+      sum(CASE WHEN EXISTS (SELECT 1 FROM capabilities c WHERE c.skill_id = s.id AND c.kind = 'when_to_use') THEN 1 ELSE 0 END) AS with_when_to_use,
+      sum(CASE WHEN EXISTS (SELECT 1 FROM capabilities c WHERE c.skill_id = s.id AND c.kind = 'metadata_issue') THEN 1 ELSE 0 END) AS with_issues,
+      sum(CASE WHEN NOT EXISTS (
+        SELECT 1 FROM capabilities c WHERE c.skill_id = s.id
+          AND c.kind IN ('tag', 'tool', 'input', 'output', 'when_to_use')
+      ) THEN 1 ELSE 0 END) AS without_structured_metadata
+    FROM skills s WHERE ${filter}
+  `).get(...bindings) as Record<string, unknown> | undefined;
+  const value = (name: string): number => {
+    const number = row?.[name];
+    return typeof number === 'number' ? number : typeof number === 'bigint' ? Number(number) : 0;
+  };
+  return {
+    total: value('total'),
+    withDescription: value('with_description'),
+    withHeadings: value('with_headings'),
+    withTags: value('with_tags'),
+    withTools: value('with_tools'),
+    withInputs: value('with_inputs'),
+    withOutputs: value('with_outputs'),
+    withWhenToUse: value('with_when_to_use'),
+    withIssues: value('with_issues'),
+    withoutStructuredMetadata: value('without_structured_metadata'),
+  };
+}
+
+function readCandidateMetadata(
+  database: DatabaseSync,
+  ids: readonly string[],
+): Map<string, CandidateMetadata> {
+  const result = new Map<string, CandidateMetadata>();
+  if (ids.length === 0) return result;
+  const placeholders = ids.map(() => '?').join(', ');
+  const rows = database.prepare(
+    `SELECT skill_id, kind, value FROM capabilities WHERE skill_id IN (${placeholders}) ORDER BY skill_id, kind, ordinal, value COLLATE NOCASE`,
+  ).all(...ids) as unknown as Array<{ skill_id: string; kind: string; value: string }>;
+  for (const row of rows) {
+    if (typeof row.skill_id !== 'string' || typeof row.kind !== 'string' || typeof row.value !== 'string') continue;
+    let entry = result.get(row.skill_id);
+    if (entry === undefined) {
+      entry = { metadata: { tags: [], tools: [], inputs: [], outputs: [] }, issues: [] };
+      result.set(row.skill_id, entry);
+    }
+    switch (row.kind) {
+      case 'tag': entry.metadata.tags.push(row.value); break;
+      case 'tool': entry.metadata.tools.push(row.value); break;
+      case 'input': entry.metadata.inputs.push(row.value); break;
+      case 'output': entry.metadata.outputs.push(row.value); break;
+      case 'when_to_use': entry.metadata.whenToUse = row.value; break;
+      case 'metadata_issue': entry.issues.push(row.value); break;
+    }
+  }
+  for (const [id, entry] of result) {
+    if (entry.metadata.tags.length === 0 && entry.metadata.tools.length === 0 &&
+        entry.metadata.inputs.length === 0 && entry.metadata.outputs.length === 0 &&
+        entry.metadata.whenToUse === undefined && entry.issues.length === 0) {
+      result.delete(id);
+    }
+  }
+  return result;
+}
+
 function sourceOrderSql(): string {
   return `CASE s.source
     WHEN 'project' THEN 0 WHEN 'personal' THEN 1 WHEN 'custom' THEN 2
@@ -1405,9 +1647,11 @@ export function createCapabilitySearchService(
     enabled,
     async search(request) {
       const started = performance.now();
+      const filters = normalizeCapabilityFilters(request);
       const normalized = {
         harness: request.harness,
         projectPath: request.projectPath,
+        ...filters,
         query: normalizeQuery(request.query),
         offset: normalizeOffset(request.offset),
         limit: normalizeLimit(request.limit),
@@ -1483,10 +1727,27 @@ async function withFallback(
     query: string;
     offset: number;
     limit: number;
-  },
+  } & NormalizedCapabilityFilters,
   reason: CapabilityFallbackReason,
 ): Promise<CapabilitySearchResponse> {
   const response = await fallback(request);
+  const warnings: CatalogWarning[] = [
+    ...response.warnings,
+    {
+      code: 'CAPABILITY_INDEX_FALLBACK',
+      message: 'The derived capability index was not used; the fresh catalog scan supplied these candidates.',
+      harness: request.harness,
+      reason: reason.toUpperCase(),
+    },
+  ];
+  if (hasMetadataFilters(request)) {
+    warnings.push({
+      code: 'METADATA_FILTER_UNSUPPORTED',
+      message: 'Metadata filters were not applied because the fresh catalog scan answered this request.',
+      harness: request.harness,
+      reason: 'SCAN_FALLBACK',
+    });
+  }
   return {
     ...response,
     mode: 'scan',
@@ -1495,15 +1756,7 @@ async function withFallback(
     offset: request.offset,
     limit: request.limit,
     elapsedMs: Math.round((performance.now() - started) * 100) / 100,
-    warnings: [
-      ...response.warnings,
-      {
-        code: 'CAPABILITY_INDEX_FALLBACK',
-        message: 'The derived capability index was not used; the fresh catalog scan supplied these candidates.',
-        harness: request.harness,
-        reason: reason.toUpperCase(),
-      },
-    ],
+    warnings,
   };
 }
 
@@ -1520,7 +1773,10 @@ export function catalogCapabilityFallback(catalog: CatalogService): CapabilityFa
       harness: request.harness,
       query: request.query,
     });
-    const entries = response.groups.flatMap((group) => group.entries);
+    const sources = request.sources ?? [];
+    const enabled = request.enabled !== false;
+    const entries = response.groups.flatMap((group) => group.entries)
+      .filter((entry) => (sources.length === 0 || sources.includes(entry.source)) && entry.enabled === enabled);
     const candidates = entries
       .slice(request.offset, request.offset + request.limit)
       .map((entry) => entryToCandidate(entry));

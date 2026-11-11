@@ -1,6 +1,8 @@
 ---
 name: incident-triage
 description: Triage an incident.
+metadata:
+  tags: [incident, triage]
 ---
 
 # Incident triage

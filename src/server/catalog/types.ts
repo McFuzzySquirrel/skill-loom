@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { SkillMetadata } from './skill-metadata.js';
 
 /**
  * Catalog domain types shared by every harness adapter.
@@ -84,6 +85,8 @@ export interface SkillEntry {
   fingerprint?: string;
   /** Ranked match metadata from the derived capability index. */
   match?: SkillMatch;
+  /** Deterministically extracted optional frontmatter metadata. */
+  metadata?: SkillMetadata;
 }
 
 /** A pinned harness-native agent definition from a verified remote snapshot. */
@@ -125,6 +128,7 @@ export const CATALOG_WARNING_CODES = {
   DISCOVERY_SLOW: 'CATALOG_DISCOVERY_SLOW',
   REMOTE_SOURCE_UNAVAILABLE: 'REMOTE_SOURCE_UNAVAILABLE',
   CAPABILITY_INDEX_FALLBACK: 'CAPABILITY_INDEX_FALLBACK',
+  METADATA_FILTER_UNSUPPORTED: 'METADATA_FILTER_UNSUPPORTED',
 } as const;
 export type CatalogWarningCode =
   (typeof CATALOG_WARNING_CODES)[keyof typeof CATALOG_WARNING_CODES];

@@ -274,6 +274,38 @@
       "allowedSources": ["project"]
     },
     {
+      "id": "metadata-tag-api",
+      "outcome": "Review an API for security issues using API-specific guidance.",
+      "query": "review",
+      "category": "metadata",
+      "expectedSkills": ["api-security-review"],
+      "tags": ["api"]
+    },
+    {
+      "id": "metadata-tool-playwright",
+      "outcome": "Run a browser test with the project's Playwright tooling.",
+      "query": "test",
+      "category": "metadata",
+      "expectedSkills": ["browser-test-automation"],
+      "tools": ["playwright"]
+    },
+    {
+      "id": "metadata-input-release-manifest",
+      "outcome": "Audit release artifacts using the release manifest.",
+      "query": "release",
+      "category": "metadata",
+      "expectedSkills": ["remote-release-audit"],
+      "inputs": ["release_manifest"]
+    },
+    {
+      "id": "metadata-output-attestation",
+      "outcome": "Produce an attestation bundle for a release.",
+      "query": "release",
+      "category": "metadata",
+      "expectedSkills": ["remote-release-audit"],
+      "outputs": ["attestation_bundle"]
+    },
+    {
       "id": "negative-quantum",
       "outcome": "Run a quantum entanglement experiment.",
       "query": "quantum entanglement",
