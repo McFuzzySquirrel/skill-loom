@@ -8,8 +8,9 @@ Scan these roots recursively for packages containing `SKILL.md`:
 
 1. `<project>/.agents/skills` (shared project root)
 2. `<project>/.opencode/skills` (legacy OpenCode root)
-3. `~/.config/opencode/skills`
-4. Each Loom-configured extra directory
+3. `~/.agents/skills` (shared personal root)
+4. `~/.config/opencode/skills` (OpenCode personal root)
+5. Each Loom-configured extra directory
 
 Parse YAML frontmatter with the `yaml` package. Require a nonempty `name`; if it is absent, fall back to the directory name and attach a warning. Keep `description`, `source`, `canonicalPath`, and `harness: "opencode"`. Do not execute a skill or infer a description with a model.
 

@@ -40,7 +40,7 @@ Every adapter exports the same shape. Load `references/descriptor-contract.md` f
 | Field | OpenCode 2.2.5 | Copilot CLI 1.0.105 |
 |-------|----------------|---------------------|
 | `id` / display | `opencode` / OpenCode | `copilot` / GitHub Copilot |
-| Discovery | Filesystem scan of shared `.agents/skills` and legacy `.opencode/skills` roots | `copilot skill list --json` |
+| Discovery | Filesystem scan of project/personal `.agents/skills` and legacy project `.opencode/skills` roots | `copilot skill list --json` for project and host-global skills |
 | Session modes | `shared`, `fresh`, `fork` | `shared`, `fresh`, `fork` as handoff |
 | Native fork | Yes on `run --fork` | No |
 | Trust | None | Interactive folder-trust dialog |
@@ -54,7 +54,7 @@ If a capability is unknown, then report it as unsupported and block preflight; d
 
 ### Step 3: Map discovery to the descriptor
 
-For OpenCode, scan the shared project `.agents/skills`, legacy project `.opencode/skills`, personal `~/.config/opencode/skills`, and each Loom-configured extra directory. For Copilot, invoke `copilot skill list --json` in the project directory with a bounded timeout; keep the CLI authoritative. New Skill Loom project copies and bundle imports use `.agents/skills` for both harnesses. In both cases:
+For OpenCode, scan project and personal `.agents/skills`, legacy project `.opencode/skills`, personal `~/.config/opencode/skills`, and each Loom-configured extra directory. For Copilot, invoke `copilot skill list --json` in the project directory with a bounded timeout; keep the CLI authoritative for both project and host-global locations. New Skill Loom project copies and bundle imports use `.agents/skills` for both harnesses. In both cases:
 
 - Preserve the source label and canonical path.
 - Return duplicates instead of deduplicating by name.

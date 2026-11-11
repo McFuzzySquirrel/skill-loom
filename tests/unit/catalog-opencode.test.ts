@@ -152,6 +152,26 @@ describe('OpenCode skill discovery', () => {
     ]);
   });
 
+  it('discovers global shared .agents skills from the host home directory', async () => {
+    const globalFile = await writeSkill(
+      join(home, '.agents', 'skills'),
+      'personal-agent-skill',
+      'name: personal-agent-skill\ndescription: Shared global skill',
+    );
+
+    const result = await scanOpenCodeSkills({ projectPath: project, homeDirectory: home });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.entries).toEqual([
+      expect.objectContaining({
+        name: 'personal-agent-skill',
+        source: 'personal',
+        path: await realpath(globalFile),
+        packagePath: await realpath(dirname(globalFile)),
+      }),
+    ]);
+  });
+
   it('discovers nested SKILL.md packages and records canonical paths', async () => {
     const nestedFile = await writeSkill(
       projectSkills(),

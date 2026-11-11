@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -164,7 +164,7 @@ async function smokePortableSkill(temporaryRoot) {
   const inspected = await execFileAsync(
     process.execPath,
     [helperPath, 'inspect', '--bundle', bundlePath],
-    { cwd: temporaryRoot, maxBuffer: 2 * 1024 * 1024 },
+    { cwd: temporaryRoot, maxBuffer: 2 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] },
   );
   const result = JSON.parse(inspected.stdout);
   if (result.ok !== true || result.chain.name !== 'Package smoke') {
@@ -174,7 +174,8 @@ async function smokePortableSkill(temporaryRoot) {
   const project = join(temporaryRoot, 'portable-project');
   await mkdir(project);
   const invoke = async (command, args, input, expectedError) => {
-    const child = spawn(process.execPath, [helperPath, command, ...args], {
+    const options = command === 'inspect' && input !== undefined ? ['--stdin-json'] : [];
+    const child = spawn(process.execPath, [helperPath, command, ...args, ...options], {
       cwd: temporaryRoot, stdio: ['pipe', 'pipe', 'pipe'],
     });
     let stdout = '';
@@ -225,6 +226,62 @@ async function smokePortableSkill(temporaryRoot) {
   }
   const next = await invoke('prepare', prepareArgs, prepareInput);
   await invoke('record', ['--project', project, '--run-id', next.runId], { revision: next.revision, action: 'abort' });
+
+  const globalSkillPath = join(temporaryRoot, 'global-skills', 'review');
+  await mkdir(globalSkillPath, { recursive: true });
+  const globalSkillMarkdown = '---\nname: review\ndescription: Check work\n---\nReview the current changes.\n';
+  await writeFile(join(globalSkillPath, 'SKILL.md'), globalSkillMarkdown);
+  const globalBundlePath = join(temporaryRoot, 'global-skill.loom.json');
+  await writeFile(globalBundlePath, JSON.stringify({
+    format: 'skill-loom-chain',
+    version: 1,
+    chain: {
+      name: 'Global reuse smoke',
+      harness: 'copilot',
+      sessionMode: 'shared',
+      steps: [{ id: 'global-review', skillName: 'review', instruction: 'Review the current changes.' }],
+      inputs: [],
+    },
+    skills: [{
+      name: 'review',
+      directory: 'review',
+      files: [{
+        path: 'SKILL.md',
+        content: Buffer.from(globalSkillMarkdown).toString('base64'),
+        executable: false,
+      }],
+    }],
+  }));
+  const globalSkillPaths = { review: globalSkillPath };
+  const globalPrepareArgs = ['--bundle', globalBundlePath, '--project', project];
+  const globalReview = await invoke('inspect', globalPrepareArgs, { globalSkillPaths });
+  if (globalReview.skills[0]?.globalReuse?.path !== globalSkillPath) {
+    throw new Error('The standalone helper did not inspect the host-resolved global package.');
+  }
+  const globalRun = await invoke('prepare', globalPrepareArgs, {
+    ...prepareInput,
+    reviewDigest: globalReview.reviewDigest,
+    globalSkillPaths,
+    reuseSkills: ['review'],
+  });
+  if (globalRun.installedSkills[0]?.source !== 'global' ||
+      globalRun.installedSkills[0]?.path !== globalSkillPath) {
+    throw new Error('The standalone helper did not retain the global package reference.');
+  }
+  try {
+    await access(join(project, '.agents', 'skills', 'review'));
+    throw new Error('Global reuse unexpectedly copied the skill into the project.');
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+  const globalRunArgs = ['--project', project, '--run-id', globalRun.runId];
+  const globalStep = await invoke('step', globalRunArgs, { revision: globalRun.revision, confirmed: true });
+  if (globalStep.step.skillPath !== globalSkillPath) {
+    throw new Error('The standalone helper did not return the selected global skill path.');
+  }
+  await invoke('record', globalRunArgs, {
+    revision: globalStep.revision, outcome: 'done', confirmed: true,
+  });
 }
 
 async function smokeScenarioDiscoverySkill() {

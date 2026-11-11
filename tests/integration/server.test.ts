@@ -381,7 +381,15 @@ describe('process lifecycle', () => {
     const stderr: string[] = [];
     child.stderr?.on('data', (chunk: Buffer) => stderr.push(chunk.toString('utf8')));
 
-    const result = await waitForExit(child);
+    let result: { code: number | null; signal: string | null };
+    try {
+      result = await waitForExit(child, 15_000);
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill('SIGKILL');
+        await waitForExit(child).catch(() => undefined);
+      }
+    }
 
     expect(result.code).not.toBe(0);
     expect(stderr.join('')).toContain('HOST_NOT_LOOPBACK');
@@ -442,7 +450,10 @@ async function waitForHealth(
   throw new Error(`Server did not become healthy: ${String(lastError)}\n${stderr.join('')}`);
 }
 
-function waitForExit(child: ChildProcess): Promise<{ code: number | null; signal: string | null }> {
+function waitForExit(
+  child: ChildProcess,
+  timeoutMs = 5_000,
+): Promise<{ code: number | null; signal: string | null }> {
   if (child.exitCode !== null || child.signalCode !== null) {
     return Promise.resolve({ code: child.exitCode, signal: child.signalCode });
   }
@@ -450,7 +461,7 @@ function waitForExit(child: ChildProcess): Promise<{ code: number | null; signal
   return new Promise((resolveExit, reject) => {
     const timer = setTimeout(() => {
       reject(new Error('Server did not exit within the shutdown timeout.'));
-    }, 5_000);
+    }, timeoutMs);
     timer.unref();
 
     child.once('exit', (code, signal) => {

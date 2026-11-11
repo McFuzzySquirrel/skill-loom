@@ -17,11 +17,12 @@ import {
 /**
  * Copilot CLI catalog adapter.
  *
- * Copilot exposes installed skills through `copilot skill list --json`. The
- * adapter never locates skill directories itself, never reads credential
- * files, and never treats a broken command as an empty catalog. Every command
- * failure becomes a warning entry so the catalog can show an error state next
- * to any entries that were still discovered.
+ * Copilot exposes project and host-global installed skills through its
+ * authoritative `copilot skill list --json` catalog. The adapter never locates
+ * skill directories itself, never reads credential files, and never treats a
+ * broken command as an empty catalog. Every command failure becomes a warning
+ * entry so the catalog can show an error state next to any entries that were
+ * still discovered.
  */
 
 export const COPILOT_HARNESS = 'copilot' as const;

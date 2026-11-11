@@ -130,8 +130,8 @@ Skill Loom v1 supports exactly two harnesses. A chain is bound to one harness; p
 
 | Harness | Verified version | Install | Authentication | Discovery |
 |---------|------------------|---------|----------------|-----------|
-| OpenCode | 2.2.5 | Install OpenCode and put `opencode` on `PATH`, or set `harnessCommands.opencode`. | Run `opencode auth login` in a terminal, or provide a supported provider credential through the environment. | Filesystem `.agents/skills` and legacy `.opencode/skills` packages under the project, `~/.config/opencode/skills`, and configured extra directories. |
-| GitHub Copilot | CLI 1.0.105 | Install `@github/copilot` 1.0.105 and put `copilot` on `PATH`, or set `harnessCommands.copilot`. | Run `copilot login` in a terminal, or provide a supported GitHub token through the environment. | `copilot skill list --json` in the project directory. |
+| OpenCode | 2.2.5 | Install OpenCode and put `opencode` on `PATH`, or set `harnessCommands.opencode`. | Run `opencode auth login` in a terminal, or provide a supported provider credential through the environment. | Filesystem project `.agents/skills`, legacy project `.opencode/skills`, personal `~/.agents/skills` and `~/.config/opencode/skills`, and configured extra directories. |
+| GitHub Copilot | CLI 1.0.105 | Install `@github/copilot` 1.0.105 and put `copilot` on `PATH`, or set `harnessCommands.copilot`. | Run `copilot login` in a terminal, or provide a supported GitHub token through the environment. | `copilot skill list --json` in the project directory, including project and host-global skill locations. |
 
 Authentication is evidence-based: preflight may inspect command output, credential-file presence, or environment-variable **presence**, but it never reads credential values, copies tokens, or logs secrets. The supported login hints are:
 
