@@ -14,6 +14,8 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 - Project-independent drafts and project chains with revision preconditions and atomic versioned persistence.
 - Portable `.loom.json` bundles with complete referenced skill packages, project-local source preference, bounded validation, explicit conflict handling, and no-overwrite import. Version 2 preserves one selected native agent.
 - Local and pinned remote skill catalogs with explicit HTTPS/SSH source registration, bounded refresh, pagination, candidate inspection, and no execution of package content.
+- Host-global skill discovery: OpenCode filesystem discovery reads personal `~/.agents/skills` beside `~/.config/opencode/skills`, and Copilot reports project and host-global locations through `copilot skill list --json`. Entries keep a harness-neutral source, and a project package still wins when a name resolves more than once.
+- Portable runs can reference a reviewed host-global skill package instead of copying it. `inspect --stdin-json` accepts `globalSkillPaths` with exact catalog-resolved directories, `prepare` requires the same map plus `reuseSkills`, and the run record stores the package path and fingerprint. A package that changes after inspection needs a fresh review, and contents that differ from the bundle need `differingReuseConfirmed`.
 - Validated discovery handoffs prepared from pinned snapshots and consumed offline by the standalone discovery skill.
 - Managed disposable test workspaces and discovery workspaces with retained output and explicit `skill-loom workspace remove` cleanup.
 - Deterministic preflight with hard blocks, warnings, and acknowledgements; preflight makes no model call.
@@ -32,6 +34,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 - OpenCode discovery includes the shared `.agents/skills/` directory while retaining legacy `.opencode/skills/` discovery. Copilot discovery remains CLI-authoritative.
 - Windows profile security prefers stable PowerShell 7 and retains Windows PowerShell 5.1 with .NET 4.7.2+ as an availability-only fallback.
 - Live discovery and execution probes accept stable OpenCode versions >=2.2.5, including 2.2.6, while retaining exact observed versions in evidence.
+- Portable runner `inspect` reads JSON stdin only with `--stdin-json`, so ordinary inspection does not wait on stdin. Prepared run records include optional global-reuse fields that older helpers cannot read; update every participating helper and service together.
 - README, user, administrator, operations, release, and evidence documentation now distinguish supported behavior, blocked gates, and unpublished status.
 - The companion skill set now includes `skill-creator` and `skill-review`; both are packaged in `dist/skills/` and mirrored under `skill/` without their generated `node_modules`.
 

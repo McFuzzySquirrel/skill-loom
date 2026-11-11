@@ -11,6 +11,7 @@ This page is the current list of capabilities that are implemented only in part,
 | Automatic OpenCode advancement | Partially verified | The record-aware parser passed a user-supplied OpenCode 2.2.6 probe (`docs/evidence/live-execution-2026-11-10-opencode-2.2.6-passed.json`). A managed multi-step automatic journey is still unverified, so automatic CLI starts remain blocked and supervised runs are unaffected. |
 | Platform and version coverage | Partial | Historical evidence covers Linux ARM64 with OpenCode 2.2.5 and Copilot CLI 1.0.105. The latest passing execution probe covers Linux x64 with OpenCode 2.2.6 and Copilot CLI 1.0.107, with a Copilot exact-version warning. |
 | Windows PowerShell 7 | Implemented, verification pending | Windows profile security prefers PowerShell 7 and falls back to 5.1 only for availability. Native PowerShell 7 verification remains pending. See the [administrator guide](admin-guide.md#identity-secrets-and-tls). |
+| Host-global skill reuse | Tests only | Unit tests cover the confirmation and stale-review errors, and `npm run test:package` prepares a run against a temporary host-global package. No live harness probe reuses a personal skill, so catalog-resolved reuse through a real host is unverified end to end. |
 
 ## Packaging and release
 

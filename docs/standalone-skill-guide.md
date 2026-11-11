@@ -55,6 +55,8 @@ node --disable-warning=ExperimentalWarning <skill-dir>/scripts/loom-bundle.mjs \
   inspect --bundle /abs/path/chain.loom.json --project /abs/path/project
 ```
 
+To reuse a host-global package instead of installing a copy, add `--stdin-json` and send the map on stdin: `{"globalSkillPaths":{"<skill-name>":"<catalog-resolved absolute package directory>"}}`. Inspection fingerprints that directory and includes it in `reviewDigest`; the package is not copied. The path must be canonical, a real directory without symlinks, and contain a `SKILL.md` whose name matches the bundle.
+
 ### 3. Prepare
 
 Installing packages and starting the chain are separate decisions. After you confirm, the host sends JSON on stdin (never in arguments) to `prepare`:
@@ -76,6 +78,8 @@ Installing packages and starting the chain are separate decisions. After you con
 ```
 
 Packages are installed under `<project>/.agents/skills/` without overwriting. Reusing an installed package needs `reuseSkills`, and differing contents also need `differingReuseConfirmed: true`. A host different from the authored harness needs `hostSwitchConfirmed: true`. `prepare` returns a `runId` and `revision`.
+
+To reuse a host-global package reviewed during inspection, send the same `globalSkillPaths` map to `prepare` and list each reused name in `reuseSkills`. The run records the package path and fingerprint and references it in place rather than copying it. `prepare` fails with `GLOBAL_REUSE_CONFIRMATION_REQUIRED` when a mapped package is not in `reuseSkills`, with `REVIEW_STALE` when the path or fingerprint changed since inspection, and with `REUSE_CONTENT_CONFIRMATION_REQUIRED` unless `differingReuseConfirmed: true` accompanies contents that differ from the bundle.
 
 Input values are stored locally under `<project>/.loom/portable-runs/` (ignored by Git). Do not put secrets in inputs unless you accept that.
 

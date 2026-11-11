@@ -60,8 +60,8 @@ The product promise is deliberately narrow:
 | Companion skills | `scenario-discovery`, `skill-creator`, `skill-review`, `loom-chain-workflow`, and `loom-run-bundle` discover skills, author an explicitly approved missing skill, coordinate testing and import, and run a bundle in the current agent session. The first and fourth offer to install the CLI when `skill-loom` is missing. |
 | Visual chain editor | `skill-loom edit` opens a local editor to drag steps into a new order, edit instructions, manage `{{inputs}}`, and save back to the draft or project chain. It is the only web screen. |
 | Chain drafts and project chains | Create, validate, update, and remove project-independent drafts and project chains with `skill-loom chain`. |
-| Portable chain bundles | Export a chain with complete referenced skill packages as `.loom.json` (version 2 also preserves one native agent); inspect, review, and import it into another project. |
-| Skill catalog and remote repositories | Search local and pinned remote skill catalogs, and register HTTPS/SSH Git repositories that are refreshed only on explicit request and never executed. |
+| Portable chain bundles | Export a chain with complete referenced skill packages as `.loom.json` (version 2 also preserves one native agent); inspect, review, and import it into another project. A portable run can reuse a reviewed host-global package by reference instead of copying it. |
+| Skill catalog and remote repositories | Search project, personal (host-global), Loom-configured extra, and pinned remote skill catalogs, and register HTTPS/SSH Git repositories that are refreshed only on explicit request and never executed. |
 | Discovery handoff | Prepare a reviewed, project-independent handoff from pinned snapshots for an agent session. |
 | Optional local testing | Test a chain in a managed disposable workspace (`skill-loom workspace`); it is separate from the source project, not an OS sandbox. |
 | Managed runs | Preflight, review, start, attach to, and recover supervised or automatic runs with `skill-loom run`. CLI starts are limited to reviewed instruction-only chains. |
@@ -154,7 +154,7 @@ The full decision directory is in [docs/adr/README.md](docs/adr/README.md).
 - `skill/skill-creator/` and `skill/skill-review/` — Mirrored staged authoring and advisory audit skills.
 - `skill/loom-chain-workflow/` — Mirrored CLI workflow skill that coordinates discovery, optional workspace testing, reviewed import, and current-session execution using the companion skills.
 - `.opencode/agents/` and `.opencode/skills/` — OpenCode agent definitions and mirrored project skills.
-- `<project>/.agents/skills/` — Shared destination for new project skill copies and bundle imports; OpenCode also discovers legacy `.opencode/skills/`.
+- `<project>/.agents/skills/` — Shared destination for new project skill copies and bundle imports; OpenCode also discovers legacy `.opencode/skills/` and personal `~/.agents/skills/` and `~/.config/opencode/skills/`.
 - `dist/` — Build output for the server and chain editor; generated, not source.
 
 ## Getting Started

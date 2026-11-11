@@ -49,6 +49,10 @@ skill-loom service stop
 
 `skill-loom catalog source add` reads `{"repository":"https://...","ref":"main"}`. Nothing is fetched until you run `catalog source refresh`, which pins a commit. Use `catalog snapshot page` and `catalog snapshot inspect` to review a pinned revision. Skill Loom never executes repository files while registering, refreshing, or browsing.
 
+### Use skills installed outside the project
+
+The catalog also lists skill roots you did not copy into the project. OpenCode discovers project `.agents/skills/` and legacy `.opencode/skills/`, plus personal `~/.agents/skills/` and `~/.config/opencode/skills/`. Copilot reports project and host-global locations through `copilot skill list --json`. Each entry keeps a harness-neutral source such as `project`, `personal`, `loom-extra`, or `remote`, and a project package wins when one name resolves more than once. Skill Loom only reads these packages while browsing; it never edits or executes them.
+
 ### Discover candidate skills
 
 Ask an agent: **"Use scenario-discovery to propose a workflow for reviewing our API changes."** The skill asks for the outcome and whether remote repositories are in scope, inspects skills as untrusted data without running their scripts, proposes ordered steps and inputs, and shows every package file for your review before anything is packaged. Its result is a reviewed `.loom.json` bundle or a draft; it never imports or runs one.
@@ -95,6 +99,8 @@ A bundle contains the chain and the complete packages of every referenced skill 
 ### Run an exported chain inside your harness
 
 Install the `loom-run-bundle` skill into the target project's `.agents/skills/` (build it with `npm run build:portable-skill` in a checkout, or copy `dist/skills/loom-run-bundle/`). In your harness session, invoke it with an absolute path to the `.loom.json` bundle. It inspects, asks you to review and confirm installation, then runs exactly one step at a time. See the [standalone skill guide](standalone-skill-guide.md) for the full procedure, recovery, and caveats.
+
+When a bundled skill already exists at a host-global path such as `~/.agents/skills/<name>/`, the helper can reuse that package instead of copying it. Run `inspect` again with `--stdin-json` and supply the exact catalog-resolved directory as `globalSkillPaths`, then pass the same map plus `reuseSkills` to `prepare`. The run record stores the package path and fingerprint and references the package in place, so review its complete contents; if any file changes, inspect and review it again.
 
 Portable runs are supervised by default: confirm each step, then record its outcome. Outcomes are agent-reported, not verified process exits. Only one unfinished portable run may exist in a project, and the helper records a project-local SQLite claim so current helpers reject a second preparation or step. This does not coordinate with managed runs, other profiles, or older helpers, so ensure nothing else is using the project. To inspect project coordination use `skill-loom project coordination-review`; it does not stop or change runs.
 
