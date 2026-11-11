@@ -506,7 +506,15 @@ async function refreshRemoteSkillSourceUnlocked(
             path: file.path, content: file.content, executable: file.mode === 'x',
           }))),
         });
-        const metadata = parseSkillFrontmatter(skillText);
+        let metadata: ReturnType<typeof parseSkillFrontmatter>;
+        try {
+          metadata = parseSkillFrontmatter(skillText);
+        } catch {
+          // A malformed package must not abort the whole pinned snapshot. Keep
+          // the package with the catalog's directory-name fallback so it can
+          // still be reviewed and rejected by the authoring flow.
+          metadata = { present: false, data: {}, body: skillText };
+        }
         packageManifests.push({
           name: frontmatterString(metadata.data, 'name') ?? basename(packagePath),
           description: frontmatterString(metadata.data, 'description') ?? '',

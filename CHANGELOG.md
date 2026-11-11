@@ -52,6 +52,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Fixed
 
+- Remote source refresh now keeps a package whose `SKILL.md` has malformed frontmatter, using the directory-name fallback instead of aborting the whole snapshot with `CONTROL_INTERNAL_ERROR`.
 - The chain editor now blocks step, input, and reorder mutations while a save is in flight and keeps any newer edit if one still arrives, adopting only the server's identity fields instead of silently replacing newer work.
 - `skill-loom edit` now asks the running profile owner for its actual HTTP endpoint instead of guessing from `LOOM_PORT`; it fails with a clear message when the endpoint is unavailable.
 - The editor restores its skip-to-content link, and the render fallback returns to the editor landing page rather than the removed `/projects` route.

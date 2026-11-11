@@ -124,6 +124,37 @@ describe('remote skill source snapshots', () => {
     await expect(resolveSnapshotPackagePath(store.getConfigDir(), snapshot, entry)).resolves.toBeTruthy();
   });
 
+  it('keeps a package with malformed frontmatter instead of aborting the snapshot', async () => {
+    const root = await makeRoot();
+    const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
+    await store.update({
+      remoteSkillSources: [{ id: 'demo-source', repository: 'https://example.com/acme/skills.git', ref: 'main' }],
+    });
+    const brokenBlob = 'f'.repeat(40);
+    const tree = `100644 blob ${brokenBlob}\tcollection/broken/SKILL.md\0`;
+    const gitRunner: RemoteSourceGitRunner = async (args) => {
+      if (args[0] === 'clone' || args.includes('fetch')) return { stdout: '' };
+      if (args.includes('rev-parse')) return { stdout: `${revision}\n` };
+      if (args.includes('ls-tree')) return { stdout: tree };
+      if (args.includes('cat-file')) {
+        return { stdout: '---\nname: broken\ndescription: Broken: value\n---\nBody.\n' };
+      }
+      throw new Error(`Unexpected git command: ${args.join(' ')}`);
+    };
+
+    const snapshot = await refreshRemoteSkillSource(store, 'demo-source', {
+      gitRunner, temporaryDirectory: root,
+    });
+    expect(snapshot.packages).toHaveLength(1);
+    expect(snapshot.packages[0]).toMatchObject({
+      name: 'broken',
+      description: '',
+      repositoryPath: 'collection/broken',
+    });
+    await expect(resolveSnapshotPackagePath(store.getConfigDir(), snapshot, snapshot.packages[0]!))
+      .resolves.toBeTruthy();
+  });
+
   it('requires a framed review index and restores it only after a matching refresh', async () => {
     const root = await makeRoot();
     const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
