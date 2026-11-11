@@ -150,11 +150,11 @@ The full decision directory is in [docs/adr/README.md](docs/adr/README.md).
 - `tests/integration/` — Fastify composition-root suites for routes, the control channel, and run orchestration.
 - `scripts/` — Documentation gate, package smoke test, and live harness probes.
 - `docs/` — User, administrator, and operations guides, ADRs, release notes, support ownership, and live evidence.
-- `.github/skills/` — Project-maintained Copilot skills and their references.
+- `.github/skills/` — Canonical companion and harness skill packages and their references.
 - `skill/scenario-discovery/` — Mirrored standalone project-independent discovery skill and helpers.
 - `skill/loom-chain-workflow/` — Mirrored CLI workflow skill that coordinates discovery, optional workspace testing, reviewed import, and current-session execution using the companion skills.
-- `.opencode/agents/` and `.opencode/skills/` — OpenCode agent definitions and mirrored project skills.
-- `<project>/.agents/skills/` — Shared destination for new project skill copies and bundle imports; OpenCode also discovers legacy `.opencode/skills/`.
+- `.opencode/agents/` and `.opencode/skills/` — OpenCode agent definitions and byte-identical mirrors of the `.github/skills/` packages.
+- `.agents/skills/` — Shared project skill root. This repository tracks `create-project-documentation` here; new bundle imports also install packages here, and OpenCode discovers it.
 - `dist/` — Build output for the server and chain editor; generated, not source.
 
 ## Getting Started

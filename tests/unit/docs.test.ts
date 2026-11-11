@@ -144,6 +144,30 @@ describe('operator documentation gate', () => {
     expect(outputOf(result)).toContain('no authentication');
   });
 
+  it('fails when a single-source skill is duplicated in a mirror root', () => {
+    const root = createFixture();
+    mkdirSync(
+      join(root, '.agents', 'skills', 'create-project-documentation'),
+      { recursive: true },
+    );
+    writeFileSync(
+      join(root, '.agents', 'skills', 'create-project-documentation', 'SKILL.md'),
+      '# skill\n',
+      'utf8',
+    );
+    mkdirSync(
+      join(root, '.github', 'skills', 'create-project-documentation'),
+      { recursive: true },
+    );
+
+    const result = runCheck(root, ['--integrity']);
+
+    expect(result.status).not.toBe(0);
+    expect(outputOf(result)).toContain(
+      'duplicate of .agents/skills/create-project-documentation',
+    );
+  });
+
   it('fails when a documented npm script is absent from package.json', () => {
     const root = createFixture();
     const manifest = JSON.parse(
