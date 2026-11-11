@@ -13,7 +13,7 @@ Skill Loom does not author skills and does not execute a skill as a callable com
 
 See the [visual tour](docs/visual-tour.md) for the chain editor.
 
-Start with the [user guide](docs/user-guide.md) to design and share a workflow, or the [administrator guide](docs/admin-guide.md) to install, configure, back up, and upgrade the application. To run chains with only the companion Agent Skills and no Skill Loom server, see the [standalone skill guide](docs/standalone-skill-guide.md).
+New users: follow the [quick start](docs/quick-start.md) to build, review, import, and run a workflow. For the full workflow and sharing details, see the [user guide](docs/user-guide.md); for installation and operations, see the [administrator guide](docs/admin-guide.md). To run chains with only the companion Agent Skills and no Skill Loom server, see the [standalone skill guide](docs/standalone-skill-guide.md).
 
 ## Table of Contents
 

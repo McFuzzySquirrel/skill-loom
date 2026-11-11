@@ -7,6 +7,7 @@ This page lists the canonical documentation and where retired material lives. Ke
 | Document | Audience | Covers |
 |---|---|---|
 | [README](../README.md) | everyone | product summary, install, build, commands, configuration, security |
+| [Quick start](quick-start.md) | new users | build, review, import, and run a first workflow |
 | [User guide](user-guide.md) | end users | service, projects, discovery, editing, bundles, runs, recovery, accessibility |
 | [Administrator guide](admin-guide.md) | operators | install, configuration, CLI flags, identity and TLS, storage, backups, upgrades, troubleshooting |
 | [Operations guide](OPERATIONS.md) | operators | configuration contract, data locations, harness prerequisites, Copilot trust, security model, live verification |
