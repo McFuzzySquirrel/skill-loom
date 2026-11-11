@@ -9527,28 +9527,28 @@ async function sh(e) {
 	let i = await ih(e.registryPath);
 	i !== null && (i !== e.content && Z(), await x(e.registryPath), await Lp(r(e.registryPath)));
 }
-async function ch(e) {
-	let t = th(e);
-	if (t === null) return null;
-	let n = eh(t);
+async function ch(e, t = {}) {
+	let n = th(e);
+	if (n === null) return null;
+	let r = eh(n);
 	for (let e of [
-		a(n.project, ".loom"),
-		n.registry,
-		n.metadata
+		a(r.project, ".loom"),
+		r.registry,
+		r.metadata
 	]) try {
 		let t = await m(e);
 		(!t.isDirectory() || t.isSymbolicLink() || await v(e) !== e) && Z();
 	} catch (e) {
 		if (!nh(e)) throw e;
 	}
-	let [r, i] = await Promise.all([ih(a(n.metadata, "installed-modes.json")), ih(a(n.registry, n.key))]);
-	if (r === null && i === null) {
+	let [i, s] = await Promise.all([ih(a(r.metadata, "installed-modes.json")), ih(a(r.registry, r.key))]);
+	if (i === null && s === null) {
 		try {
-			await m(n.metadata), Z();
+			await m(r.metadata), Z();
 		} catch (e) {
 			if (!nh(e)) throw e;
 		}
-		if (process.platform === "win32") {
+		if (process.platform === "win32" && t.allowMissingForGitFallback !== !0) {
 			try {
 				await m(a(e, "SKILL.md"));
 			} catch (e) {
@@ -9559,29 +9559,29 @@ async function ch(e) {
 		}
 		return null;
 	}
-	(r === null || i === null || r !== i) && Z();
-	for await (let e of await _(n.metadata)) e.name !== "installed-modes.json" && Z();
-	let s;
+	(i === null || s === null || i !== s) && Z();
+	for await (let e of await _(r.metadata)) e.name !== "installed-modes.json" && Z();
+	let l;
 	try {
-		s = JSON.parse(r);
+		l = JSON.parse(i);
 	} catch {
 		Z();
 	}
-	let l = $m.safeParse(s);
-	l.success && l.data.packagePath === n.packagePath || Z();
-	let u = /* @__PURE__ */ new Set();
-	for (let e of l.data.files) {
+	let u = $m.safeParse(l);
+	u.success && u.data.packagePath === r.packagePath || Z();
+	let d = /* @__PURE__ */ new Set();
+	for (let e of u.data.files) {
 		Ap(e.path);
 		let t = e.path.toLowerCase();
-		u.has(t) && Z(), u.add(t);
+		d.has(t) && Z(), d.add(t);
 	}
-	let d = o(t, e).split(c).join("/");
+	let f = o(n, e).split(c).join("/");
 	return {
-		...l.data,
-		metadataDirectory: n.metadata,
-		files: d === "" ? l.data.files : l.data.files.filter((e) => e.path.startsWith(`${d}/`)).map((e) => ({
+		...u.data,
+		metadataDirectory: r.metadata,
+		files: f === "" ? u.data.files : u.data.files.filter((e) => e.path.startsWith(`${f}/`)).map((e) => ({
 			...e,
-			path: e.path.slice(d.length + 1)
+			path: e.path.slice(f.length + 1)
 		}))
 	};
 }
