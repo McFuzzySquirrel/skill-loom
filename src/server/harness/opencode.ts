@@ -23,7 +23,8 @@ import {
  * - Headless entry: `opencode run [--fork] [--session id] <message>`; the run
  *   subcommand exposes `--fork` while the interactive entry does not.
  * - Machine state: `OSC 7501;state=working|idle|clear`.
- * - Skills: filesystem discovery of shared `.agents/skills` and legacy `.opencode/skills` packages.
+ * - Skills: filesystem discovery of project/personal `.agents/skills`,
+ *   legacy project `.opencode/skills`, and OpenCode personal skill packages.
  *
  * This module only describes commands and capabilities. It never spawns a
  * process, runs a preflight check, or reads a credential file.
@@ -63,6 +64,7 @@ const DISCOVERY = Object.freeze({
   roots: Object.freeze([
     Object.freeze({ source: 'project' as const, location: '<project>/.agents/skills' }),
     Object.freeze({ source: 'project' as const, location: '<project>/.opencode/skills' }),
+    Object.freeze({ source: 'personal' as const, location: '~/.agents/skills' }),
     Object.freeze({ source: 'personal' as const, location: '~/.config/opencode/skills' }),
     Object.freeze({
       source: 'loom-extra' as const,

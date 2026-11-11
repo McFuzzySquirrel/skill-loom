@@ -196,6 +196,32 @@ describe('Copilot skill discovery', () => {
     }
   });
 
+  it('preserves host-global .agents skills reported by the Copilot catalog', async () => {
+    const packagePath = join(root, 'home', '.agents', 'skills', 'global-skill');
+    await mkdir(packagePath, { recursive: true });
+    const skillPath = join(packagePath, 'SKILL.md');
+    await writeFile(skillPath, '---\nname: global-skill\ndescription: Global skill\n---\nBody.\n');
+    const { run } = fixedRunner(success([{
+      name: 'global-skill',
+      description: 'Global skill',
+      source: 'personal',
+      path: skillPath,
+      enabled: true,
+    }]));
+
+    const result = await scanCopilotSkills({ projectPath: project, runner: run });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.entries).toEqual([
+      expect.objectContaining({
+        name: 'global-skill',
+        source: 'personal',
+        path: await realpath(skillPath),
+        packagePath: await realpath(packagePath),
+      }),
+    ]);
+  });
+
   it('maps newer personal source labels to the personal catalog source', async () => {
     const agentsPackage = await writePackage('personal-agents', 'agents-personal-skill');
     const copilotPackage = await writePackage('personal-copilot', 'copilot-personal-skill');

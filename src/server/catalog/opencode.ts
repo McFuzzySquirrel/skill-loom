@@ -2,7 +2,7 @@ import type { Dirent, Stats } from 'node:fs';
 import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join } from 'node:path';
-import { SHARED_PROJECT_SKILLS_SEGMENTS } from './project-paths.js';
+import { SHARED_PROJECT_SKILLS_SEGMENTS, SHARED_SKILLS_SEGMENTS } from './project-paths.js';
 import {
   FrontmatterError,
   frontmatterString,
@@ -57,8 +57,8 @@ interface ScanRoot {
   path: string;
   canonicalPath?: string;
   /**
-   * True for the two documented native roots. A missing native root is a
-   * normal empty source; a missing configured extra directory is a warning.
+   * Missing native roots are normal empty sources; a missing configured extra
+   * directory is a warning.
    */
   optional: boolean;
 }
@@ -67,7 +67,7 @@ interface ScanRoot {
  * Discover OpenCode skill packages.
  *
  * The scanner reads `SKILL.md` metadata only. It does not execute a skill,
- * invoke the OpenCode CLI, call a model, or read anything outside the three
+ * invoke the OpenCode CLI, call a model, or read anything outside the
  * documented roots. Filesystem and frontmatter problems become warnings so
  * one broken package or directory cannot hide the rest of the catalog.
  */
@@ -127,6 +127,11 @@ function buildRoots(
     {
       source: 'project',
       path: join(projectPath, ...OPENCODE_PROJECT_SKILLS_SEGMENTS),
+      optional: true,
+    },
+    {
+      source: 'personal',
+      path: join(homeDirectory, ...SHARED_SKILLS_SEGMENTS),
       optional: true,
     },
     {
