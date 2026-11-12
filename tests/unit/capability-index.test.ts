@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { cp, link, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -51,7 +51,7 @@ async function writeSkill(
   options: { name?: string; description?: string; body?: string } = {},
 ): Promise<void> {
   await mkdir(packagePath, { recursive: true });
-  const name = options.name ?? packagePath.split('/').at(-1) ?? 'skill';
+  const name = options.name ?? (basename(packagePath) || 'skill');
   const description = options.description ?? `${name} description`;
   const body = options.body ?? `# ${name}\n\nUse ${name}.`;
   await writeFile(

@@ -121,7 +121,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
   });
 
   it('serves ranked capability-index entries through the project catalog page', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'loom-capability-page-'));
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-capability-page-')));
     const project = join(root, 'project');
     const configDirectory = join(root, 'config');
     const home = join(root, 'home');
@@ -203,7 +203,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
   });
 
   it('reviews and installs a catalog skill into the shared project root', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'loom-skill-install-'));
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-skill-install-')));
     const project = join(root, 'project');
     const configDirectory = join(root, 'config');
     const home = join(root, 'home');
