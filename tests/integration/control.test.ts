@@ -22,6 +22,7 @@ import { CHAIN_VERSION, parseChain } from '../../src/server/chains/model.js';
 import { createRunRecord } from '../../src/server/runs/model.js';
 import { createRunOwner } from '../../src/server/runs/owner.js';
 import { createRunStore } from '../../src/server/runs/store.js';
+import { createLoomServices } from '../../src/server/services.js';
 import { createTerminalManager, TerminalSubscriberConflictError } from '../../src/server/terminal/pty.js';
 
 describe.skipIf(process.platform === 'win32')('local control transport', () => {
@@ -115,6 +116,190 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
         .toMatchObject({ ok: false, error: { code: 'PROJECT_CLAIM_UNSAFE' } });
     } finally {
       await server.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('serves ranked capability-index entries through the project catalog page', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-capability-page-')));
+    const project = join(root, 'project');
+    const configDirectory = join(root, 'config');
+    const home = join(root, 'home');
+    const skill = join(project, '.agents', 'skills', 'body-only-review');
+    await mkdir(skill, { recursive: true });
+    await mkdir(home, { recursive: true });
+    await writeFile(join(skill, 'SKILL.md'), [
+      '---',
+      'name: body-only-review',
+      'description: Review a generic helper.',
+      'allowed-tools: Read Grep',
+      'inputs: [release_manifest]',
+      'metadata:',
+      '  tags: [review, release]',
+      '---',
+      '',
+      '## Attestation bundle',
+      '',
+      'Verify the attestation bundle and record the pinned revision.',
+      '',
+    ].join('\n'));
+    const config = createConfigStore({ env: { LOOM_CONFIG_DIR: configDirectory } });
+    await config.update({});
+    const services = createLoomServices({
+      configStore: config,
+      preflightEnv: { LOOM_CAPABILITY_INDEX: '1' },
+      preflightHomeDirectory: home,
+    });
+    const server = await startControlServer(config, { services });
+    try {
+      // The first capability query builds the index and truthfully reports the
+      // scan fallback; later queries use the indexed path.
+      await services.capabilitySearchService.search({
+        harness: 'opencode', projectPath: project, query: 'warm', offset: 0, limit: 1,
+      });
+      const opened = await callControl(configDirectory, 'project.open', { path: project });
+      if (!opened.ok) throw new Error('Project registration failed.');
+      const projectId = (opened.result as { project: { id: string } }).project.id;
+      const response = await callControl(configDirectory, 'catalog.project.page', {
+        projectId, harness: 'opencode', query: 'attestation bundle',
+        sources: ['project'], tags: ['release'], tools: ['grep'], inputs: ['release_manifest'],
+        hasTools: true,
+      });
+      expect(response).toMatchObject({
+        ok: true,
+        result: {
+          retrieval: { mode: 'index', ranking: 'fts5' },
+          metadataCoverage: {
+            total: 1, withTags: 1, withTools: 1, withInputs: 1, withoutStructuredMetadata: 0,
+          },
+          metadataFacets: {
+            tags: [{ value: 'release', count: 1 }, { value: 'review', count: 1 }],
+            tools: [{ value: 'Grep', count: 1 }, { value: 'Read', count: 1 }],
+            inputs: [{ value: 'release_manifest', count: 1 }],
+            outputs: [],
+          },
+          entries: [{
+            name: 'body-only-review',
+            source: 'project',
+            fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+            metadata: {
+              tags: ['review', 'release'],
+              tools: ['Read', 'Grep'],
+              inputs: ['release_manifest'],
+              outputs: [],
+            },
+            match: {
+              score: expect.any(Number),
+              snippet: expect.stringContaining('attestation'),
+            },
+          }],
+        },
+      });
+    } finally {
+      await server.close();
+      await services.capabilitySearchService.dispose({ deleteIndex: true });
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('reviews and installs a catalog skill into the shared project root', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-skill-install-')));
+    const project = join(root, 'project');
+    const configDirectory = join(root, 'config');
+    const home = join(root, 'home');
+    const extra = join(root, 'extra-skills');
+    const packagePath = join(extra, 'note-writer');
+    await mkdir(project, { recursive: true });
+    await mkdir(home, { recursive: true });
+    await mkdir(packagePath, { recursive: true });
+    await writeFile(
+      join(packagePath, 'SKILL.md'),
+      '---\nname: note-writer\ndescription: Writes review notes.\n---\n\nWrite review notes.\n',
+    );
+    const config = createConfigStore({ env: { LOOM_CONFIG_DIR: configDirectory } });
+    await config.update({ extraSkillDirectories: [extra] });
+    const services = createLoomServices({
+      configStore: config,
+      preflightEnv: { LOOM_CAPABILITY_INDEX: '1' },
+      preflightHomeDirectory: home,
+    });
+    const server = await startControlServer(config, { services });
+    try {
+      const opened = await callControl(configDirectory, 'project.open', { path: project });
+      if (!opened.ok) throw new Error('Project registration failed.');
+      const projectId = (opened.result as { project: { id: string } }).project.id;
+      const page = await callControl(configDirectory, 'catalog.project.page', {
+        projectId, harness: 'opencode', query: 'note-writer', sources: ['loom-extra'], limit: 10,
+      });
+      if (!page.ok) throw new Error('Catalog page failed.');
+      const entries = (page.result as {
+        entries: Array<{ id: string; source: string; name: string; fingerprint: string }>;
+      }).entries;
+      expect(entries).toHaveLength(1);
+      const found = entries[0]!;
+      const candidate = {
+        id: found.id,
+        source: found.source,
+        ...(/^[a-f0-9]{64}$/.test(found.fingerprint) ? { fingerprint: found.fingerprint } : {}),
+      };
+      const request = { projectId, harness: 'opencode', candidate };
+      const review = await callControl(configDirectory, 'catalog.skill.review', request);
+      expect(review).toMatchObject({
+        ok: true,
+        result: {
+          destination: {
+            path: join(project, '.agents', 'skills', 'note-writer'),
+            conflict: null,
+          },
+          candidate: { name: 'note-writer', source: 'loom-extra' },
+          totalFiles: 1,
+          reviewDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
+      });
+      const reviewDigest = (review as { result: { reviewDigest: string } }).result.reviewDigest;
+
+      expect(await callControl(configDirectory, 'catalog.skill.install', {
+        ...request, reviewDigest,
+      })).toMatchObject({ ok: false, error: { code: 'CONTROL_INVALID_REQUEST' } });
+      expect(await callControl(configDirectory, 'catalog.skill.install', {
+        ...request, reviewDigest: 'a'.repeat(64), confirmed: true,
+      })).toMatchObject({ ok: false, error: { code: 'SKILL_INSTALL_REVIEW_STALE' } });
+
+      const installed = await callControl(configDirectory, 'catalog.skill.install', {
+        ...request, reviewDigest, confirmed: true,
+      });
+      expect(installed).toMatchObject({
+        ok: true,
+        result: {
+          name: 'note-writer',
+          source: 'loom-extra',
+          destinationPath: join(project, '.agents', 'skills', 'note-writer'),
+          totalFiles: 1,
+          fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
+      });
+      expect(await readFile(join(project, '.agents', 'skills', 'note-writer', 'SKILL.md'), 'utf8'))
+        .toContain('Write review notes.');
+
+      const conflict = await callControl(configDirectory, 'catalog.skill.review', request);
+      expect(conflict).toMatchObject({ ok: true, result: { destination: { conflict: 'EXISTS' } } });
+
+      let output = '';
+      let error = '';
+      expect(await runCli(['catalog', 'skill', 'review', '--config-dir', configDirectory], {
+        env: {},
+        stdin: Readable.from([JSON.stringify(request)]),
+        stdout: { write: (chunk) => { output += String(chunk); return true; }, isTTY: false },
+        stderr: { write: (chunk) => { error += String(chunk); return true; } },
+      })).toBe(0);
+      expect(error).toBe('');
+      expect(JSON.parse(output)).toMatchObject({
+        ok: true,
+        result: { destination: { conflict: 'EXISTS' }, reviewDigest: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      });
+    } finally {
+      await server.close();
+      await services.capabilitySearchService.dispose({ deleteIndex: true });
       await rm(root, { recursive: true, force: true });
     }
   });
@@ -564,7 +749,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
     await new Promise<void>((done, reject) => reservation.close((error) => error ? reject(error) : done()));
     const started = await startServer({
       host: '127.0.0.1', port, serveStatic: false,
-      env: { ...process.env, LOOM_CONFIG_DIR: root },
+      env: { ...process.env, LOOM_CONFIG_DIR: root, LOOM_CAPABILITY_INDEX: '0' },
       configStore,
       catalogService: createCatalogService({
         configStore,

@@ -11,6 +11,7 @@ This page lists the canonical documentation and where retired material lives. Ke
 | [User guide](user-guide.md) | end users | service, projects, discovery, editing, bundles, runs, recovery, accessibility |
 | [Administrator guide](admin-guide.md) | operators | install, configuration, CLI flags, identity and TLS, storage, backups, upgrades, troubleshooting |
 | [Operations guide](OPERATIONS.md) | operators | configuration contract, data locations, harness prerequisites, Copilot trust, security model, live verification |
+| [Capability index dogfooding](capability-index-dogfooding.md) | operators and chain authors | manual, isolated dogfooding with real projects and pinned remote sources |
 | [Standalone skill guide](standalone-skill-guide.md) | skill-only users | discover, inspect, prepare, run, and recover bundles without the service |
 | [Scenario chain examples](scenario-chains.md) | workflow authors | starter recipes and third-party skill sources |
 | [Visual tour](visual-tour.md) | editor users | the chain editor and its controls |
@@ -31,7 +32,7 @@ This page lists the canonical documentation and where retired material lives. Ke
 
 - `.github/skills/**` is the canonical source for the companion and harness skills. `scripts/build-portable-skill.mjs` builds `dist/skills/**` and syncs the checked-in mirrors.
 - `.agents/skills/create-project-documentation/` is the single tracked copy of the documentation workflow skill and its AGENTS.md maintenance reference. Do not add a second copy under `.github/skills/` or `.opencode/skills/`.
-- `skill/**` is the distributable mirror of `scenario-discovery`, `loom-chain-workflow`, and the generated `loom-run-bundle` helper.
+- `skill/**` is the distributable mirror of `scenario-discovery`, `loom-chain-workflow`, `loom-skill-catalog`, and the generated `loom-run-bundle` helper.
 - `.opencode/skills/**` contains the project-local OpenCode mirrors of the `.github/skills/**` packages.
 - `.opencode/agents/**` defines the maintainer agent team described in [Support](SUPPORT.md).
 

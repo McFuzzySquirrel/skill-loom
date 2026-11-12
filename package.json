@@ -39,6 +39,7 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:watch": "vitest",
+    "eval:retrieval": "tsx scripts/retrieval-eval.ts",
     "test:package": "node scripts/package-smoke.mjs",
     "test:live:discovery": "tsx scripts/live-discovery.ts",
     "test:live:execution": "tsx scripts/live-execution.ts",
@@ -69,5 +70,9 @@
     "typescript": "7.0.2",
     "vite": "8.3.5",
     "vitest": "5.1.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "node-pty@1.1.0": true
   }
 }

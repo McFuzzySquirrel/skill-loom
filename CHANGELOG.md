@@ -8,24 +8,36 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Added
 
+- A derived, disposable SQLite capability index for chain authoring. It searches bounded names, descriptions, frontmatter, headings, file paths, and body excerpts with FTS5 ranking (or a deterministic token table), fingerprints packages for invalidation, preserves remote binding identity, and falls back to the fresh catalog scan when the index is disabled, missing, corrupt, unsafe, unsupported, or too large. It is enabled by default; set `LOOM_CAPABILITY_INDEX=0` to force the scan.
+- `catalog project page` now uses the capability index when it is enabled. Entries carry bounded `match.snippet` and `match.score` values, indexed `fingerprint` provenance, and the exact remote `sourceId`, `revision`, and `repositoryPath`. The response reports `retrieval.mode`, `retrieval.ranking`, and any fallback reason while keeping the existing paging, `snapshotId`, warning-cursor, and cache-limit contract. Large indexed result sets and any indexed failure use the fresh scan instead of truncating or hiding skills.
+- `scenario-discovery` and `loom-chain-workflow` now expand an outcome into bounded capability queries and rerank the shortlist with the harness model before reading complete packages. They treat snippets as ranking signals, surface scan fallback, and keep the exact remote binding identity.
+- The retrieval corpus adds a pinned remote candidate with exact-binding checks and a source-policy exclusion case. `npm run eval:retrieval` compares the scan and indexed paths and reports binding accuracy, excluded violations, fallbacks, and build time.
+- Structured skill metadata from frontmatter: bounded `tags`, `allowed-tools`/`tools`, `inputs`, `outputs`, and `when_to_use`, with field-level validation issues. Indexed results include the extracted metadata, and `catalog project page` returns `metadataCoverage` counts for missing or invalid metadata.
+- `catalog project page` accepts optional `sources`, `enabled`, `tags`, `tools`, `inputs`, `outputs`, `hasTags`, `hasTools`, `hasInputs`, and `hasOutputs` filters. They are part of the snapshot identity and are applied by the indexed path; the scan fallback reports `METADATA_FILTER_UNSUPPORTED` instead of pretending they held.
+- `catalog project page` returns `metadataFacets` with every unique declared tag, tool, input, and output plus counts, so an author can discover available metadata values before filtering.
+- The capability index now uses schema version 2 with a dedicated metadata FTS column and token weights. An older index rebuilds automatically from unchanged package files.
+- The retrieval corpus adds metadata filter tasks and `precision@10`. The Phase 3 comparison records precision improving from 0.637 to 0.731 while recall stays at 1.000.
 - Skill Loom is CLI- and skill-driven. A shared-owner CLI (`service`, `project`, `chain`, `catalog`, `discovery`, `bundle`, `run`, `workspace`) provides versioned JSON envelopes, stdin payloads, reviewed digests, and explicit confirmations.
-- Companion skills: `scenario-discovery` discovers candidates and builds reviewed bundles, `loom-chain-workflow` coordinates discovery, optional workspace testing, import, and current-session execution, and `loom-run-bundle` runs a bundle in the current host session. The first two offer to install the CLI when it is missing.
+- Companion skills: `scenario-discovery` discovers candidates and builds reviewed bundles, `loom-chain-workflow` coordinates discovery, optional workspace testing, import, and current-session execution, `loom-run-bundle` runs a bundle in the current host session, and `loom-skill-catalog` searches registered sources and installs one reviewed package. The workflow, discovery, and catalog skills offer to install the CLI when it is missing.
 - A single visual chain editor opened with `skill-loom edit` for reordering steps, editing instructions, managing `{{inputs}}`, and saving back to a draft or project chain.
 - Project-independent drafts and project chains with revision preconditions and atomic versioned persistence.
 - Portable `.loom.json` bundles with complete referenced skill packages, project-local source preference, bounded validation, explicit conflict handling, and no-overwrite import. Version 2 preserves one selected native agent.
 - Portable bundle runs can reuse a catalog-resolved host-global skill package instead of copying it into the project. Reuse is explicit, the reviewed path and fingerprint are bound into the review digest, and the package is re-fingerprinted before every step; an edited package blocks the run.
 - Local and pinned remote skill catalogs with explicit HTTPS/SSH source registration, bounded refresh, pagination, candidate inspection, and no execution of package content.
+- `catalog skill review` and `catalog skill install` add a reviewed, digest-bound install path for one exact catalog candidate. Review returns the complete package inventory, license files, destination conflict, and provenance; install rechecks the digest, refuses stale or changed content, targets the shared `.agents/skills/` root, and never overwrites or suffixes a conflicting name.
+- The `loom-skill-catalog` companion skill searches registered local and pinned remote sources, reads the selected package in full as untrusted data, and installs one reviewed package into the project. It does not create chains and does not browse a public registry.
 - Validated discovery handoffs prepared from pinned snapshots and consumed offline by the standalone discovery skill.
 - Managed disposable test workspaces and discovery workspaces with retained output and explicit `skill-loom workspace remove` cleanup.
 - Deterministic preflight with hard blocks, warnings, and acknowledgements; preflight makes no model call.
 - Supervised and automatic managed runs with frozen snapshots, one global active run, bounded step tails, explicit interruption recovery, `run events`, and `run attach`.
 - Profile ownership lock and authenticated local control transport: a private socket on Unix and mutually authenticated loopback TLS on Windows.
-- Documentation set: user, administrator, operations, scenario, standalone skill, and visual tour guides; ADR index and records; release notes; [known gaps](docs/current-gaps.md); and a [documentation archive](docs/archive/README.md) for retired plans.
+- Documentation set: user, administrator, operations, scenario, standalone skill, visual tour, and capability-index dogfooding guides; ADR index and records; release notes; [known gaps](docs/current-gaps.md); and a [documentation archive](docs/archive/README.md) for retired plans.
 - Global install guidance for a locally packed tarball, including the npm 11 `allow-scripts` workaround for `file:` dependencies.
 - An extended documentation gate that checks relative links and anchors, documented npm scripts, retired vocabulary, ADR index dates, and checked-in skill mirrors.
 
 ### Changed
 
+- Indexed retrieval is the default for `catalog project page`. `LOOM_CAPABILITY_INDEX=0` forces the fresh scan. The index includes project, personal, extra-directory, bundled, and pinned remote sources.
 - The web application is reduced to the chain editor. Projects, catalogs, discovery, libraries, test workspaces, runs, themes, and the terminal are CLI-, skill-, or harness-driven.
 - Chain documents use version 3 for exact remote skill bindings and optional native-agent identity. Valid version 1 and 2 records migrate on read.
 - Portable bundle export uses version 2 for chains with a selected native agent and version 1 for agent-free chains.
@@ -44,6 +56,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Fixed
 
+- Remote source refresh now keeps a package whose `SKILL.md` has malformed frontmatter, using the directory-name fallback instead of aborting the whole snapshot with `CONTROL_INTERNAL_ERROR`.
 - The chain editor now blocks step, input, and reorder mutations while a save is in flight and keeps any newer edit if one still arrives, adopting only the server's identity fields instead of silently replacing newer work.
 - `skill-loom edit` now asks the running profile owner for its actual HTTP endpoint instead of guessing from `LOOM_PORT`; it fails with a clear message when the endpoint is unavailable.
 - The editor restores its skip-to-content link, and the render fallback returns to the editor landing page rather than the removed `/projects` route.

@@ -10031,7 +10031,7 @@ async function Hh(e, t, n = !1) {
 function Uh(e, t) {
 	if (e === void 0) return {};
 	(typeof e != "object" || !e || Array.isArray(e)) && Q("REUSE_INVALID", "Global skill paths must be an object mapping skill names to absolute package paths.");
-	let n = {};
+	let n = Object.create(null);
 	for (let [r, a] of Object.entries(e)) (!t.skills.some((e) => e.name === r) || typeof a != "string" || a.length > 4096 || !i(a) || s(a) !== a) && Q("GLOBAL_SKILL_PATH_INVALID", "Global skill paths must use bundled skill names and canonical absolute paths."), n[r] = a;
 	return n;
 }

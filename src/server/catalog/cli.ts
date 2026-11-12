@@ -32,14 +32,24 @@ const USAGE = `Usage:
     [--search <text>] [--offset <number>] [--limit <number>] [--config-dir <path>]
   skill-loom catalog snapshot inspect --source <id> --revision <commit> --kind <skill|agent>
     --path <repository-path> [--config-dir <path>]
+  skill-loom catalog skill review [--config-dir <path>]                # JSON on stdin
+  skill-loom catalog skill install [--config-dir <path>]               # JSON on stdin
 
 Source and snapshot read-only commands work offline. Project catalog discovery
 and mutations require the running local service. Project page reads
 {"projectId":"...","harness":"opencode","query":"","offset":0,"limit":50};
-warnings use a separate warningsOffset cursor. Pass the returned snapshotId
-with the same project, harness and query for subsequent pages.
+optional sources, enabled, tags, tools, inputs, outputs, hasTags, hasTools,
+hasInputs, and hasOutputs filter the indexed path. Warnings use a separate
+warningsOffset cursor. Pass the returned snapshotId with the same project,
+harness, query, and filters for subsequent pages.
 Source add reads {"repository":"https://...","ref":"main"}; limits set/source
-read {"limits":{...}} (use null to clear a source override).`;
+read {"limits":{...}} (use null to clear a source override).
+Skill review reads {"projectId":"...","harness":"opencode","candidate":
+{"id":"...","source":"remote","sourceId":"...","revision":"...",
+"repositoryPath":"...","fingerprint":"..."}} and returns a reviewDigest.
+Skill install repeats that request with the digest and "confirmed":true.
+Installation targets the project's shared .agents/skills directory, never
+overwrites, and never suffixes a conflicting name.`;
 
 export async function runCatalogCli(
   argv: readonly string[],
@@ -56,7 +66,7 @@ export async function runCatalogCli(
       return 0;
     }
     if (argv.length === 2 && (argv[1] === '--help' || argv[1] === '-h') &&
-        ['source', 'limits', 'snapshot', 'project'].includes(argv[0] ?? '')) {
+        ['source', 'limits', 'snapshot', 'project', 'skill'].includes(argv[0] ?? '')) {
       options.stdout.write(`${USAGE}\n`);
       return 0;
     }
@@ -79,7 +89,9 @@ export async function runCatalogCli(
             ? ['config-dir', 'source', 'revision', 'kind', 'search', 'offset', 'limit']
           : operation === 'snapshot inspect'
             ? ['config-dir', 'source', 'revision', 'kind', 'path']
-            : null;
+            : operation === 'skill review' || operation === 'skill install'
+              ? ['config-dir']
+              : null;
     if (allowed === null) throw new CatalogCliUsageError('Unknown catalog command.');
     if (argv.length === 3 && (argv[2] === '--help' || argv[2] === '-h')) {
       options.stdout.write(`${USAGE}\n`);
@@ -116,9 +128,11 @@ export async function runCatalogCli(
     };
     const configDirectory = resolveConfigDir({ env });
     let result: unknown;
-    if (['source add', 'source remove', 'source refresh', 'limits set', 'limits source', 'project page'].includes(operation)) {
+    if (['source add', 'source remove', 'source refresh', 'limits set', 'limits source', 'project page',
+      'skill review', 'skill install'].includes(operation)) {
       let input: unknown;
-      if (operation === 'source add' || operation === 'limits set' || operation === 'project page') {
+      if (operation === 'source add' || operation === 'limits set' || operation === 'project page' ||
+          operation === 'skill review' || operation === 'skill install') {
         input = await readJsonStdin(options.stdin);
       } else if (operation === 'limits source') {
         const parsed = z.strictObject({ limits: z.unknown() }).safeParse(await readJsonStdin(options.stdin));

@@ -19,7 +19,17 @@ import {
   setRemoteSourceLimits,
   unregisterRemoteSkillSource,
 } from './catalog/remote.js';
-import { CatalogError } from './catalog/types.js';
+import { CatalogError, SKILL_SOURCES } from './catalog/types.js';
+import { CatalogCopyError } from './catalog/copy.js';
+import {
+  CatalogInstallError,
+  installSkillIntoProject,
+  reviewSkillInstall,
+} from './catalog/install.js';
+import {
+  CAPABILITY_MAX_FILTER_VALUES,
+  CAPABILITY_MAX_FILTER_VALUE_LENGTH,
+} from './catalog/capability-index.js';
 import { ProjectCatalogPageError, ProjectCatalogPages } from './catalog/project-pages.js';
 import { HarnessError } from './harness/types.js';
 import { atomicWriteJson, ConfigError, type ConfigStore } from './config/store.js';
@@ -84,6 +94,21 @@ const requestSchema = z.strictObject({
 });
 const sourceId = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/);
 const revision = z.string().regex(/^[a-f0-9]{64}$/);
+const skillDestinationName = z.string().regex(/^(?:[a-z0-9]|[a-z0-9][a-z0-9-]{0,62}[a-z0-9])$/);
+const skillInstallCandidateSchema = z.strictObject({
+  id: z.string().min(1).max(512),
+  source: z.enum(SKILL_SOURCES),
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  sourceId: sourceId.optional(),
+  revision: z.string().regex(/^[a-f0-9]{40,64}$/).optional(),
+  repositoryPath: z.string().min(1).max(4096).optional(),
+});
+const skillInstallReviewSchema = z.strictObject({
+  projectId: z.string().min(1).max(255),
+  harness: z.enum(HARNESS_IDS),
+  candidate: skillInstallCandidateSchema,
+  destinationName: skillDestinationName.optional(),
+});
 
 function withRevision(chain: Chain) {
   return { chain, revision: chainRevision(chain) };
@@ -111,6 +136,7 @@ function failure(error: unknown): ControlResponse {
       error instanceof FolderPathError || error instanceof ProjectRegistryError || error instanceof BundleError ||
       error instanceof TestWorkspaceError || error instanceof RunOrchestratorError || error instanceof RunStoreError ||
       error instanceof RunOwnerError || error instanceof CatalogError || error instanceof ProjectCatalogPageError || error instanceof HarnessError ||
+      error instanceof CatalogCopyError || error instanceof CatalogInstallError ||
       error instanceof RunError || error instanceof AutomaticRunnerError ||
       error instanceof SupervisedRunnerError || error instanceof RunPromptError ||
       error instanceof TerminalTransportError || error instanceof DiscoveryWorkspaceError ||
@@ -696,11 +722,44 @@ async function dispatch(
         limit: z.number().int().min(1).max(100).default(50),
         warningsOffset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0),
         snapshotId: z.string().regex(/^[A-Za-z0-9_-]{32}$/).optional(),
+        sources: z.array(z.enum(SKILL_SOURCES)).max(SKILL_SOURCES.length).optional(),
+        enabled: z.boolean().optional(),
+        tags: z.array(z.string().trim().min(1).max(CAPABILITY_MAX_FILTER_VALUE_LENGTH))
+          .max(CAPABILITY_MAX_FILTER_VALUES).optional(),
+        tools: z.array(z.string().trim().min(1).max(CAPABILITY_MAX_FILTER_VALUE_LENGTH))
+          .max(CAPABILITY_MAX_FILTER_VALUES).optional(),
+        inputs: z.array(z.string().trim().min(1).max(CAPABILITY_MAX_FILTER_VALUE_LENGTH))
+          .max(CAPABILITY_MAX_FILTER_VALUES).optional(),
+        outputs: z.array(z.string().trim().min(1).max(CAPABILITY_MAX_FILTER_VALUE_LENGTH))
+          .max(CAPABILITY_MAX_FILTER_VALUES).optional(),
+        hasTags: z.boolean().optional(),
+        hasTools: z.boolean().optional(),
+        hasInputs: z.boolean().optional(),
+        hasOutputs: z.boolean().optional(),
       }));
       const project = isProjectId(request.projectId)
         ? await services.projectRegistry.findRecentProject(request.projectId) : undefined;
       if (project === undefined) throw new ControlError('PROJECT_NOT_FOUND', 'The project is not registered.');
       return catalogPages.page({ ...request, projectPath: project.canonicalPath });
+    }
+    case 'catalog.skill.review': {
+      const request = parse(skillInstallReviewSchema);
+      const path = await projectPath(request.projectId);
+      return reviewSkillInstall(
+        { catalogService: services.catalogService },
+        { ...request, projectPath: path },
+      );
+    }
+    case 'catalog.skill.install': {
+      const request = parse(skillInstallReviewSchema.extend({
+        reviewDigest: z.string().regex(/^[a-f0-9]{64}$/),
+        confirmed: z.literal(true),
+      }));
+      const path = await projectPath(request.projectId);
+      return installSkillIntoProject(
+        { catalogService: services.catalogService },
+        { ...request, projectPath: path },
+      );
     }
     case 'catalog.source.add': {
       const request = parse(z.strictObject({ repository: z.string().max(2048), ref: z.string().max(255).optional() }));
@@ -759,7 +818,9 @@ export async function startControlServer(
   const requestedRoot = resolve(configStore.getConfigDir());
   const root = await realpath(requestedRoot);
   const services = options.services ?? createLoomServices({ configStore });
-  const catalogPages = new ProjectCatalogPages(services.catalogService);
+  const catalogPages = new ProjectCatalogPages(
+    services.catalogService, Date.now, undefined, undefined, services.capabilitySearchService,
+  );
   if (process.platform !== 'win32') await assertPrivateDirectory(root, true);
   const previous = await readMetadata(process.platform === 'win32' ? requestedRoot : root);
   if (previous !== null) await removeStaleEndpoint(previous);

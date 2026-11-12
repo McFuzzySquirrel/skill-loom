@@ -14,6 +14,8 @@ Use this path when you already work in an agent harness (GitHub Copilot CLI, Ope
 | `loom-run-bundle` | Inspects, installs, and runs a bundle in the **current** host session through a Node.js helper. | No |
 | `loom-chain-workflow` | Coordinates the two skills above and, when Skill Loom's CLI owner is running, optional workspace tests and reviewed import. | Only for the CLI phases |
 
+`loom-skill-catalog` searches registered sources and installs one reviewed package into a project. It requires the Skill Loom CLI and owner service, so it is not part of the skill-only path described here.
+
 Limits of the skill-only path:
 
 - The helper never launches a harness, runs package scripts, changes trust, or grants tool permissions. Your host does the work and reports each outcome, so completion is **agent-reported**, not a verified process exit, and it does not prove a named skill fired.
@@ -30,7 +32,7 @@ Limits of the skill-only path:
 
 ## Install the Skills
 
-1. From a checkout, run `npm run build:portable-skill` and use `dist/skills/loom-run-bundle/`, `dist/skills/scenario-discovery/`, and `dist/skills/loom-chain-workflow/` (ZIP archives sit beside them), or copy the checked-in `skill/` directories.
+1. From a checkout, run `npm run build:portable-skill` and use `dist/skills/loom-run-bundle/`, `dist/skills/scenario-discovery/`, and `dist/skills/loom-chain-workflow/` (ZIP archives sit beside them), or copy the checked-in `skill/` directories. `dist/skills/loom-skill-catalog/` is the CLI-backed catalog skill and is installed the same way, but it requires the owner service.
 2. Copy each directory into the target project's `.agents/skills/`. Do not merge over an existing package.
 3. Refresh or restart the host so it discovers them.
 
@@ -38,7 +40,7 @@ Limits of the skill-only path:
 
 ### 1. Discover and package (optional)
 
-Ask the host: **"Use scenario-discovery to propose a workflow for <outcome>."** The skill asks for the outcome and whether remote repositories matter, inspects only enabled project-local skills as untrusted data, proposes scenarios, and shows the full chain and every package file. After you confirm, it writes a version 1 `.loom.json`. It does not import or run it. Remote repositories must already be copied into the project; the skill never clones.
+Ask the host: **"Use scenario-discovery to propose a workflow for <outcome>."** The skill asks for the outcome and whether remote repositories matter, expands the outcome into bounded capability queries, and reranks the shortlist before inspection. It can narrow candidates by project source, enabled state, declared tag, tool, input, or output, or by whether one of those metadata kinds is present. It reads `metadataFacets` to discover declared values and `metadataCoverage` to explain a weak shortlist. It treats ranked snippets as signals only: it inspects only enabled project-local skills as untrusted data, reads every selected package in full, proposes scenarios, and shows the full chain and every package file. After you confirm, it writes a version 1 `.loom.json`. It does not import or run it. Remote repositories must already be copied into the project; the skill never clones.
 
 You can skip this step if you already have a bundle, for example exported from Skill Loom or shared by a colleague.
 
