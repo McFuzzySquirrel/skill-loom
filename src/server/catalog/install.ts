@@ -25,6 +25,7 @@ import {
   type SkillHarness,
   type SkillSource,
 } from './types.js';
+import type { Chain } from '../chains/model.js';
 
 /**
  * Review and install a catalog skill package into the project's shared
@@ -44,6 +45,7 @@ export const SKILL_INSTALL_ERROR_CODES = {
   DESTINATION_CONFLICT: 'SKILL_INSTALL_DESTINATION_CONFLICT',
   REVIEW_STALE: 'SKILL_INSTALL_REVIEW_STALE',
   SOURCE_UNSUPPORTED: 'SKILL_INSTALL_SOURCE_UNSUPPORTED',
+  CHAIN_APPLY_FAILED: 'SKILL_CHAIN_APPLY_FAILED',
 } as const;
 
 export type SkillInstallErrorCode =
@@ -120,7 +122,7 @@ export interface SkillInstallReview {
     repositoryPath: string | null;
     /** Full-package fingerprint of the reviewed contents. */
     fingerprint: string;
-    /** True when the source is a personal/global package that will now diverge. */
+    /** True when the global package will diverge from its project-local copy. */
     personalSource: boolean;
   };
   destination: {
@@ -160,6 +162,92 @@ interface WalkedPackage {
 
 interface InstallOptions {
   catalogService: CatalogService;
+}
+
+export interface ApplyChainSkillsRequest {
+  projectId: string;
+  projectPath: string;
+  chain: Pick<Chain, 'harness' | 'steps'>;
+}
+
+/**
+ * Copy the chain's current global packages into the project's shared skill
+ * root. Package names are the chain's stable reference for this catalog model;
+ * ambiguous or missing names fail rather than selecting a different package.
+ */
+export async function applyChainSkillsToProject(
+  options: InstallOptions,
+  request: ApplyChainSkillsRequest,
+): Promise<{
+  projectId: string;
+  installed: Array<{
+    name: string;
+    source: SkillSource;
+    destinationPath: string;
+    fingerprint: string;
+  }>;
+}> {
+  const catalog = await options.catalogService.getCatalog({
+    projectPath: request.projectPath,
+    harness: request.chain.harness,
+  });
+  const entries = catalog.groups.flatMap((group) => group.entries);
+  const names = [...new Set(request.chain.steps
+    .filter((step) => step.kind !== 'instruction')
+    .map((step) => step.skillName))];
+  const selected: SkillEntry[] = [];
+
+  for (const name of names) {
+    const matches = entries.filter((entry) => entry.source === 'personal' && entry.name === name);
+    if (matches.length !== 1) {
+      throw new CatalogInstallError(
+        matches.length === 0
+          ? SKILL_INSTALL_ERROR_CODES.CANDIDATE_NOT_FOUND
+          : SKILL_INSTALL_ERROR_CODES.CANDIDATE_CHANGED,
+        matches.length === 0
+          ? `The global skill "${name}" is not available.`
+          : `The global skill name "${name}" is ambiguous.`,
+        { projectId: request.projectId, skillName: name, matches: matches.map((entry) => entry.id) },
+      );
+    }
+    selected.push(matches[0]!);
+  }
+
+  const installed: Array<{
+    name: string;
+    source: SkillSource;
+    destinationPath: string;
+    fingerprint: string;
+  }> = [];
+  for (const entry of selected) {
+    let copied;
+    try {
+      copied = await copySkillIntoProject({
+        projectPath: request.projectPath,
+        harness: request.chain.harness,
+        entry,
+        destinationName: safePackageName(entry.name),
+        allowNameSuffix: false,
+      });
+    } catch (error) {
+      throw new CatalogInstallError(
+        SKILL_INSTALL_ERROR_CODES.CHAIN_APPLY_FAILED,
+        'Applying the chain stopped while copying its skills; earlier packages remain installed.',
+        {
+          projectId: request.projectId,
+          failedSkill: entry.name,
+          installed: installed.map((skill) => ({
+            name: skill.name,
+            destinationPath: skill.destinationPath,
+          })),
+          causeCode: error instanceof CatalogCopyError ? error.code : 'UNKNOWN',
+        },
+        { cause: error },
+      );
+    }
+    installed.push(copied);
+  }
+  return { projectId: request.projectId, installed };
 }
 
 interface ResolvedReview {

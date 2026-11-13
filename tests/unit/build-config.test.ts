@@ -92,6 +92,7 @@ describe('package contract', () => {
     expect(pkg.scripts?.['test:unit']).toContain('tests/unit');
     expect(pkg.scripts?.['test:integration']).toContain('tests/integration');
     expect(pkg.scripts?.['test:package']).toContain('scripts/package-smoke.mjs');
+    expect(pkg.scripts?.['podman:cli']).toContain('src/server/podman-cli.ts');
     expect(pkg.scripts?.prepack).toBe('npm run build');
     expect(pkg.scripts?.['test:live:discovery']).toContain('scripts/live-discovery.ts');
     expect(pkg.scripts?.['test:live:execution']).toContain('scripts/live-execution.ts');
@@ -103,7 +104,10 @@ describe('package contract', () => {
     expect(pkg.version).toBe('0.1.0');
     expect(pkg.license).toBe('MIT');
     expect(pkg.private).toBe(true);
-    expect(pkg.bin).toEqual({ 'skill-loom': 'dist/src/server/cli.js' });
+    expect(pkg.bin).toEqual({
+      'skill-loom': 'dist/src/server/cli.js',
+      'skill-loom-podman': 'dist/src/server/podman-cli.js',
+    });
     expect(pkg.files).toEqual([
       'dist/src',
       'dist/web',

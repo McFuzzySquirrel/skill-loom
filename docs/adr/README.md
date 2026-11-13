@@ -16,9 +16,9 @@
 | [ADR-0010](0010-global-chain-library-snapshots.md) | Store the global chain library as independent snapshots | Superseded by [ADR-0027](0027-cli-and-skill-driven-workflow.md) and [ADR-0028](0028-single-purpose-chain-editor.md) | 2026-11-04 |
 | [ADR-0011](0011-shell-free-process-and-pty-transport.md) | Spawn harnesses without a shell and keep PTYs server-owned | Accepted | 2026-11-04 |
 | [ADR-0012](0012-shared-project-skill-installation-root.md) | Use a shared project skill installation root | Accepted | 2026-11-05 |
-| [ADR-0013](0013-deterministic-chain-bundle-skill-resolution.md) | Resolve bundle skills with project-local precedence | Accepted | 2026-11-05 |
-| [ADR-0014](0014-portable-agent-skill-execution.md) | Execute exported chains through a standalone agent skill | Accepted | 2026-11-05 |
-| [ADR-0015](0015-pinned-remote-skill-snapshots.md) | Ingest remote skills as pinned immutable snapshots | Accepted | 2026-11-07 |
+| [ADR-0013](0013-deterministic-chain-bundle-skill-resolution.md) | Resolve bundle skills with project-local precedence | Superseded for the default workflow by [ADR-0032](0032-host-global-skills-and-current-session-chains.md) | 2026-11-05 |
+| [ADR-0014](0014-portable-agent-skill-execution.md) | Execute exported chains through a standalone agent skill | Superseded for the default workflow by [ADR-0032](0032-host-global-skills-and-current-session-chains.md) | 2026-11-05 |
+| [ADR-0015](0015-pinned-remote-skill-snapshots.md) | Ingest remote skills as pinned immutable snapshots | Superseded for the default workflow by [ADR-0032](0032-host-global-skills-and-current-session-chains.md) | 2026-11-07 |
 | [ADR-0016](0016-pinned-native-agent-selection.md) | Select source-pinned native agents through harness capabilities | Accepted | 2026-11-07 |
 | [ADR-0017](0017-managed-disposable-test-workspaces.md) | Run chain tests in managed disposable workspaces | Accepted; web UI superseded in part by [ADR-0027](0027-cli-and-skill-driven-workflow.md), [ADR-0028](0028-single-purpose-chain-editor.md) | 2026-11-07 |
 | [ADR-0018](0018-version-portable-bundles-for-native-agents.md) | Version portable bundles for native-agent assets | Accepted | 2026-11-07 |
@@ -32,9 +32,10 @@
 | [ADR-0026](0026-bounded-opt-in-workspace-evaluation.md) | Evaluate retained workspaces only with explicit bounded checks | Accepted | 2026-11-10 |
 | [ADR-0027](0027-cli-and-skill-driven-workflow.md) | Drive Skill Loom from the CLI and companion skills | Accepted | 2026-11-10 |
 | [ADR-0028](0028-single-purpose-chain-editor.md) | Limit the web UI to a visual chain editor | Accepted | 2026-11-10 |
-| [ADR-0029](0029-catalog-resolved-global-skill-reuse.md) | Reuse catalog-resolved host-global skill packages in portable runs | Accepted | 2026-11-11 |
-| [ADR-0030](0030-capability-index-and-model-reranking.md) | Locate chain-authoring skills through a derived capability index | Accepted | 2026-11-11 |
-| [ADR-0031](0031-reviewed-skill-installation.md) | Install one reviewed catalog skill through the CLI | Accepted | 2026-11-11 |
+| [ADR-0029](0029-catalog-resolved-global-skill-reuse.md) | Reuse catalog-resolved host-global skill packages in portable runs | Superseded for the default workflow by [ADR-0032](0032-host-global-skills-and-current-session-chains.md) | 2026-11-11 |
+| [ADR-0030](0030-capability-index-and-model-reranking.md) | Locate chain-authoring skills through a derived capability index | Superseded for source scope and review by [ADR-0032](0032-host-global-skills-and-current-session-chains.md) | 2026-11-11 |
+| [ADR-0031](0031-reviewed-skill-installation.md) | Install one reviewed catalog skill through the CLI | Superseded for chain apply by [ADR-0032](0032-host-global-skills-and-current-session-chains.md) | 2026-11-11 |
+| [ADR-0032](0032-host-global-skills-and-current-session-chains.md) | Use host-global skills and shared chains in the current session | Accepted | 2026-11-12 |
 
 ## Rules
 

@@ -29,6 +29,7 @@ function assertPackageContents(files) {
     'package/install/ensure-pty-helper.mjs',
     'package/dist/package.json',
     'package/dist/src/server/cli.js',
+    'package/dist/src/server/podman-cli.js',
     'package/dist/src/server/index.js',
     'package/dist/src/server/windows-control.ps1',
     'package/dist/src/server/chains/scenario-skills/THIRD_PARTY_NOTICES.md',
@@ -391,6 +392,17 @@ async function main() {
     );
     if (!version.stdout.includes(`Skill Loom ${packageVersion}`)) {
       throw new Error(`Unexpected --version output: ${version.stdout.trim()}`);
+    }
+    const podmanHelp = await execFileAsync(
+      npmCommand,
+      [...npmArguments, 'exec', '--yes', `--package=${tarball}`, '--', 'skill-loom-podman', '--help'],
+      {
+        cwd: repoRoot, maxBuffer: 20 * 1024 * 1024,
+        env: { ...process.env, CI: '1', npm_config_cache: join(temporaryRoot, 'npm-cache') },
+      },
+    );
+    if (!podmanHelp.stdout.includes('Usage: skill-loom-podman')) {
+      throw new Error(`Unexpected Podman CLI help output: ${podmanHelp.stdout.trim()}`);
     }
 
     const installedRoot = join(temporaryRoot, 'installed-package');

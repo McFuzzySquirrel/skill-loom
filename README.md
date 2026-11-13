@@ -6,14 +6,14 @@
 
 [![Node.js >=24](https://img.shields.io/badge/Node.js-%3E%3D24-339933?logo=nodedotjs&logoColor=white)](package.json)
 
-Skill Loom is a local workspace for discovering, designing, saving, and bundling reusable workflows built from agent skills and standalone instructions. It is driven by a CLI (`skill-loom`) and companion Agent Skills that install the CLI when it is missing. The only web screen is a visual chain editor, opened with `skill-loom edit`. Portable `.loom.json` bundles can be reviewed and moved into other repositories.
+Skill Loom is a single-user workspace for building shared chains from skills already installed in a host-global `.agents/skills` directory. Its CLI and companion Agent Skills find and save ordered workflows, copy selected packages into a project when needed, and run steps in the current agent session. The only web screen is a visual chain editor, opened with `skill-loom edit`. Podman is available for private, persistent hosting; exported bundles remain a compatibility feature.
 
 Skill Loom does not author skills and does not execute a skill as a callable command. Each chain step is sent to a local harness as a prompt; skills are **model-invoked** context. The chain order is prompt order, **not a guarantee** that a harness loads or fires a named skill. A harness may decline to load a skill even when preflight resolved it.
 
 
 See the [visual tour](docs/visual-tour.md) for the chain editor.
 
-New users: follow the [quick start](docs/quick-start.md) to build, review, import, and run a workflow. For the full workflow and sharing details, see the [user guide](docs/user-guide.md); for installation and operations, see the [administrator guide](docs/admin-guide.md). To run chains with only the companion Agent Skills and no Skill Loom server, see the [standalone skill guide](docs/standalone-skill-guide.md).
+New users: follow the [quick start](docs/quick-start.md) to find global skills, create or select a shared chain, apply it to a project, and run it in the current session. For the full workflow, see the [user guide](docs/user-guide.md); for installation and operations, see the [administrator guide](docs/admin-guide.md). The [standalone skill guide](docs/standalone-skill-guide.md) documents the legacy bundle-only path.
 
 ## Table of Contents
 
@@ -43,39 +43,40 @@ New users: follow the [quick start](docs/quick-start.md) to build, review, impor
 
 ## About
 
-Agent CLIs such as OpenCode and GitHub Copilot can load installed skills, but turning a set of skills into a repeatable, ordered workflow is manual and easy to get wrong. Skill Loom is driven by its CLI and companion skills (which install the CLI when missing); its only web screen is a visual chain editor, opened with `skill-loom edit`, for changing step order, instructions, and inputs. It provides a local workspace to inspect available skills, assemble and save chains as drafts or project chains, and export reviewed bundles for use in other repositories. Register a project when you want its skill catalog for authoring or optional local tests.
+Agent CLIs such as OpenCode and GitHub Copilot can load installed skills, but turning them into a repeatable, ordered workflow is manual and easy to get wrong. Skill Loom indexes the host-global `~/.agents/skills/` catalog (or `LOOM_SKILLS_DIR`), saves chains in a shared Loom library, and applies the selected packages to a registered project. The `loom-chain-workflow` companion skill then carries out the saved order in the active conversation. Register a project as the target for skill copies and for the visual chain editor.
 
 The product promise is deliberately narrow:
 
-- **Portable workflow design.** Skill Loom organizes steps and named inputs into reusable chains, saved as drafts or project chains and shared as reviewable bundles.
-- **Deterministic prompt order.** When a chain is run, Skill Loom builds the prompt for each step and sends steps in the saved order.
+- **Shared workflow design.** Skill Loom organizes steps and named inputs into a shared chain library, then copies the chain's required skills into a project.
+- **Current-session execution.** The companion workflow carries out ordered steps in the agent session already in use; it does not start a child harness.
+- **One host catalog.** Skills are indexed from `~/.agents/skills` (or `LOOM_SKILLS_DIR`) and provisioned by the user's existing installation method.
+- **Deterministic prompt order.** The active agent follows the saved step order, but the host decides whether to load a named skill.
 - **Model-invoked skills.** The harness decides whether to load a named skill. Skill Loom reports skill observation only when the harness exposes evidence, and never blocks a step on it.
-- **Local by construction.** The server binds to loopback, owns all filesystem and process access, and has no telemetry or hosted backend.
-- **Optional local testing.** A run freezes the chain definition, resolved inputs, harness, mode, and session plan at creation. Editing the saved chain later does not change an existing run.
+- **Private single-user deployment.** The server remains loopback-bound. Podman can host persistent Loom state behind a local loopback port or a private authenticated platform/VPN ingress; anonymous public access is unsupported.
 
 ## Features
 
 | Capability | What it does |
 |---|---|
-| Companion skills | `scenario-discovery`, `loom-chain-workflow`, `loom-run-bundle`, and `loom-skill-catalog` discover skills, coordinate testing and import, install a reviewed skill into a project, and run a bundle in the current agent session. The first two and `loom-skill-catalog` offer to install the CLI when `skill-loom` is missing. |
+| Companion workflow | `loom-chain-workflow` selects a shared chain, applies its global skills to a project, and carries out its ordered steps in the current agent session. |
 | Visual chain editor | `skill-loom edit` opens a local editor to drag steps into a new order, edit instructions, manage `{{inputs}}`, and save back to the draft or project chain. It is the only web screen. |
-| Chain drafts and project chains | Create, validate, update, and remove project-independent drafts and project chains with `skill-loom chain`. |
-| Portable chain bundles | Export a chain with complete referenced skill packages as `.loom.json` (version 2 also preserves one native agent); inspect, review, and import it into another project, or run it in the current host session with optional reuse of a reviewed host-global package. |
-| Skill catalog and remote repositories | Search local and pinned remote skill catalogs, review a candidate's complete file inventory, and install it into the project's shared `.agents/skills/` directory with a reviewed digest. Register HTTPS/SSH Git repositories that are refreshed only on explicit request and never executed. |
-| Discovery handoff | Prepare a reviewed, project-independent handoff from pinned snapshots for an agent session. |
-| Optional local testing | Test a chain in a managed disposable workspace (`skill-loom workspace`); it is separate from the source project, not an OS sandbox. |
-| Managed runs | Preflight, review, start, attach to, and recover supervised or automatic runs with `skill-loom run`. CLI starts are limited to reviewed instruction-only chains. |
+| Shared chain library | Create, validate, update, and remove chains in one Loom library, visible from every registered project context. Legacy project chain files are copied on first access and retained. |
+| Global skill catalog | Search only the configured host-global `.agents/skills` tree. Existing external tools own package installation and updates. |
+| Apply chain to project | `skill-loom chain project apply` copies only the chain's referenced global packages into `<project>/.agents/skills/`; it never overwrites an existing package. |
+| Podman deployment | `npm run podman:up`, `podman:down`, and `podman:plan` support local and private single-user deployment with a persistent config volume, global skills, and project mounts. |
+| Podman CLI bridge | `skill-loom-podman` forwards CLI commands and stdin into the running app container so the current-session workflow can use its shared catalog and chain library. |
 | Scenario examples | Illustrative starter chains for business, student, app developer, and game developer workflows. See the [scenario chain guide](docs/scenario-chains.md). |
-| Local service | `skill-loom service start`, `status`, and `stop` manage the shared owner, which owns the profile and active runs over a private socket (Unix) or mutually authenticated loopback TLS (Windows). |
+| Compatibility surfaces | Bundle, remote-source, and managed-run commands remain during the pivot but are not part of the default chain workflow. |
 
 Typical commands (run `skill-loom --help` for the full surface; structured input is JSON on stdin and every command prints a JSON envelope):
 
 ```sh
 skill-loom service start                      # shared owner; no browser
 skill-loom edit --draft <draft-id>            # visual chain editor
-skill-loom bundle inspect --bundle /absolute/path/chain.loom.json
-skill-loom catalog --help                     # list/refresh Git sources, search snapshots
-skill-loom run preflight                      # no model call
+skill-loom chain project list                 # JSON on stdin; shared library
+skill-loom chain project apply                # JSON on stdin; copy referenced skills
+npm run podman:plan                           # inspect the Podman deployment plan
+skill-loom-podman service status              # use the CLI bridge for a Podman deployment
 ```
 
 Unix uses a private socket; Windows uses mutually authenticated loopback TLS and requires a protected private profile on local NTFS/ReFS storage (PowerShell 7, or Windows PowerShell 5.1 with .NET 4.7.2+). Unsafe existing Windows profiles are rejected, not reconfigured; see the [administrator guide](docs/admin-guide.md#cli-flags). Remaining blocked and unverified capabilities are listed in [known gaps](docs/current-gaps.md).
@@ -134,7 +135,7 @@ Key boundaries and the decisions behind them:
 - Copilot trust is read-only and broad permissions need an opt-in — [ADR-0009](docs/adr/0009-read-only-copilot-trust-and-explicit-permissions.md).
 - The product is CLI- and skill-driven with one chain editor screen — [ADR-0027](docs/adr/0027-cli-and-skill-driven-workflow.md) and [ADR-0028](docs/adr/0028-single-purpose-chain-editor.md).
 - Processes are spawned without a shell and PTYs are server-owned — [ADR-0011](docs/adr/0011-shell-free-process-and-pty-transport.md).
-- New project skill copies share `.agents/skills/`, with legacy OpenCode discovery preserved — [ADR-0012](docs/adr/0012-shared-project-skill-installation-root.md).
+- New project skill copies share `.agents/skills/`; the active catalog comes from the configured host-global skills directory — [ADR-0032](docs/adr/0032-host-global-skills-and-current-session-chains.md).
 - Bundle export prefers one project-local package and rejects remaining ambiguity — [ADR-0013](docs/adr/0013-deterministic-chain-bundle-skill-resolution.md).
 - Portable runs reuse a host-global package only when the host catalog resolves it and review binds its path and fingerprint; otherwise the package is installed into the project — [ADR-0029](docs/adr/0029-catalog-resolved-global-skill-reuse.md).
 - Chain authoring locates skills through a derived capability index and lets the harness model expand and rerank; the index never replaces package review or exact remote binding — [ADR-0030](docs/adr/0030-capability-index-and-model-reranking.md).
@@ -153,10 +154,10 @@ The full decision directory is in [docs/adr/README.md](docs/adr/README.md).
 - `docs/` — User, administrator, and operations guides, ADRs, release notes, support ownership, and live evidence.
 - `.github/skills/` — Canonical companion and harness skill packages and their references.
 - `skill/scenario-discovery/` — Mirrored standalone project-independent discovery skill and helpers.
-- `skill/loom-chain-workflow/` — Mirrored CLI workflow skill that coordinates discovery, optional workspace testing, reviewed import, and current-session execution using the companion skills.
+- `skill/loom-chain-workflow/` — Mirrored current-session workflow for shared chains and host-global skills.
 - `skill/loom-skill-catalog/` — Mirrored skill for searching registered sources and installing one reviewed package into a project.
 - `.opencode/agents/` and `.opencode/skills/` — OpenCode agent definitions and byte-identical mirrors of the `.github/skills/` packages.
-- `.agents/skills/` — Shared project skill root. This repository tracks `create-project-documentation` here; new bundle imports also install packages here, and OpenCode discovers it.
+- `.agents/skills/` — This repository tracks `create-project-documentation` here; the host-global catalog is external and project copies are made only when applying a chain.
 - `dist/` — Build output for the server and chain editor; generated, not source.
 
 ## Getting Started
@@ -310,10 +311,10 @@ Pull requests run `npm run check`, `npm run typecheck`, `npm test`, and `npm run
 ## First run
 
 1. Install and start: `npm run build`, then `skill-loom service start` (or let a companion skill install the CLI and start it).
-2. Ask an agent to use `scenario-discovery` to propose a workflow, or create a draft yourself with `skill-loom chain draft create` (JSON on stdin) and check it with `chain draft validate`.
-3. Open `skill-loom edit --draft <draft-id>` to reorder steps, edit instructions, and manage inputs; **Save chain** writes the changes back.
-4. Share it with `skill-loom bundle create`, review a received bundle with `bundle inspect` and `bundle review`, and install it with `bundle import` (exact review digest plus confirmation).
-5. Run it in your current agent session with the `loom-run-bundle` skill, or under a managed harness with `skill-loom run preflight`, `run review-start`, `run start`, and `run attach`. Preflight never makes a model call. A run never advances because of terminal output or a timer.
+2. Ensure the skills you intend to use are installed in `~/.agents/skills/` or the directory configured by `LOOM_SKILLS_DIR`.
+3. Use `loom-chain-workflow` to find skills, create or select a shared chain, apply its packages to a registered project, and perform the ordered steps in the active session.
+4. Open `skill-loom edit --project <project-id> --chain <chain-id>` to reorder steps, edit instructions, and manage inputs; **Save chain** writes the changes back.
+5. Use `skill-loom bundle ...` only when working with legacy exported bundles.
 
 The full workflow, run controls, statuses, recovery, accessibility, and privacy behavior are in the [user guide](docs/user-guide.md).
 
@@ -321,18 +322,21 @@ The full workflow, run controls, statuses, recovery, accessibility, and privacy 
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `LOOM_CONFIG_DIR` | `~/.config/loom` | Global config, recent projects, active-run pointer, drafts, and catalog snapshots. |
+| `LOOM_CONFIG_DIR` | `~/.config/loom` | Global config, shared chains, recent projects, and compatibility data. |
+| `LOOM_SKILLS_DIR` | `~/.agents/skills` | Host-global skill catalog used to find and apply skills. Provision it with existing host tools. |
+| `LOOM_PODMAN_PORT` | `4317` | Local host port for the Podman deployment; it binds to `127.0.0.1`. |
+| `LOOM_PODMAN_PLATFORM` | host default | Optional Podman image target: `linux/amd64` or `linux/arm64`. |
 | `LOOM_HOST` | `127.0.0.1` | Loopback bind host. Any non-loopback value aborts startup. |
 | `LOOM_PORT` | `7373` | TCP port from 1 to 65535. |
 | `LOOM_WEB_ROOT` | discovered `dist/web` | Optional built-editor directory override for controlled deployments and tests. |
 
-The versioned config document contains `version`, `harnessCommands`, `extraSkillDirectories`, `recentProjects`, and `uiPreferences`. `harnessCommands` may override the executable name or absolute path for `opencode` or `copilot`; a missing entry resolves from `PATH`. The schema is strict: credential-like fields such as `apiKey`, `token`, or `secret` are invalid and are never stored. Configuration writes use an atomic temporary-file replacement; a corrupt or unsupported-version config is reported rather than silently rewritten.
+The versioned config document contains `version`, harness overrides, recent projects, and UI preferences. `extraSkillDirectories` remains for compatibility but is not part of the default authoring catalog. `LOOM_SKILLS_DIR` selects the host-global catalog root. The schema is strict: credential-like fields such as `apiKey`, `token`, or `secret` are invalid and are never stored. Configuration writes use an atomic temporary-file replacement; a corrupt or unsupported-version config is reported rather than silently rewritten.
 
 The CLI flags `--port` and `--config-dir` set `LOOM_PORT` and `LOOM_CONFIG_DIR`. See the [administrator guide](docs/admin-guide.md#configuration) for the full configuration and backup contract.
 
 ## Security and privacy
 
-Skill Loom is **loopback-only**. The server binds to `127.0.0.1` by default, refuses any non-loopback `LOOM_HOST`, and has **no authentication** because there is no remote access. Never expose the port through a reverse proxy, tunnel, container port publish, or remote host.
+Skill Loom is a **single-user** tool with no application authentication. The app binds to loopback and refuses non-loopback `LOOM_HOST`. Podman publishes to localhost by default; private hosting is supported only behind a private authenticated platform/VPN ingress. Anonymous public access is unsupported.
 
 The server owns all filesystem traversal, persistence, process spawning, and PTY handling. The browser performs no shell execution and receives only typed JSON API data. Skill Loom sends no telemetry, crash reports, or remote logs. Git network access occurs only when a user explicitly refreshes a registered repository; user-invoked harness CLIs and package installation may also use the network. Harness credentials are not persisted or logged. Local control uses a separate, temporary bearer capability in a private profile file; Windows also stores temporary client TLS credentials there. See the [administrator guide](docs/admin-guide.md#identity-secrets-and-tls).
 
@@ -368,7 +372,7 @@ Skill Loom is licensed under the [MIT License](LICENSE). The npm package remains
 
 ## Third-party skills and licenses
 
-Skill Loom's own code is MIT-licensed. Skills are independent third-party packages: Skill Loom does not author, audit, or guarantee skills you install yourself, or skills a harness discovers in project or global skill directories. Review their source, license, scripts, and prerequisites before use.
+Skill Loom's own code is MIT-licensed. Skills are independent third-party prompt packages: Skill Loom does not author or guarantee skills installed in the host-global catalog. Packages are model-invoked context, not Loom-executed commands; users remain responsible for their sources, permissions, and licensing.
 
 For the scenario skills bundled as pinned snapshots, provenance and license evidence are tracked:
 

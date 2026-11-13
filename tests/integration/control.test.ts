@@ -19,6 +19,7 @@ import { acquireProfileOwner } from '../../src/server/profile-owner.js';
 import type { PreflightReport } from '../../src/server/preflight/engine.js';
 import type { RunOrchestrator } from '../../src/server/runs/orchestrator.js';
 import { CHAIN_VERSION, parseChain } from '../../src/server/chains/model.js';
+import { createChainService } from '../../src/server/chains/service.js';
 import { createRunRecord } from '../../src/server/runs/model.js';
 import { createRunOwner } from '../../src/server/runs/owner.js';
 import { createRunStore } from '../../src/server/runs/store.js';
@@ -26,6 +27,87 @@ import { createLoomServices } from '../../src/server/services.js';
 import { createTerminalManager, TerminalSubscriberConflictError } from '../../src/server/terminal/pty.js';
 
 describe.skipIf(process.platform === 'win32')('local control transport', () => {
+  it('applies a shared chain’s global skills to the registered project without overwriting', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'loom-chain-apply-'));
+    const project = join(root, 'project');
+    const globalSkills = join(root, 'host', '.agents', 'skills');
+    const configDirectory = join(root, 'config');
+    const skillDirectory = join(globalSkills, 'formatting');
+    await mkdir(project);
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      join(skillDirectory, 'SKILL.md'),
+      '---\nname: formatting\ndescription: Format project files.\n---\n\nFormat carefully.\n',
+    );
+    const config = createConfigStore({ env: { LOOM_CONFIG_DIR: configDirectory } });
+    await config.update({});
+    const services = createLoomServices({
+      configStore: config,
+      preflightEnv: { LOOM_SKILLS_DIR: globalSkills },
+    });
+    const registration = await services.projectRegistry.openProject(project);
+    const legacyChain = await createChainService().create(registration.canonicalPath, {
+      name: 'Formatting chain',
+      harness: 'opencode',
+      sessionMode: 'shared',
+      steps: [{ id: 'step-one', skillName: 'formatting', instruction: 'Format the changed files.' }],
+      inputs: [],
+    });
+    const server = await startControlServer(config, { services });
+    try {
+      const opened = await callControl(configDirectory, 'project.open', { path: project });
+      if (!opened.ok) throw new Error('Project registration failed.');
+      const projectId = (opened.result as { project: { id: string } }).project.id;
+      const request = { projectId, chainId: legacyChain.id };
+      let output = '';
+      let error = '';
+      const exitCode = await runCli(['chain', 'project', 'apply', '--config-dir', configDirectory], {
+        env: {},
+        stdin: Readable.from([JSON.stringify(request)]),
+        stdout: { write: (chunk) => { output += String(chunk); return true; }, isTTY: false },
+        stderr: { write: (chunk) => { error += String(chunk); return true; } },
+      });
+      expect(exitCode, error).toBe(0);
+      expect(error).toBe('');
+      expect(JSON.parse(output)).toMatchObject({
+        ok: true,
+        result: {
+          projectId,
+          installed: [{
+            name: 'formatting',
+            destinationPath: join(project, '.agents', 'skills', 'formatting'),
+            fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+          }],
+        },
+      });
+      const installedPath = join(project, '.agents', 'skills', 'formatting', 'SKILL.md');
+      expect(await readFile(installedPath, 'utf8')).toContain('Format carefully.');
+      await expect(access(join(project, '.loom', 'chains', `${legacyChain.id}.json`))).resolves.toBeUndefined();
+      await expect(access(join(configDirectory, 'chains', `${legacyChain.id}.json`))).resolves.toBeUndefined();
+
+      const conflict = await callControl(configDirectory, 'chain.project.apply', request);
+      expect(conflict).toMatchObject({ ok: false });
+      expect(await readFile(installedPath, 'utf8')).toContain('Format carefully.');
+
+      const missingChain = await services.chainService.create(registration.canonicalPath, {
+        name: 'Missing skill chain',
+        harness: 'opencode',
+        sessionMode: 'shared',
+        steps: [{ id: 'step-one', skillName: 'not-installed-globally', instruction: 'Continue.' }],
+        inputs: [],
+      });
+      expect(await callControl(configDirectory, 'chain.project.apply', {
+        projectId, chainId: missingChain.id,
+      })).toMatchObject({
+        ok: false,
+        error: { code: 'SKILL_INSTALL_CANDIDATE_NOT_FOUND' },
+      });
+    } finally {
+      await server.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('reviews project coordination through the CLI without modifying run records', async () => {
     const root = await mkdtemp(join(tmpdir(), 'loom-coordination-review-'));
     const project = join(root, 'project');
@@ -120,12 +202,13 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
     }
   });
 
-  it('serves ranked capability-index entries through the project catalog page', async () => {
+  it('serves ranked capability-index entries from the host-global catalog', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-capability-page-')));
     const project = join(root, 'project');
     const configDirectory = join(root, 'config');
     const home = join(root, 'home');
-    const skill = join(project, '.agents', 'skills', 'body-only-review');
+    const globalSkillsDirectory = join(home, '.agents', 'skills');
+    const skill = join(globalSkillsDirectory, 'body-only-review');
     await mkdir(skill, { recursive: true });
     await mkdir(home, { recursive: true });
     await writeFile(join(skill, 'SKILL.md'), [
@@ -145,9 +228,10 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
     ].join('\n'));
     const config = createConfigStore({ env: { LOOM_CONFIG_DIR: configDirectory } });
     await config.update({});
+    await mkdir(project, { recursive: true });
     const services = createLoomServices({
       configStore: config,
-      preflightEnv: { LOOM_CAPABILITY_INDEX: '1' },
+      preflightEnv: { LOOM_CAPABILITY_INDEX: '1', LOOM_SKILLS_DIR: globalSkillsDirectory },
       preflightHomeDirectory: home,
     });
     const server = await startControlServer(config, { services });
@@ -162,7 +246,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       const projectId = (opened.result as { project: { id: string } }).project.id;
       const response = await callControl(configDirectory, 'catalog.project.page', {
         projectId, harness: 'opencode', query: 'attestation bundle',
-        sources: ['project'], tags: ['release'], tools: ['grep'], inputs: ['release_manifest'],
+        sources: ['personal'], tags: ['release'], tools: ['grep'], inputs: ['release_manifest'],
         hasTools: true,
       });
       expect(response).toMatchObject({
@@ -180,7 +264,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
           },
           entries: [{
             name: 'body-only-review',
-            source: 'project',
+            source: 'personal',
             fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
             metadata: {
               tags: ['review', 'release'],
@@ -202,13 +286,13 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
     }
   });
 
-  it('reviews and installs a catalog skill into the shared project root', async () => {
+  it('reviews and installs a host-global catalog skill into the shared project root', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-skill-install-')));
     const project = join(root, 'project');
     const configDirectory = join(root, 'config');
     const home = join(root, 'home');
-    const extra = join(root, 'extra-skills');
-    const packagePath = join(extra, 'note-writer');
+    const globalSkillsDirectory = join(root, 'global-skills');
+    const packagePath = join(globalSkillsDirectory, 'note-writer');
     await mkdir(project, { recursive: true });
     await mkdir(home, { recursive: true });
     await mkdir(packagePath, { recursive: true });
@@ -217,10 +301,13 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       '---\nname: note-writer\ndescription: Writes review notes.\n---\n\nWrite review notes.\n',
     );
     const config = createConfigStore({ env: { LOOM_CONFIG_DIR: configDirectory } });
-    await config.update({ extraSkillDirectories: [extra] });
+    await config.update({});
     const services = createLoomServices({
       configStore: config,
-      preflightEnv: { LOOM_CAPABILITY_INDEX: '1' },
+      preflightEnv: {
+        LOOM_CAPABILITY_INDEX: '1',
+        LOOM_SKILLS_DIR: globalSkillsDirectory,
+      },
       preflightHomeDirectory: home,
     });
     const server = await startControlServer(config, { services });
@@ -229,7 +316,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       if (!opened.ok) throw new Error('Project registration failed.');
       const projectId = (opened.result as { project: { id: string } }).project.id;
       const page = await callControl(configDirectory, 'catalog.project.page', {
-        projectId, harness: 'opencode', query: 'note-writer', sources: ['loom-extra'], limit: 10,
+        projectId, harness: 'opencode', query: 'note-writer', sources: ['personal'], limit: 10,
       });
       if (!page.ok) throw new Error('Catalog page failed.');
       const entries = (page.result as {
@@ -251,7 +338,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
             path: join(project, '.agents', 'skills', 'note-writer'),
             conflict: null,
           },
-          candidate: { name: 'note-writer', source: 'loom-extra' },
+          candidate: { name: 'note-writer', source: 'personal' },
           totalFiles: 1,
           reviewDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
         },
@@ -272,7 +359,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
         ok: true,
         result: {
           name: 'note-writer',
-          source: 'loom-extra',
+          source: 'personal',
           destinationPath: join(project, '.agents', 'skills', 'note-writer'),
           totalFiles: 1,
           fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -716,6 +803,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
 
   it('shares profile updates between the CLI and the running UI owner', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-control-app-')));
+    const globalSkillsDirectory = join(root, 'global-skills');
     const configStore = createConfigStore({ env: { LOOM_CONFIG_DIR: root }, homeDirectory: () => join(root, 'home') });
     const copilotRunner = vi.fn(async ({ cwd }: { cwd: string }) => {
       const skillsRoot = join(cwd, '.agents', 'skills');
@@ -753,6 +841,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       configStore,
       catalogService: createCatalogService({
         configStore,
+        globalSkillsDirectory: () => globalSkillsDirectory,
         adapters: createDefaultCatalogAdapters({ homeDirectory: join(root, 'home'), copilotRunner }),
       }),
       runRecoverOnStartup: false,
@@ -805,10 +894,10 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       });
       if (!opened.ok) throw new Error('Project registration failed.');
       const projectId = (opened.result as { project: { id: string } }).project.id;
-      const localSkill = join(project, '.agents', 'skills', 'local-review');
+      const localSkill = join(globalSkillsDirectory, 'local-review');
       await mkdir(localSkill, { recursive: true });
       await writeFile(join(localSkill, 'SKILL.md'), '---\nname: local-review\ndescription: Local review\n---\nReview locally.\n');
-      const secondSkill = join(project, '.agents', 'skills', 'local-review-two');
+      const secondSkill = join(globalSkillsDirectory, 'local-review-two');
       await mkdir(secondSkill, { recursive: true });
       await writeFile(join(secondSkill, 'SKILL.md'), '---\nname: local-review-two\ndescription: Local review\n---\nReview locally.\n');
       let catalogOutput = '';
@@ -818,7 +907,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       })).toBe(0);
       expect(JSON.parse(catalogOutput)).toMatchObject({
         ok: true, result: {
-          total: 2, entries: [{ name: 'local-review', source: 'project' }],
+          total: 2, entries: [{ name: 'local-review', source: 'personal' }],
           nextOffset: 1, snapshotId: expect.any(String),
         },
       });
@@ -920,7 +1009,6 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       expect(JSON.parse(projectBundleOutput)).toMatchObject({ ok: true, result: { path: projectBundlePath } });
       const projectBundle = JSON.parse(await readFile(projectBundlePath, 'utf8'));
       expect(projectBundle).toMatchObject({ skills: [{ name: 'local-review' }] });
-      expect(copilotRunner).toHaveBeenCalled();
       const portableProject = join(root, 'portable-project');
       await mkdir(portableProject);
       const portableReview = await executePortableRequest({

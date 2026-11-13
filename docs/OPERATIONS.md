@@ -1,8 +1,8 @@
 # Skill Loom Operations Guide
 
-This guide is the operator contract for the local Skill Loom v1 application and its standalone skills. It covers configuration, on-disk data, harness prerequisites, Copilot trust and automatic permissions, the security model, backup and cleanup, known limitations, fork handoff behavior, and troubleshooting.
+This guide is the operator contract for Skill Loom's local and private single-user Podman deployments. It covers configuration, on-disk data, the global skill catalog, the security model, backup and cleanup, compatibility features, and troubleshooting.
 
-Read [README.md](../README.md) first for install, development, build, start, and test commands. For task-oriented guidance, see the [user guide](user-guide.md), the [standalone skill guide](standalone-skill-guide.md) for the skill-only path, and [administrator guide](admin-guide.md). The durable decisions behind this contract are in the [ADR index](adr/README.md), and release validation is in [the 0.1.0 release notes](releases/0.1.0.md).
+Read [README.md](../README.md) first for install, development, build, start, and test commands. For task-oriented guidance, see the [user guide](user-guide.md), [standalone skill guide](standalone-skill-guide.md) for legacy bundles, and [administrator guide](admin-guide.md). The durable decisions behind this contract are in the [ADR index](adr/README.md), and release validation is in [the 0.1.0 release notes](releases/0.1.0.md).
 
 ## Configuration
 
@@ -17,14 +17,15 @@ LOOM_CONFIG_DIR=/absolute/path/to/loom-profile npm start
 | Environment variable | Default | Behavior |
 |----------------------|---------|----------|
 | `LOOM_CONFIG_DIR` | `~/.config/loom` | Overrides the global config, recent-project, and active-run pointer location. |
+| `LOOM_SKILLS_DIR` | `~/.agents/skills` | The single host-global skill catalog. External installation tools own provisioning and updates. |
 | `LOOM_HOST` | `127.0.0.1` | Bind host. Only `127.0.0.0/8`, `::1`, and `localhost` (normalized to `127.0.0.1`) are accepted; any other value aborts startup. |
 | `LOOM_PORT` | `7373` | TCP port from 1 to 65535. |
 | `LOOM_WEB_ROOT` | discovered `dist/web` | Optional override for the built chain editor directory; intended for controlled deployments and tests. |
 | `LOOM_CAPABILITY_INDEX` | enabled | `catalog project page` uses the derived, disposable capability index by default. Set `LOOM_CAPABILITY_INDEX=0` to force the fresh catalog scan. When the index is missing, stale, corrupt, unsafe, unsupported, or oversized, retrieval uses the fresh scan. The indexed path keeps the existing paging and `snapshotId` contract and reports `retrieval.mode`, `retrieval.ranking`, and any fallback reason. |
 
-The versioned config document contains `version`, `harnessCommands`, `extraSkillDirectories`, `remoteSkillSources`, `recentProjects`, and `uiPreferences`. `remoteSkillSources` stores validated credential-free Git URLs and optional refs; pinned package snapshots are retained below `<LOOM_CONFIG_DIR>/catalog-sources/`. `harnessCommands` may override the executable name or absolute path for `opencode` or `copilot`; a missing entry resolves from `PATH`. The config schema is strict: credential-like fields such as `apiKey`, `token`, or `secret` are invalid and are never stored there. Configuration writes use an atomic temporary-file replacement. A corrupt or unsupported-version config is reported rather than silently rewritten.
+The versioned config document retains fields for compatibility. The active authoring catalog scans only `LOOM_SKILLS_DIR`; legacy extra directories and remote snapshot sources are not consulted by the default chain workflow. `harnessCommands` and other remaining settings are validated, and credential-like fields such as `apiKey`, `token`, or `secret` are invalid and never stored there. Configuration writes use an atomic temporary-file replacement. A corrupt or unsupported-version config is reported rather than silently rewritten.
 
-`extraSkillDirectories` is the global extra-skill search list stored in the config file; there is no editor for it, so change it in `config.json` while the service is stopped. Recent projects store the canonical path, display name, derived id, and last-opened time; removing a recent entry never removes project files.
+Recent projects store the canonical path, display name, derived id, and last-opened time; removing a recent entry never removes project files.
 
 ## Package and CLI
 
@@ -76,18 +77,21 @@ proof that a person reviewed the content.
 
 | Path | Contents | Notes |
 |------|----------|-------|
-| `~/.config/loom/config.json` | Global config, harness command overrides, extra skill directories, remote sources, recent projects, and UI preferences (unused by the chain editor). | Override the whole directory with `LOOM_CONFIG_DIR`. |
+| `~/.agents/skills/` | The single host-global skill catalog. | External tools provision and update packages. Override with `LOOM_SKILLS_DIR`. |
+| `~/.config/loom/config.json` | Global config, harness command overrides, recent projects, and UI preferences (unused by the chain editor). | Override the whole directory with `LOOM_CONFIG_DIR`. |
 | `~/.config/loom/drafts/*.json` | Project-independent chain drafts. | Independent of projects; back up with the config directory. |
 | `~/.config/loom/profile-owner.sqlite` | Profile ownership lock. | One owner per profile. Do not remove while the service is running; the OS releases the lock on exit. |
-| `~/.config/loom/capability-index.sqlite` | Derived capability index for chain authoring: bounded names, descriptions, frontmatter, headings, file paths, body excerpts, and declared structured metadata, with package fingerprints and remote binding identity. | Disposable and excluded from backups. Owner-only, capped at 64 MiB, and safe to delete at any time. Schema version 2 rebuilds older indexes. A missing, corrupt, unsafe, unsupported, or too-large index falls back to the fresh catalog scan. |
+| `~/.config/loom/capability-index.sqlite` | Derived index of the configured global skill catalog. | Disposable and excluded from backups. Owner-only, capped at 64 MiB, and safe to delete at any time. A missing, corrupt, unsafe, unsupported, or too-large index falls back to the fresh catalog scan. |
 | `~/.config/loom/control.json` | Temporary local control endpoint and bearer capability; Windows also holds client TLS credentials. | Private to the owning process. Do not commit, back up, or remove while the service is running. |
 | `~/.config/loom/test-workspaces/<uuid>/` | Retained managed test project, including its `.loom/chains/` and `.loom/runs/` data. | Hidden from the ordinary recent-project list. Remove with `skill-loom workspace remove` after inspecting results; active-run ownership blocks cleanup. |
 | `~/.config/loom/discovery-workspaces/<uuid>/` | Reviewed discovery handoff, bundled `scenario-discovery` package, managed project, result file, and run state. | Retained until explicit CLI cleanup; cleanup refuses the workspace that owns the active run. |
-| `~/.config/loom/catalog-sources/<source-id>/<commit>/` | Immutable snapshots of validated remote skill packages and their manifest. | Created only by explicit refresh; unregistering a source retains snapshots. Refresh uses bounded staging and package limits. |
+| `~/.config/loom/catalog-sources/<source-id>/<commit>/` | Compatibility snapshots of validated remote skill packages. | Not used by the default global catalog or current-session chain workflow. |
 | User-selected download location (`*.loom-discovery.json`) | A self-contained discovery handoff with goal, harness, exact pinned candidate identities, and selected package files. | Returned on stdout by `skill-loom discovery handoff`; not persisted by the server. Treat it as potentially private and redistribution-restricted. Maximum 100 packages, 2,000 files, 20 MiB decoded content, and 30 MiB JSON. |
 | `~/.config/loom/active-run.json` | Single global active-run pointer used for health reporting and startup recovery. | Holds only the active run's project path, run id, and status. |
-| `~/.config/loom/chains/*.json` (legacy) | Chains written by the removed global-template library. | No current command reads or writes this directory. Keep it only if you are preserving an old installation's data. |
-| `<project>/.loom/chains/*.json` | Saved chain definitions, including steps, inputs, harness, session mode, and the automatic-permission opt-in. | Versioned JSON written atomically. Chain files can be backed up or versioned if you want to keep recipes. |
+| `~/.config/loom/chains/*.json` | Shared chain library, visible from every registered project context. | Versioned JSON written atomically. Back up with the config directory. |
+| Podman volume `skill-loom-config` | Container deployment's config, shared chains, and derived index. | Persists across `podman:down`; inspect and back up with `podman volume export`. |
+| `<project>/.loom/chains/*.json` | Legacy project-local chain definitions. | Copied into the shared library on first access; original files remain. Corrupt files and id collisions are reported. |
+| `<project>/.agents/skills/` | Project-local copies installed by applying a shared chain. | Global source updates do not rewrite these copies; existing packages are never overwritten. |
 | `<project>/.loom/runs/*.json` | Run snapshots, statuses, actions, and a bounded terminal tail per step. | At most a **200-line or 32 KiB** tail per step; never a full transcript. `.loom/runs/` is **git-ignored** by this repository's `.gitignore`. |
 | `<project>/.loom/portable-runs/*.json` | Separate standalone-skill run snapshots, resolved input values, package fingerprints, attempts, and bounded summaries. A reused host-global package is recorded with `source: "global"` and its reviewed absolute path instead of a project copy. | Contains local input values and machine-local package paths; created and Git-ignored by the portable helper. Writes use same-directory temporary files and atomic replacement; directory fsync is attempted where supported and may be skipped on platforms that reject it. It does not use native run records or the global active-run pointer. |
 | `~/.copilot/config.json` | Copilot's own persistent folder-trust configuration. | Skill Loom only reads `trustedFolders`; it never writes this file. |
@@ -142,13 +146,13 @@ Authentication is evidence-based: preflight may inspect command output, credenti
 - OpenCode: `opencode auth login`
 - Copilot: `copilot login`, or set `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`
 
-Skills are installed into a project only by reviewed bundle import (`skill-loom bundle import`), which copies whole packages into `<project>/.agents/skills/` for either harness. The copy is bounded, refuses symlinks, and never overwrites an existing package. Originals are left untouched.
+The host-global `LOOM_SKILLS_DIR` is the only authoring catalog. Applying a shared chain copies only its referenced packages into the project's `.agents/skills/` root. Copies are bounded, symlinks are refused, existing packages are never overwritten, and project copies do not track later global updates. Bundle import remains a compatibility path.
 
 The chain editor's **Add instruction** adds an ordered standalone prompt without a catalog skill. It uses the same harness, inputs, session modes, and run controls as skill steps.
 
-For cross-installation sharing, save the chain and run `skill-loom bundle create`. Review the instructions and complete skill package contents with `bundle inspect` before sharing the `.loom.json` bundle. `bundle review` previews the file and installed-package inventories, requires trust confirmation and explicit reuse choices, and separately confirms differing installed contents. Inspect installed files directly before approving reuse. Review fingerprints are rechecked but do not lock external edits or prove human review. Import creates a fresh chain and installs new project-local packages without executing them. It never overwrites packages and resets automatic-permission consent. Input defaults, run history, and local catalog source paths are not exported; ordinary file contents are not secret-scanned. Limits are 100 packages, 2,000 files, 20 MiB decoded content, and 30 MiB JSON requests. See the [user guide](user-guide.md#share-a-chain-and-its-skills) for sharing restrictions and recipient prerequisites.
+For compatibility, cross-installation sharing remains available through `skill-loom bundle create`. Review instructions and package contents with `bundle inspect` before sharing; bundle import still applies its review and confirmation requirements. New workflows use the shared chain library and global skills catalog instead. See the [legacy bundle workflow](user-guide.md#legacy-share-a-chain-as-a-bundle).
 
-The reusable runner skill (`loom-run-bundle`) is a separate artifact and contains no chain-specific instructions or packages. Recipients install it in their project's `.agents/skills/`, refresh host discovery as needed, and pass the separately exported bundle to the skill. Package review/installation is separately confirmed before execution. When the current host catalog reports a global package for a bundled skill, the runner can reference that exact directory instead of copying the package into the project; reuse is explicit, the path and fingerprint are bound into the review digest, and each step re-fingerprints it. A changed global package blocks the run with `PACKAGE_CHANGED` and requires a fresh inspection and preparation. Portable records persist resolved inputs and machine-local reused package paths locally; do not use credentials as chain inputs. The host's own tools and trust prompts remain authoritative.
+The default `loom-chain-workflow` uses the shared library and current global catalog, then performs ordered steps in the already-active agent session. It does not create portable run records or launch a nested harness. The legacy `loom-run-bundle` package remains for existing `.loom.json` artifacts only.
 
 The discovery handoff is a different artifact from `skill-loom-chain` and is not accepted by chain import or execution APIs. `skill-loom discovery handoff` accepts only goal, harness, and immutable candidate identities; it resolves and verifies files from retained snapshots and rejects stale or unsafe packages. No artifact is retained server-side. The CLI helper treats the goal and package content as untrusted input, never executes package files, and writes the generated bundle exclusively. Native-agent selection is outside handoff v1; use the managed designer and run path for selected native agents.
 
@@ -177,7 +181,7 @@ Watch a run with `skill-loom run attach --run <id>` (Ctrl-] detaches), `run show
 
 ## Security model
 
-Skill Loom is a **loopback-only** single-user application. The server binds to `127.0.0.1`, rejects non-loopback hosts, and has **no authentication** because it is not designed for remote access. Never expose it through a reverse proxy, tunnel, published container port, or remote host. The loopback HTTP and control surfaces are an accepted single-user risk.
+Skill Loom is a **loopback-only** single-user application. The server binds to `127.0.0.1` and rejects non-loopback hosts. The app has **no authentication** and must not be exposed directly to a public or untrusted network. In the Podman deployment, the Caddy proxy shares the pod's network namespace and forwards to the loopback-bound app; the default host publish binds only to `127.0.0.1`. A private deployment may use a private authenticated platform/VPN ingress as its access boundary. Do not configure anonymous ingress, a public port, or multi-user access.
 
 The server owns all filesystem traversal, path canonicalization, persistence, CLI process spawning, and PTY handling. Harness processes are spawned with an executable plus an argument array, never a shell command string; project paths are canonicalized and traversal outside the intended project data directory is rejected. The chain editor performs no shell execution and receives only typed API data.
 
@@ -191,13 +195,13 @@ Back up the global config if you want to preserve `harnessCommands`, extra skill
 cp ~/.config/loom/config.json ~/loom-config.backup.json
 ```
 
-Back up a project's recipes by copying `<project>/.loom/chains/`. Run records under `<project>/.loom/runs/` are optional history; because they can contain terminal output, treat them as sensitive local data and keep them out of version control. This repository already ignores `.loom/runs/`. A legacy `~/.config/loom/chains/` directory from the removed template library has no current interface; back it up only if you are preserving an old installation.
+Back up the shared recipes by copying `~/.config/loom/chains/` with the config directory. Legacy project chain files remain after migration. Run records under `<project>/.loom/runs/` are optional compatibility history; because they can contain terminal output, treat them as sensitive local data and keep them out of version control.
 
 Cleanup behavior:
 
 - **Remove a recent project:** removes only the recent-entry record. The project directory and its files are untouched.
 - **Delete a chain:** removes only that chain's file under `<project>/.loom/chains/`. `skill-loom chain project remove` requires `expectedRevision` and `"confirmed":true`; it cannot be undone.
-- **Remove a legacy template file:** the removed template library wrote files under `~/.config/loom/chains/`. No current command reads or deletes them; remove individual files only if you are intentionally discarding that historical data.
+- **Remove a chain:** removes only that chain's file under the shared library; legacy source copies remain available under the project's `.loom/chains/`.
 - **Delete run history:** with no active run, remove individual files under `<project>/.loom/runs/`, or the directory. Do not delete `active-run.json` while a run is live; let Skill Loom release it, or restart the server so startup recovery marks the stale run interrupted.
 - **Stop the server:** run `skill-loom service stop` (refused while a run is active) or let `SIGINT`/`SIGTERM` shut down PTYs, control-channel clients, and child processes. Do not kill harness children manually and then resume the run.
 - **Reset all Skill Loom state for a test profile:** use a temporary `LOOM_CONFIG_DIR` and project directory; never point test tooling at your real `~/.config/loom`.

@@ -90,6 +90,22 @@ export async function scanOpenCodeSkills(
   return { entries, warnings };
 }
 
+export async function scanGlobalSkillDirectory(
+  directory: string,
+  maxDepth = DEFAULT_MAX_SKILL_DEPTH,
+): Promise<SkillDiscoveryResult> {
+  const entries: SkillEntry[] = [];
+  const warnings: CatalogWarning[] = [];
+  await scanRoot(
+    { source: 'personal', path: directory, optional: true },
+    normalizeMaxDepth(maxDepth),
+    entries,
+    warnings,
+  );
+  entries.sort(compareSkillEntries);
+  return { entries, warnings };
+}
+
 function validateProjectPath(value: unknown): string {
   if (
     typeof value !== 'string' ||

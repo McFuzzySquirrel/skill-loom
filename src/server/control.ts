@@ -23,6 +23,7 @@ import { CatalogError, SKILL_SOURCES } from './catalog/types.js';
 import { CatalogCopyError } from './catalog/copy.js';
 import {
   CatalogInstallError,
+  applyChainSkillsToProject,
   installSkillIntoProject,
   reviewSkillInstall,
 } from './catalog/install.js';
@@ -479,6 +480,15 @@ async function dispatch(
         return withRevision(await services.chainService.get(path, request.chainId));
       }
       return listWithRevisions(await services.chainService.list(path));
+    }
+    case 'chain.project.apply': {
+      const request = parse(z.strictObject({ projectId: z.string().max(255), chainId: sourceId }));
+      const path = await projectPath(request.projectId);
+      const chain = await services.chainService.get(path, request.chainId);
+      return applyChainSkillsToProject(
+        { catalogService: services.catalogService },
+        { projectId: request.projectId, projectPath: path, chain },
+      );
     }
     case 'chain.project.create': {
       const request = parse(z.strictObject({ projectId: z.string().max(255), draft: DraftPayloadSchema }));

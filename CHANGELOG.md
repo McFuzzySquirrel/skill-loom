@@ -8,6 +8,11 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Added
 
+- A Podman deployment for Linux, macOS, and Windows hosts, with persistent config, global-skill, and project mounts, localhost-only default publishing, private-network mode, and a cross-platform plan command.
+- A `skill-loom-podman` CLI bridge that forwards command arguments and stdin to the running app container without using a shell, enabling host-side chain and apply operations against the shared service.
+- A `chain project apply` command that copies only a selected shared chain's current global skills into the target project's `.agents/skills/` root, never overwrites existing packages, and reports missing, ambiguous, or partial-copy failures.
+- A non-destructive first-access migration that copies valid legacy project chains into the shared library and leaves original files in place.
+- The `loom-chain-workflow` current-session path for searching the host-global catalog, creating or selecting a shared chain, applying its skills, and carrying out ordered steps without launching a nested harness.
 - A derived, disposable SQLite capability index for chain authoring. It searches bounded names, descriptions, frontmatter, headings, file paths, and body excerpts with FTS5 ranking (or a deterministic token table), fingerprints packages for invalidation, preserves remote binding identity, and falls back to the fresh catalog scan when the index is disabled, missing, corrupt, unsafe, unsupported, or too large. It is enabled by default; set `LOOM_CAPABILITY_INDEX=0` to force the scan.
 - `catalog project page` now uses the capability index when it is enabled. Entries carry bounded `match.snippet` and `match.score` values, indexed `fingerprint` provenance, and the exact remote `sourceId`, `revision`, and `repositoryPath`. The response reports `retrieval.mode`, `retrieval.ranking`, and any fallback reason while keeping the existing paging, `snapshotId`, warning-cursor, and cache-limit contract. Large indexed result sets and any indexed failure use the fresh scan instead of truncating or hiding skills.
 - `scenario-discovery` and `loom-chain-workflow` now expand an outcome into bounded capability queries and rerank the shortlist with the harness model before reading complete packages. They treat snippets as ranking signals, surface scan fallback, and keep the exact remote binding identity.
@@ -37,7 +42,10 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Changed
 
-- Indexed retrieval is the default for `catalog project page`. `LOOM_CAPABILITY_INDEX=0` forces the fresh scan. The index includes project, personal, extra-directory, bundled, and pinned remote sources.
+- The host-global `~/.agents/skills/` directory, configurable with `LOOM_SKILLS_DIR`, is now the sole source for the default authoring catalog. External installation tools own provisioning and updates; remote snapshots and bundles remain compatibility surfaces rather than the default workflow.
+- New chains are stored in the shared Loom library and are visible from each registered project context. Applying a chain creates independent project-local skill copies; later global changes do not rewrite them.
+- Shared chain execution now uses the already-active agent session. The container path keeps the application loopback-bound and requires private authenticated ingress for non-local access.
+- Indexed retrieval is the default for `catalog project page`. `LOOM_CAPABILITY_INDEX=0` forces the fresh scan. The default index now contains the configured host-global skills root only.
 - The web application is reduced to the chain editor. Projects, catalogs, discovery, libraries, test workspaces, runs, themes, and the terminal are CLI-, skill-, or harness-driven.
 - Chain documents use version 3 for exact remote skill bindings and optional native-agent identity. Valid version 1 and 2 records migrate on read.
 - Portable bundle export uses version 2 for chains with a selected native agent and version 1 for agent-free chains.

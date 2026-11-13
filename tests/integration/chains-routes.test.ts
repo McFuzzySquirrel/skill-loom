@@ -6,7 +6,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import { CHAIN_VERSION, type Chain } from '../../src/server/chains/model.js';
 import { createChainService, type ChainService } from '../../src/server/chains/service.js';
-import { CHAIN_ID_PATTERN, chainsDirectoryFor } from '../../src/server/chains/store.js';
+import {
+  CHAIN_ID_PATTERN,
+  globalChainsDirectoryFor,
+} from '../../src/server/chains/store.js';
 import { createConfigStore } from '../../src/server/config/store.js';
 import {
   isApiErrorEnvelope,
@@ -126,37 +129,6 @@ async function updateChain(
     url: `${chainUrl(projectId, chainId)}${query}`,
     headers: { 'x-loom-chain-revision': revision },
     payload: payload as Record<string, unknown>,
-  });
-  return { statusCode: response.statusCode, body: response.json<unknown>() };
-}
-
-async function duplicateChain(
-  app: FastifyInstance,
-  projectId: string,
-  chainId: string,
-  payload?: unknown,
-  query = '',
-): Promise<{ statusCode: number; body: unknown }> {
-  const response = await app.inject({
-    method: 'POST',
-    url: `${chainUrl(projectId, chainId, '/duplicate')}${query}`,
-    ...(payload === undefined ? {} : { payload: payload as Record<string, unknown> }),
-  });
-  return { statusCode: response.statusCode, body: response.json<unknown>() };
-}
-
-async function deleteChain(
-  app: FastifyInstance,
-  projectId: string,
-  chainId: string,
-): Promise<{ statusCode: number; body: unknown }> {
-  const current = await app.inject({ method: 'GET', url: chainUrl(projectId, chainId) });
-  const revision = current.statusCode === 200
-    ? current.json<{ revision: string }>().revision : '0'.repeat(64);
-  const response = await app.inject({
-    method: 'DELETE',
-    url: chainUrl(projectId, chainId),
-    headers: { 'x-loom-chain-revision': revision },
   });
   return { statusCode: response.statusCode, body: response.json<unknown>() };
 }
@@ -285,7 +257,7 @@ describe('chain CRUD through src/server/app.ts', () => {
     expect(Number.isNaN(Date.parse(chain.createdAt))).toBe(false);
     expect(Number.isNaN(Date.parse(chain.updatedAt))).toBe(false);
 
-    const storedPath = join(chainsDirectoryFor(project), `${chain.id}.json`);
+    const storedPath = join(globalChainsDirectoryFor(configDirectory), `${chain.id}.json`);
     const stored = JSON.parse(await readFile(storedPath, 'utf8')) as Chain;
     expect(stored.id).toBe(chain.id);
     expect(stored.version).toBe(CHAIN_VERSION);
@@ -423,8 +395,8 @@ describe('chain CRUD through src/server/app.ts', () => {
   });
 });
 
-describe('chain project scoping', () => {
-  it('never exposes a chain through another project id', async () => {
+describe('shared chain library', () => {
+  it('exposes the same saved chain through every registered project context', async () => {
     const app = await buildTestApp();
     const projectA = join(root, 'project-a');
     const projectB = join(root, 'project-b');
@@ -433,11 +405,11 @@ describe('chain project scoping', () => {
 
     const chain = chainOf((await createChain(app, projectAId, baseDraft())).body);
 
-    expect(chainsOf((await listChains(app, projectBId)).body)).toEqual([]);
+    expect(chainsOf((await listChains(app, projectBId)).body)).toEqual([chain]);
 
     const crossRead = await getChain(app, projectBId, chain.id);
-    expect(crossRead.statusCode).toBe(404);
-    expect(envelope(crossRead.body).error.code).toBe('CHAIN_NOT_FOUND');
+    expect(crossRead.statusCode).toBe(200);
+    expect(chainOf(crossRead.body)).toEqual(chain);
 
     const crossUpdate = await updateChain(
       app,
@@ -445,20 +417,16 @@ describe('chain project scoping', () => {
       chain.id,
       baseDraft({ name: 'Stolen' }),
     );
-    expect(crossUpdate.statusCode).toBe(404);
-    expect(envelope(crossUpdate.body).error.code).toBe('CHAIN_NOT_FOUND');
+    expect(crossUpdate.statusCode).toBe(200);
+    expect(chainOf(crossUpdate.body).name).toBe('Stolen');
 
-    const crossDuplicate = await duplicateChain(app, projectBId, chain.id);
-    expect(crossDuplicate.statusCode).toBe(404);
-
-    const crossDelete = await deleteChain(app, projectBId, chain.id);
-    expect(crossDelete.statusCode).toBe(404);
-
-    expect(await exists(join(chainsDirectoryFor(projectA), `${chain.id}.json`))).toBe(true);
-    expect(await exists(chainsDirectoryFor(projectB))).toBe(false);
-    expect(chainOf((await getChain(app, projectAId, chain.id)).body).name).toBe(
-      'Release chain',
-    );
+    expect(await exists(join(globalChainsDirectoryFor(configDirectory), `${chain.id}.json`))).toBe(true);
+    expect(chainOf((await getChain(app, projectAId, chain.id)).body).name).toBe('Stolen');
+    expect(chainsOf((await listChains(app, projectBId)).body)).toEqual([
+      chainOf((await getChain(app, projectAId, chain.id)).body),
+    ]);
+    expect(await exists(join(projectA, '.loom', 'chains'))).toBe(false);
+    expect(await exists(join(projectB, '.loom', 'chains'))).toBe(false);
   });
 
   it('returns 404 for an unknown, malformed, or unregistered project id', async () => {
@@ -620,7 +588,7 @@ describe('chain request validation', () => {
     }
 
     expect(await exists(join(root, 'escape.json'))).toBe(false);
-    expect(await exists(chainsDirectoryFor(project))).toBe(false);
+    expect(await exists(globalChainsDirectoryFor(configDirectory))).toBe(false);
   });
 });
 
@@ -631,7 +599,7 @@ describe('chain listing warnings', () => {
     const projectId = await registerProject(app, project);
     const chain = chainOf((await createChain(app, projectId, baseDraft())).body);
 
-    const chainsDirectory = chainsDirectoryFor(project);
+    const chainsDirectory = globalChainsDirectoryFor(configDirectory);
     await writeFile(join(chainsDirectory, 'broken.json'), '{not json', 'utf8');
     await writeFile(
       join(chainsDirectory, 'future.json'),

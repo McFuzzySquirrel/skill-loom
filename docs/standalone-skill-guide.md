@@ -1,6 +1,17 @@
 # Standalone Skill Guide
 
-*How to discover, review, and run Skill Loom chains using only the companion Agent Skills inside your own agent session. Skill Loom's server, chain editor, and CLI are not required.*
+*The bundle-based standalone runner is retained for compatibility. The preferred shared-chain workflow uses the Skill Loom CLI and the active agent session.*
+
+## Current Workflow
+
+Install the `loom-chain-workflow` companion skill and use a running Skill Loom
+service. It selects a chain from the shared library, applies its current
+host-global skills into the target project's `.agents/skills/`, and carries
+out the saved steps in the current conversation. It does not create a bundle,
+launch a nested harness, or persist run state. See [Run a Shared Chain](user-guide.md#run-a-shared-chain).
+
+The remaining sections describe the older bundle-based workflow for existing
+`.loom.json` artifacts only. They are not required for new chains.
 
 ## Who This Is For
 
@@ -138,7 +149,7 @@ When a Skill Loom owner is running (`skill-loom service start`), `loom-chain-wor
 
 ## Related Documents
 
-- [User guide: Run an exported chain inside your harness](user-guide.md#run-an-exported-chain-inside-your-harness)
+- [User guide: Run an exported bundle](user-guide.md#legacy-run-an-exported-bundle)
 - [ADR-0014: Execute exported chains through a standalone agent skill](adr/0014-portable-agent-skill-execution.md)
-- [Administrator guide: Portable bundle administration](admin-guide.md#portable-bundle-administration)
+- [Administrator guide: Portable bundle administration](admin-guide.md#legacy-portable-bundle-administration)
 - [Changelog](../CHANGELOG.md)

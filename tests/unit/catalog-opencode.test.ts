@@ -11,6 +11,7 @@ import {
 } from '../../src/server/catalog/frontmatter.js';
 import {
   DEFAULT_MAX_SKILL_DEPTH,
+  scanGlobalSkillDirectory,
   scanOpenCodeSkills,
 } from '../../src/server/catalog/opencode.js';
 import {
@@ -76,6 +77,21 @@ function namesBySource(entries: SkillEntry[]): Record<string, string[]> {
 }
 
 describe('OpenCode skill discovery', () => {
+  it('scans only the configured global skill directory', async () => {
+    const globalDirectory = join(root, 'host', '.agents', 'skills');
+    await writeSkill(globalDirectory, 'shared-skill', 'name: shared-skill\ndescription: Shared host skill');
+    await writeSkill(projectSkills(), 'project-only', 'name: project-only\ndescription: Project skill');
+
+    const result = await scanGlobalSkillDirectory(globalDirectory);
+
+    expect(namesBySource(result.entries)).toEqual({ personal: ['shared-skill'] });
+    expect(result.entries[0]).toMatchObject({
+      name: 'shared-skill',
+      source: 'personal',
+      path: await realpath(join(globalDirectory, 'shared-skill', 'SKILL.md')),
+    });
+  });
+
   it('scans project, personal, and Loom extra directories', async () => {
     const projectFile = await writeSkill(
       projectSkills(),

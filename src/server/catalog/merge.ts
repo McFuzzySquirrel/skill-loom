@@ -9,10 +9,10 @@ import {
   resolveCanonicalDirectory,
 } from '../projects/paths.js';
 import {
-  scanCopilotSkills,
   type CopilotCommandRunner,
 } from './copilot.js';
-import { scanOpenCodeSkills } from './opencode.js';
+import { scanGlobalSkillDirectory } from './opencode.js';
+import { resolveGlobalSkillsDirectory } from './global-skills.js';
 import { frontmatterString, parseSkillFrontmatter } from './frontmatter.js';
 import {
   RemoteSourceError,
@@ -63,6 +63,8 @@ export interface CatalogAdapter {
 export interface CatalogDiscoveryRequest {
   /** Canonical project directory. */
   projectPath: string;
+  /** One host-global skill directory shared by all projects and harnesses. */
+  globalSkillsDirectory: string;
   /** Canonical global extra directories; empty for adapters that do not use them. */
   extraDirectories: readonly string[];
 }
@@ -90,33 +92,19 @@ export function createDefaultCatalogAdapters(
   return [
     {
       harness: 'opencode',
-      usesExtraDirectories: true,
-      discover: (request) =>
-        scanOpenCodeSkills({
-          projectPath: request.projectPath,
-          extraDirectories: request.extraDirectories,
-          ...(options.homeDirectory === undefined
-            ? {}
-            : { homeDirectory: options.homeDirectory }),
-          ...(options.openCodeMaxDepth === undefined
-            ? {}
-            : { maxDepth: options.openCodeMaxDepth }),
-        }),
+      usesExtraDirectories: false,
+      discover: (request) => scanGlobalSkillDirectory(
+        request.globalSkillsDirectory,
+        options.openCodeMaxDepth,
+      ),
     },
     {
       harness: 'copilot',
       usesExtraDirectories: false,
-      discover: (request) =>
-        scanCopilotSkills({
-          projectPath: request.projectPath,
-          ...(options.copilotExecutable === undefined
-            ? {}
-            : { executable: options.copilotExecutable }),
-          ...(options.copilotTimeoutMs === undefined
-            ? {}
-            : { timeoutMs: options.copilotTimeoutMs }),
-          ...(options.copilotRunner === undefined ? {} : { runner: options.copilotRunner }),
-        }),
+      discover: (request) => scanGlobalSkillDirectory(
+        request.globalSkillsDirectory,
+        options.openCodeMaxDepth,
+      ),
     },
   ];
 }
@@ -162,6 +150,8 @@ export interface CatalogService {
 
 export interface CatalogServiceOptions {
   configStore: ConfigStore;
+  /** Resolve the single host-global skill root; defaults to `LOOM_SKILLS_DIR` or `~/.agents/skills`. */
+  globalSkillsDirectory?: () => string;
   /** Registered adapters. Defaults to the v1 OpenCode and Copilot adapters. */
   adapters?: readonly CatalogAdapter[];
   /** Default harness. Defaults to the first registered adapter. */
@@ -217,18 +207,19 @@ export function createCatalogService(options: CatalogServiceOptions): CatalogSer
       const startedAt = now();
       const discovery = await adapter.discover({
         projectPath: request.projectPath,
+        globalSkillsDirectory: options.globalSkillsDirectory?.() ?? resolveGlobalSkillsDirectory(),
         extraDirectories,
       });
       const elapsedMs = Math.max(0, Math.round(now() - startedAt));
 
       const remote = await discoverRemoteSkillEntries({
         configDirectory: options.configStore.getConfigDir(),
-        sources: config.remoteSkillSources,
+        sources: [],
         harness: adapter.harness,
       });
       const agents = await discoverRemoteNativeAgents({
         configDirectory: options.configStore.getConfigDir(),
-        sources: config.remoteSkillSources,
+        sources: [],
         harness: adapter.harness,
       });
       const merged = [...discovery.entries, ...remote.entries]

@@ -1,0 +1,10 @@
+.git
+.loom
+loom-library
+node_modules
+dist
+coverage
+*.tgz
+.agents/skills/*
+!.agents/skills/create-project-documentation
+!.agents/skills/create-project-documentation/**

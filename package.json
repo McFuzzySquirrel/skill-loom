@@ -9,7 +9,8 @@
     "node": ">=24"
   },
   "bin": {
-    "skill-loom": "dist/src/server/cli.js"
+    "skill-loom": "dist/src/server/cli.js",
+    "skill-loom-podman": "dist/src/server/podman-cli.js"
   },
   "files": [
     "dist/src",
@@ -41,6 +42,10 @@
     "test:watch": "vitest",
     "eval:retrieval": "tsx scripts/retrieval-eval.ts",
     "test:package": "node scripts/package-smoke.mjs",
+    "podman:up": "node scripts/podman.mjs up",
+    "podman:down": "node scripts/podman.mjs down",
+    "podman:plan": "node scripts/podman.mjs plan",
+    "podman:cli": "tsx src/server/podman-cli.ts",
     "test:live:discovery": "tsx scripts/live-discovery.ts",
     "test:live:execution": "tsx scripts/live-execution.ts",
     "test:live:managed": "tsx scripts/live-managed-opencode.ts",
