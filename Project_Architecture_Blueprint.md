@@ -1,6 +1,6 @@
 # Project Architecture Blueprint — Skill Loom
 
-*Generated: 2026-11-10 · Package version `0.1.0` · Configuration: `PROJECT_TYPE=Auto-detect`, `ARCHITECTURE_PATTERN=Auto-detect`, `DIAGRAM_TYPE=C4`, `DETAIL_LEVEL=Comprehensive`, `INCLUDES_CODE_EXAMPLES=true`, `INCLUDES_IMPLEMENTATION_PATTERNS=true`, `INCLUDES_DECISION_RECORDS=true`, `FOCUS_ON_EXTENSIBILITY=true`.*
+*Generated: 2026-11-13 · Package version `0.1.0` · Configuration: `PROJECT_TYPE=Auto-detect`, `ARCHITECTURE_PATTERN=Auto-detect`, `DIAGRAM_TYPE=C4`, `DETAIL_LEVEL=Comprehensive`, `INCLUDES_CODE_EXAMPLES=true`, `INCLUDES_IMPLEMENTATION_PATTERNS=true`, `INCLUDES_DECISION_RECORDS=true`, `FOCUS_ON_EXTENSIBILITY=true`.*
 
 This document is the reference for how Skill Loom is actually built. It describes the code that exists, not an aspirational pattern. File paths and symbols are named so a maintainer can go straight from this document to the implementation.
 
@@ -18,20 +18,20 @@ This document is the reference for how Skill Loom is actually built. It describe
 | Browser UI | React `19.3.1`, React DOM, Vite `8.3.5` | `package.json`, `vite.config.ts` |
 | Terminal | `node-pty` `1.1.0`, server-owned PTY sessions | `src/server/terminal/pty.ts` |
 | Contracts/validation | Zod `4.6.7`, YAML `2.9.1` | `src/server/**/model.ts`, `config/schema.ts`, `catalog/frontmatter.ts` |
-| Persistence | Versioned JSON files with atomic replacement; SQLite for profile/claim locks | `config/store.ts`, `runs/store.ts`, `shared/project-claim.ts` |
-| Tests | Vitest `5.1.0`, 60 suites under `tests/unit` and `tests/integration` | `vitest.config.ts`, CI |
+| Persistence | Versioned JSON files with atomic replacement and typed corrupt-file handling; SQLite for profile/claim locks | `config/store.ts`, `chains/store.ts`, `runs/store.ts`, `shared/project-claim.ts` |
+| Tests | Vitest `5.1.0`, unit and integration suites | `vitest.config.ts`, CI |
 | Packaging | npm tarball, postinstall native PTY helper, GitHub Actions matrix | `scripts/package-smoke.mjs`, `.github/workflows/cross-platform-verification.yml` |
 
 ### 1.2 Architectural pattern detected
 
-Skill Loom is a **local-first modular monolith** with a **ports-and-adapters** core and a **CLI-first control surface**.
+Skill Loom is a **single-user modular monolith** with a **ports-and-adapters** core and a **CLI-first control surface**. It supports a local deployment and a private single-user Podman deployment.
 
-- **Modular monolith**: one Node process serves the browser, owns persistence, spawns harnesses, and exposes a local control endpoint. There is no separately deployed backend service.
+- **Modular monolith**: one Node process serves the browser, owns persistence, and exposes a local control endpoint. The default chain workflow runs in the already-active agent session; the retained managed-run compatibility subsystem can still spawn harnesses.
 - **Layered server**: composition root → routes/control dispatch → domain services → stores → filesystem/processes.
-- **Ports and adapters**: harness differences live behind `HarnessAdapter`; skill discovery differences live behind `CatalogAdapter`; run execution uses runner strategies (`SupervisedRunner`, `AutomaticRunner`).
-- **Command/control split**: most mutations and all run execution go through a private, authenticated local control protocol; the HTTP surface is deliberately minimal.
-- **Local-first security**: loopback-only with no authentication for the browser surface, private-socket or mutually authenticated TLS for control.
-- **Document-oriented persistence**: versioned JSON documents with Zod schemas, atomic replacement, corruption quarantine, and frozen run snapshots.
+- **Ports and adapters**: harness differences live behind `HarnessAdapter`; catalog adapters scan one configured host-global skills root; runner strategies belong to retained managed runs.
+- **Command/control split**: chain mutations and project apply go through a private, authenticated local control protocol; the HTTP surface is deliberately minimal. Current-session step execution is performed by the active agent, not the server.
+- **Single-user security**: the server is loopback-only, with a private control transport. Podman adds a same-pod proxy and requires localhost publishing or private authenticated ingress.
+- **Document-oriented persistence**: versioned JSON documents with Zod schemas and atomic replacement. Shared chains are profile-owned; frozen run snapshots are limited to the compatibility run subsystem.
 
 The classic labels “Clean Architecture” or “Hexagonal” only partly apply. Domain modules do not depend on Fastify, but they do use Node built-ins directly, and several shared contract modules import server model types. The accurate description is **modular monolith with adapter seams**, not a textbook clean-architecture dependency inversion everywhere.
 
@@ -41,15 +41,15 @@ The classic labels “Clean Architecture” or “Hexagonal” only partly apply
 
 ### 2.1 Guiding principles evident in the code
 
-1. **The server owns every side effect.** Filesystem, Git, process, PTY, and network operations happen in `src/server`. The browser and CLI are typed clients (`README.md` Architecture; `src/server/cli.ts`).
+1. **The server owns its side effects.** Filesystem, process, PTY, and network operations happen in `src/server`; the active host agent performs the prompts and tool actions for the default current-session workflow. The browser and CLI are typed clients (`src/server/cli.ts`).
 2. **One composition root.** `buildApp()` in `src/server/app.ts` constructs config, services, run ownership, terminal management, routes, and error handling. Tests inject the same seams.
-3. **Harness differences are data, not branches.** Routes, preflight, and runners consume `HarnessDescriptor`/`HarnessAdapter`; they do not compare `'opencode'` or `'copilot'` (`src/server/harness/types.ts`, `runs/orchestrator.ts` header).
-4. **Runs are frozen and bounded.** A run snapshots its chain at creation and retains only a bounded terminal tail (`src/server/runs/model.ts`, `terminal/pty.ts`).
-5. **Persistence is versioned and atomic.** Config, chains, and runs have explicit versions, Zod validation, same-directory temporary files, fsync, and rename (`config/store.ts:atomicWriteJson`).
+3. **Harness differences are data, not branches.** Compatibility preflight and managed-run code consume `HarnessDescriptor`/`HarnessAdapter`; current-session chain execution does not start another harness (`src/server/harness/types.ts`, `.github/skills/loom-chain-workflow/SKILL.md`).
+4. **Current-session chains are prompt workflows.** The library stores ordered steps; the active agent follows them in the existing session. The compatibility run subsystem separately snapshots chains and retains only bounded terminal tails.
+5. **Persistence is versioned and atomic.** Config, shared chains, and compatibility run records have explicit schemas and atomic writes (`config/store.ts:atomicWriteJson`, `chains/store.ts`).
 6. **Explicit signals beat heuristics.** Automatic runs advance only on `osc-working-idle` or `process-exit`; supervised runs advance only when the user says so (`runs/automatic.ts`, `runs/supervised.ts`, ADR-0007).
-7. **Irreversible actions are reviewed.** Mutating CLI operations and run starts use digests plus explicit confirmations (`control.ts`, `runs/reviewed-start.ts`, ADRs 0025–0026).
-8. **Identity is deterministic.** Project ids, skill ids, agent ids, chain revisions, run revisions, and bundle fingerprints are content- or path-derived hashes (`projects/registry.ts`, `catalog/types.ts`, `chains/service.ts`, `runs/orchestrator.ts`, `portable/bundle.ts`).
-9. **Uncertainty is surfaced, never guessed.** Ambiguous auth/trust becomes an acknowledgement-required preflight finding; unobservable skill firing becomes `not-observable` (`preflight/engine.ts`, `runs/observations.ts`).
+7. **Review gates are scoped to their operation.** Compatibility mutations and managed-run starts use digests plus explicit confirmations; current global-skill apply uses safe path checks and refuses overwrites without requiring provenance review (`control.ts`, `catalog/install.ts`, ADR-0032).
+8. **Project and chain identity is deterministic.** Project ids and chain revisions are path- or content-derived; chain skill steps resolve names against the current host-global catalog when applied (`projects/registry.ts`, `chains/service.ts`, `catalog/install.ts`).
+9. **Compatibility uncertainty is surfaced, never guessed.** Managed-run preflight reports ambiguous auth/trust and unobservable skill firing; project apply fails for missing or ambiguous global skill names instead of choosing one (`preflight/engine.ts`, `runs/observations.ts`, `catalog/install.ts`).
 10. **The product is CLI/skill-driven with one web screen.** The web UI is only the chain editor (ADR-0027, ADR-0028).
 
 ### 2.2 Architectural boundaries
@@ -58,25 +58,28 @@ The classic labels “Clean Architecture” or “Hexagonal” only partly apply
 |---|---|
 | Browser ↔ server | Loopback Fastify origin, same-origin shutdown check, shared JSON error envelope |
 | CLI ↔ owner process | Private Unix socket or mutually authenticated loopback TLS; 256-bit bearer token; request size caps |
-| Server ↔ harness | Shell-free executable + argument array; server-owned PTY/child process; adapter descriptors |
-| Server ↔ filesystem | Canonical paths, symlink checks, safe filename patterns, atomic writes, bounded reads |
-| Server ↔ remote Git | HTTPS/SSH only, explicit refresh, bounded staging, immutable snapshots, no execution |
-| Web UI ↔ run execution | No run/workspace HTTP routes; execution is CLI/control-only |
-| Portable helper ↔ managed server | Separate run records under `.loom/portable-runs`; opt-in project coordination protocol |
+| Active agent ↔ chain workflow | The companion skill reads shared chain data and carries out ordered prompts in the current session; no child harness or run record |
+| Server ↔ harness | Shell-free executable + argument array and server-owned PTY only for retained managed-run compatibility |
+| Server ↔ filesystem | Canonical paths, global catalog scans, shared chain persistence, bounded no-overwrite copies into project `.agents/skills/` |
+| Server ↔ remote Git | Compatibility-only source and snapshot support; not used by the default catalog or chain workflow |
+| Host CLI ↔ Podman service | `skill-loom-podman` forwards an argument array and stdin with `podman exec`; no shell string |
+| Web UI ↔ execution | No run/workspace HTTP routes; the editor saves chains and drafts only |
+| Portable helper ↔ project | Separate legacy bundle run records under `.loom/portable-runs`; opt-in project coordination protocol |
 
 ### 2.3 Notable hybrid or adapted patterns
 
 - **CQRS-like split without separate models**: mutations flow through control operations; reads are small HTTP `GET`s. Both share the same domain services.
 - **Strategy + registry**: run mode selects a runner strategy; harness/catalog registries resolve adapters.
-- **Snapshot + pointer**: run documents are immutable-ish snapshots plus a single global `active-run.json` pointer for cross-project exclusivity.
-- **Reviewed command pattern**: review produces a digest, the mutation re-computes and compares it, then requires `confirmed: true`.
+- **Shared library + project copy**: chains live under the Loom config directory and resolve skill names from the current host-global catalog; apply copies selected packages into a project without overwriting existing ones.
+- **Snapshot + pointer (compatibility)**: managed-run documents are snapshots plus a global `active-run.json` pointer for cross-project exclusivity.
+- **Reviewed command pattern (compatibility)**: where required, review produces a digest, the mutation re-computes and compares it, then requires `confirmed: true`.
 - **Filesystem as database**: one JSON document per aggregate, guarded by naming conventions and atomic replacement rather than a transactional store.
 
 ---
 
 ## 3. Architecture Visualization
 
-The Mermaid views below stay readable as text. The same revision also has an explorable form: [system map and run flows](docs/diagrams/skill-loom-architecture.html), [chain-save sequence](docs/diagrams/chain-save-sequence.html), and [portable handoff](docs/diagrams/portable-handoff-workflow.html).
+The Mermaid views below stay readable as text. Related explorable views are available for the [system map and run flows](docs/diagrams/skill-loom-architecture.html), [chain-save sequence](docs/diagrams/chain-save-sequence.html), and [portable handoff](docs/diagrams/portable-handoff-workflow.html).
 
 ### 3.1 C4 Level 1 — System context
 
@@ -85,17 +88,19 @@ flowchart LR
   User["Developer / operator"]
   Agent["Coding agent<br/>(OpenCode or Copilot CLI)"]
   Loom["Skill Loom<br/>local service + CLI"]
-  FS["Project and profile<br/>filesystem"]
-  Harness["Harness CLIs<br/>OpenCode 2.2.x<br/>Copilot CLI 1.0.x"]
-  Remote["Remote Git<br/>skill repositories"]
+  Global["Host-global skills<br/>~/.agents/skills"]
+  FS["Loom profile and<br/>project filesystem"]
+  Harness["Harness CLIs<br/>(managed-run compatibility)"]
+  Remote["Remote Git<br/>(compatibility only)"]
 
   User -->|"CLI commands, JSON envelopes"| Loom
   Agent -->|"companion skills call the CLI"| Loom
-  Agent -->|"executes chain steps"| Harness
+  Agent -->|"uses project copies in its current session"| FS
   User -->|"chain editor in browser"| Loom
-  Loom -->|"reads/writes versioned JSON"| FS
-  Loom -->|"spawns shell-free; owns PTY"| Harness
-  Loom -->|"explicit refresh, immutable snapshots"| Remote
+  Loom -->|"indexes"| Global
+  Loom -->|"reads/writes chains; copies selected skills"| FS
+  Loom -.->|"legacy managed runs only"| Harness
+  Loom -.->|"legacy source support only"| Remote
 ```
 
 ### 3.2 C4 Level 2 — Containers
@@ -105,35 +110,44 @@ flowchart TB
   subgraph Client["Client surfaces"]
     CLI["skill-loom CLI<br/>dist/src/server/cli.js"]
     Skill["Companion skills<br/>scenario-discovery<br/>loom-chain-workflow<br/>loom-run-bundle"]
+    PodmanCLI["skill-loom-podman<br/>podman exec bridge"]
     Web["React chain editor<br/>dist/web"]
   end
 
-  subgraph Owner["Owner process (one per profile)"]
-    Fastify["Fastify 5<br/>127.0.0.1:7373"]
+  subgraph Owner["Owner process (local or Podman app container)"]
+    Fastify["Fastify 5<br/>127.0.0.1:7373 local<br/>127.0.0.1:3000 in Podman"]
     Control["Control server<br/>Unix socket or mTLS"]
-    Services["Loom services<br/>config · projects · catalog<br/>chains · preflight · runs"]
+    Services["Loom services<br/>config · projects · global catalog<br/>shared chains · apply · compatibility runs"]
     Lifecycle["Lifecycle + profile owner<br/>+ run owner"]
-    PTY["TerminalManager<br/>node-pty"]
+    PTY["TerminalManager<br/>legacy managed runs"]
   end
 
   subgraph Disk["Persistent state"]
-    Config["~/.config/loom<br/>config · drafts · workspaces<br/>snapshots · active-run"]
-    Project[".loom in each project<br/>chains · runs · claims"]
+    Config["~/.config/loom local<br/>/var/lib/loom/config Podman<br/>config · shared chains · index"]
+    Global["~/.agents/skills<br/>LOOM_SKILLS_DIR<br/>/var/lib/loom/skills in Podman"]
+    Project[".agents/skills in selected project<br/>applied package copies"]
   end
+
+  Agent["Active host agent session"]
+  Harness["Harness CLIs<br/>legacy managed runs"]
+  Proxy["Caddy proxy<br/>same Podman pod"]
 
   CLI -->|"HTTP for edit/health<br/>control protocol otherwise"| Fastify
   CLI -->|"control protocol"| Control
+  PodmanCLI -->|"argument array + stdin"| CLI
   Web -->|"JSON /api"| Fastify
   Skill -->|"CLI invocations"| CLI
-  Skill -->|"portable helper"| Project
+  Skill -->|"current-session steps"| Agent
+  Proxy --> Fastify
 
   Fastify --> Services
   Control --> Services
   Services --> Lifecycle
   Services --> PTY
   Services --> Config
+  Services --> Global
   Services --> Project
-  PTY -->|"exec + args"| Harness["Harness CLIs"]
+  PTY -.->|"exec + args (compatibility)"| Harness
 ```
 
 ### 3.3 C4 Level 3 — Server components
@@ -148,10 +162,10 @@ flowchart LR
   subgraph Domain
     ConfigS["config/store + schema"]
     ProjectS["projects/<br/>registry · paths · coordination"]
-    CatalogS["catalog/<br/>merge · opencode · copilot · remote"]
-    ChainS["chains/<br/>model · store · service · drafts · bundle"]
+    CatalogS["catalog/<br/>global root · capability index<br/>legacy adapters"]
+    ChainS["chains/<br/>shared library · migration<br/>drafts · compatibility bundles"]
     Preflight["preflight/<br/>engine · auth · trust · trust-session"]
-    Runs["runs/<br/>orchestrator · owner · store<br/>automatic · supervised · prompts"]
+    Runs["runs/<br/>managed-run compatibility<br/>orchestrator · owner · store"]
     Workspaces["workspaces<br/>test · discovery"]
     Bundles["bundles/<br/>reviewed-import · target-review"]
   end
@@ -177,13 +191,16 @@ sequenceDiagram
   participant F as Fastify routes
   participant C as ChainService
   participant S as ChainStore
-  participant D as .loom/chains
+  participant D as ~/.config/loom/chains
+  participant M as Legacy migration wrapper
 
   U->>W: edit steps / inputs
   W->>W: useChainDraft validation + dirty tracking
   W->>F: PUT /api/projects/:id/chains/:chainId
   F->>C: update(projectPath, chainId, draft)
   C->>C: parse + validate draft, check revision
+  C->>M: migrate legacy project chains if needed
+  M->>S: copy valid legacy records without deleting originals
   C->>S: update(chain)
   S->>S: validate, reject symlink/escape
   S->>D: atomic temp write + fsync + rename
@@ -193,7 +210,33 @@ sequenceDiagram
   W->>W: reset dirty baseline
 ```
 
-### 3.5 Control request and run start flow
+### 3.5 Current-session chain workflow
+
+```mermaid
+sequenceDiagram
+  participant A as Active agent session
+  participant SK as loom-chain-workflow
+  participant CLI as skill-loom CLI
+  participant CTL as Control server
+  participant CAT as Global catalog
+  participant ST as Shared chain store
+  participant P as Selected project
+
+  A->>SK: request to use a saved chain
+  SK->>CLI: list/get chain and project context
+  CLI->>CTL: authenticated control request
+  CTL->>ST: resolve chain from <configDir>/chains
+  ST-->>SK: ordered chain definition
+  SK->>CLI: chain project apply
+  CLI->>CTL: apply operation
+  CTL->>CAT: resolve each skill name in global root
+  CAT-->>CTL: unique current packages
+  CTL->>P: copy to .agents/skills; refuse overwrite
+  SK->>A: guide ordered prompts and declared inputs
+  Note over A: Agent uses the current host tools/session; Loom starts no harness and stores no run record for this workflow
+```
+
+### 3.6 Compatibility managed-run start flow
 
 ```mermaid
 sequenceDiagram
@@ -220,7 +263,9 @@ sequenceDiagram
   CTL-->>CLI: JSON response / JSON Lines events
 ```
 
-### 3.6 Run lifecycle
+### 3.7 Compatibility managed-run lifecycle
+
+This state machine describes the retained server-managed run subsystem, not the default current-session chain workflow.
 
 ```mermaid
 stateDiagram-v2
@@ -246,11 +291,11 @@ The status vocabulary is defined in `src/server/runs/model.ts`; recovery actions
 
 ### 4.1 CLI launcher and control client
 
-**Purpose.** Entry point for users and skills. Parses command families (`service`, `edit`, `bundle`, `catalog`, `project`, `chain`, `run`, `workspace`, `discovery`), chooses HTTP or control transport, and prints JSON envelopes.
+**Purpose.** Entry point for users and skills. Parses command families (`service`, `edit`, `catalog`, `project`, `chain`, plus retained `bundle`, `run`, `workspace`, and `discovery` compatibility commands), chooses HTTP or control transport, and prints JSON envelopes.
 
-**Internal structure.** `src/server/cli.ts` (top-level routing, service lifecycle, browser opening), `src/server/control-cli.ts` (control-backed command grammar and help), `src/server/catalog/cli.ts`, `src/server/bundle-cli.ts`, `src/server/cli-input.ts` (strict stdin JSON).
+**Internal structure.** `src/server/cli.ts` (top-level routing, service lifecycle, browser opening), `src/server/control-cli.ts` (control-backed command grammar and help), `src/server/catalog/cli.ts`, `src/server/bundle-cli.ts`, `src/server/podman-cli.ts` (container bridge), `src/server/cli-input.ts` (strict stdin JSON).
 
-**Interactions.** HTTP only for health/lifecycle and the editor's own API; everything else goes through `callControl`, `streamControlEvents`, or `attachControlTerminal`. The CLI never imports server domain internals to perform work; it calls the owner.
+**Interactions.** HTTP is used for health/lifecycle and the editor API; control operations handle catalog and chain queries, chain apply, and compatibility features. `skill-loom-podman` forwards structured arguments and stdin to the CLI inside the container.
 
 **Evolution.** Add a command by adding a control operation and a grammar entry, not by adding a second state owner.
 
@@ -266,7 +311,7 @@ The status vocabulary is defined in `src/server/runs/model.ts`; recovery actions
 
 ### 4.3 Routes
 
-**Purpose.** Minimal validated HTTP surface for the browser: health, lifecycle, shutdown, chain persistence, and draft persistence.
+**Purpose.** Minimal validated HTTP surface for the browser: health, lifecycle, shutdown, chain persistence, and draft persistence. Chain routes retain project context for API compatibility, but persist into the shared profile library.
 
 **Internal structure.** `routes/health.ts`, `routes/server.ts`, `routes/chains.ts`, `routes/drafts.ts`, `routes/index.ts`.
 
@@ -276,57 +321,57 @@ The status vocabulary is defined in `src/server/runs/model.ts`; recovery actions
 
 ### 4.4 Service composition
 
-**Purpose.** One place that wires configuration, project registry, catalog, chains, drafts, preflight, and workspaces.
+**Purpose.** One place that wires configuration, project registry, global catalog and capability search, shared chains, drafts, compatibility preflight, and workspaces.
 
 **Internal structure.** `src/server/services.ts:createLoomServices`, returning `LoomServices`.
 
-**Interactions.** Lazily creates the global draft service. Injected stores/services are honored for tests. `control.ts` can create the same services when started standalone.
+**Interactions.** Resolves `LOOM_SKILLS_DIR` or `~/.agents/skills`, builds the catalog and derived capability index from that root, and creates the shared chain store under the config directory. The chain service lazily migrates legacy project chain files without deleting originals. Injected services are honored for tests.
 
 **Evolution.** Add a domain service here and thread it through `LoomServices`, then inject into routes/control; do not construct it ad hoc inside handlers.
 
 ### 4.5 Configuration
 
-**Purpose.** Versioned global preferences: harness command overrides, extra skill directories, remote sources, recent projects, workspaces, and discovery settings.
+**Purpose.** Versioned global settings and profile state. Legacy fields for extra directories, remote sources, and discovery remain for compatibility, but they do not supply the default authoring catalog.
 
 **Internal structure.** `config/schema.ts` (Zod schemas, `CONFIG_VERSION = 2`, v1 migration), `config/store.ts` (`ConfigStore`, `atomicWriteJson`, serialized updates), `config/canonical-root.ts`.
 
-**Interactions.** Every service receives a `ConfigStore`; project registration, remote refresh, workspace creation, and control operations all use `update()` read-modify-write with per-target in-process queues.
+**Interactions.** Every service receives a `ConfigStore`; chain storage and drafts use its config directory. The global skills root is independently selected by `LOOM_SKILLS_DIR` or the host default and is not copied into config.
 
 **Evolution.** Bump `CONFIG_VERSION` only with an explicit migration branch and a test that rejects unknown versions.
 
 ### 4.6 Projects
 
-**Purpose.** Register canonical project directories, derive stable ids, create `.loom` state, and coordinate access.
+**Purpose.** Register canonical project directories, derive stable ids, provide project context for shared-chain operations, and coordinate retained managed-run compatibility features.
 
 **Internal structure.** `projects/registry.ts` (canonicalization, `projectIdForPath`, recent-project persistence, Git init), `projects/paths.ts` (typed path errors), `projects/coordination.ts` (reviewed coordination actions), `shared/project-claim.ts` (SQLite claim/transaction), `shared/project-run-records.ts` (bounded run-record scan), `shared/project-coordination.ts` (protocol review).
 
-**Interactions.** Projects are addressed by id in API/control; services resolve id → canonical path. Managed test/discovery workspaces are projects with `managedWorkspace: true`, hidden from ordinary listings.
+**Interactions.** Projects are addressed by id in API/control; services resolve id → canonical path. Applying a shared chain copies only its referenced global skills into the project's `.agents/skills/` root without overwriting existing packages. Managed test/discovery workspaces remain for compatibility.
 
 **Evolution.** New project-scoped data belongs under `.loom/` and must be added to the project `.gitignore` policy.
 
 ### 4.7 Catalog
 
-**Purpose.** Discover local, bundled, project, and pinned remote skills and native agents; merge deterministically; search; copy into projects.
+**Purpose.** Discover and index skill packages from one configured host-global directory, then search and copy selected packages into projects. Project copies are destinations, not catalog sources.
 
-**Internal structure.** `catalog/merge.ts` (`CatalogService`, adapter registry, merge order, performance budget), `catalog/opencode.ts`, `catalog/copilot.ts`, `catalog/frontmatter.ts`, `catalog/types.ts` (stable ids, source order), `catalog/remote.ts` (Git snapshot ingestion), `catalog/project-pages.ts` (paged project views), `catalog/agent-copy.ts`, `catalog/skill-resolution.ts`, `catalog/discovery-handoff.ts`.
+**Internal structure.** `catalog/global-skills.ts` resolves `LOOM_SKILLS_DIR` or `~/.agents/skills`; `catalog/merge.ts` registers harness-neutral adapters over that root; `catalog/capability-index.ts` builds the derived searchable index; `catalog/frontmatter.ts` parses package metadata; `catalog/install.ts` resolves chain skill names and performs bounded project copies. Remote, extra-source, native-agent, and discovery modules remain compatibility surfaces.
 
-**Interactions.** Discovery adapters return harness-neutral entries. Duplicate names are preserved with source badges. Remote snapshots are immutable and refreshed only on explicit request. Preflight resolves a chain step’s skill against the catalog.
+**Interactions.** Both harness adapters scan the same global root. The catalog is rescanned on requests, and the capability index is disposable. Apply requires exactly one global package for each referenced skill name, then copies it into `<project>/.agents/skills/` without overwrite. Remote snapshots are not part of the default authoring path.
 
-**Evolution.** Add a harness by adding a `CatalogAdapter`; do not special-case it in merge or routes.
+**Evolution.** Keep the global root as the default authoring source. External tools provision and update packages; adding a compatibility source must not silently expand the default catalog.
 
 ### 4.8 Chains
 
-**Purpose.** Define, validate, persist, duplicate, import, export, and version chains.
+**Purpose.** Define, validate, persist, duplicate, and version chains in a shared profile library. Bundle import/export remains a compatibility path.
 
-**Internal structure.** `chains/model.ts` (`ChainSchema`, versions, steps, inputs, session modes, agent selection, warnings), `chains/store.ts` (`ChainStore`, safe ids, symlink checks, atomic writes, corrupt-file warnings), `chains/service.ts` (`ChainService`, revisions, copy naming, import), `chains/drafts.ts` (global draft store), `chains/bundle.ts` (export/import bundles), `chains/presets.ts`, `chains/git-file-modes.ts`.
+**Internal structure.** `chains/model.ts` (`ChainSchema`, versions, steps, inputs, session modes, agent selection, warnings), `chains/store.ts` (`ChainStore`, safe ids, atomic writes, corrupt-file warnings, shared directory), `chains/service.ts` (`ChainService`, revisions, copy naming, import), `chains/drafts.ts` (profile-owned draft store), and compatibility bundle/preset modules.
 
-**Interactions.** Routes and control both call `ChainService`. Project chains live in `<project>/.loom/chains`; drafts in `~/.config/loom/drafts`. Bundle export resolves skills deterministically and embeds package files plus optional native agent.
+**Interactions.** Routes and control call `ChainService` with a registered project as context, while saved chains live in `~/.config/loom/chains`. Valid legacy `<project>/.loom/chains/*.json` files are copied into the shared library on first access; originals remain. Chain steps refer to skill names resolved against the current global catalog at apply time. Drafts remain in `~/.config/loom/drafts`.
 
-**Evolution.** Chain schema changes require version handling, migration tests, editor updates, and bundle compatibility review.
+**Evolution.** Chain schema changes require version handling, migration tests, editor updates, and compatibility bundle review. Preserve the separation between shared chain ownership and the project selected for apply.
 
 ### 4.9 Preflight
 
-**Purpose.** Deterministically decide whether a chain can run and what the user must acknowledge.
+**Purpose.** Deterministically decide whether a chain can run and what the user must acknowledge in the retained managed-run compatibility subsystem. The default companion workflow instead runs in the active host session.
 
 **Internal structure.** `preflight/engine.ts` (ordered checks: chain, request, project, harness, inputs, CLI, catalog, skill, agent, authentication, trust, session-mode, fork, permissions, git), `preflight/auth.ts` (redacted evidence), `preflight/trust.ts`, `preflight/trust-session.ts`, `preflight/manual-command.ts`, `preflight/provider.ts`, `preflight/request.ts`.
 
@@ -344,9 +389,9 @@ The status vocabulary is defined in `src/server/runs/model.ts`; recovery actions
 
 **Evolution.** See §13.1 for the full checklist.
 
-### 4.11 Runs
+### 4.11 Managed runs (compatibility subsystem)
 
-**Purpose.** Own the complete run lifecycle: preflight, snapshot, input resolution, single-active-run claim, runner selection, event streaming, persistence, recovery, and cleanup.
+**Purpose.** Retain the former server-managed lifecycle: preflight, snapshot, input resolution, single-active-run claim, runner selection, event streaming, persistence, recovery, and cleanup. New shared-chain workflows do not create managed runs or use these records.
 
 **Internal structure.**
 
@@ -369,11 +414,11 @@ The status vocabulary is defined in `src/server/runs/model.ts`; recovery actions
 
 **Interactions.** The orchestrator consumes `ChainService`, `HarnessRegistry`, `PreflightEngine`, `ProjectRegistry`, `RunStore`, `TerminalManager`, and spawner seams. It broadcasts `RunStreamMessage` events; control streams them as JSON Lines.
 
-**Evolution.** New run modes are runner strategies behind the orchestrator; never bypass the active-run claim or persistence.
+**Evolution.** Any retained managed-run mode must stay behind the orchestrator and preserve its active-run claim and persistence rules. Do not route the default current-session workflow through this subsystem.
 
 ### 4.12 Terminal transport
 
-**Purpose.** Server-owned PTY sessions with bounded output, subscriber fan-out, resize/write, and idempotent shutdown.
+**Purpose.** Server-owned PTY sessions with bounded output, subscriber fan-out, resize/write, and idempotent shutdown for retained managed runs.
 
 **Internal structure.** `terminal/pty.ts`: `TerminalSession`, `TerminalManager`, `TerminalOutputBuffer`, `trimTerminalOutput`, `createTerminalManager`.
 
@@ -383,7 +428,7 @@ The status vocabulary is defined in `src/server/runs/model.ts`; recovery actions
 
 ### 4.13 Portable helper
 
-**Purpose.** Execute exported bundles without the Skill Loom service, using the same bundle format and safety rules.
+**Purpose.** Execute legacy exported bundles without the Skill Loom service, using the compatibility bundle format and safety rules. New chains use the shared library and active agent session instead.
 
 **Internal structure.** `portable/bundle.ts` (bundle v1/v2 schema, path validation, fingerprints), `portable/runtime.ts` (install, status, step, record, resume), `portable/install-skill.ts`, `portable/installed-modes.ts`, `portable/run-schema.ts`, `portable/cli.ts`.
 
@@ -413,11 +458,11 @@ The status vocabulary is defined in `src/server/runs/model.ts`; recovery actions
 
 ### 4.16 Companion skills and maintainer agents
 
-**Purpose.** Teach a coding agent how to use the CLI, discover skills, run bundles, and maintain the repository.
+**Purpose.** Teach a coding agent how to use the CLI, select shared chains, apply host-global skills, and follow ordered steps in the active session. Other companion skills preserve compatibility workflows.
 
 **Internal structure.** `.github/skills/**` is canonical; `scripts/build-portable-skill.mjs` generates `dist/skills/**` and mirrors `skill/**` and `.opencode/skills/**`. `.opencode/agents/**` defines maintainer agents. Project copies install to `<project>/.agents/skills`, with legacy OpenCode discovery preserved.
 
-**Interactions.** Skills invoke the CLI as a subprocess; they do not import server code. Documentation and mirrors are validated by `npm run check`.
+**Interactions.** `loom-chain-workflow` invokes the CLI as a subprocess to read chains and apply packages, then guides the active agent through steps; it does not start a child harness or create a run record. Skills do not import server code. Documentation and mirrors are validated by `npm run check`.
 
 ---
 
@@ -440,17 +485,17 @@ flowchart TB
   subgraph L3["L3 · Domain services"]
     CFG["config"]
     PRJ["projects"]
-    CAT["catalog"]
-    CHN["chains"]
-    PRE["preflight"]
-    RUN["runs / workspaces"]
+    CAT["global skill catalog"]
+    CHN["shared chains / apply"]
+    PRE["legacy preflight"]
+    RUN["managed runs / workspaces<br/>(compatibility)"]
     BUN["bundles"]
   end
   subgraph L4["L4 · Adapters and transports"]
     HAR["harness adapters"]
     PTY["terminal / process"]
     PORT["portable runtime"]
-    REM["remote Git"]
+    REM["remote Git<br/>(compatibility)"]
   end
   subgraph L5["L5 · Infrastructure"]
     FS["filesystem · SQLite · OS"]
@@ -476,8 +521,18 @@ Skill Loom uses **constructor/options injection with production defaults**, not 
 
 ```ts
 // src/server/services.ts (excerpt)
-const catalogService =
-  options.catalogService ?? createCatalogService({ configStore: options.configStore });
+const globalSkillsDirectory = () => resolveGlobalSkillsDirectory(
+  options.preflightEnv,
+  options.preflightHomeDirectory,
+);
+const catalogService = options.catalogService ?? createCatalogService({
+  configStore: options.configStore,
+  globalSkillsDirectory,
+});
+const createGlobalChainStore = () => createChainStore({
+  chainsDirectory: globalChainsDirectoryFor(options.configStore.getConfigDir()),
+  configDirectory: options.configStore.getConfigDir(),
+});
 const projectRegistry = createProjectRegistry({
   configStore: options.configStore,
   ...(options.gitInit === undefined ? {} : { gitInit: options.gitInit }),
@@ -494,7 +549,7 @@ Every seam is an optional function or object in an options interface. `BuildAppO
 | `src/shared/project-run-records.ts` imports `parseRunDocument` | Shared scanning logic depends on server run validation | Acceptable today for portable use; document the dependency direction |
 | `src/portable/*` imports server leaf modules | Portable is not source-independent from the server tree | Treat those modules as a stable “portable kernel”; avoid adding dependencies on routes/orchestrator |
 | `buildApp` and `startServer` both call startup recovery | Duplicate recovery path, though idempotent | Keep recovery idempotent; test both entry paths |
-| Editor API and control API share services but not one transport | Two mutation surfaces, one domain | Do not add run/workspace mutations to HTTP; keep review digests in control |
+| Editor API and control API share services but not one transport | Two mutation surfaces, one domain | Keep the editor limited to chain/draft persistence; use control for apply and compatibility operations |
 | JSON files are not cross-file transactional | Partial failure can leave a pointer or workspace record inconsistent | Use ordering, idempotent recovery, locks, and explicit reconciliation; never assume a multi-file atomic commit |
 
 No circular module dependency was found between `web`, `server`, and `portable` directories at the directory level. The shared→server type imports are the main logical inversion.
@@ -510,50 +565,56 @@ erDiagram
   CONFIG ||--o{ RECENT_PROJECT : lists
   CONFIG ||--o{ TEST_WORKSPACE : tracks
   CONFIG ||--o{ DISCOVERY_WORKSPACE : tracks
-  CONFIG ||--o{ REMOTE_SOURCE : registers
-  REMOTE_SOURCE ||--o{ SNAPSHOT : pins
-  SNAPSHOT ||--o{ SKILL_PACKAGE : contains
-  SNAPSHOT ||--o{ NATIVE_AGENT : contains
-  PROJECT ||--o{ CHAIN : owns
+  PROFILE ||--o{ CHAIN : stores
+  GLOBAL_SKILL_ROOT ||--o{ SKILL_PACKAGE : contains
+  CHAIN }o..o{ SKILL_PACKAGE : references_by_name
+  PROJECT ||--o{ PROJECT_SKILL_COPY : receives
   CHAIN ||--o{ STEP : contains
   CHAIN ||--o{ INPUT : declares
-  CHAIN ||--o{ RUN : snapshotted_into
-  RUN ||--o{ RUN_STEP : records
+  CHAIN ||--o{ MANAGED_RUN : compatibility_snapshot
+  MANAGED_RUN ||--o{ RUN_STEP : records
   PROJECT ||--o| PROJECT_CLAIM : claims
 ```
 
 Core documents:
 
-- **Config** (`version: 2`): harness commands, extra skill directories, remote sources, project catalog pages, recent projects, test/discovery workspaces, discovery settings, remote limits.
-- **Chain** (`CHAIN_VERSION`): id, name, harness, session mode, steps (skill or instruction), inputs, automatic-permission opt-in, optional pinned native agent, timestamps.
-- **Run** (`RUN_VERSION`): frozen chain snapshot, mode, status, steps with status/tail/attempts/reason, session plan, project/test-workspace identity, skill observations, revision.
-- **Bundle** (`version: 1 | 2`): chain, skill packages with content and fingerprints, optional selected agent plus agent inventory.
-- **Discovery handoff**: goal, harness, pinned candidate identities, selected package files, fingerprints, size bounds.
+- **Config** (`version: 2`): harness commands, compatibility fields for extra directories/remote sources, recent projects, test/discovery workspaces, and discovery settings.
+- **Global skill root**: externally provisioned package directories under `~/.agents/skills` or `LOOM_SKILLS_DIR`; the catalog and derived index read this root.
+- **Chain** (`CHAIN_VERSION`): id, name, harness, session-mode and permission metadata, ordered skill-name or instruction steps, inputs, optional compatibility agent/binding metadata, and timestamps. The profile owns it; a selected project is context for apply and session work. The current-session workflow does not change the active host session mode.
+- **Project skill copy**: point-in-time package files copied to `<project>/.agents/skills`; there is no automatic update from the global source.
+- **Managed run** (`RUN_VERSION`, compatibility): frozen chain snapshot, mode, status, bounded step tails, session plan, project identity, and revision.
+- **Bundle and discovery handoff**: compatibility formats that can carry package contents, fingerprints, selected-agent data, or pinned candidate identities.
 
 ### 6.2 Persistence locations
 
 | Location | Data | Durability strategy |
 |---|---|---|
 | `~/.config/loom/config.json` | Global config | Atomic write, versioned schema, v1 migration |
-| `~/.config/loom/drafts/*.json` | Draft chains | Same chain store as projects |
+| `~/.config/loom/drafts/*.json` | Project-independent draft chains | Atomic, versioned chain documents |
+| `~/.config/loom/chains/*.json` | Shared chain library | Atomic, versioned chain documents visible from every registered project context |
+| `~/.config/loom/capability-index.sqlite` | Derived index of the configured global skill catalog | Disposable cache; rebuild or fresh-scan fallback |
+| `~/.agents/skills/` or `LOOM_SKILLS_DIR` | Externally provisioned global skill catalog | Read and indexed by Loom; updates are owned by external installation tools |
 | `~/.config/loom/profile-owner.sqlite` | Profile ownership lock | SQLite/OS lock |
 | `~/.config/loom/control.json` | Control endpoint + capability (and TLS credentials on Windows) | Private file, process-owned |
-| `~/.config/loom/active-run.json` | Global active pointer | Atomic write |
+| `~/.config/loom/active-run.json` | Compatibility managed-run pointer | Atomic write; not used by current-session chain execution |
 | `~/.config/loom/test-workspaces/<uuid>` | Retained managed test projects | Project registry + config records |
 | `~/.config/loom/discovery-workspaces/<uuid>` | Discovery handoff, managed project, results | Same |
-| `~/.config/loom/catalog-sources/<source>/<commit>` | Immutable remote snapshots | Content-addressed directories |
-| `<project>/.loom/chains/*.json` | Project chains | Atomic write + safe id/symlink checks |
-| `<project>/.loom/runs/*.json` | Run snapshots | Atomic write + bounded tails |
-| `<project>/.loom/portable-runs/*.json` | Portable helper runs | Atomic write, separate from managed runs |
-| `<project>/.loom/project-claim.sqlite` | Coordination claim | SQLite transactions |
+| `~/.config/loom/catalog-sources/<source>/<commit>` | Compatibility remote snapshots | Content-addressed directories; not the default catalog |
+| `<project>/.loom/chains/*.json` | Legacy project chain files | Copied into the shared library on first access; originals remain |
+| `<project>/.agents/skills/` | Applied skill package copies | Not overwritten or automatically updated |
+| `<project>/.loom/runs/*.json` | Compatibility managed-run snapshots | Atomic write + bounded tails |
+| `<project>/.loom/portable-runs/*.json` | Legacy portable helper runs | Atomic write, separate from managed runs |
+| `<project>/.loom/project-claim.sqlite` | Compatibility coordination claim | SQLite transactions |
+| Podman volume `skill-loom-config` | Container config, shared chains, and capability index | Persists across pod removal |
+| Podman bind mounts `/var/lib/loom/skills` and `/workspace` | Global catalog (read-only) and selected project | Host paths are translated by Podman; mounted project is writable |
 
 ### 6.3 Access patterns
 
 - **Repository/store**: `ChainStore`, `RunStore`, `ConfigStore` hide filesystem details behind async interfaces.
-- **Factory per project**: `ChainService` uses a `ChainStoreFactory`; `RunStore` is created per project path.
+- **Shared chain store**: `ChainService` writes to `<configDir>/chains`; the project parameter provides context and triggers non-destructive migration of legacy project records. Compatibility `RunStore` remains project-scoped.
 - **Read-modify-write**: config updates are serialized per target in-process (`enqueueWrite`) to avoid lost updates; cross-process safety comes from single-owner design.
-- **Snapshot isolation**: a run stores its own chain copy; later chain edits never change a run.
-- **Bounded reads**: run tails cap at 200 lines or 32 KiB per step; remote/handoff/bundle inputs have explicit byte/file/package caps; directory scans have limits (1,000 records / 64 MiB for portable coordination).
+- **Snapshot isolation (compatibility)**: a managed run stores its own chain copy; later chain edits never change that run. Current-session workflows do not create run snapshots.
+- **Bounded reads**: skill-package copies are bounded; managed-run tails cap at 200 lines or 32 KiB per step; compatibility remote/handoff/bundle inputs have explicit caps.
 - **Corruption handling**: invalid files are reported as warnings with stable codes; list operations keep going; read-by-id raises a typed error. There is no silent repair.
 
 ### 6.4 Identity and integrity
@@ -564,20 +625,21 @@ Core documents:
 | Chain revision | SHA-256 of canonical chain JSON (`chainRevision`) |
 | Run revision | SHA-256 of run JSON (`runRevision`) |
 | Bundle fingerprint | SHA-256 of the serialized bundle |
-| Snapshot id | Source + commit/revision |
-| Skill id | Source kind + harness + package identity |
+| Chain skill reference | Skill name, resolved uniquely against the current global catalog at apply time |
+| Compatibility snapshot id | Source + commit/revision |
+| Compatibility skill id | Source kind + harness + package identity |
 | Native agent id | Harness + source + path + fingerprint |
 | Review digest | SHA-256 of the exact review evidence shown to the caller |
 
-Integrity checks appear at bundle parse (file hashes/paths), agent copy (fingerprint), remote snapshot review, and run-start/action review. A digest is evidence that the reviewed payload has not changed; it is not proof a human reviewed it (documented in CLI help and ADRs).
+Integrity checks remain in compatibility bundle parsing, remote snapshot review, native-agent copy, and managed-run start/action review. The default chain apply path relies on safe package traversal, unique name resolution, and no-overwrite behavior; it does not require provenance review or immutable fingerprints.
 
 ### 6.5 Concurrency and retention
 
-- **Single active run globally** via `~/.config/loom/active-run.json` and the run owner.
+- **Single active managed run globally (compatibility)** via `~/.config/loom/active-run.json` and the run owner.
 - **Single profile owner** via profile lock; control endpoint metadata is written by the owner.
 - **Workspace lifecycle lock** prevents create/remove races.
 - **Project coordination** (opt-in, versioned SQLite protocol) reconciles claims and prior run records across clients.
-- **Retention is explicit**: test/discovery workspaces persist until `workspace remove`; remote snapshots persist after source unregistration; completed portable records should be archived by the operator.
+- **Retention is explicit**: shared chains and external global skills persist independently of projects; compatibility test/discovery workspaces persist until `workspace remove`, and old remote snapshots/portable records have separate cleanup rules.
 
 ---
 
@@ -587,26 +649,26 @@ Integrity checks appear at bundle parse (file hashes/paths), agent copy (fingerp
 
 - **Network**: loopback-only host assertion (`assertLoopbackHost`); shutdown route validates loopback host, same origin, JSON content type, per-instance token, and `confirm: true`.
 - **Control**: Unix socket in a private temp/profile directory or Windows loopback TLS with generated client certificates; 32-byte bearer token; timing-safe comparison; 64 KiB request cap; 32-client cap; 5-second initial timeout; protocol version check.
-- **Process execution**: no shell; executable + argument array; resolved from config or PATH; PTY input only from explicit attach/subscribe surfaces.
-- **Filesystem**: canonical paths, absolute-path requirements, safe id regexes, symlink/regular-file checks, private directory modes, output published with `link` to avoid overwrite.
-- **Remote content**: validated Git remotes, bounded staging, immutable snapshots, fingerprints, no execution of fetched content.
-- **Review gates**: mutations that change project state or start/advance runs require a digest and explicit confirmations; skill-bearing runs remain blocked where unverified.
+- **Process execution**: the default chain workflow starts no process; retained managed-run compatibility uses an executable plus argument array, never a shell string, with server-owned PTY handling.
+- **Filesystem**: global catalog reads and project package copies use bounded traversal, path validation, symlink refusal, and no-overwrite publication; chain documents use safe ids and atomic writes.
+- **Remote content**: validated Git sources and immutable snapshots remain compatibility features, not inputs to the default catalog or chain apply path.
+- **Review gates**: legacy managed-run and compatibility mutations retain their digest/confirmation contracts. Default chain apply resolves intentional global packages by unique name and refuses destination conflicts without requiring provenance review.
 
 ### 7.2 Error handling and resilience
 
 - A **typed error family** per module (`ConfigError`, `ChainStoreError`, `RunStoreError`, `RunOrchestratorError`, `HarnessError`, `ControlError`, `BundleError`, etc.) with stable codes and safe details.
 - Control `failure()` maps known errors to `{ ok: false, error }`; HTTP uses `createApiErrorEnvelope`; unknown errors become generic `INTERNAL_ERROR` without leaking internals.
 - Cause chains are preserved where useful (`{ cause }`); details avoid prompts, credentials, terminal output, and file contents.
-- Recovery: startup marks active runs `interrupted`; stale/ambiguous/claimed records are retained with warnings; active pointers are cleared only with evidence.
+- Recovery: startup marks compatibility managed runs `interrupted`; stale/ambiguous/claimed records are retained with warnings; active pointers are cleared only with evidence.
 - Failure isolation: a corrupt chain/run file becomes a list warning, not a service outage; a failed workspace cleanup is typed and retryable.
 
 ### 7.3 Logging and observability
 
 - Fastify request logging is injectable (disabled by default `logger: false`; enabled by the CLI `startServer`).
 - Server logs record unhandled 5xx errors with `{ err }` but respond generically.
-- Run recovery emits structured warning codes (`RUN_RECOVERY_AMBIGUOUS`, `RUN_RECOVERY_CLAIMED`).
-- Health endpoint reports status, version, config directory, port, and active-run summary.
-- No metrics/tracing subsystem exists; observability is logs, JSON envelopes, run records, and live evidence files under `docs/evidence/`.
+- Compatibility run recovery emits structured warning codes (`RUN_RECOVERY_AMBIGUOUS`, `RUN_RECOVERY_CLAIMED`).
+- Health endpoint reports status, version, config directory, port, and compatibility active-run summary.
+- No metrics/tracing subsystem exists; observability is logs, JSON envelopes, compatibility run records, and live evidence files under `docs/evidence/`.
 
 ### 7.4 Validation
 
@@ -617,15 +679,16 @@ Validation is distributed by responsibility:
 | Route/control input | Zod request schemas, strict objects, size caps |
 | Chain model | Chain shape, versions, steps, inputs, placeholders, session mode |
 | Stores | Decoded document schema, ids, paths, versions, file type/symlink |
-| Preflight | Chain, project, harness, catalog, skills, agent, auth, trust, permissions, git |
-| Review layer | Recomputed digest vs reviewed digest, confirmations |
-| Runtime | Session ids, shell-free args, input values, timeouts, process identity |
+| Current-session apply | Unique current global package per skill name, bounded safe copy, destination conflict |
+| Compatibility preflight | Chain, project, harness, catalog, skills, agent, auth, trust, permissions, git |
+| Compatibility review layer | Recomputed digest vs reviewed digest, confirmations |
+| Compatibility managed runtime | Session ids, shell-free args, input values, timeouts, process identity |
 
 Business rules that must survive reload (for example “a run must never mutate after final status”) are enforced in domain functions, not only routes.
 
 ### 7.5 Configuration management
 
-- Global config is a versioned JSON document; environment overrides are explicit and read per operation: `LOOM_CONFIG_DIR`, `LOOM_HOST`, `LOOM_PORT`, `LOOM_DEV_SUPERVISOR`.
+- Global config is a versioned JSON document; environment overrides are explicit and read per operation: `LOOM_CONFIG_DIR`, `LOOM_SKILLS_DIR`, `LOOM_HOST`, `LOOM_PORT`, and `LOOM_DEV_SUPERVISOR`. Podman deployment also accepts `LOOM_PROJECT_DIR`, `LOOM_PODMAN_PORT`, and `LOOM_PODMAN_PLATFORM`.
 - Harness executable overrides live in config (`harnessCommands`), with PATH fallback and typed resolution evidence.
 - No secrets are stored in config for harness auth; Skill Loom reads local evidence and never writes Copilot trust.
 - Test seams are option fields, not environment hacks.
@@ -637,6 +700,7 @@ The editor implements skip-to-content, `aria-live` status announcements, focus-v
 ### 7.7 Privacy
 
 - Run tails are bounded and never full transcripts.
+- Current-session chain inputs and outcomes are not persisted by Loom; the shared chain definition itself remains in the profile library.
 - Auth evidence is redacted.
 - Evidence JSON is privacy-reviewed before check-in.
 - Control metadata and TLS credentials are private and excluded from backups/commits.
@@ -659,27 +723,27 @@ The editor implements skip-to-content, `aria-live` status announcements, focus-v
 - **Transport**: Unix domain socket (non-Windows) or mutual TLS on loopback (Windows).
 - **Framing**: one newline-delimited JSON request per connection; one JSON response; event subscriptions stream JSON Lines.
 - **Envelope**: `{ version, token, operation, input }`; response `{ protocolVersion, ok, result | error }`; events `{ protocolVersion, ok, event }`.
-- **Operations**: grouped by `status`, `service.stop`, `project.*`, `draft.*`, `chain.project.*`, `bundle.*`, `run.*`, `workspace.*`, `catalog.*`, `discovery.handoff`.
+- **Operations**: grouped by `status`, `service.stop`, `project.*`, `draft.*`, `chain.project.*` (including `chain.project.apply`), `catalog.*`, and retained `bundle.*`, `run.*`, `workspace.*`, and `discovery.handoff`.
 - **Idempotency and concurrency**: mutation blocking during run operations; control returns `CONTROL_BUSY` rather than interleaving.
 - **Resilience**: protocol version mismatch is explicit; stale endpoints are removed only after safe checks; sockets and active operations are drained on close.
 
 ### 8.3 Process and PTY communication
 
-- **Supervised**: one fresh harness process per step on a stable PTY; exit is a signal only; user decides advancement.
-- **Automatic**: either PTY + OSC 7501 working→idle edge, or headless process exit; bounded per-step timeout pauses instead of guessing.
+- **Compatibility supervised mode**: one fresh harness process per step on a stable PTY; exit is a signal only; user decides advancement.
+- **Compatibility automatic mode**: either PTY + OSC 7501 working→idle edge, or headless process exit; bounded per-step timeout pauses instead of guessing.
 - **Backpressure/retention**: output is fanned out to subscribers and trimmed at append time; no unbounded transcript.
 - **Cleanup**: `disposeAndWait` and terminal manager shutdown ensure children do not orphan.
 
 ### 8.4 Git and remote catalog
 
-- Remote sources are registered explicitly with validated HTTPS/SSH URLs.
-- Refresh stages content under limits, validates packages/agents, computes fingerprints, and publishes an immutable snapshot.
-- No command executes fetched content; copying/installation is a separate reviewed action.
-- Bundle export/import is file-based and content-addressed; import is reviewed with digests and confirmations.
+- Remote source registration, refresh, validation, and immutable snapshots remain compatibility functionality. The default global catalog does not fetch remote repositories.
+- Compatibility refresh stages content under limits, validates packages/agents, computes fingerprints, and publishes an immutable snapshot.
+- No command executes fetched content; compatibility import/copy behavior remains separate from the current global-root apply path.
+- Bundle export/import is file-based and content-addressed; compatibility imports retain their review and confirmation requirements.
 
 ### 8.5 Agent/skill integration
 
-Companion skills invoke the CLI with JSON stdin and parse JSON stdout. The portable `loom-bundle.mjs` is a separate entry point for service-free execution. Neither path depends on the browser UI.
+`loom-chain-workflow` invokes the CLI with JSON stdin to select a shared chain and apply its referenced packages, then guides the active agent through ordered steps in the current session. It does not launch a child harness or store run inputs/outcomes. The standalone bundle runner remains a separate compatibility entry point for existing exported bundles. Neither path depends on the browser UI.
 
 ---
 
@@ -783,8 +847,24 @@ Guarantees: same-directory temp file, `0600`, fsync file, atomic rename, fsync d
 ```ts
 // src/server/services.ts (excerpt)
 export function createLoomServices(options): LoomServices {
-  const catalogService = options.catalogService ?? createCatalogService({ configStore: options.configStore });
-  const chainService = options.chainService ?? createChainService();
+  const getConfigDirectory = () => options.configStore.getConfigDir();
+  const globalSkillsDirectory = () => resolveGlobalSkillsDirectory(
+    options.preflightEnv,
+    options.preflightHomeDirectory,
+  );
+  const catalogService = options.catalogService ?? createCatalogService({
+    configStore: options.configStore,
+    globalSkillsDirectory,
+  });
+  const createGlobalChainStore = () => createChainStore({
+    chainsDirectory: globalChainsDirectoryFor(getConfigDirectory()),
+    configDirectory: getConfigDirectory(),
+  });
+  const chainService = options.chainService ?? createMigratingChainService(
+    createChainService({ createStore: createGlobalChainStore }),
+    createGlobalChainStore,
+    getConfigDirectory,
+  );
   let draftService: ChainService | undefined;
   const getDraftService = () => draftService ??= createGlobalDraftService(options.configStore.getConfigDir());
   return { configStore, projectRegistry, catalogService, chainService, getDraftService, preflightProvider, testWorkspaceService };
@@ -839,7 +919,7 @@ Every unbounded surface has a cap: request bytes, response bytes, terminal tail 
 | Package smoke | `scripts/package-smoke.mjs` | Tarball contents, install, service startup, authenticated control, clean shutdown |
 | Docs gate | `scripts/check-docs.mjs` | Required headings, commands, safety statements, links/anchors, ADR index consistency, skill mirrors |
 
-There are 60 Vitest suites. There is no browser E2E suite in the current tree; the web editor is covered by TypeScript checks and component-level expectations where present, while live harness behavior is verified by probes rather than mocked assertions.
+There is no browser E2E suite in the current tree; the web editor is covered by TypeScript checks and component-level expectations where present. Current-session workflow rules are documented; chain selection and apply are covered through CLI/control tests. Legacy managed-run and live harness behavior are verified separately.
 
 ### 11.2 Test boundary patterns
 
@@ -869,7 +949,8 @@ npm run build
   └─ build:server          → dist/src/** (tsc) + copy scenario skills
 ```
 
-The npm tarball contains `dist/src`, `dist/web`, `dist/skills`, the PTY helper installer, and `docs/OPERATIONS.md`. `postinstall` builds/installs the native PTY helper. The `bin` entry is `dist/src/server/cli.js`.
+The npm tarball contains `dist/src`, `dist/web`, `dist/skills`, the PTY helper installer, and `docs/OPERATIONS.md`. `postinstall` builds/installs the native PTY helper. The main `skill-loom` binary points to `dist/src/server/cli.js`.
+The optional Podman deployment builds the same server from `Containerfile`; it exposes the `skill-loom-podman` bridge as a second npm binary.
 
 ### 12.2 Runtime topology
 
@@ -877,8 +958,8 @@ The npm tarball contains `dist/src`, `dist/web`, `dist/skills`, the PTY helper i
 - Fastify listens on `127.0.0.1:7373` (or `LOOM_PORT`); it refuses non-loopback hosts.
 - Static SPA served from `dist/web`; missing non-API GETs fall back to `index.html`.
 - Control endpoint runs alongside HTTP in the same process.
-- Harness CLIs are child processes/PTYs spawned on demand.
-- All persistent state is local; no cloud dependency.
+- Harness CLIs are spawned only by the retained managed-run compatibility subsystem. The default chain workflow runs in the active host agent session.
+- All persistent state is local in a host profile or Podman named volume; there is no cloud dependency.
 
 ### 12.3 Platform adaptation
 
@@ -889,15 +970,25 @@ The npm tarball contains `dist/src`, `dist/web`, `dist/skills`, the PTY helper i
 
 Native scope and identity have platform-specific tests and fixtures. CI runs the full verification matrix on Ubuntu, macOS, and Windows, plus Node 26 on Ubuntu.
 
-### 12.4 Development topology
+### 12.4 Podman deployment
+
+- `scripts/podman.mjs` builds and starts the app and Caddy proxy in one pod. The app remains bound to loopback inside the pod.
+- The default publication is a host loopback port (`127.0.0.1:4317`); `--private-network` publishes no host port and requires private authenticated platform/VPN ingress.
+- The named volume `skill-loom-config` stores config, the shared chain library, and the derived capability index. `podman:down` removes the pod but retains this volume.
+- The host-global skills directory is mounted read-only at `/var/lib/loom/skills`; one selected project is mounted read-write at `/workspace`.
+- `skill-loom-podman` runs the CLI inside the app container using a structured `podman exec` argument array and forwards stdin. Host `skill-loom` cannot reach the container-local control socket.
+- On macOS and Windows the launcher starts Podman Machine and relies on Podman's host-path translation. `LOOM_PODMAN_PLATFORM` can select `linux/amd64` or `linux/arm64`. Linux Podman runtime/persistence has been exercised; macOS/Windows runtime mounts remain unverified.
+
+### 12.5 Development topology
 
 - `npm run dev` runs `scripts/dev-supervisor.mjs`: forks the backend with `LOOM_DEV_SUPERVISOR=1`, starts Vite, watches `src/server`, restarts on change, and coordinates graceful shutdown/restart.
 - Vite proxies `/api` to `127.0.0.1:7373`; the server owns the API.
 - `npm start` runs the built server.
 
-### 12.5 Operations and upgrade path
+### 12.6 Operations and upgrade path
 
-- Back up the config directory and project `.loom` data; control metadata and active-run pointers are process state, not backup targets.
+- Back up the config directory (including shared chains), the externally managed global skill root, and project `.agents/skills` copies as needed. For Podman, back up `skill-loom-config` and the mounted host directories.
+- Treat run records and active-run pointers as compatibility state; control metadata is process state, not a backup target.
 - Stop the service before upgrading; one owner per profile.
 - Schema versions are explicit; older versions are rejected rather than silently reinterpreted.
 - Live verification is opt-in and documented; evidence is retained separately from unit tests.
@@ -911,20 +1002,20 @@ Native scope and identity have platform-specific tests and fixtures. CI runs the
 1. Extend `HARNESS_IDS` and `HarnessCommandsSchema` in `config/schema.ts`.
 2. Implement `createXAdapter` in `src/server/harness/` returning a complete `HarnessAdapter` descriptor + methods.
 3. Register it in `harness/registry.ts` (`createHarnessAdapter` and the ordered id list).
-4. Add catalog discovery if the harness owns skill locations (`CatalogAdapter` in `catalog/merge.ts` + adapter file).
+4. Keep skill discovery on the configured global root across harnesses; add or adjust a catalog adapter only for harness-specific metadata or compatibility behavior.
 5. Add auth evidence strategy if needed (`preflight/auth.ts`, `PreflightProviderOptions.preflightAuthStrategies`).
 6. Add trust behavior only if the harness has a folder dialog; otherwise set `behavior: 'none'`.
 7. Add command builders for interactive/headless and session id rules.
 8. Add preflight/session/fork/permission tests and update docs/ADRs.
 9. Keep all harness-name comparisons inside adapter construction; consume descriptors elsewhere.
 
-### 13.2 Adding a skill source
+### 13.2 Provisioning the global skill catalog
 
-1. Extend `SkillSource`/`SKILL_SOURCES` ordering in `catalog/types.ts`.
-2. Add discovery in the relevant adapter or a new adapter.
-3. Define stable id derivation and source badge.
-4. Add merge ordering, search behavior, and duplicate preservation tests.
-5. If remote, add snapshot validation, limits, and provenance notices.
+1. Install or update packages with the user's existing skill provisioning tool in `~/.agents/skills` or the configured `LOOM_SKILLS_DIR`.
+2. Keep the directory layout compatible with the supported skill package metadata.
+3. Use the existing catalog and capability-index paths; external additions/changes are observed on subsequent scans or index rebuilds.
+4. Apply selected chain packages with `chain project apply`; it copies only referenced packages and refuses to overwrite a project destination.
+5. Do not add a remote source or provenance-review requirement to the default catalog. Compatibility source code is separate from the current authoring model.
 
 ### 13.3 Adding an HTTP route
 
@@ -1115,40 +1206,44 @@ The durable decisions live in `docs/adr/`. The index is authoritative; this tabl
 | 0005 | Versioned atomic JSON | Crash-safe single-document writes; explicit migrations |
 | 0006 | One active run + interrupt recovery | Global exclusivity; conservative recovery |
 | 0007 | Explicit advancement signals | No timing heuristics; deterministic automatic runs |
-| 0008 | Session modes + deterministic handoff | Fork limitations are explicit, not simulated |
-| 0009 | Read-only Copilot trust + permission opt-in | No trust writes; broad permissions require chain opt-in |
-| 0010 | Global chain library snapshots | Superseded by CLI-driven workflow |
+| 0008 | Session modes + deterministic handoff | Compatibility chain metadata; the current-session workflow does not change host session mode |
+| 0009 | Read-only Copilot trust + permission opt-in | No trust writes; permission behavior remains in compatibility runs |
+| 0010 | Global chain library snapshots | Historical storage decision; superseded by ADR-0027/0028 and the shared-library model in ADR-0032 |
 | 0011 | Shell-free spawn + server-owned PTY | Injection-resistant process control; centralized cleanup |
 | 0012 | Shared project skill install root | One `.agents/skills` destination; legacy discovery preserved |
-| 0013 | Deterministic bundle skill resolution | Project-local precedence; ambiguity rejected |
-| 0014 | Portable agent-skill execution | Bundles run without the service |
-| 0015 | Pinned remote snapshots | Immutable, content-addressed remote inputs |
-| 0016 | Pinned native agent selection | Agents are harness-specific, source-pinned, adapter-gated |
+| 0013 | Deterministic bundle skill resolution | Compatibility bundle behavior; superseded for default chains by ADR-0032 |
+| 0014 | Portable agent-skill execution | Retained for old bundles; superseded for default chains by ADR-0032 |
+| 0015 | Pinned remote snapshots | Compatibility remote inputs; not used by default chain authoring |
+| 0016 | Pinned native agent selection | Compatibility selection remains harness-specific and source-pinned |
 | 0017 | Managed disposable test workspaces | Tests isolated from source project; explicit cleanup |
 | 0018 | Versioned bundles for native agents | Bundle v2 carries agent assets |
 | 0019 | Project-independent drafts | Drafts keyed to profile, not a project |
-| 0020 | Local shared bundle library | Superseded by CLI-driven workflow |
+| 0020 | Local shared bundle library | Historical bundle-sharing design; superseded by ADR-0027/0028 and shared chains in ADR-0032 |
 | 0021 | Validated discovery handoff | Pinned, bounded, redistributable-only-with-review |
 | 0022 | Managed interactive discovery | Retained workspace + supervised execution |
 | 0023 | Profile owner lock | One owner per profile |
 | 0024 | Local control transport | Private socket / mTLS + bearer capability |
-| 0025 | Reviewed CLI approval contract | Digests + explicit confirmations for mutations |
+| 0025 | Reviewed CLI approval contract | Digests remain for compatibility mutations; current chain apply has no review digest |
 | 0026 | Bounded opt-in workspace evaluation | Explicit checks, bounded output, no arbitrary execution |
 | 0027 | CLI and skill-driven workflow | CLI is the primary product surface |
 | 0028 | Single-purpose chain editor | Web UI limited to editing; no run/project screens |
+| 0029 | Catalog-resolved global skill reuse | Superseded for the default workflow by ADR-0032 |
+| 0030 | Capability index and model reranking | Derived search index now reads the single global root; review requirements superseded by ADR-0032 |
+| 0031 | Reviewed skill installation | Superseded for shared-chain apply by ADR-0032 |
+| 0032 | Host-global skills and shared chains in the current session | Global catalog, shared chain library, project copy, active-session execution, private Podman deployment |
 
 ### 15.1 Decision rationale patterns
 
 - **Local-first over multi-user**: removes auth/identity complexity and matches the product (a developer’s local machine).
 - **Explicit over implicit**: signals, acknowledgements, confirmations, versions, and error codes are all explicit.
-- **Immutable over mutable history**: snapshots and content-addressed fingerprints make reviews and recovery possible.
+- **Current inputs for new chains; snapshots for compatibility**: default chain references resolve to the current global package at apply time, while retained bundles and managed runs keep their immutable review/recovery model.
 - **Bounded over complete**: tails, scans, bundles, and handoffs have hard limits to protect memory, disk, and privacy.
 - **Adapters over conditionals**: capability descriptors keep harness evolution localized.
 
 ### 15.2 Consequences accepted
 
 - Recovery can leave ambiguous records rather than guessing ownership.
-- Some capabilities remain blocked or unverified (skill-bearing CLI starts, non-process-exit automatic advancement, native fork differences).
+- Managed-run compatibility limitations remain; the current-session workflow does not claim to change the active host session mode or to verify that the host loaded a named skill.
 - The editor is intentionally not a full project manager.
 - JSON document storage is not a transactional database; consistency relies on ordering, locks, single ownership, and reconciliation.
 - Platform-specific control transport adds Windows-specific setup and verification burden.
@@ -1208,6 +1303,13 @@ The durable decisions live in `docs/adr/`. The index is authoritative; this tabl
 5. Add control integration tests (auth, invalid, stale, happy path).
 6. Update user/admin docs.
 
+**New shared-chain workflow**
+1. Read or create the chain in the profile-owned `<configDir>/chains` library (default: `~/.config/loom/chains`).
+2. Resolve referenced skill names against the configured host-global catalog.
+3. Use `chain project apply` to copy only the selected packages into the chosen project's `.agents/skills`; preserve existing destinations.
+4. Update the canonical companion skill so it guides ordered work in the active session without launching a harness or persisting run state.
+5. Test chain lookup, missing/ambiguous names, no-overwrite behavior, and session instructions; document compatibility boundaries.
+
 **New harness**
 Follow §13.1 end to end; add descriptor, registry entry, catalog adapter, auth/trust strategy, command builders, tests, docs.
 
@@ -1252,6 +1354,9 @@ docs/adr/NNNN-<decision>.md             # durable choice
 | Adding shared→server type imports casually | Deepens logical inversion | Move pure types to shared or keep leaf/type-only |
 | Forgetting docs/ADR/mirror updates | Docs gate fails; behavior drifts | Run `npm run check`; update docs map and ADRs |
 | Assuming JSON files are transactional | Partial state after crash | Order writes, make recovery idempotent, use locks/reconciliation |
+| Treating project skill copies as catalog sources | Makes chain selection depend on project-local duplicates | Author from the one configured global root; copy only when applying |
+| Reusing bundles or managed runs as the normal workflow | Reintroduces snapshots, nested harness execution, and persistent run records | Use the shared library and active agent session; keep old paths explicitly compatibility-only |
+| Requiring provenance review for intentionally selected global skills | Adds process without improving the chosen host catalog model | Keep basic path, copy-bound, and no-overwrite safety; do not add snapshot review to default apply |
 
 ### 17.4 Testing blind spots to close
 
@@ -1267,10 +1372,12 @@ docs/adr/NNNN-<decision>.md             # durable choice
 Refresh this document when any of the following changes:
 
 - A new harness, catalog source, run mode, transport, or persistence document is added.
+- The global skill root, shared chain store, project apply behavior, or current-session companion workflow changes.
+- Podman image, persistent volume, mount layout, CLI bridge, host-platform behavior, or ingress boundary changes.
 - A route family or control operation family is added/removed.
 - The web surface expands beyond the chain editor.
 - An ADR is added or superseded.
 - Build/deployment topology or platform support changes.
 - A boundary exception in §5.4 is introduced or removed.
 
-A good refresh is evidence-driven: read `package.json`, `src/server/app.ts`, `src/server/services.ts`, `src/server/control.ts`, `src/server/harness/types.ts`, `src/server/runs/orchestrator.ts`, `src/portable/bundle.ts`, `src/web/App.tsx`, `docs/adr/README.md`, and the CI workflow before editing. Then run `npm run typecheck && npm run check && npm test` to confirm the documented commands still exist and the tree still agrees with the blueprint.
+A good refresh is evidence-driven: read `package.json`, `src/server/app.ts`, `src/server/services.ts`, `src/server/catalog/global-skills.ts`, `src/server/catalog/install.ts`, `src/server/chains/store.ts`, `src/server/control.ts`, `.github/skills/loom-chain-workflow/SKILL.md`, `scripts/podman.mjs`, `Containerfile`, the relevant ADRs, and the CI workflow before editing. Distinguish default current-session behavior from retained compatibility subsystems, and record platform runtime evidence without claiming unverified Podman Machine behavior. Then run `npm run typecheck && npm run check && npm test` to confirm the documented commands still exist and the tree still agrees with the blueprint.
