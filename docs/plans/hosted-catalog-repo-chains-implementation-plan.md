@@ -87,11 +87,11 @@ P1 and P2 may proceed in parallel after P0. P3 and P4 require the data/identity 
 **Checklist:**
 
 - [x] Use a new explicit repo source directory rather than the legacy `.loom/chains/` migration directory.
-- [ ] Choose the exact directory name and file layout; verify it cannot be confused with legacy migration or project-local run data.
-- [ ] Define how the repo's canonical chain gets a stable ID and timestamps, and how its hosted counterpart is matched to it.
-- [ ] Define publication semantics: create, update, conflict, and deliberate republish after a remote edit. Use revision preconditions; do not silently overwrite.
-- [ ] Decide where the last-published revision lives. The current chain schema is strict; do not add an unversioned field to chain JSON.
-- [ ] Select the client export identity contract. Prefer an exact catalog identity over an ambiguous display name; verify available stable identifiers and behavior when the source path changes.
+- [x] Choose the exact directory name and file layout; verify it cannot be confused with legacy migration or project-local run data.
+- [x] Define how the repo's canonical chain gets a stable ID and timestamps, and how its hosted counterpart is matched to it.
+- [x] Define publication semantics: create, update, conflict, and deliberate republish after a remote edit. Use revision preconditions; do not silently overwrite.
+- [x] Decide where the last-published revision lives. The current chain schema is strict; do not add an unversioned field to chain JSON.
+- [x] Select the client export identity contract. Prefer an exact catalog identity over an ambiguous display name; verify available stable identifiers and behavior when the source path changes.
 - [x] Limit standalone skill copies to project `.agents/skills/`; do not install into a client-global personal directory in this scope.
 - [x] Refuse to overwrite existing project packages. A package replacement/update operation is out of scope and requires a separate explicit decision.
 - [x] Use operator-controlled host catalog sync. Skill Loom itself does not fetch the source repository; a scheduled sync is not included.
@@ -343,7 +343,7 @@ Do not record credentials, private keys, tokens, or unnecessary tailnet hostname
 
 | Phase | Status | Acceptance criteria | Evidence / next action |
 | --- | --- | --- | --- |
-| P0 — Contract | Partially confirmed; exit gate open | All | Operator sync, new explicit repo directory, repo-only/no-overwrite copies, repo-canonical publishing, and active-session local run are recorded above. Resolve remaining Phase 0 questions before dependent implementation. |
+| P0 — Contract | Complete | All | ADR-0034 and `P0-CONTRACT-01`; user-approved decisions recorded. Live host validation is not part of P0 and remains unrun for P6. |
 | P1 — Host catalog operations | Not started | AC-01, AC-02, AC-10, AC-12 | Not run. |
 | P2 — Selected-skill transfer | Not started | AC-03, AC-04, AC-05, AC-09, AC-10 | Not run. |
 | P3 — Repo chain and publish | Not started | AC-08, AC-11 | Not run. |
@@ -351,13 +351,15 @@ Do not record credentials, private keys, tokens, or unnecessary tailnet hostname
 | P5 — Remote workflow | Not started | AC-03, AC-06, AC-07, AC-08, AC-09 | Not run. |
 | P6 — Docs and rollout | Not started | AC-01–AC-12 | Product validation not run. |
 
-### Evidence recorded while creating this plan
+### Evidence recorded while planning and executing
 
 | ID | Date / commit | Phase / AC | Status | Environment and exact action | Result / evidence | Follow-up |
 | --- | --- | --- | --- | --- | --- | --- |
 | PLAN-DOC-01 | 2026-11-13T22:38+02:00; uncommitted | Planning docs; no product AC | Passed | Node v26.13.0, npm 11.20.0; `npm run check`; `git diff --check`. | Both passed. | No product tests were run; implementation phases remain not started. |
 | PLAN-PAGE-01 | 2026-11-13T22:37:54+02:00; uncommitted | P6 planning artifact; no product AC | Automated checks passed; browser check not run | `node /home/mcsquirrel/.agents/skills/archify/bin/archify.mjs finalize explainer ... --repo-root /home/mcsquirrel/projects/personal/skill-loom --json`. | Validate, deliver, and check passed; no diagnostics. Finalizer HTML SHA-256 `18b15f9a804fdba85a5edba2076a084eb4a022f79d6969e861fe061b0f5b3b1f`. Local receipt: `.archify/explainer-hosted-catalog-repo-chains-20261113-222411/hosted-catalog-repo-chains.finalize-summary.json`. | Browser check and visual review not run. |
 | PLAN-PAGE-02 | 2026-11-13T22:38+02:00; uncommitted | P6 tracked overview; no product AC | Passed; provenance unknown | Removed generated trailing whitespace from the tracked copy only; ran `node /home/mcsquirrel/.agents/skills/archify/bin/archify.mjs check docs/plans/hosted-catalog-repo-chains-overview.html --json`. | Structural, dependency, and native-diagram checks passed. Tracked HTML SHA-256 `e1ba595873a480f259ec3175a82c88faf6a40d79f159eed540502ae011a7ed33`. | Whitespace-only change to the finalized HTML; original finalizer artifact and receipt remain in `.archify/`. |
+| P0-CONTRACT-01 | 2026-11-13T22:53+02:00; uncommitted | P0 / contract | Passed | User-approved Phase 0 decisions; repository review of the chain schema/revisions, catalog IDs/fingerprints, Podman plan, and existing ADRs. | ADR-0034 records `chains/<chain-id>.json`, a versioned `.publish.json` sidecar, stable repo identity with revision-checked hosted mapping, entry ID plus package fingerprint, and native Linux Podman as the first live target. No product behavior or live host validation was run. | P0 contract gate closed. P1–P6 remain unstarted; the real Linux SSH/Podman pilot remains unrun. |
+| P0-GATES-01 | 2026-11-13T22:58+02:00; uncommitted | P0 / repository gates | Blocked | Node v26.13.0, npm 11.20.0; ran `npm run check`, `npm run typecheck`, `npm test`, and `git diff --check`. | Documentation check and diff check passed. Typecheck could not start (`tsc: not found`); tests could not start (`vitest: not found`). | Dependencies are not installed in this worktree. No product tests or live Podman checks were run. |
 
 ### Entry template for implementation runs
 
@@ -365,14 +367,15 @@ Do not record credentials, private keys, tokens, or unnecessary tailnet hostname
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `E-<n>` | `P<n>` / `AC-xx` | `not run` | — | — | — | — | — |
 
-## 9. Questions requiring confirmation before dependent implementation
+## 9. Approved Phase 0 decisions
 
-These are intentionally unresolved; the phases must not guess.
+ADR-0034 records the decisions approved for dependent implementation:
 
-1. **Exact local chain directory and format:** Which explicit repo path should hold the source chain? It must not be `.loom/chains/`, which has a legacy-import role.
-2. **Publish metadata:** Should the repo store hosted chain ID/revision in a versioned sidecar, or should users supply/resolve that mapping during each publish?
-3. **Target platform:** Which OS and Podman environment is the first live host target? The repo's current evidence does not establish real second-machine interoperability or all Podman Machine mount behavior.
-4. **Selection identity:** Which exact catalog identity should the client transfer request carry? Confirm stability and behavior when a package path or name changes.
+1. **Repo chain path and format:** Tracked `chains/<chain-id>.json`, outside the legacy `.loom/chains/` importer.
+2. **Publish metadata:** A separate versioned `chains/<chain-id>.publish.json` sidecar stores the hosted ID and last successful revision.
+3. **First live target:** Native Linux Podman host. Real SSH/Podman interoperability remains unverified until the P6 pilot.
+4. **Selected-skill identity:** Exact catalog entry ID plus a verified package fingerprint. A path/name change requires rediscovery and reselection.
+5. **Publication behavior:** Repo chain IDs persist across edits and renames; copies get new IDs. Updates require the sidecar revision. A stale conflict preserves both records and needs explicit comparison and user-confirmed republish.
 
 ## 10. Delegation policy for execution
 
