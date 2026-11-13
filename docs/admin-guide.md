@@ -89,6 +89,13 @@ authenticated platform/VPN ingress. Do not bind the application to a
 non-loopback address or expose it directly to the internet; the service has no
 application authentication.
 
+The host skills directory is an operator-managed source, mounted read-only and
+outside the image. See the [Host Catalog Operations guide](host-catalog-operations.md)
+for its package layout, safe add/update/remove workflow, refresh behavior,
+backup, permissions, and troubleshooting. Updating mounted packages does not
+require rebuilding the application image; existing client copies remain
+unchanged.
+
 On macOS and Windows, Podman Machine must be initialized and running under the
 same user with access to the selected host directories. `LOOM_PODMAN_PLATFORM`
 can select `linux/amd64` or `linux/arm64` for cross-architecture builds. Plan
@@ -168,6 +175,13 @@ host's existing package-management process.
 The bridge contract and local export are covered by automated tests. A
 second-machine connection to a real hosted Podman service has not yet been
 live-tested; track this as unverified in the [known gaps](current-gaps.md#execution-gates).
+
+The bridge can also copy exact reviewed catalog selections into a remote
+client's local repository before a chain exists. The local project path stays
+on the client; the host receives only the registered project id, harness, entry
+ids, and verified package fingerprints. See the [standalone skill guide](standalone-skill-guide.md#copy-selected-host-skills-to-a-client-project)
+for the review and copy commands. Existing `apply-local` behavior remains
+available for chain-based copies.
 
 ### From a packed package
 

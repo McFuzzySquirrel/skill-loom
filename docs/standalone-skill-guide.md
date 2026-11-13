@@ -90,6 +90,50 @@ existing package. Remote clients cannot install or update packages in the
 host-global catalog. For host setup, permissions, and troubleshooting, see
 [Remote client access](admin-guide.md#remote-client-access).
 
+## Copy Selected Host Skills to a Client Project
+
+The bridge can copy exact host-global catalog entries before a shared chain
+exists. First search using the registered host project context. Select a
+`personal` catalog entry by its exact `id`; display names are not unique:
+
+```bash
+printf '%s' '{"projectId":"<host-project-id>","harness":"opencode","query":"format","sources":["personal"],"offset":0,"limit":100,"warningsOffset":0}' \
+  | skill-loom-podman catalog project page
+```
+
+Review that exact entry to obtain the verified whole-package `fingerprint`:
+
+```bash
+printf '%s' '{"projectId":"<host-project-id>","harness":"opencode","candidate":{"id":"<catalog-entry-id>","source":"personal"}}' \
+  | skill-loom-podman catalog skill review
+```
+
+Then copy the reviewed selection to the local repository:
+
+```bash
+skill-loom-podman catalog skills copy-local \
+  --project /absolute/path/to/local/repo \
+  --project-id <host-project-id> \
+  --harness opencode \
+  --selection <catalog-entry-id> <package-fingerprint>
+```
+
+Repeat `--selection <catalog-entry-id> <package-fingerprint>` for each selected
+package. The command keeps `--project` client-side; the host request contains
+only the registered project id, harness, entry ids, and package fingerprints.
+It copies only verified `personal` entries into
+`<local-repo>/.agents/skills/`. The helper validates the complete bounded
+manifest and fingerprints before writing, rejects unsafe paths and existing
+destinations, and never executes package files. Limits are 100 packages, 2,000
+files, and 20 MiB decoded content.
+
+All destinations are checked before the first package is written. If a later
+filesystem failure interrupts multiple installs, earlier successful packages
+remain; the error reports those packages and whether cleanup of the failing
+package was incomplete. Resolve that state explicitly before retrying. Host
+catalog updates do not replace these project-local copies. Existing
+`chain project apply-local` remains the chain-based alternative.
+
 ## Workflow
 
 ### 1. Discover and package (optional)

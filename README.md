@@ -13,7 +13,7 @@ Skill Loom does not author skills and does not execute a skill as a callable com
 
 See the [visual tour](docs/visual-tour.md) for the chain editor.
 
-New users: follow the [quick start](docs/quick-start.md) to find global skills, create or select a shared chain, apply it to a project, and run it in the current session. For the full workflow, see the [user guide](docs/user-guide.md); for installation and operations, see the [administrator guide](docs/admin-guide.md). The [standalone skill guide](docs/standalone-skill-guide.md) documents the legacy bundle-only path.
+New users: follow the [quick start](docs/quick-start.md) to find global skills, create or select a shared chain, apply it to a project, and run it in the current session. For the full workflow, see the [user guide](docs/user-guide.md); for installation and operations, see the [administrator guide](docs/admin-guide.md) and [host catalog operations guide](docs/host-catalog-operations.md). The [standalone skill guide](docs/standalone-skill-guide.md) covers hosted selected-skill copies and the compatibility bundle workflow.
 
 ## Table of Contents
 
@@ -64,7 +64,7 @@ The product promise is deliberately narrow:
 | Global skill catalog | Search only the configured host-global `.agents/skills` tree. Existing external tools own package installation and updates. |
 | Apply chain to project | `skill-loom chain project apply` copies only the chain's referenced global packages into `<project>/.agents/skills/`; it never overwrites an existing package. |
 | Podman deployment | `npm run podman:up`, `podman:down`, and `podman:plan` support local and private single-user deployment with a persistent config volume, global skills, and project mounts. |
-| Podman CLI bridge | `skill-loom-podman` forwards CLI commands and stdin into the running app container, including through a named SSH-backed Podman connection; it can also copy selected skills into a client-local project. |
+| Podman CLI bridge | `skill-loom-podman` forwards CLI commands and stdin into the running app container, including through a named SSH-backed Podman connection; it can copy exact reviewed catalog selections into a client-local project before a chain exists. |
 | Scenario examples | Illustrative starter chains for business, student, app developer, and game developer workflows. See the [scenario chain guide](docs/scenario-chains.md). |
 | Compatibility surfaces | Bundle, remote-source, and managed-run commands remain during the pivot but are not part of the default chain workflow. |
 

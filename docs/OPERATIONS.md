@@ -148,6 +148,14 @@ Authentication is evidence-based: preflight may inspect command output, credenti
 
 The host-global `LOOM_SKILLS_DIR` is the only authoring catalog. Applying a shared chain copies only its referenced packages into the project's `.agents/skills/` root. Copies are bounded, symlinks are refused, existing packages are never overwritten, and project copies do not track later global updates. Bundle import remains a compatibility path.
 
+For Podman hosting, the operator-provisioned catalog is mounted read-only at
+`/var/lib/loom/skills` and is not included in the image. A fresh catalog query
+observes added or removed package directories; review/export re-walks package
+files and verifies the selected fingerprint. Client-local copies are
+point-in-time files and are never replaced when the host catalog changes. Use
+the [Host Catalog Operations guide](host-catalog-operations.md) for staging,
+rollback, read-only mount checks, host permissions, backup, and recovery.
+
 The chain editor's **Add instruction** adds an ordered standalone prompt without a catalog skill. It uses the same harness, inputs, session modes, and run controls as skill steps.
 
 For compatibility, cross-installation sharing remains available through `skill-loom bundle create`. Review instructions and package contents with `bundle inspect` before sharing; bundle import still applies its review and confirmation requirements. New workflows use the shared chain library and global skills catalog instead. See the [legacy bundle workflow](user-guide.md#legacy-share-a-chain-as-a-bundle).
@@ -183,7 +191,7 @@ Watch a run with `skill-loom run attach --run <id>` (Ctrl-] detaches), `run show
 
 Skill Loom is a **loopback-only** single-user application. The server binds to `127.0.0.1` and rejects non-loopback hosts. The app has **no authentication** and must not be exposed directly to a public or untrusted network. In the Podman deployment, the Caddy proxy shares the pod's network namespace and forwards to the loopback-bound app; the default host publish binds only to `127.0.0.1`. A private deployment may use a private authenticated platform/VPN ingress as its access boundary. Do not configure anonymous ingress, a public port, or multi-user access.
 
-Trusted remote clients may run the packaged `skill-loom-podman` helper over an SSH-backed Podman connection. SSH and Podman authorize access to the host account's containers and mounts; this is not Skill Loom user authentication or a per-command permission boundary. The helper uses `podman exec` to invoke the in-container CLI, which uses the existing private control transport. It does not expose the HTTP server or control socket. Client-local apply transfers only a bounded manifest of selected global packages (up to 100 packages, 2,000 files, and 20 MiB) and does not send the client project path to the host. A live second-machine SSH flow has not yet been verified; see [known gaps](current-gaps.md#execution-gates).
+Trusted remote clients may run the packaged `skill-loom-podman` helper over an SSH-backed Podman connection. SSH and Podman authorize access to the host account's containers and mounts; this is not Skill Loom user authentication or a per-command permission boundary. The helper uses `podman exec` to invoke the in-container CLI, which uses the existing private control transport. It does not expose the HTTP server or control socket. Chain-based and standalone client-local copies transfer only bounded selected global packages (up to 100 packages, 2,000 files, and 20 MiB decoded content), require exact catalog ids and package fingerprints for the standalone path, and do not send the client project path to the host. A live second-machine SSH flow has not yet been verified; see [known gaps](current-gaps.md#execution-gates).
 
 The server owns all filesystem traversal, path canonicalization, persistence, CLI process spawning, and PTY handling. Harness processes are spawned with an executable plus an argument array, never a shell command string; project paths are canonicalized and traversal outside the intended project data directory is rejected. The chain editor performs no shell execution and receives only typed API data.
 

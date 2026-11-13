@@ -27,6 +27,97 @@ import { createLoomServices } from '../../src/server/services.js';
 import { createTerminalManager, TerminalSubscriberConflictError } from '../../src/server/terminal/pty.js';
 
 describe.skipIf(process.platform === 'win32')('local control transport', () => {
+  it('exports only exact reviewed catalog selections and rejects changed packages', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-selected-export-')));
+    const project = join(root, 'project');
+    const globalSkills = join(root, 'host-skills');
+    const configDirectory = join(root, 'config');
+    const selected = join(globalSkills, 'formatting');
+    const unselected = join(globalSkills, 'private-helper');
+    await mkdir(project);
+    await mkdir(selected, { recursive: true });
+    await mkdir(unselected, { recursive: true });
+    await writeFile(join(selected, 'SKILL.md'), '---\nname: formatting\n---\nFormat safely.\n');
+    await writeFile(join(selected, 'helper.mjs'), 'export {};\n');
+    await writeFile(join(unselected, 'SKILL.md'), '---\nname: formatting\n---\nDo not export.\n');
+    const config = createConfigStore({ env: { LOOM_CONFIG_DIR: configDirectory } });
+    await config.update({});
+    const services = createLoomServices({
+      configStore: config,
+      preflightEnv: { LOOM_CAPABILITY_INDEX: '0', LOOM_SKILLS_DIR: globalSkills },
+    });
+    const server = await startControlServer(config, { services });
+    try {
+      const opened = await callControl(configDirectory, 'project.open', { path: project });
+      if (!opened.ok) throw new Error('Project registration failed.');
+      const projectId = (opened.result as { project: { id: string } }).project.id;
+      const page = await callControl(configDirectory, 'catalog.project.page', {
+        projectId, harness: 'opencode', sources: ['personal'], offset: 0, limit: 50, warningsOffset: 0,
+      });
+      if (!page.ok) throw new Error('Catalog query failed.');
+      const selectedEntry = (page.result as { entries: Array<{ id: string; name: string }> }).entries
+        .find((entry) => entry.name === 'formatting');
+      if (selectedEntry === undefined) throw new Error('Selected catalog entry was not discovered.');
+      const review = await callControl(configDirectory, 'catalog.skill.review', {
+        projectId, harness: 'opencode', candidate: { id: selectedEntry.id, source: 'personal' },
+      });
+      if (!review.ok) throw new Error('Catalog selection review failed.');
+      const fingerprint = (review.result as { candidate: { fingerprint: string } }).candidate.fingerprint;
+
+      const request = {
+        projectId,
+        harness: 'opencode',
+        selections: [{ id: selectedEntry.id, fingerprint }],
+      };
+      let output = '';
+      let error = '';
+      const exportExitCode = await runCli(['catalog', 'skill', 'export', '--config-dir', configDirectory], {
+        env: {},
+        stdin: Readable.from([JSON.stringify(request)]),
+        stdout: { write: (chunk) => { output += String(chunk); return true; }, isTTY: false },
+        stderr: { write: (chunk) => { error += String(chunk); return true; } },
+      });
+      expect(exportExitCode, error).toBe(0);
+      expect(error).toBe('');
+      const exported = JSON.parse(output) as { ok: boolean; result: unknown };
+      expect(exported).toMatchObject({
+        ok: true,
+        result: {
+          format: 'skill-loom-project-skills', version: 2,
+          skills: [{ id: selectedEntry.id, fingerprint, name: 'formatting', directory: 'formatting' }],
+        },
+      });
+      expect(JSON.stringify(exported)).toContain(Buffer.from('---\nname: formatting\n---\nFormat safely.\n').toString('base64'));
+      expect(JSON.stringify(exported)).not.toContain(Buffer.from('---\nname: formatting\n---\nDo not export.\n').toString('base64'));
+      await expect(access(join(project, '.agents'))).rejects.toMatchObject({ code: 'ENOENT' });
+
+      const added = join(globalSkills, 'added-after-query');
+      await mkdir(added);
+      await writeFile(join(added, 'SKILL.md'), '---\nname: added-after-query\n---\nVisible on refresh.\n');
+      const refreshedPage = await callControl(configDirectory, 'catalog.project.page', {
+        projectId, harness: 'opencode', query: 'added-after-query',
+        sources: ['personal'], offset: 0, limit: 50, warningsOffset: 0,
+      });
+      expect(refreshedPage).toMatchObject({
+        ok: true,
+        result: { entries: [expect.objectContaining({ name: 'added-after-query' })] },
+      });
+
+      await writeFile(join(selected, 'helper.mjs'), 'changed after package review\n');
+      expect(await callControl(configDirectory, 'catalog.skills.export', request))
+        .toMatchObject({ ok: false, error: { code: 'SKILL_INSTALL_CANDIDATE_CHANGED' } });
+      expect(await callControl(configDirectory, 'catalog.skills.export', {
+        projectId, harness: 'opencode', selections: [{ id: 'opencode-personal-not-found', fingerprint }],
+      })).toMatchObject({ ok: false, error: { code: 'SKILL_INSTALL_CANDIDATE_NOT_FOUND' } });
+      expect(await callControl(configDirectory, 'catalog.skills.export', {
+        projectId, projectPath: project, harness: 'opencode', selections: [{ id: selectedEntry.id, fingerprint }],
+      })).toMatchObject({ ok: false, error: { code: 'CONTROL_INVALID_REQUEST' } });
+    } finally {
+      await server.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('applies a shared chain’s global skills to the registered project without overwriting', async () => {
     const root = await mkdtemp(join(tmpdir(), 'loom-chain-apply-'));
     const project = join(root, 'project');

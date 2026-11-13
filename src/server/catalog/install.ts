@@ -116,6 +116,11 @@ export interface SkillPackageFile {
   sha256: string;
 }
 
+export interface SelectedCatalogSkill {
+  id: string;
+  fingerprint: string;
+}
+
 export interface SkillInstallReview {
   project: { id: string; path: string };
   harness: SkillHarness;
@@ -292,6 +297,97 @@ export async function exportChainSkillsForClient(
     }
   }
   return { format: 'skill-loom-project-skills', version: 1, skills };
+}
+
+/** Export exact, reviewed host-global catalog entries for a client-local copy. */
+export async function exportSelectedCatalogSkillsForClient(
+  options: InstallOptions,
+  request: {
+    projectId: string;
+    projectPath: string;
+    harness: SkillHarness;
+    selections: SelectedCatalogSkill[];
+  },
+): Promise<{
+  format: 'skill-loom-project-skills';
+  version: 2;
+  skills: Array<BundleSkill & { id: string; fingerprint: string }>;
+}> {
+  if (request.selections.length > MAX_BUNDLE_SKILLS) {
+    throw new BundleError('BUNDLE_TOO_LARGE', `Client transfers are limited to ${MAX_BUNDLE_SKILLS} skill packages.`);
+  }
+  const ids = new Set<string>();
+  for (const selection of request.selections) {
+    if (ids.has(selection.id)) {
+      throw new BundleError('BUNDLE_INVALID', 'The selected catalog entries contain a duplicate identity.');
+    }
+    ids.add(selection.id);
+  }
+
+  const catalog = await options.catalogService.getCatalog({
+    projectPath: request.projectPath,
+    harness: request.harness,
+  });
+  const entries = catalog.groups.flatMap((group) => group.entries);
+  const skills: Array<BundleSkill & { id: string; fingerprint: string }> = [];
+  const directories = new Set<string>();
+  const budget = { bytes: 0, files: 0 };
+
+  for (const selection of request.selections) {
+    const matches = entries.filter((entry) => entry.id === selection.id && entry.source === 'personal');
+    if (matches.length !== 1) {
+      throw new CatalogInstallError(
+        SKILL_INSTALL_ERROR_CODES.CANDIDATE_NOT_FOUND,
+        matches.length === 0
+          ? 'The selected host-global catalog entry is unavailable; search again.'
+          : 'The selected catalog identity is ambiguous; search again.',
+        { projectId: request.projectId, skillId: selection.id, matches: matches.length },
+      );
+    }
+    const entry = matches[0]!;
+    if (entry.name.trim() === '' || entry.name.length > 128) {
+      throw new BundleError('BUNDLE_INVALID', 'A selected skill name cannot be represented safely in the client manifest.');
+    }
+    const directory = safePackageName(entry.name);
+    validatePackagePath(directory);
+    if (directories.has(directory.toLowerCase())) {
+      throw new BundleError('BUNDLE_INVALID', 'Selected skill names map to the same project directory.');
+    }
+    directories.add(directory.toLowerCase());
+
+    try {
+      const info = await lstat(entry.packagePath);
+      if (!info.isDirectory() || info.isSymbolicLink() || await realpath(entry.packagePath) !== entry.packagePath) {
+        throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', `The package for skill "${entry.name}" is not a real directory.`);
+      }
+      const walked = await walkPackage(entry.packagePath);
+      if (!walked.files.some((file) => file.path === 'SKILL.md')) {
+        throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', `The package for skill "${entry.name}" has no SKILL.md.`);
+      }
+      const fingerprint = snapshotPackageFingerprint(walked.files);
+      if (fingerprint !== selection.fingerprint) {
+        throw new CatalogInstallError(
+          SKILL_INSTALL_ERROR_CODES.CANDIDATE_CHANGED,
+          `The package for skill "${entry.name}" changed after review; review it again.`,
+          { projectId: request.projectId, skillId: entry.id },
+        );
+      }
+      const files = walked.files.map((file) => {
+        validatePackagePath(file.path);
+        budget.bytes += file.bytes;
+        budget.files += 1;
+        if (budget.bytes > MAX_BUNDLE_BYTES || budget.files > MAX_BUNDLE_FILES) {
+          throw new BundleError('BUNDLE_TOO_LARGE', 'Client transfers are limited to 20 MiB and 2,000 files.');
+        }
+        return { path: file.path, content: file.content.toString('base64'), executable: file.executable };
+      });
+      skills.push({ id: entry.id, fingerprint, name: entry.name, directory, files });
+    } catch (error) {
+      if (error instanceof BundleError || error instanceof CatalogInstallError) throw error;
+      throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', `The package for skill "${entry.name}" could not be exported.`);
+    }
+  }
+  return { format: 'skill-loom-project-skills', version: 2, skills };
 }
 
 async function resolveChainSkillEntries(

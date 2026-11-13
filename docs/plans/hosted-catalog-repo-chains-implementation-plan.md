@@ -1,12 +1,12 @@
 # Hosted skill catalog and repo-first chains: implementation plan
 
-**Status:** Proposed; the agreed operating choices are recorded. Product changes have not started.
+**Status:** In progress; P1 documentation and P2 selected-skill transfer are implemented. The P1 target-host verification gate remains open; P3–P6 have not started.
 
 **Overview:** [One-page implementation overview](hosted-catalog-repo-chains-overview.html)
 
 **Purpose:** Plan the workflow discussed in the issue: maintain one skills catalog on the container host; let a remote repository agent discover and copy selected packages into that repo; author and run a chain from the repo; and explicitly publish a copy of that chain into the host's shared library.
 
-**Scope boundary:** This is a plan, not an implementation. No sub-agents have been started. Sub-agent opportunities are proposals only.
+**Execution note:** P1 and P2 implementation work is recorded in the evidence register. No sub-agents have been started; the listed opportunities remain proposals only.
 
 **Evidence rule:** A phase is not complete until its exit gate is backed by an entry in the execution evidence register. Mark unrun checks as `not run`; do not infer a live result from an automated contract test.
 
@@ -115,14 +115,14 @@ P1 and P2 may proceed in parallel after P0. P3 and P4 require the data/identity 
 
 **Checklist:**
 
-- [ ] Specify the exact catalog root layout: configured root contains one directory per package and each package has a `SKILL.md`.
-- [ ] Document the operator-controlled host-side source workflow and explicit sync. Do not invent hostnames, branch names, credentials, or timer schedules.
+- [x] Specify the exact catalog root layout: configured root contains one directory per package and each package has a `SKILL.md`.
+- [x] Document the operator-controlled host-side source workflow and explicit sync. Do not invent hostnames, branch names, credentials, or timer schedules.
 - [ ] Confirm whether the Podman host can read the mirrored path and whether UID/GID and SELinux labeling need platform-specific treatment.
-- [ ] Keep the container mount read-only and outside the image; document that changing package files does not require rebuilding the application image.
-- [ ] Verify and document when catalog discovery observes an external file change and how to diagnose stale/invalid package metadata.
-- [ ] Explain the difference between updating the host catalog and replacing a project-local copy. Existing client copies remain unchanged unless an explicit update flow is separately approved.
-- [ ] Document add, update, remove, backup/restore, source-sync failure, missing-package, duplicate-name, and permission troubleshooting.
-- [ ] Link the operator guide from `docs/admin-guide.md`; update `README.md` only where its feature/guide links need to reflect the new workflow.
+- [x] Keep the container mount read-only and outside the image; document that changing package files does not require rebuilding the application image.
+- [x] Verify and document when catalog discovery observes an external file change and how to diagnose stale/invalid package metadata.
+- [x] Explain the difference between updating the host catalog and replacing a project-local copy. Existing client copies remain unchanged unless an explicit update flow is separately approved.
+- [x] Document add, update, remove, backup/restore, source-sync failure, missing-package, duplicate-name, and permission troubleshooting.
+- [x] Link the operator guide from `docs/admin-guide.md`; update `README.md` only where its feature/guide links need to reflect the new workflow.
 
 **Exit gate:** An operator who did not implement the feature can follow the guide on the target host to add a package, see it in a catalog query, update it, and restore the previous source state without writing into the image or exposing the service.
 
@@ -139,15 +139,15 @@ P1 and P2 may proceed in parallel after P0. P3 and P4 require the data/identity 
 
 **Checklist:**
 
-- [ ] Add a host control operation that resolves an explicit bounded selection against the configured global catalog and returns the existing versioned transfer-manifest family or a deliberately versioned successor.
-- [ ] Bind each request to the registered host project context and an exact catalog selection; never accept a client filesystem path on the host.
-- [ ] Reuse the existing package walker, path validation, file-count/content limits, regular-file rules, executable-bit handling, and safe package naming where their contracts apply.
-- [ ] Extend the client bridge with a dedicated local-copy path that writes only to the client-supplied absolute project path and only under `<project>/.agents/skills/`.
-- [ ] Validate the complete manifest before the first write; refuse traversal, symlinks, malformed base64, duplicate destinations, unsafe names, over-limit transfers, and existing packages.
-- [ ] Define failure reporting for multiple package installs, including whether prior successful packages remain and how the output reports partial success. Existing destinations remain conflicts; replacement is excluded.
-- [ ] Keep remote/local path privacy: the project path stays client-side; the request contains only host project context and selected skill identities.
-- [ ] Keep writes non-executing. Treat skill contents as untrusted prompt data; do not run package scripts during discovery or transfer.
-- [ ] Add tests for exact selection, ambiguous/missing identity, changed catalog entry, malformed response, size limits, unsafe paths, symlink destinations, no overwrite, partial failure, and selected SSH connection use.
+- [x] Add a host control operation that resolves an explicit bounded selection against the configured global catalog and returns a versioned successor to the transfer-manifest family.
+- [x] Bind each request to the registered host project context and an exact catalog selection; never accept a client filesystem path on the host.
+- [x] Reuse the existing package walker, path validation, file-count/content limits, regular-file rules, executable-bit handling, and safe package naming where their contracts apply.
+- [x] Extend the client bridge with a dedicated local-copy path that writes only to the client-supplied absolute project path and only under `<project>/.agents/skills/`.
+- [x] Validate the complete manifest before the first write; refuse traversal, symlinks, malformed base64, duplicate destinations, unsafe names, over-limit transfers, and existing packages.
+- [x] Define failure reporting for multiple package installs, including whether prior successful packages remain and how the output reports partial success. Existing destinations remain conflicts; replacement is excluded.
+- [x] Keep remote/local path privacy: the project path stays client-side; the request contains only host project context and selected skill identities.
+- [x] Keep writes non-executing. Treat skill contents as untrusted prompt data; do not run package scripts during discovery or transfer.
+- [x] Add tests for exact selection, duplicate display names with exact IDs, missing identity, changed catalog entry, malformed manifest/base64, size limits, unsafe paths, symlink destinations, no overwrite, partial failure, and selected SSH connection use.
 
 **Exit gate:** A client can search the hosted catalog, select one or more exact entries, copy only those packages to a disposable local repo without a chain, and prove that no path or unselected package was sent to or written by the host. All transfer and conflict cases fail safely.
 
@@ -344,8 +344,8 @@ Do not record credentials, private keys, tokens, or unnecessary tailnet hostname
 | Phase | Status | Acceptance criteria | Evidence / next action |
 | --- | --- | --- | --- |
 | P0 — Contract | Complete | All | ADR-0034 and `P0-CONTRACT-01`; user-approved decisions recorded. Live host validation is not part of P0 and remains unrun for P6. |
-| P1 — Host catalog operations | Not started | AC-01, AC-02, AC-10, AC-12 | Not run. |
-| P2 — Selected-skill transfer | Not started | AC-03, AC-04, AC-05, AC-09, AC-10 | Not run. |
+| P1 — Host catalog operations | In progress — guide and automated contract complete; target-host check remains open | AC-01, AC-02, AC-10, AC-12 | `P1-DOC-AUTO-01` passed. Native Podman mount access, UID/GID, and SELinux checks remain not run. |
+| P2 — Selected-skill transfer | Complete — automated control and bridge contract | AC-03, AC-04, AC-05, AC-09, AC-10 | `P2-CONTROL-BRIDGE-01` passed. Real second-machine SSH/Podman remains a P6 live gate. |
 | P3 — Repo chain and publish | Not started | AC-08, AC-11 | Not run. |
 | P4 — Local execution | Not started | AC-06, AC-07 | Not run. |
 | P5 — Remote workflow | Not started | AC-03, AC-06, AC-07, AC-08, AC-09 | Not run. |
@@ -361,6 +361,10 @@ Do not record credentials, private keys, tokens, or unnecessary tailnet hostname
 | P0-CONTRACT-01 | 2026-11-13T22:53+02:00; uncommitted | P0 / contract | Passed | User-approved Phase 0 decisions; repository review of the chain schema/revisions, catalog IDs/fingerprints, Podman plan, and existing ADRs. | ADR-0034 records `chains/<chain-id>.json`, a versioned `.publish.json` sidecar, stable repo identity with revision-checked hosted mapping, entry ID plus package fingerprint, and native Linux Podman as the first live target. No product behavior or live host validation was run. | P0 contract gate closed. P1–P6 remain unstarted; the real Linux SSH/Podman pilot remains unrun. |
 | P0-GATES-01 | 2026-11-13T22:58+02:00; uncommitted | P0 / repository gates | Blocked | Node v26.13.0, npm 11.20.0; ran `npm run check`, `npm run typecheck`, `npm test`, and `git diff --check`. | Documentation check and diff check passed. Typecheck could not start (`tsc: not found`); tests could not start (`vitest: not found`). | Dependencies are not installed in this worktree. No product tests or live Podman checks were run. |
 | P0-GATES-02 | 2026-11-13T23:05+02:00; uncommitted | P0 / repository gates | Passed | Node v26.13.0, npm 11.20.0; `npm ci`, then `npm run check`, `npm run typecheck`, `npm test`, and `git diff --check`. | `npm ci` installed 228 packages and reported zero vulnerabilities. Check, typecheck, and diff check passed. Tests: 63 files passed, 5 skipped; 920 tests passed, 33 skipped. | No product behavior or live Podman checks were run; P1–P6 remain unstarted. |
+| P1-DOC-AUTO-01 | 2026-11-13T23:55+02:00; uncommitted | P1 / AC-01, AC-02, AC-10, AC-12 | Passed — documentation and automated contract only | Linux, Node v26.13.0, npm 11.20.0, Podman CLI 5.7.0; added `docs/host-catalog-operations.md`; `npm run podman:plan`; `tests/unit/podman.test.ts` in the focused P1/P2 run; `npm run check`. | The guide documents the host-controlled source, staging, rollback, restore, permissions, SELinux caveat, and fresh-query behavior. Plan output uses `keep-id`, app UID/GID `1000:1000`, and a `ro` mount; automated tests and docs integrity passed. | No container was started and no host-mounted package was read in a live container. Target-host UID/GID and SELinux behavior remain unverified; P1 exit gate is still open. |
+| P2-CONTROL-BRIDGE-01 | 2026-11-13T23:55+02:00; uncommitted | P2 / AC-03, AC-04, AC-05, AC-09, AC-10 | Passed — automated control and bridge contract | Linux, Node v26.13.0, npm 11.20.0; `npm test -- --run tests/unit/catalog-install.test.ts tests/unit/podman.test.ts tests/unit/podman-cli.test.ts tests/integration/control.test.ts`. | 4 focused files passed, 41 tests. Integration exercised catalog query/review and `catalog skill export` with exact ID/fingerprint, rejects changed identity and a client path, and exports no unselected duplicate-name entry. Bridge tests exercised the selected SSH flag, client-only path, complete validation, executable mode, no-overwrite/symlink conflicts, limits, and partial-success report. | Fake bridge/control tests are not a real SSH/Podman session. Existing chain-based `apply-local` remains covered by the full suite. |
+| P1P2-GATES-01 | 2026-11-13T23:52+02:00; uncommitted | P1/P2 / repository gates | Passed | Linux, Node v26.13.0, npm 11.20.0; `npm run check`; `npm run typecheck`; `npm test`; `npm run test:package`; `git diff --check`. | Docs integrity, server/web typechecks, package smoke, and diff check passed. Tests: 63 files passed, 5 skipped; 926 tests passed, 33 skipped. Package smoke: 543 files, 538 distribution files. | No real Podman container, host filesystem permission, SELinux, second-machine, or SSH interoperability check was run. |
+| P1P2-GATES-02 | 2026-11-14T00:00+02:00; uncommitted | P1/P2 / repository gates | Passed | Linux, Node v26.13.0, npm 11.20.0; `npm run build:portable-skill`; `npm run check`; `npm run typecheck`; `npm test`; `npm run test:package`; `git diff --check`. | Canonical bridge package built and mirrors synced. Documentation integrity, server/web typechecks, tests (63 files passed, 5 skipped; 926 passed, 33 skipped), package smoke (543 files, 538 distribution files), and diff check passed. | No container was started and no host-mounted package, target-host permissions, SELinux, second-machine, or SSH interoperability check was run. P1 remains open for its host-dependent exit gate; real remote pilot remains P6. |
 
 ### Entry template for implementation runs
 

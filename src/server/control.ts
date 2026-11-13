@@ -25,6 +25,7 @@ import {
   CatalogInstallError,
   applyChainSkillsToProject,
   exportChainSkillsForClient,
+  exportSelectedCatalogSkillsForClient,
   installSkillIntoProject,
   reviewSkillInstall,
 } from './catalog/install.js';
@@ -38,6 +39,7 @@ import { atomicWriteJson, ConfigError, type ConfigStore } from './config/store.j
 import { DraftPayloadSchema } from './chains/drafts.js';
 import { HARNESS_IDS } from './config/schema.js';
 import { BundleError, exportBundle, MAX_BUNDLE_REQUEST_BYTES } from './chains/bundle.js';
+import { MAX_BUNDLE_SKILLS } from '../portable/bundle.js';
 import { CHAIN_VERSION, ChainError, validateChain, type Chain } from './chains/model.js';
 import { chainRevision, ChainServiceError } from './chains/service.js';
 import { ChainStoreError } from './chains/store.js';
@@ -779,6 +781,20 @@ async function dispatch(
       return installSkillIntoProject(
         { catalogService: services.catalogService },
         { ...request, projectPath: path },
+      );
+    }
+    case 'catalog.skills.export': {
+      const request = parse(z.strictObject({
+        projectId: z.string().min(1).max(255),
+        harness: z.enum(HARNESS_IDS),
+        selections: z.array(z.strictObject({
+          id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+          fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+        })).min(1).max(MAX_BUNDLE_SKILLS),
+      }));
+      return exportSelectedCatalogSkillsForClient(
+        { catalogService: services.catalogService },
+        { ...request, projectPath: await projectPath(request.projectId) },
       );
     }
     case 'catalog.source.add': {

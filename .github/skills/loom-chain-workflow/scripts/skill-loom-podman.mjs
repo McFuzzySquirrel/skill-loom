@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { constants, realpathSync } from 'node:fs';
 import {
   lstat,
@@ -26,6 +27,7 @@ export class PodmanBridgeError extends Error {
     super(message, options.cause === undefined ? undefined : { cause: options.cause });
     this.name = 'PodmanBridgeError';
     this.code = code;
+    this.details = options.details ?? {};
   }
 }
 
@@ -48,19 +50,34 @@ export function createPodmanCliArgs(args, allocateTty, connection) {
   ];
 }
 
-export function validateSkillTransfer(manifest) {
+export function validateSkillTransfer(manifest, expectedSelections = undefined) {
+  const version = isRecord(manifest) ? manifest.version : undefined;
   if (!isRecord(manifest) || !hasOnlyKeys(manifest, ['format', 'version', 'skills']) ||
-      manifest.format !== 'skill-loom-project-skills' || manifest.version !== 1 ||
+      manifest.format !== 'skill-loom-project-skills' || ![1, 2].includes(version) ||
       !Array.isArray(manifest.skills) || manifest.skills.length > MAX_TRANSFER_SKILLS) {
     throw new PodmanBridgeError('TRANSFER_INVALID', 'The hosted service returned an unsupported skill transfer manifest.');
+  }
+  if ((version === 2) !== (expectedSelections !== undefined)) {
+    throw new PodmanBridgeError('TRANSFER_INVALID', 'The hosted service returned a manifest for a different copy operation.');
+  }
+  const expected = new Map((expectedSelections ?? []).map((selection) => [selection.id, selection.fingerprint]));
+  if (version === 2 && (expected.size !== expectedSelections.length || expected.size !== manifest.skills.length)) {
+    throw new PodmanBridgeError('TRANSFER_INVALID', 'The hosted service returned a different selected-skill set.');
   }
 
   const names = new Set();
   const directories = new Set();
+  const skillIds = new Set();
   let totalBytes = 0;
   let totalFiles = 0;
   const skills = manifest.skills.map((skill) => {
-    if (!isRecord(skill) || !hasOnlyKeys(skill, ['name', 'directory', 'files']) ||
+    const skillKeys = version === 1
+      ? ['name', 'directory', 'files'] : ['id', 'fingerprint', 'name', 'directory', 'files'];
+    if (!isRecord(skill) || !hasOnlyKeys(skill, skillKeys) ||
+        (version === 2 && (typeof skill.id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(skill.id) ||
+          typeof skill.fingerprint !== 'string' ||
+          !/^[a-f0-9]{64}$/.test(skill.fingerprint) || expected.get(skill.id) !== skill.fingerprint ||
+          skillIds.has(skill.id))) ||
         typeof skill.name !== 'string' || skill.name.trim() === '' || skill.name.length > 128 ||
         typeof skill.directory !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(skill.directory) ||
         !Array.isArray(skill.files) || skill.files.length === 0) {
@@ -72,6 +89,7 @@ export function validateSkillTransfer(manifest) {
     }
     names.add(skill.name);
     directories.add(directoryKey);
+    if (version === 2) skillIds.add(skill.id);
 
     const paths = new Set();
     const files = skill.files.map((file) => {
@@ -107,13 +125,19 @@ export function validateSkillTransfer(manifest) {
     if (!files.some((file) => file.path === 'SKILL.md')) {
       throw new PodmanBridgeError('TRANSFER_INVALID', 'Each transferred skill package must include SKILL.md.');
     }
-    return { name: skill.name, directory: skill.directory, files };
+    if (version === 2 && packageFingerprint(files) !== skill.fingerprint) {
+      throw new PodmanBridgeError('TRANSFER_INVALID', 'A transferred package does not match its reviewed fingerprint.');
+    }
+    return {
+      ...(version === 2 ? { id: skill.id, fingerprint: skill.fingerprint } : {}),
+      name: skill.name, directory: skill.directory, files,
+    };
   });
 
   return skills;
 }
 
-export async function installTransferredSkills(projectPath, manifest) {
+export async function installTransferredSkills(projectPath, manifest, expectedSelections = undefined) {
   if (!isAbsolute(projectPath)) {
     throw new PodmanBridgeError('PROJECT_PATH_INVALID', 'Provide an absolute client project path.');
   }
@@ -128,7 +152,7 @@ export async function installTransferredSkills(projectPath, manifest) {
     throw new PodmanBridgeError('PROJECT_UNAVAILABLE', 'The client project path is not a directory.');
   }
 
-  const skills = validateSkillTransfer(manifest);
+  const skills = validateSkillTransfer(manifest, expectedSelections);
   if (skills.length === 0) return { installed: [] };
   const root = join(project, '.agents', 'skills');
   await ensureDirectory(join(project, '.agents'), []);
@@ -192,8 +216,16 @@ export async function installTransferredSkills(projectPath, manifest) {
         : 'A transferred skill package could not be written to the client project.';
       throw new PodmanBridgeError(
         'LOCAL_INSTALL_FAILED',
-        `${message}${cleanupErrors.length === 0 ? '' : ` Partial files may remain at ${destination}.`}`,
-        { cause: error },
+        `${message}${cleanupErrors.length === 0 ? '' : ` Partial files may remain at ${destination}.`}${installed.length === 0 ? '' : ' Earlier successfully installed packages remain.'}`,
+        {
+          cause: error,
+          details: {
+            failedSkill: skill.name,
+            installed,
+            partialSuccess: installed.length > 0,
+            cleanupIncomplete: cleanupErrors.length > 0,
+          },
+        },
       );
     }
   }
@@ -215,6 +247,7 @@ export async function runPodmanCli(
     stdout.write(
       'Usage: skill-loom-podman <skill-loom command...>\n' +
       '       skill-loom-podman chain project apply-local --project <path> --project-id <id> --chain-id <id>\n' +
+      '       skill-loom-podman catalog skills copy-local --project <path> --project-id <id> --harness <id> --selection <entry-id> <fingerprint> [...]\n' +
       'Forwards CLI commands to the running skill-loom Podman container without a shell.\n' +
       'Set LOOM_PODMAN_CONNECTION to a configured Podman SSH connection for a remote host.\n' +
       'Use npm run podman:up and npm run podman:down on the Podman host to manage the service.\n',
@@ -224,6 +257,34 @@ export async function runPodmanCli(
 
   try {
     const connection = validateConnection(env.LOOM_PODMAN_CONNECTION);
+    if (isSelectedCopyLocal(args)) {
+      const request = parseSelectedCopyLocalArgs(args.slice(3));
+      const result = spawn(
+        command,
+        createPodmanCliArgs(['catalog', 'skill', 'export'], false, connection),
+        {
+          input: JSON.stringify({
+            projectId: request.projectId,
+            harness: request.harness,
+            selections: request.selections,
+          }),
+          encoding: 'utf8',
+          maxBuffer: MAX_REMOTE_OUTPUT_BYTES,
+          windowsHide: true,
+        },
+      );
+      if (result.stderr !== undefined && result.stderr !== null && String(result.stderr) !== '') {
+        stderr.write(String(result.stderr));
+      }
+      if (result.error !== undefined) {
+        throw new PodmanBridgeError('PODMAN_EXEC_FAILED', `Could not run Podman CLI bridge: ${result.error.message}`, { cause: result.error });
+      }
+      if (result.status !== 0) return result.status ?? 1;
+      const response = parseRemoteResponse(String(result.stdout ?? ''));
+      const installed = await installTransferredSkills(request.projectPath, response.result, request.selections);
+      stdout.write(`${JSON.stringify({ ok: true, ...installed })}\n`);
+      return 0;
+    }
     if (isApplyLocal(args)) {
       const request = parseApplyLocalArgs(args.slice(3));
       const result = spawn(
@@ -262,13 +323,58 @@ export async function runPodmanCli(
   } catch (error) {
     const code = error instanceof PodmanBridgeError ? error.code : 'PODMAN_BRIDGE_FAILED';
     const message = error instanceof Error ? error.message : String(error);
-    stderr.write(`${JSON.stringify({ ok: false, error: { code, message } })}\n`);
+    const details = error instanceof PodmanBridgeError && Object.keys(error.details).length > 0
+      ? { details: error.details } : {};
+    stderr.write(`${JSON.stringify({ ok: false, error: { code, message, ...details } })}\n`);
     return error instanceof PodmanBridgeError && code === 'USAGE' ? 2 : 1;
   }
 }
 
 function isApplyLocal(args) {
   return args[0] === 'chain' && args[1] === 'project' && args[2] === 'apply-local';
+}
+
+function isSelectedCopyLocal(args) {
+  return args[0] === 'catalog' && args[1] === 'skills' && args[2] === 'copy-local';
+}
+
+function parseSelectedCopyLocalArgs(args) {
+  const values = new Map();
+  const selections = [];
+  const allowed = new Set(['--project', '--project-id', '--harness']);
+  for (let index = 0; index < args.length;) {
+    const key = args[index];
+    if (key === '--selection') {
+      const id = args[index + 1];
+      const fingerprint = args[index + 2];
+      if (id === undefined || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(id) || fingerprint === undefined ||
+          !/^[a-f0-9]{64}$/.test(fingerprint) || selections.some((selection) => selection.id === id)) {
+        throw new PodmanBridgeError('USAGE', 'Each --selection requires one unique entry id and its 64-character package fingerprint.');
+      }
+      selections.push({ id, fingerprint });
+      if (selections.length > MAX_TRANSFER_SKILLS) {
+        throw new PodmanBridgeError('USAGE', `Select no more than ${MAX_TRANSFER_SKILLS} skill packages.`);
+      }
+      index += 3;
+      continue;
+    }
+    const value = args[index + 1];
+    if (key === undefined || !allowed.has(key) || value === undefined || value.startsWith('--') ||
+        value.trim() === '' || values.has(key)) {
+      throw new PodmanBridgeError('USAGE', 'Selected-skill copy requires --project, --project-id, --harness, and one or more --selection pairs exactly once.');
+    }
+    values.set(key, value);
+    index += 2;
+  }
+  const projectPath = values.get('--project');
+  const projectId = values.get('--project-id');
+  const harness = values.get('--harness');
+  if (projectPath === undefined || !isAbsolute(projectPath) ||
+      projectId === undefined || projectId.length > 255 ||
+      (harness !== 'opencode' && harness !== 'copilot') || selections.length === 0) {
+    throw new PodmanBridgeError('USAGE', 'Selected-skill copy requires an absolute --project path, host project id, harness id, and exact selections.');
+  }
+  return { projectPath, projectId, harness, selections };
 }
 
 function parseApplyLocalArgs(args) {
@@ -311,9 +417,18 @@ function parseRemoteResponse(text) {
     throw new PodmanBridgeError('REMOTE_RESPONSE_INVALID', 'The hosted Skill Loom CLI returned invalid JSON.', { cause: error });
   }
   if (!isRecord(response) || response.protocolVersion !== 1 || response.ok !== true) {
-    throw new PodmanBridgeError('REMOTE_EXPORT_FAILED', 'The hosted Skill Loom CLI could not export the selected chain skills.');
+    throw new PodmanBridgeError('REMOTE_EXPORT_FAILED', 'The hosted Skill Loom CLI could not export the requested skill packages.');
   }
   return response;
+}
+
+function packageFingerprint(files) {
+  const hash = createHash('sha256');
+  for (const file of [...files].sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0)) {
+    hash.update(file.path).update('\0').update(file.executable ? 'x' : '-')
+      .update('\0').update(file.content);
+  }
+  return hash.digest('hex');
 }
 
 function validatePackagePath(path) {
