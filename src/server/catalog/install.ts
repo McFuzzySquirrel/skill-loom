@@ -8,6 +8,14 @@ import {
   type InstalledModeIndex,
 } from '../../portable/installed-modes.js';
 import {
+  BundleError,
+  MAX_BUNDLE_BYTES,
+  MAX_BUNDLE_FILES,
+  MAX_BUNDLE_SKILLS,
+  validatePackagePath,
+} from '../../portable/bundle.js';
+import type { BundleSkill } from '../../shared/bundles.js';
+import {
   CATALOG_COPY_ERROR_CODES,
   CatalogCopyError,
   MAX_SKILL_PACKAGE_BYTES,
@@ -187,31 +195,7 @@ export async function applyChainSkillsToProject(
     fingerprint: string;
   }>;
 }> {
-  const catalog = await options.catalogService.getCatalog({
-    projectPath: request.projectPath,
-    harness: request.chain.harness,
-  });
-  const entries = catalog.groups.flatMap((group) => group.entries);
-  const names = [...new Set(request.chain.steps
-    .filter((step) => step.kind !== 'instruction')
-    .map((step) => step.skillName))];
-  const selected: SkillEntry[] = [];
-
-  for (const name of names) {
-    const matches = entries.filter((entry) => entry.source === 'personal' && entry.name === name);
-    if (matches.length !== 1) {
-      throw new CatalogInstallError(
-        matches.length === 0
-          ? SKILL_INSTALL_ERROR_CODES.CANDIDATE_NOT_FOUND
-          : SKILL_INSTALL_ERROR_CODES.CANDIDATE_CHANGED,
-        matches.length === 0
-          ? `The global skill "${name}" is not available.`
-          : `The global skill name "${name}" is ambiguous.`,
-        { projectId: request.projectId, skillName: name, matches: matches.map((entry) => entry.id) },
-      );
-    }
-    selected.push(matches[0]!);
-  }
+  const selected = await resolveChainSkillEntries(options, request);
 
   const installed: Array<{
     name: string;
@@ -248,6 +232,98 @@ export async function applyChainSkillsToProject(
     installed.push(copied);
   }
   return { projectId: request.projectId, installed };
+}
+
+export async function exportChainSkillsForClient(
+  options: InstallOptions,
+  request: ApplyChainSkillsRequest,
+): Promise<{
+  format: 'skill-loom-project-skills';
+  version: 1;
+  skills: BundleSkill[];
+}> {
+  const selected = await resolveChainSkillEntries(options, request);
+  if (selected.length > MAX_BUNDLE_SKILLS) {
+    throw new BundleError('BUNDLE_TOO_LARGE', `Client transfers are limited to ${MAX_BUNDLE_SKILLS} skill packages.`);
+  }
+
+  const skills: BundleSkill[] = [];
+  const directories = new Set<string>();
+  const budget = { bytes: 0, files: 0 };
+  for (const entry of selected) {
+    const directory = safePackageName(entry.name);
+    if (directories.has(directory.toLowerCase())) {
+      throw new BundleError('BUNDLE_INVALID', 'The chain contains skill names that map to the same project directory.');
+    }
+    directories.add(directory.toLowerCase());
+    if (entry.packagePath.trim() === '') {
+      throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', `The package for skill "${entry.name}" is unavailable.`);
+    }
+
+    try {
+      const info = await lstat(entry.packagePath);
+      if (!info.isDirectory() || info.isSymbolicLink() || await realpath(entry.packagePath) !== entry.packagePath) {
+        throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', `The package for skill "${entry.name}" is not a real directory.`);
+      }
+      const walked = await walkPackage(entry.packagePath);
+      if (!walked.files.some((file) => file.path === 'SKILL.md')) {
+        throw new BundleError('BUNDLE_SOURCE_UNAVAILABLE', `The package for skill "${entry.name}" has no SKILL.md.`);
+      }
+      const files = walked.files.map((file) => {
+        validatePackagePath(file.path);
+        budget.bytes += file.bytes;
+        budget.files += 1;
+        if (budget.bytes > MAX_BUNDLE_BYTES || budget.files > MAX_BUNDLE_FILES) {
+          throw new BundleError('BUNDLE_TOO_LARGE', 'Client transfers are limited to 20 MiB and 2,000 files.');
+        }
+        return {
+          path: file.path,
+          content: file.content.toString('base64'),
+          executable: file.executable,
+        };
+      });
+      skills.push({ name: entry.name, directory, files });
+    } catch (error) {
+      if (error instanceof BundleError || error instanceof CatalogInstallError) throw error;
+      throw new BundleError(
+        'BUNDLE_SOURCE_UNAVAILABLE',
+        `The package for skill "${entry.name}" could not be exported.`,
+      );
+    }
+  }
+  return { format: 'skill-loom-project-skills', version: 1, skills };
+}
+
+async function resolveChainSkillEntries(
+  options: InstallOptions,
+  request: ApplyChainSkillsRequest,
+): Promise<SkillEntry[]> {
+  const catalog = await options.catalogService.getCatalog({
+    projectPath: request.projectPath,
+    harness: request.chain.harness,
+  });
+  const entries = catalog.groups.flatMap((group) => group.entries);
+  const names = [...new Set(request.chain.steps
+    .filter((step) => step.kind !== 'instruction')
+    .map((step) => step.skillName))];
+  const selected: SkillEntry[] = [];
+
+  for (const name of names) {
+    const matches = entries.filter((entry) => entry.source === 'personal' && entry.name === name);
+    if (matches.length !== 1) {
+      throw new CatalogInstallError(
+        matches.length === 0
+          ? SKILL_INSTALL_ERROR_CODES.CANDIDATE_NOT_FOUND
+          : SKILL_INSTALL_ERROR_CODES.CANDIDATE_CHANGED,
+        matches.length === 0
+          ? `The global skill "${name}" is not available.`
+          : `The global skill name "${name}" is ambiguous.`,
+        { projectId: request.projectId, skillName: name, matches: matches.map((entry) => entry.id) },
+      );
+    }
+    selected.push(matches[0]!);
+  }
+  return selected;
 }
 
 interface ResolvedReview {

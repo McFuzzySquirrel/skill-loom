@@ -24,6 +24,7 @@ import { CatalogCopyError } from './catalog/copy.js';
 import {
   CatalogInstallError,
   applyChainSkillsToProject,
+  exportChainSkillsForClient,
   installSkillIntoProject,
   reviewSkillInstall,
 } from './catalog/install.js';
@@ -486,6 +487,15 @@ async function dispatch(
       const path = await projectPath(request.projectId);
       const chain = await services.chainService.get(path, request.chainId);
       return applyChainSkillsToProject(
+        { catalogService: services.catalogService },
+        { projectId: request.projectId, projectPath: path, chain },
+      );
+    }
+    case 'chain.project.export': {
+      const request = parse(z.strictObject({ projectId: z.string().max(255), chainId: sourceId }));
+      const path = await projectPath(request.projectId);
+      const chain = await services.chainService.get(path, request.chainId);
+      return exportChainSkillsForClient(
         { catalogService: services.catalogService },
         { projectId: request.projectId, projectPath: path, chain },
       );

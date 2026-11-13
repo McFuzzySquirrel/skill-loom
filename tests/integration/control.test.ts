@@ -80,6 +80,23 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
           }],
         },
       });
+      output = '';
+      error = '';
+      const exportExitCode = await runCli(['chain', 'project', 'export', '--config-dir', configDirectory], {
+        env: {},
+        stdin: Readable.from([JSON.stringify(request)]),
+        stdout: { write: (chunk) => { output += String(chunk); return true; }, isTTY: false },
+        stderr: { write: (chunk) => { error += String(chunk); return true; } },
+      });
+      expect(exportExitCode, error).toBe(0);
+      expect(JSON.parse(output)).toMatchObject({
+        ok: true,
+        result: {
+          format: 'skill-loom-project-skills',
+          version: 1,
+          skills: [{ name: 'formatting', files: [{ path: 'SKILL.md' }] }],
+        },
+      });
       const installedPath = join(project, '.agents', 'skills', 'formatting', 'SKILL.md');
       expect(await readFile(installedPath, 'utf8')).toContain('Format carefully.');
       await expect(access(join(project, '.loom', 'chains', `${legacyChain.id}.json`))).resolves.toBeUndefined();

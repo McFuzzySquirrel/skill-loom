@@ -10,7 +10,7 @@
   },
   "bin": {
     "skill-loom": "dist/src/server/cli.js",
-    "skill-loom-podman": "dist/src/server/podman-cli.js"
+    "skill-loom-podman": "dist/skills/loom-chain-workflow/scripts/skill-loom-podman.mjs"
   },
   "files": [
     "dist/src",
@@ -45,7 +45,7 @@
     "podman:up": "node scripts/podman.mjs up",
     "podman:down": "node scripts/podman.mjs down",
     "podman:plan": "node scripts/podman.mjs plan",
-    "podman:cli": "tsx src/server/podman-cli.ts",
+    "podman:cli": "node .github/skills/loom-chain-workflow/scripts/skill-loom-podman.mjs",
     "test:live:discovery": "tsx scripts/live-discovery.ts",
     "test:live:execution": "tsx scripts/live-execution.ts",
     "test:live:managed": "tsx scripts/live-managed-opencode.ts",

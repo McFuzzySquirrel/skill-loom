@@ -30,31 +30,35 @@ agent harness.
 
 ## Create or run a chain
 
-1. Check `skill-loom --version`. If the CLI is unavailable, report that rather
-   than installing software or starting a competing service. Use the already
-   running Skill Loom service. For a Podman deployment, use
-   `skill-loom-podman` instead of `skill-loom` for all service commands; it
-   forwards arguments and stdin to the running app container without a shell.
-   The Podman deployment mounts one host project as `/workspace`. Register that
-   path with `skill-loom-podman project open` only when the user has selected
-   that mounted project. Do not pass host paths that are not visible in the
-   container.
-   Use the same CLI choice for every command below. When no project is
-   registered in the Podman service, pass `{"path":"/workspace"}` to
-   `skill-loom-podman project open`.
-2. Select the registered project with the user. Run `skill-loom project list`
-   (or `skill-loom-podman project list`) and use the exact project id. Do not
-   register a new path without the user's direction. Existing
-   `<project>/.loom/chains/` files migrate to the shared library on first
-   access; their originals remain.
-3. If the user wants a new chain, identify the active host and query the
-   project's global catalog with `skill-loom catalog project page`. Search
-   using one to three short capability queries, then propose a small ordered
-   set of exact skill names and step instructions. The user has intentionally
-   provisioned this catalog: do not fetch remote repositories or require a
-   separate provenance, license, or file-inventory review. Confirm the
-   proposed chain with the user, then save it with `skill-loom chain project
-   create` using JSON on stdin. The request shape is:
+1. Select the connection before running any service command:
+   - For a local service, use `skill-loom`.
+   - For a Podman deployment, use `skill-loom-podman`. On a remote client,
+     `LOOM_PODMAN_CONNECTION` must name an SSH-backed Podman connection already
+     configured on that client. The bridge invokes `podman exec` with an
+     argument array; it does not start or reconfigure the remote service.
+   - If the `skill-loom-podman` command is unavailable, resolve
+     `scripts/skill-loom-podman.mjs` from this installed skill package and run it
+     with Node.js 24+. Do not assume a repository checkout or guess a skill
+     directory. If neither bridge is available, stop rather than installing
+     software or starting a competing service.
+   Use the same bridge for every hosted catalog and chain command. SSH and
+   Podman authenticate the client; do not put credentials in chain inputs or
+   prompts. The Podman host must already be running Skill Loom. In the
+   remaining steps, replace `<bridge>` with the selected CLI command.
+2. Select a registered project context with the user. Run `<bridge> project
+   list` and use the exact project id. For a Podman deployment, `/workspace`
+   is the one mounted host project; register it with `<bridge> project open`
+   only when the user has selected that mounted project. If no host project is
+   registered, pass `{"path":"/workspace"}` to `<bridge> project open`. Never
+   register a remote-client filesystem path on the host.
+3. If the user wants a new chain, query the hosted global catalog with
+   `<bridge> catalog project page`. Search using one to three short capability
+   queries, then propose a small ordered set of exact skill names and step
+   instructions. The user has intentionally provisioned this catalog: do not
+   fetch remote repositories or require a separate provenance, license, or
+   file-inventory review. Confirm the proposed chain with the user, then save
+   it with `<bridge> chain project create` using JSON on stdin. The request
+   shape is:
 
    ```json
    {
@@ -78,18 +82,26 @@ agent harness.
 
    Use the active host's harness id, stable step ids, and declared inputs for
    every `{{input_name}}` placeholder. If the user wants an existing chain,
-   list the shared library with `skill-loom chain project list` and pass
+   list the shared library with `<bridge> chain project list` and pass
    `{"projectId":"..."}` on stdin. Read the selected definition with
-   `skill-loom chain project show` and
+   `<bridge> chain project show` and
    `{"projectId":"...","chainId":"..."}`.
 4. Present the chain name, harness, session mode, ordered skill names and
    instructions, and required inputs. Collect missing input values before
    applying or starting. Keep credentials out of inputs unless the user
    explicitly accepts handling them in this conversation.
-5. Apply the chain with `skill-loom chain project apply` and the same project
-   and chain ids on stdin. This copies only referenced packages from the
-   current global catalog into the project's `.agents/skills/`; it does not
-   overwrite existing packages. If it fails, do not start the chain.
+5. Confirm the destination with the user, then apply the chain:
+   - For the registered host project (including Podman's mounted
+     `/workspace`), use `<bridge> chain project apply` with the project and
+     chain ids on stdin.
+   - For a remote client's local project, use
+     `skill-loom-podman chain project apply-local --project <absolute-local-path>
+     --project-id <id> --chain-id <id>`. This client-side operation asks the
+     hosted service for only the chain's global packages and writes them into
+     the local project's `.agents/skills/`. It does not send the local project
+     path to the host and never overwrites an existing package.
+   In either mode, stop on a missing skill, conflict, failed transfer, or
+   partial-copy report; show the exact issue and do not claim apply succeeded.
 6. If the active host needs a skill refresh to load the project copies, pause
    and tell the user. Do not claim a refresh occurred or try to launch a second
    harness. If the skill content is available to this session, follow it under

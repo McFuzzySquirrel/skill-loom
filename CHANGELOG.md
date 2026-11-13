@@ -10,6 +10,8 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 - A Podman deployment for Linux, macOS, and Windows hosts, with persistent config, global-skill, and project mounts, localhost-only default publishing, private-network mode, and a cross-platform plan command.
 - A `skill-loom-podman` CLI bridge that forwards command arguments and stdin to the running app container without using a shell, enabling host-side chain and apply operations against the shared service.
+- The standalone `loom-chain-workflow` package now includes the Podman bridge for clients using an existing SSH-backed named Podman connection, so a remote agent can search the hosted global catalog and shared chains without exposing the Skill Loom server.
+- A bounded `chain project export` operation and `skill-loom-podman chain project apply-local` command that transfer only the selected chain's global skills to a remote client's project without sending its path to the host or overwriting existing packages.
 - A `chain project apply` command that copies only a selected shared chain's current global skills into the target project's `.agents/skills/` root, never overwrites existing packages, and reports missing, ambiguous, or partial-copy failures.
 - A non-destructive first-access migration that copies valid legacy project chains into the shared library and leaves original files in place.
 - The `loom-chain-workflow` current-session path for searching the host-global catalog, creating or selecting a shared chain, applying its skills, and carrying out ordered steps without launching a nested harness.

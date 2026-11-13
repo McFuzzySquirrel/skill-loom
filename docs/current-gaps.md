@@ -10,6 +10,7 @@ This page is the current list of capabilities that are implemented only in part,
 | Descendant containment | Open | Verified native containment is required on Linux, macOS, and Windows. Direct-child exit, a terminal status, or operator confirmation does not prove descendants stopped. |
 | Automatic OpenCode advancement | Partially verified | The record-aware parser passed a user-supplied OpenCode 2.2.6 probe (`docs/evidence/live-execution-2026-11-10-opencode-2.2.6-passed.json`). A managed multi-step automatic journey is still unverified, so automatic CLI starts remain blocked and supervised runs are unaffected. |
 | Platform and version coverage | Partial | Historical evidence covers Linux ARM64 with OpenCode 2.2.5 and Copilot CLI 1.0.105. The latest passing execution probe covers Linux x64 with OpenCode 2.2.6 and Copilot CLI 1.0.107, with a Copilot exact-version warning. |
+| Remote Podman client | Implemented, live verification pending | Unit and integration coverage exercise the SSH-backed bridge contract and bounded client-local export. A second-machine connection to a real hosted Podman service has not been tested. |
 | Windows PowerShell 7 | Implemented, verification pending | Windows profile security prefers PowerShell 7 and falls back to 5.1 only for availability. Native PowerShell 7 verification remains pending. See the [administrator guide](admin-guide.md#identity-secrets-and-tls). |
 
 ## Packaging and release

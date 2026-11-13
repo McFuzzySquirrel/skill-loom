@@ -122,9 +122,58 @@ Stop the service before export or import. Podman does not validate Skill Loom's
 config or chain records during import; verify the restored data before relying
 on it.
 
+### Remote client access
+
+A remote agent can use the same hosted catalog and shared chains through
+Podman's SSH transport. It does not use Caddy, the editor port, or a new
+Skill Loom network endpoint. Keep the app loopback-bound and configure a
+dedicated rootless Podman account on the host. Anyone authorized to use that
+account's Podman connection can control its containers and mounts, so grant
+SSH access only to trusted clients; the bridge is not a per-command permission
+system.
+
+On each client, install the `loom-chain-workflow` standalone skill package.
+The package includes the `skill-loom-podman` helper and needs Node.js 24+ and
+the Podman CLI; it does not need a Skill Loom checkout or a copy of the private
+npm package. Create a named SSH connection using the identity authorized by
+the host administrator:
+
+```bash
+podman system connection add --identity ~/.ssh/loom_host_ed25519 \
+  loom-host ssh://loom@podman-host.example
+export LOOM_PODMAN_CONNECTION=loom-host
+skill-loom-podman service status
+```
+
+For PowerShell, use the same `podman system connection add` arguments with the
+client's Windows SSH key path, then set
+`$env:LOOM_PODMAN_CONNECTION = "loom-host"`. The name must match a connection
+shown by `podman system connection list`. Loom stores neither SSH keys nor
+connection credentials. If the `skill-loom-podman` command is not installed,
+run `scripts/skill-loom-podman.mjs` from the installed workflow skill package
+with Node.js.
+
+The host administrator registers `/workspace` once as the project context.
+Remote users can discover the hosted catalog and create/select shared chains
+using that host project id. `skill-loom-podman chain project apply` writes into
+the host's mounted project. To write into a remote client's local project, use
+the bridge's `chain project apply-local` command with the local absolute path.
+That path stays on the client; the bridge requests a bounded, versioned
+manifest of only the chain's global packages and writes them locally without
+overwriting an existing skill. Transfers are limited to 100 packages, 2,000
+files, and 20 MiB decoded content. Remote clients cannot provision or update
+the host-global skills directory; maintain that read-only mount through the
+host's existing package-management process.
+
+The bridge contract and local export are covered by automated tests. A
+second-machine connection to a real hosted Podman service has not yet been
+live-tested; track this as unverified in the [known gaps](current-gaps.md#execution-gates).
+
 ### From a packed package
 
-The npm package is named `skill-loom-cli` and exposes the `skill-loom` binary. It is still `"private": true`, so there is no registry release. Build and pack locally:
+The npm package is named `skill-loom-cli` and exposes `skill-loom` and
+`skill-loom-podman` binaries. It is still `"private": true`, so there is no
+registry release. Build and pack locally:
 
 ```bash
 npm run build
@@ -134,7 +183,11 @@ npx --yes --package=./skill-loom-cli-0.1.0.tgz skill-loom
 
 The CLI accepts `--help`, `--version`, `--no-open`, `--port <number>`, and `--config-dir <path>`. It starts the same production server, prints the config directory and loopback URL, and opens a browser only when stdout is a TTY and `CI` is unset.
 
-The tarball contains `dist/src`, `dist/web`, the compiled package metadata, `docs/OPERATIONS.md`, and the manifest. Source, tests, build scripts, and the other documentation files are excluded. Installing the package still builds the native `node-pty` module.
+The tarball contains `dist/src`, `dist/web`, `dist/skills` (including the
+standalone Podman bridge), the compiled package metadata,
+`docs/OPERATIONS.md`, and the manifest. Source, tests, build scripts, and the
+other documentation files are excluded. Installing the package still builds
+the native `node-pty` module.
 
 To install the command globally instead of running the tarball through `npx`:
 

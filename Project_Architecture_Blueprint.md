@@ -110,7 +110,7 @@ flowchart TB
   subgraph Client["Client surfaces"]
     CLI["skill-loom CLI<br/>dist/src/server/cli.js"]
     Skill["Companion skills<br/>scenario-discovery<br/>loom-chain-workflow<br/>loom-run-bundle"]
-    PodmanCLI["skill-loom-podman<br/>podman exec bridge"]
+    PodmanCLI["skill-loom-podman<br/>packaged Podman exec bridge"]
     Web["React chain editor<br/>dist/web"]
   end
 
@@ -149,6 +149,32 @@ flowchart TB
   Services --> Project
   PTY -.->|"exec + args (compatibility)"| Harness
 ```
+
+### 3.2.1 Remote Podman-over-SSH client flow
+
+```mermaid
+flowchart LR
+  Agent["Remote active agent session"] --> Workflow["loom-chain-workflow"]
+  Workflow --> Bridge["Packaged skill-loom-podman helper"]
+  Bridge -->|"podman --connection name exec + args"| SSH["SSH-backed Podman connection"]
+  SSH --> Engine["Host rootless Podman engine"]
+  Engine -->|"exec app CLI"| AppCLI["CLI inside Skill Loom app container"]
+  AppCLI --> Control["Container-local private control transport"]
+  Control --> Service["Hosted catalog and shared chain services"]
+  Service --> Global["Read-only host-global skill catalog"]
+  Service --> Chains["Shared chain library"]
+  Service -->|"bounded versioned package manifest"| AppCLI
+  AppCLI -->|"stdout over Podman exec"| Bridge
+  Bridge -->|"validated, no-overwrite write"| LocalProject["Remote client's local .agents/skills"]
+  Service -->|"host-target apply only"| Workspace["Host /workspace"]
+```
+
+The client uses its own configured SSH identity and named Podman connection;
+the connection authorizes container access rather than adding Skill Loom
+authentication. Client-local apply exports only the selected chain's global
+packages in a manifest capped at 100 packages, 2,000 files, and 20 MiB. The
+local project path never leaves the client. The normal server and control
+transport remain loopback/private inside the host.
 
 ### 3.3 C4 Level 3 — Server components
 
@@ -293,9 +319,9 @@ The status vocabulary is defined in `src/server/runs/model.ts`; recovery actions
 
 **Purpose.** Entry point for users and skills. Parses command families (`service`, `edit`, `catalog`, `project`, `chain`, plus retained `bundle`, `run`, `workspace`, and `discovery` compatibility commands), chooses HTTP or control transport, and prints JSON envelopes.
 
-**Internal structure.** `src/server/cli.ts` (top-level routing, service lifecycle, browser opening), `src/server/control-cli.ts` (control-backed command grammar and help), `src/server/catalog/cli.ts`, `src/server/bundle-cli.ts`, `src/server/podman-cli.ts` (container bridge), `src/server/cli-input.ts` (strict stdin JSON).
+**Internal structure.** `src/server/cli.ts` (top-level routing, service lifecycle, browser opening), `src/server/control-cli.ts` (control-backed command grammar and help), `src/server/catalog/cli.ts`, `src/server/bundle-cli.ts`, `.github/skills/loom-chain-workflow/scripts/skill-loom-podman.mjs` (portable Podman bridge packaged with the workflow skill), and `src/server/cli-input.ts` (strict stdin JSON).
 
-**Interactions.** HTTP is used for health/lifecycle and the editor API; control operations handle catalog and chain queries, chain apply, and compatibility features. `skill-loom-podman` forwards structured arguments and stdin to the CLI inside the container.
+**Interactions.** HTTP is used for health/lifecycle and the editor API; control operations handle catalog and chain queries, chain apply/export, and compatibility features. `skill-loom-podman` forwards structured arguments and stdin through Podman exec to the CLI inside the container. For a client-local project, it requests a bounded package manifest and writes validated files locally without overwriting existing skill packages.
 
 **Evolution.** Add a command by adding a control operation and a grammar entry, not by adding a second state owner.
 
@@ -950,7 +976,7 @@ npm run build
 ```
 
 The npm tarball contains `dist/src`, `dist/web`, `dist/skills`, the PTY helper installer, and `docs/OPERATIONS.md`. `postinstall` builds/installs the native PTY helper. The main `skill-loom` binary points to `dist/src/server/cli.js`.
-The optional Podman deployment builds the same server from `Containerfile`; it exposes the `skill-loom-podman` bridge as a second npm binary.
+The optional Podman deployment builds the same server from `Containerfile`; it exposes `skill-loom-podman` as a second npm binary and packages the same bridge with the standalone workflow skill for clients that do not install the Loom npm package.
 
 ### 12.2 Runtime topology
 
@@ -976,7 +1002,9 @@ Native scope and identity have platform-specific tests and fixtures. CI runs the
 - The default publication is a host loopback port (`127.0.0.1:4317`); `--private-network` publishes no host port and requires private authenticated platform/VPN ingress.
 - The named volume `skill-loom-config` stores config, the shared chain library, and the derived capability index. `podman:down` removes the pod but retains this volume.
 - The host-global skills directory is mounted read-only at `/var/lib/loom/skills`; one selected project is mounted read-write at `/workspace`.
-- `skill-loom-podman` runs the CLI inside the app container using a structured `podman exec` argument array and forwards stdin. Host `skill-loom` cannot reach the container-local control socket.
+- `skill-loom-podman` runs the CLI inside the app container using a structured `podman exec` argument array and forwards stdin. A remote client selects a preconfigured SSH-backed connection with `LOOM_PODMAN_CONNECTION`; Podman/SSH authorization is the host access boundary. Host `skill-loom` cannot reach the container-local control socket.
+- Client-local apply requests `chain.project.export`, which returns a bounded, versioned manifest of selected host-global packages; the bridge validates and writes it into the client's local `.agents/skills/` without sending the local project path to the host or overwriting existing packages. Remote clients cannot provision the host-global catalog.
+- This second-machine SSH flow has not received a live end-to-end test; see [known gaps](docs/current-gaps.md#platform-and-version-coverage).
 - On macOS and Windows the launcher starts Podman Machine and relies on Podman's host-path translation. `LOOM_PODMAN_PLATFORM` can select `linux/amd64` or `linux/arm64`. Linux Podman runtime/persistence has been exercised; macOS/Windows runtime mounts remain unverified.
 
 ### 12.5 Development topology

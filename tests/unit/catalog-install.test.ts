@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   CatalogInstallError,
   SKILL_INSTALL_ERROR_CODES,
+  exportChainSkillsForClient,
   installSkillIntoProject,
   reviewSkillInstall,
 } from '../../src/server/catalog/install.js';
@@ -92,6 +93,44 @@ async function expectInstallError(operation: Promise<unknown>, code: string): Pr
 }
 
 describe.skipIf(process.platform === 'win32')('catalog skill install', () => {
+  it('exports only referenced global packages for client-local apply', async () => {
+    const projectSource = join(root, 'project-skill');
+    await mkdir(projectSource, { recursive: true });
+    await writeFile(join(projectSource, 'SKILL.md'), '---\nname: release-notes\n---\nPROJECT\n');
+    const personal = entry();
+    const project = entry({
+      id: 'opencode-project-release-notes',
+      source: 'project',
+      path: join(projectSource, 'SKILL.md'),
+      packagePath: projectSource,
+    });
+    const transfer = await exportChainSkillsForClient(
+      { catalogService: catalogWith([project, personal]) },
+      {
+        projectId: 'project-1',
+        projectPath,
+        chain: {
+          harness: 'opencode',
+          steps: [{ id: 'step-one', kind: 'skill', skillName: 'release-notes', instruction: 'Write notes.' }],
+        },
+      },
+    );
+
+    expect(transfer).toMatchObject({
+      format: 'skill-loom-project-skills',
+      version: 1,
+      skills: [{
+        name: 'release-notes',
+        directory: 'release-notes',
+        files: [
+          { path: 'SKILL.md', content: skillContent.toString('base64') },
+          { path: 'templates/note.md', content: templateContent.toString('base64') },
+        ],
+      }],
+    });
+    await expect(access(join(projectPath, '.agents'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('reviews a candidate without writing to the project', async () => {
     const review = await reviewSkillInstall(
       { catalogService: catalogWith([entry()]) },

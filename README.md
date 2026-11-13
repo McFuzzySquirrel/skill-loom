@@ -6,7 +6,7 @@
 
 [![Node.js >=24](https://img.shields.io/badge/Node.js-%3E%3D24-339933?logo=nodedotjs&logoColor=white)](package.json)
 
-Skill Loom is a single-user workspace for building shared chains from skills already installed in a host-global `.agents/skills` directory. Its CLI and companion Agent Skills find and save ordered workflows, copy selected packages into a project when needed, and run steps in the current agent session. The only web screen is a visual chain editor, opened with `skill-loom edit`. Podman is available for private, persistent hosting; exported bundles remain a compatibility feature.
+Skill Loom is a single-user workspace for building shared chains from skills already installed in a host-global `.agents/skills` directory. Its CLI and companion Agent Skills find and save ordered workflows, copy selected packages into a project when needed, and run steps in the current agent session. The only web screen is a visual chain editor, opened with `skill-loom edit`. Podman is available for private, persistent hosting; trusted remote clients can use an SSH-backed Podman connection without exposing the server. Exported bundles remain a compatibility feature.
 
 Skill Loom does not author skills and does not execute a skill as a callable command. Each chain step is sent to a local harness as a prompt; skills are **model-invoked** context. The chain order is prompt order, **not a guarantee** that a harness loads or fires a named skill. A harness may decline to load a skill even when preflight resolved it.
 
@@ -64,7 +64,7 @@ The product promise is deliberately narrow:
 | Global skill catalog | Search only the configured host-global `.agents/skills` tree. Existing external tools own package installation and updates. |
 | Apply chain to project | `skill-loom chain project apply` copies only the chain's referenced global packages into `<project>/.agents/skills/`; it never overwrites an existing package. |
 | Podman deployment | `npm run podman:up`, `podman:down`, and `podman:plan` support local and private single-user deployment with a persistent config volume, global skills, and project mounts. |
-| Podman CLI bridge | `skill-loom-podman` forwards CLI commands and stdin into the running app container so the current-session workflow can use its shared catalog and chain library. |
+| Podman CLI bridge | `skill-loom-podman` forwards CLI commands and stdin into the running app container, including through a named SSH-backed Podman connection; it can also copy selected skills into a client-local project. |
 | Scenario examples | Illustrative starter chains for business, student, app developer, and game developer workflows. See the [scenario chain guide](docs/scenario-chains.md). |
 | Compatibility surfaces | Bundle, remote-source, and managed-run commands remain during the pivot but are not part of the default chain workflow. |
 
@@ -77,9 +77,10 @@ skill-loom chain project list                 # JSON on stdin; shared library
 skill-loom chain project apply                # JSON on stdin; copy referenced skills
 npm run podman:plan                           # inspect the Podman deployment plan
 skill-loom-podman service status              # use the CLI bridge for a Podman deployment
+LOOM_PODMAN_CONNECTION=loom-host skill-loom-podman service status # remote Podman host
 ```
 
-Unix uses a private socket; Windows uses mutually authenticated loopback TLS and requires a protected private profile on local NTFS/ReFS storage (PowerShell 7, or Windows PowerShell 5.1 with .NET 4.7.2+). Unsafe existing Windows profiles are rejected, not reconfigured; see the [administrator guide](docs/admin-guide.md#cli-flags). Remaining blocked and unverified capabilities are listed in [known gaps](docs/current-gaps.md).
+Unix uses a private socket; Windows uses mutually authenticated loopback TLS and requires a protected private profile on local NTFS/ReFS storage (PowerShell 7, or Windows PowerShell 5.1 with .NET 4.7.2+). Unsafe existing Windows profiles are rejected, not reconfigured; see the [administrator guide](docs/admin-guide.md#cli-flags). For trusted remote Podman clients, see [remote client access](docs/admin-guide.md#remote-client-access). Remaining blocked and unverified capabilities are listed in [known gaps](docs/current-gaps.md).
 
 ## Tech Stack
 

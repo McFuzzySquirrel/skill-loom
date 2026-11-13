@@ -4,13 +4,14 @@ This guide is for the person using Skill Loom to design shared skill workflows (
 
 ## Who This Is For
 
-Skill Loom is a **single-user** tool. It can run locally or in a private Podman container; there are no accounts or multi-tenant controls. The app binds to loopback and sends no telemetry. Container access must remain behind localhost or a private authenticated platform/VPN ingress.
+Skill Loom is a **single-user** tool. It can run locally or in a private Podman container; there are no accounts or multi-tenant controls. The app binds to loopback and sends no telemetry. Remote CLI access uses an authenticated SSH-backed Podman connection; it does not expose a Skill Loom control endpoint.
 
 ## Before You Begin
 
 - Node.js 24 or newer. The `loom-chain-workflow` and `scenario-discovery` skills offer to install the CLI when `skill-loom --version` fails, and ask for approval first. To install it yourself, follow the [administrator guide](admin-guide.md#installation).
 - An agent session with the global skills catalog available. The host decides whether to load each named skill.
 - For Copilot, the project folder trusted in Copilot's own trust dialog.
+- For remote use, the standalone `loom-chain-workflow` skill, Node.js 24+, Podman CLI, and an operator-configured SSH Podman connection.
 
 On Windows, service startup also requires a protected private profile on a local fixed NTFS/ReFS drive and PowerShell 7 or Windows PowerShell 5.1 with .NET 4.7.2+. Unsafe profile ACLs are refused, not repaired. See [identity, secrets, and TLS](admin-guide.md#identity-secrets-and-tls).
 
@@ -20,12 +21,52 @@ On Windows, service startup also requires a protected private profile on a local
 |---|---|
 | Find skills | Search the host-global `~/.agents/skills/` catalog with `skill-loom catalog` or the current host |
 | Create, inspect, or edit shared chains | `skill-loom chain ...` and `skill-loom edit` |
-| Copy required skills into a project | `skill-loom chain project apply` |
+| Copy required skills into a registered host project | `skill-loom chain project apply` |
+| Copy required skills into a remote client's local project | `skill-loom-podman chain project apply-local` |
 | Run a chain in the current agent session | The `loom-chain-workflow` skill |
 | Change step order, instructions, or inputs visually | `skill-loom edit` |
 | Use the legacy bundle-based workflow | `skill-loom bundle ...` and `loom-run-bundle` (compatibility only) |
 
 Run `skill-loom --help` and `skill-loom chain project --help` for the exact commands of the installed version. Structured input is passed as JSON on stdin; every command prints a versioned JSON envelope.
+
+## Use a Hosted Podman Service Remotely
+
+The remote workflow uses Podman's SSH transport to invoke the existing app CLI;
+it does not connect through the editor's HTTP proxy. Ask the administrator for
+the host and SSH identity to use, then configure a named Podman connection on
+the client:
+
+```sh
+podman system connection add --identity ~/.ssh/loom_host_ed25519 \
+  loom-host ssh://loom@podman-host.example
+export LOOM_PODMAN_CONNECTION=loom-host
+skill-loom-podman service status
+```
+
+`loom-chain-workflow` includes the `skill-loom-podman` client helper, so the
+remote machine does not need a Skill Loom checkout or npm package. Install the
+standalone skill package as described in the [standalone skill guide](standalone-skill-guide.md#connect-to-hosted-podman).
+The SSH connection must be configured and usable by the same OS user running
+the agent. Podman access grants control of that rootless Podman account's
+containers and mounts; it is not a narrowly scoped Skill Loom permission.
+
+Use the registered project id on the Podman host as the shared-chain context.
+Applying to the registered host project writes into its mounted `/workspace`
+using `chain project apply`. To apply to the remote client's own checkout,
+select the local path explicitly:
+
+```sh
+skill-loom-podman chain project apply-local \
+  --project /absolute/path/to/local/repo \
+  --project-id <host-project-id> \
+  --chain-id <chain-id>
+```
+
+The helper sends only the project and chain ids to the host, transfers only
+the referenced global skill packages, and writes them into the client's local
+`.agents/skills/` directory without overwriting existing packages. Skill
+package provisioning remains an operator/host maintenance task; remote clients
+cannot modify the hosted global skills root. See the [administrator guide](admin-guide.md#remote-client-access).
 
 ## Run a Shared Chain
 

@@ -1,6 +1,6 @@
 # Skill Loom Operations Guide
 
-This guide is the operator contract for Skill Loom's local and private single-user Podman deployments. It covers configuration, on-disk data, the global skill catalog, the security model, backup and cleanup, compatibility features, and troubleshooting.
+This guide is the operator contract for Skill Loom's local and private single-user Podman deployments, including trusted remote clients using Podman-over-SSH. It covers configuration, on-disk data, the global skill catalog, the security model, backup and cleanup, compatibility features, and troubleshooting.
 
 Read [README.md](../README.md) first for install, development, build, start, and test commands. For task-oriented guidance, see the [user guide](user-guide.md), [standalone skill guide](standalone-skill-guide.md) for legacy bundles, and [administrator guide](admin-guide.md). The durable decisions behind this contract are in the [ADR index](adr/README.md), and release validation is in [the 0.1.0 release notes](releases/0.1.0.md).
 
@@ -61,7 +61,7 @@ Persist that list with `npm config set allow-scripts="file:/absolute/path/to/ski
 
 Before publishing, flip `"private"` to `false`, add repository metadata, verify the package name is still available, run `npm run test:package`, and publish with `npm publish`. Once published, the invocation is `npx skill-loom-cli` or `npm install -g skill-loom-cli`, and the name-based allowlist `--allow-scripts=skill-loom-cli,node-pty` covers both packages.
 
-The build creates `dist/skills/loom-run-bundle/`, `dist/skills/scenario-discovery/`, `dist/skills/loom-chain-workflow/`, and `dist/skills/loom-skill-catalog/` and their ZIP archives. It syncs the `scenario-discovery`, `loom-chain-workflow`, and `loom-skill-catalog` trees into `skill/`, and syncs the generated runner helper into `skill/loom-run-bundle/`; review any other checked-in mirror changes separately. The ZIP archives are the distributable skill packages; there is no in-app download. To install manually from a checkout, run `npm run build:portable-skill`, then copy the relevant directories into the target project's `.agents/skills/<skill-name>/`. The workflow skill requires both discovery and runner skills and the Skill Loom CLI and owner service; the catalog skill requires the CLI and owner service; the other companion helpers run on Node.js 24+ without that service, a native PTY, or an installed Loom npm package. Portable runner mutations use a project-local SQLite database. The runner skill prescribes `--disable-warning=ExperimentalWarning` to keep early Node 24 SQLite warnings out of structured stderr; this also suppresses other experimental warnings. The standalone ZIPs and files are included in the packed Skill Loom artifact. The development `npm run dev` lifecycle builds the skills before starting the server and UI.
+The build creates `dist/skills/loom-run-bundle/`, `dist/skills/scenario-discovery/`, `dist/skills/loom-chain-workflow/`, and `dist/skills/loom-skill-catalog/` and their ZIP archives. It syncs the `scenario-discovery`, `loom-chain-workflow`, and `loom-skill-catalog` trees into `skill/`, and syncs the generated runner helper into `skill/loom-run-bundle/`; review any other checked-in mirror changes separately. The ZIP archives are the distributable skill packages; there is no in-app download. To install manually from a checkout, run `npm run build:portable-skill`, then copy the relevant directories into the target project's `.agents/skills/<skill-name>/`. The workflow skill requires the Skill Loom CLI owner or a configured Podman bridge; its package includes the `skill-loom-podman` client helper for remote SSH connections. The catalog skill requires the CLI and owner service; the legacy bundle and discovery helpers run on Node.js 24+ without that service, a native PTY, or an installed Loom npm package. Portable runner mutations use a project-local SQLite database. The runner skill prescribes `--disable-warning=ExperimentalWarning` to keep early Node 24 SQLite warnings out of structured stderr; this also suppresses other experimental warnings. The standalone ZIPs and files are included in the packed Skill Loom artifact. The development `npm run dev` lifecycle builds the skills before starting the server and UI.
 
 The discovery skill's project-independent mode consumes a downloaded `*.loom-discovery.json` handoff, validates its schema, fingerprints, paths, and content offline, then proposes reviewed scenarios. It builds a standard v1 `.loom.json` bundle from only the approved packages. It does not import, install, run package code, or make network requests. Hosts must pass helper arguments as structured process arguments; do not substitute shell-concatenated commands.
 
@@ -182,6 +182,8 @@ Watch a run with `skill-loom run attach --run <id>` (Ctrl-] detaches), `run show
 ## Security model
 
 Skill Loom is a **loopback-only** single-user application. The server binds to `127.0.0.1` and rejects non-loopback hosts. The app has **no authentication** and must not be exposed directly to a public or untrusted network. In the Podman deployment, the Caddy proxy shares the pod's network namespace and forwards to the loopback-bound app; the default host publish binds only to `127.0.0.1`. A private deployment may use a private authenticated platform/VPN ingress as its access boundary. Do not configure anonymous ingress, a public port, or multi-user access.
+
+Trusted remote clients may run the packaged `skill-loom-podman` helper over an SSH-backed Podman connection. SSH and Podman authorize access to the host account's containers and mounts; this is not Skill Loom user authentication or a per-command permission boundary. The helper uses `podman exec` to invoke the in-container CLI, which uses the existing private control transport. It does not expose the HTTP server or control socket. Client-local apply transfers only a bounded manifest of selected global packages (up to 100 packages, 2,000 files, and 20 MiB) and does not send the client project path to the host. A live second-machine SSH flow has not yet been verified; see [known gaps](current-gaps.md#execution-gates).
 
 The server owns all filesystem traversal, path canonicalization, persistence, CLI process spawning, and PTY handling. Harness processes are spawned with an executable plus an argument array, never a shell command string; project paths are canonicalized and traversal outside the intended project data directory is rejected. The chain editor performs no shell execution and receives only typed API data.
 
@@ -380,6 +382,17 @@ managed evidence has passed and that reviewed CLI contract is verified.
 ### Missing harness CLI
 
 Preflight reports a blocking finding when `opencode` or `copilot` cannot be resolved. Confirm the exact binary is on the `PATH` used to launch Skill Loom (`command -v opencode`, `command -v copilot`), install the verified version, or set `harnessCommands.opencode` / `harnessCommands.copilot` in `~/.config/loom/config.json` to an absolute executable path. Restart Skill Loom after changing the server `PATH`, then rerun preflight. Skill Loom does not silently fall back from a broken override.
+
+### Remote Podman connection
+
+Confirm the host's rootless Podman service and Skill Loom app container are
+running, and that `LOOM_PODMAN_CONNECTION` matches a connection shown by
+`podman system connection list`. Test the connection with
+`skill-loom-podman service status`; if that fails, resolve SSH identity,
+account, or Podman connectivity before retrying. The client also needs Node.js
+24+ and the workflow skill's packaged bridge. For client-local apply, verify
+the host project and chain ids; an existing local skill package is reported as
+a conflict and is never replaced.
 
 ### Authentication failure
 

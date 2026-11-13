@@ -1,14 +1,14 @@
 # Standalone Skill Guide
 
-*The bundle-based standalone runner is retained for compatibility. The preferred shared-chain workflow uses the Skill Loom CLI and the active agent session.*
+*The `loom-chain-workflow` package can connect an active agent session to a hosted Skill Loom Podman service. The bundle-based runner remains a separate compatibility workflow.*
 
 ## Current Workflow
 
 Install the `loom-chain-workflow` companion skill and use a running Skill Loom
-service. It selects a chain from the shared library, applies its current
-host-global skills into the target project's `.agents/skills/`, and carries
-out the saved steps in the current conversation. It does not create a bundle,
-launch a nested harness, or persist run state. See [Run a Shared Chain](user-guide.md#run-a-shared-chain).
+service. It searches the host-global catalog, selects or creates a shared
+chain, applies its current global skills to a chosen project, and carries out
+the saved steps in the current conversation. It does not launch a nested
+harness or persist run state. See [Run a Shared Chain](user-guide.md#run-a-shared-chain).
 
 The remaining sections describe the older bundle-based workflow for existing
 `.loom.json` artifacts only. They are not required for new chains.
@@ -23,7 +23,7 @@ Use this path when you already work in an agent harness (GitHub Copilot CLI, Ope
 |---|---|---|
 | `scenario-discovery` | Inventories project-local skills, proposes workflows, and writes a reviewed `.loom.json` bundle. | No |
 | `loom-run-bundle` | Inspects, installs, and runs a bundle in the **current** host session through a Node.js helper. | No |
-| `loom-chain-workflow` | Coordinates the two skills above and, when Skill Loom's CLI owner is running, optional workspace tests and reviewed import. | Only for the CLI phases |
+| `loom-chain-workflow` | Searches hosted global skills, builds or selects shared chains, applies skills, and walks ordered steps in the current session. | Yes; use a local `skill-loom` CLI or the packaged `skill-loom-podman` bridge. |
 
 `loom-skill-catalog` searches registered sources and installs one reviewed package into a project. It requires the Skill Loom CLI and owner service, so it is not part of the skill-only path described here.
 
@@ -40,12 +40,55 @@ Limits of the skill-only path:
 - Node.js 24 or newer.
 - A host that can discover project skills, invoke Node with an argument array, pass JSON on stdin, and ask you for confirmation. If it cannot, stop rather than guessing paths.
 - Exclusive use of the project while a run is in progress. A status check is not a lock; see [Concurrency](#concurrency-and-recovery).
+- For hosted Podman, Podman CLI and an SSH-backed named connection configured by the service administrator. No Skill Loom checkout or private npm package is required on the client.
 
 ## Install the Skills
 
 1. From a checkout, run `npm run build:portable-skill` and use `dist/skills/loom-run-bundle/`, `dist/skills/scenario-discovery/`, and `dist/skills/loom-chain-workflow/` (ZIP archives sit beside them), or copy the checked-in `skill/` directories. `dist/skills/loom-skill-catalog/` is the CLI-backed catalog skill and is installed the same way, but it requires the owner service.
 2. Copy each directory into the target project's `.agents/skills/`. Do not merge over an existing package.
 3. Refresh or restart the host so it discovers them.
+
+## Connect to Hosted Podman
+
+The standalone workflow package includes
+`scripts/skill-loom-podman.mjs`. It invokes the Podman CLI on the client and
+forwards Skill Loom commands to the already-running `skill-loom-app` over
+Podman's configured SSH connection. The client uses SSH to reach the Podman
+engine; it does not connect through the editor's HTTP port or expose the
+container control socket.
+
+Ask the host administrator for the SSH account and identity to use, then
+configure a named connection on the client:
+
+```sh
+podman system connection add --identity ~/.ssh/loom_host_ed25519 \
+  loom-host ssh://loom@podman-host.example
+export LOOM_PODMAN_CONNECTION=loom-host
+node <loom-chain-workflow-skill-dir>/scripts/skill-loom-podman.mjs service status
+```
+
+In PowerShell, set `$env:LOOM_PODMAN_CONNECTION = "loom-host"`. Keep the
+connection identity in the OS user's normal SSH configuration; Loom does not
+store it. Podman access grants control of the host account's containers and
+mounts, so this is appropriate only for trusted clients.
+
+Use the host's registered project id to work with the shared catalog and
+chains. `chain project apply` writes into the registered host project, usually
+the Podman host's `/workspace`. To apply selected global packages to a project
+on the client, use:
+
+```sh
+node <loom-chain-workflow-skill-dir>/scripts/skill-loom-podman.mjs \
+  chain project apply-local --project /absolute/path/to/local/repo \
+  --project-id <host-project-id> --chain-id <chain-id>
+```
+
+The local project path stays on the client. The bridge requests a bounded,
+versioned manifest containing only the selected chain's global packages and
+copies them to the local `.agents/skills/` directory without overwriting an
+existing package. Remote clients cannot install or update packages in the
+host-global catalog. For host setup, permissions, and troubleshooting, see
+[Remote client access](admin-guide.md#remote-client-access).
 
 ## Workflow
 
@@ -125,9 +168,16 @@ Repeat until the run completes:
 
 After an interruption, run `status` first. A still-`running` attempt is uncertain: confirm the earlier host work has stopped and send `stoppedConfirmed: true` with the current `revision` to `resume`, then choose `retry`, `done`, `failed`, or `continue`. Nothing is replayed automatically, and retry does not undo side effects.
 
-## Combining With the Skill Loom CLI
+## Chain Operations on a Hosted Service
 
-When a Skill Loom owner is running (`skill-loom service start`), `loom-chain-workflow` can add CLI phases between discovery and execution: create a retained test workspace, inspect or evaluate its output with explicit checks, and review then import the bundle with a `reviewDigest`. Each of these needs its own approval; none approves a run. Current CLI-managed starts reject skill-bearing chains and native agents, and OpenCode automatic starts remain blocked, so execution of such chains still goes through `loom-run-bundle`. See the [administrator guide](admin-guide.md#cli-flags) for payloads.
+`loom-chain-workflow` uses the selected CLI bridge for every hosted operation.
+For local installations, use `skill-loom`; for Podman deployments, use
+`skill-loom-podman` and set `LOOM_PODMAN_CONNECTION` on a remote client. The
+standalone helper is included with the installed workflow skill, so clients do
+not need the Skill Loom npm package. New skill packages still need to be
+provisioned into the host-global directory by the host administrator or the
+user's existing installer. `loom-run-bundle` remains offline and does not
+connect to the hosted service.
 
 ## Concurrency and Recovery
 
