@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { chainRevision, createChainService } from '../../src/server/chains/service.js';
+import { createChainStore } from '../../src/server/chains/store.js';
 
 describe('chain revision concurrency', () => {
   it('serializes competing services and changes revisions even within the same clock tick', async () => {
@@ -30,6 +31,59 @@ describe('chain revision concurrency', () => {
         .rejects.toMatchObject({ code: 'CHAIN_STALE' });
       await first.remove(root, created.id, { expectedRevision: chainRevision(updated) });
       await expect(first.get(root, created.id)).rejects.toMatchObject({ code: 'CHAIN_NOT_FOUND' });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('serializes updates from different project contexts that share one store', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'loom-shared-chain-revision-'));
+    try {
+      const projectA = join(root, 'project-a');
+      const projectB = join(root, 'project-b');
+      const backing = createChainStore({ chainsDirectory: join(root, 'shared-chains') });
+      const createStore = () => ({
+        async list() {
+          return backing.list();
+        },
+        async read(chainId: string) {
+          const observed = await backing.read(chainId);
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          return observed;
+        },
+        async create(chain: Parameters<typeof backing.create>[0]) {
+          return backing.create(chain);
+        },
+        async update(chain: Parameters<typeof backing.update>[0]) {
+          return backing.update(chain);
+        },
+        async delete(chainId: string) {
+          return backing.delete(chainId);
+        },
+      });
+      const service = createChainService({
+        createStore,
+        mutationScope: () => join(root, 'shared-chains'),
+      });
+      const draft = {
+        name: 'Concurrent shared chain',
+        harness: 'copilot',
+        sessionMode: 'shared',
+        steps: [{ id: 'step', kind: 'instruction', instruction: 'Review.' }],
+        inputs: [],
+      };
+      const created = await service.create(projectA, draft);
+      const revision = chainRevision(created);
+
+      const outcomes = await Promise.allSettled([
+        service.update(projectA, created.id, draft, { expectedRevision: revision }),
+        service.update(projectB, created.id, { ...draft, name: 'Changed elsewhere' }, { expectedRevision: revision }),
+      ]);
+
+      expect(outcomes.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(outcomes.filter((result) => result.status === 'rejected')).toMatchObject([
+        { reason: { code: 'CHAIN_STALE' } },
+      ]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

@@ -1,5 +1,6 @@
-import { execFileSync } from 'node:child_process';
-import { homedir } from 'node:os';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -28,6 +29,29 @@ function podmanPlan(args: string[], env: NodeJS.ProcessEnv = {}): {
 }
 
 describe('Podman deployment plan', () => {
+  it('creates both host bind-mount directories before starting Podman', () => {
+    const dataRoot = mkdtempSync(join(tmpdir(), 'loom-podman-up-'));
+    const projectDirectory = join(dataRoot, 'new-project');
+    const skillsDirectory = join(dataRoot, 'new-skills');
+    try {
+      const result = spawnSync(process.execPath, [join(root, 'scripts', 'podman.mjs'), 'up'], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          LOOM_PROJECT_DIR: projectDirectory,
+          LOOM_SKILLS_DIR: skillsDirectory,
+          PODMAN: join(dataRoot, 'missing-podman'),
+        },
+      });
+
+      expect(result.status).toBe(1);
+      expect(existsSync(skillsDirectory)).toBe(true);
+      expect(existsSync(projectDirectory)).toBe(true);
+    } finally {
+      rmSync(dataRoot, { recursive: true, force: true });
+    }
+  });
+
   it('uses a persistent config volume and global skills mount with loopback-only publishing', () => {
     const skillsDirectory = join(homedir(), 'loom-skills-test');
     const projectDirectory = join(homedir(), 'loom-project-test');

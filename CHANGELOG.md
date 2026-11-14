@@ -76,6 +76,8 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Fixed
 
+- Bound repository-chain skill steps now resolve the exact remote source identity, configured remote snapshots are visible to catalog operations, and shared-chain revision checks serialize across registered projects.
+- `podman:up` now creates both configured bind-mount source directories before startup.
 - The Podman chain-publish bridge now omits the sidecar version wrapper from strict hosted update requests, so confirmed repository-chain updates pass control validation.
 - Remote source refresh now keeps a package whose `SKILL.md` has malformed frontmatter, using the directory-name fallback instead of aborting the whole snapshot with `CONTROL_INTERNAL_ERROR`.
 - The chain editor now blocks step, input, and reorder mutations while a save is in flight and keeps any newer edit if one still arrives, adopting only the server's identity fields instead of silently replacing newer work.

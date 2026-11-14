@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createConfigStore } from '../../src/server/config/store.js';
+import { createCatalogService } from '../../src/server/catalog/merge.js';
 import {
   REMOTE_SOURCE_ERROR_CODES,
   RemoteSourceError,
@@ -76,6 +77,48 @@ function fakeGit(tree = [
 }
 
 describe('remote skill source snapshots', () => {
+  it('discovers configured remote skills and agents in the catalog', async () => {
+    const root = await makeRoot();
+    const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });
+    await store.update({
+      remoteSkillSources: [{ id: 'demo-source', repository: 'https://example.com/acme/skills.git', ref: 'main' }],
+    });
+    const source = fakeGit();
+    await refreshRemoteSkillSource(store, 'demo-source', {
+      gitRunner: source.run,
+      temporaryDirectory: root,
+    });
+    const service = createCatalogService({
+      configStore: store,
+      adapters: [{
+        harness: 'opencode',
+        usesExtraDirectories: false,
+        async discover() {
+          return { entries: [], warnings: [] };
+        },
+      }],
+    });
+
+    const catalog = await service.getCatalog({ projectPath: root, harness: 'opencode' });
+
+    expect(catalog.groups.flatMap((group) => group.entries)).toContainEqual(
+      expect.objectContaining({
+        source: 'remote',
+        sourceId: 'demo-source',
+        revision,
+        repositoryPath: 'collection/demo',
+        name: 'demo-skill',
+      }),
+    );
+    expect(catalog.agents).toContainEqual(
+      expect.objectContaining({
+        sourceId: 'demo-source',
+        revision,
+        name: 'reviewer',
+      }),
+    );
+  });
+
   it('binds versioned Git executable modes to snapshot fingerprints and migrates legacy snapshots', async () => {
     const root = await makeRoot();
     const store = createConfigStore({ env: { LOOM_CONFIG_DIR: join(root, 'config') } });

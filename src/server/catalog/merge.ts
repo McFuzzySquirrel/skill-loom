@@ -214,12 +214,12 @@ export function createCatalogService(options: CatalogServiceOptions): CatalogSer
 
       const remote = await discoverRemoteSkillEntries({
         configDirectory: options.configStore.getConfigDir(),
-        sources: [],
+        sources: config.remoteSkillSources,
         harness: adapter.harness,
       });
       const agents = await discoverRemoteNativeAgents({
         configDirectory: options.configStore.getConfigDir(),
-        sources: [],
+        sources: config.remoteSkillSources,
         harness: adapter.harness,
       });
       const merged = [...discovery.entries, ...remote.entries]

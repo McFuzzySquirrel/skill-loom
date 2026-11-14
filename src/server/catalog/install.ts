@@ -185,8 +185,8 @@ export interface ApplyChainSkillsRequest {
 
 /**
  * Copy the chain's current global packages into the project's shared skill
- * root. Package names are the chain's stable reference for this catalog model;
- * ambiguous or missing names fail rather than selecting a different package.
+ * root. Resolve bound steps by their complete source identity and unbound
+ * steps by personal-catalog name; ambiguous or missing entries fail closed.
  */
 export async function applyChainSkillsToProject(
   options: InstallOptions,
@@ -399,27 +399,54 @@ async function resolveChainSkillEntries(
     harness: request.chain.harness,
   });
   const entries = catalog.groups.flatMap((group) => group.entries);
-  const names = [...new Set(request.chain.steps
-    .filter((step) => step.kind !== 'instruction')
-    .map((step) => step.skillName))];
-  const selected: SkillEntry[] = [];
+  const selectedById = new Map<string, SkillEntry>();
+  const selectedByDirectory = new Map<string, SkillEntry>();
 
-  for (const name of names) {
-    const matches = entries.filter((entry) => entry.source === 'personal' && entry.name === name);
+  for (const step of request.chain.steps.filter((item) => item.kind !== 'instruction')) {
+    const binding = step.skillBinding;
+    const matches = entries.filter((entry) => binding === undefined
+      ? entry.source === 'personal' && entry.name === step.skillName
+      : entry.source === 'remote' && entry.name === step.skillName &&
+        entry.sourceId === binding.sourceId &&
+        entry.revision === binding.revision &&
+        entry.repositoryPath === binding.repositoryPath);
     if (matches.length !== 1) {
+      const identity = binding === undefined
+        ? `The global skill name "${step.skillName}"`
+        : `The bound global skill "${step.skillName}"`;
       throw new CatalogInstallError(
         matches.length === 0
           ? SKILL_INSTALL_ERROR_CODES.CANDIDATE_NOT_FOUND
           : SKILL_INSTALL_ERROR_CODES.CANDIDATE_CHANGED,
         matches.length === 0
-          ? `The global skill "${name}" is not available.`
-          : `The global skill name "${name}" is ambiguous.`,
-        { projectId: request.projectId, skillName: name, matches: matches.map((entry) => entry.id) },
+          ? `${identity} is not available.`
+          : `${identity} is ambiguous.`,
+        {
+          projectId: request.projectId,
+          skillName: step.skillName,
+          ...(binding === undefined ? {} : { skillBinding: binding }),
+          matches: matches.map((entry) => entry.id),
+        },
       );
     }
-    selected.push(matches[0]!);
+    const entry = matches[0]!;
+    const directory = safePackageName(entry.name).toLowerCase();
+    const existing = selectedByDirectory.get(directory);
+    if (existing !== undefined && existing.id !== entry.id) {
+      throw new CatalogInstallError(
+        SKILL_INSTALL_ERROR_CODES.CANDIDATE_CHANGED,
+        `Multiple selected package identities map to the "${directory}" project directory.`,
+        {
+          projectId: request.projectId,
+          skillName: step.skillName,
+          matches: [existing.id, entry.id],
+        },
+      );
+    }
+    selectedByDirectory.set(directory, entry);
+    selectedById.set(entry.id, entry);
   }
-  return selected;
+  return [...selectedById.values()];
 }
 
 interface ResolvedReview {

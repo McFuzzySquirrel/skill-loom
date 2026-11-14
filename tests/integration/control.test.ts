@@ -12,6 +12,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { executePortableRequest } from '../../src/portable/runtime.js';
 import { createConfigStore } from '../../src/server/config/store.js';
 import { createCatalogService, createDefaultCatalogAdapters } from '../../src/server/catalog/merge.js';
+import type { CatalogResponse, CatalogService } from '../../src/server/catalog/merge.js';
+import type { SkillEntry } from '../../src/server/catalog/types.js';
 import { attachControlTerminal, callControl, startControlServer, streamControlEvents } from '../../src/server/control.js';
 import { runCli } from '../../src/server/cli.js';
 import { startServer } from '../../src/server/index.js';
@@ -27,6 +29,111 @@ import { createLoomServices } from '../../src/server/services.js';
 import { createTerminalManager, TerminalSubscriberConflictError } from '../../src/server/terminal/pty.js';
 
 describe.skipIf(process.platform === 'win32')('local control transport', () => {
+  it('publishes only when a repository chain’s exact remote skill binding exists', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-remote-chain-publish-')));
+    const project = join(root, 'project');
+    const configDirectory = join(root, 'config');
+    await mkdir(project);
+    const config = createConfigStore({ env: { LOOM_CONFIG_DIR: configDirectory } });
+    await config.update({});
+    const binding = {
+      sourceId: 'hosted-skills',
+      revision: 'a'.repeat(40),
+      repositoryPath: 'skills/release-notes',
+    };
+    const entries: SkillEntry[] = [
+      {
+        id: 'opencode-personal-release-notes',
+        harness: 'opencode',
+        source: 'personal',
+        name: 'release-notes',
+        description: 'Personal release notes',
+        path: join(root, 'personal', 'release-notes', 'SKILL.md'),
+        packagePath: join(root, 'personal', 'release-notes'),
+        enabled: true,
+      },
+      {
+        id: 'opencode-remote-release-notes',
+        harness: 'opencode',
+        source: 'remote',
+        name: 'release-notes',
+        description: 'Hosted release notes',
+        path: join(root, 'remote', 'release-notes', 'SKILL.md'),
+        packagePath: join(root, 'remote', 'release-notes'),
+        enabled: true,
+        ...binding,
+      },
+    ];
+    const catalogService: CatalogService = {
+      defaultHarness: 'opencode',
+      async getCatalog(): Promise<CatalogResponse> {
+        return {
+          harness: 'opencode',
+          query: '',
+          total: entries.length,
+          counts: {
+            total: entries.length,
+            bySource: { project: 0, personal: 1, custom: 0, plugin: 0, builtin: 0, 'loom-extra': 0, remote: 1 },
+          },
+          groups: [
+            { source: 'personal', count: 1, entries: [entries[0]!] },
+            { source: 'remote', count: 1, entries: [entries[1]!] },
+          ],
+          agents: [],
+          warnings: [],
+          elapsedMs: 1,
+        };
+      },
+    };
+    const services = createLoomServices({ configStore: config, catalogService, preflightEnv: {} });
+    const server = await startControlServer(config, { services });
+    try {
+      const opened = await callControl(configDirectory, 'project.open', { path: project });
+      if (!opened.ok) throw new Error('Project registration failed.');
+      const projectId = (opened.result as { project: { id: string } }).project.id;
+      const makeChain = (id: string, skillBinding = binding) => ({
+        version: CHAIN_VERSION,
+        id,
+        name: 'Remote release notes',
+        harness: 'opencode',
+        sessionMode: 'shared',
+        steps: [{
+          id: 'step-one',
+          skillName: 'release-notes',
+          skillBinding,
+          instruction: 'Write the notes.',
+        }],
+        inputs: [],
+        automaticPermissionOptIn: false,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      });
+
+      const published = await callControl(configDirectory, 'chain.project.publish', {
+        projectId,
+        repoChainId: 'repo-remote',
+        chain: makeChain('repo-remote'),
+      });
+      expect(published).toMatchObject({
+        ok: true,
+        result: { chain: { name: 'Remote release notes' } },
+      });
+
+      const missingBinding = await callControl(configDirectory, 'chain.project.publish', {
+        projectId,
+        repoChainId: 'repo-missing-remote',
+        chain: makeChain('repo-missing-remote', { ...binding, revision: 'b'.repeat(40) }),
+      });
+      expect(missingBinding).toMatchObject({
+        ok: false,
+        error: { code: 'SKILL_INSTALL_CANDIDATE_NOT_FOUND' },
+      });
+    } finally {
+      await server.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('exports only exact reviewed catalog selections and rejects changed packages', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-selected-export-')));
     const project = join(root, 'project');
@@ -326,6 +433,12 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       expect(await readFile(installedPath, 'utf8')).toContain('Format carefully.');
       await expect(access(join(project, '.loom', 'chains', `${legacyChain.id}.json`))).resolves.toBeUndefined();
       await expect(access(join(configDirectory, 'chains', `${legacyChain.id}.json`))).resolves.toBeUndefined();
+      await expect(services.chainService.get(registration.canonicalPath, legacyChain.id))
+        .resolves.toMatchObject({
+          id: legacyChain.id,
+          createdAt: legacyChain.createdAt,
+          updatedAt: legacyChain.updatedAt,
+        });
 
       const conflict = await callControl(configDirectory, 'chain.project.apply', request);
       expect(conflict).toMatchObject({ ok: false });

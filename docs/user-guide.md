@@ -155,6 +155,11 @@ These commands remain for compatibility; the default chain workflow does not
 use remote snapshots. Add skills to `LOOM_SKILLS_DIR` with your existing
 installation method instead.
 
+An explicitly bound repository-chain step still resolves only against its
+configured remote source, revision, and repository path when applying or
+publishing. If that exact snapshot is unavailable, the operation fails rather
+than substituting a same-named personal skill.
+
 `skill-loom catalog source add` reads `{"repository":"https://...","ref":"main"}`. Nothing is fetched until you run `catalog source refresh`, which pins a commit. Use `catalog snapshot page` and `catalog snapshot inspect` to review a pinned revision. Skill Loom never executes repository files while registering, refreshing, or browsing.
 
 ### Legacy: discover candidates and create a bundle

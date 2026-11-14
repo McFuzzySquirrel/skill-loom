@@ -38,9 +38,9 @@ npm run podman:plan
 ```
 
 The plan must show the catalog mounted at `/var/lib/loom/skills` with `ro` and
-the app bound to loopback. `npm run podman:up` creates the host directory if it
-does not exist. The packages are not copied into the image; editing the mounted
-files does not require rebuilding the application image.
+the app bound to loopback. `npm run podman:up` creates the catalog and project
+directories if they do not exist. The packages are not copied into the image;
+editing the mounted files does not require rebuilding the application image.
 
 ## Add, update, and remove packages
 

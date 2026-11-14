@@ -110,8 +110,20 @@ function printPlan(plan) {
   process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
 }
 
+function ensureDataDirectory(directory) {
+  try {
+    mkdirSync(directory, { recursive: true });
+  } catch (error) {
+    throw new Error(
+      `Could not create Podman bind-mount directory "${directory}": ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
+}
+
 function ensureDataDirectories(plan) {
-  mkdirSync(plan.skillsDirectory, { recursive: true });
+  ensureDataDirectory(plan.skillsDirectory);
+  ensureDataDirectory(plan.projectDirectory);
 }
 
 function runUp(plan) {

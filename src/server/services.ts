@@ -75,7 +75,10 @@ export function createLoomServices(options: Omit<PreflightProviderOptions, 'cata
     });
   };
   const chainService = options.chainService ?? createMigratingChainService(
-    createChainService({ createStore: createGlobalChainStore }),
+    createChainService({
+      createStore: createGlobalChainStore,
+      mutationScope: () => globalChainsDirectoryFor(getConfigDirectory()),
+    }),
     createGlobalChainStore,
     getConfigDirectory,
   );
