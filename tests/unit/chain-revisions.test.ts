@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -37,7 +37,7 @@ describe('chain revision concurrency', () => {
   });
 
   it('serializes updates from different project contexts that share one store', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'loom-shared-chain-revision-'));
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-shared-chain-revision-')));
     try {
       const projectA = join(root, 'project-a');
       const projectB = join(root, 'project-b');
