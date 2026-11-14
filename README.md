@@ -63,7 +63,7 @@ The product promise is deliberately narrow:
 | Shared chain library | Create, validate, update, and remove chains in one Loom library, visible from every registered project context. Legacy project chain files are copied on first access and retained. |
 | Global skill catalog | Search only the configured host-global `.agents/skills` tree. Existing external tools own package installation and updates. |
 | Apply chain to project | `skill-loom chain project apply` copies only the chain's referenced global packages into `<project>/.agents/skills/`; it never overwrites an existing package. |
-| Podman deployment | `npm run podman:up`, `podman:down`, and `podman:plan` support local and private single-user deployment with a persistent config volume, global skills, and project mounts. |
+| Podman deployment | `npm run podman:up`, `podman:down`, and `podman:plan` support cross-platform local deployment; `podman:host` installs and manages a persistent Linux rootless Quadlet service. |
 | Podman CLI bridge | `skill-loom-podman` forwards CLI commands and stdin into the running app container, including through a named SSH-backed Podman connection; it can copy exact reviewed catalog selections into a client-local project before a chain exists. |
 | Scenario examples | Illustrative starter chains for business, student, app developer, and game developer workflows. See the [scenario chain guide](docs/scenario-chains.md). |
 | Compatibility surfaces | Bundle, remote-source, and managed-run commands remain during the pivot but are not part of the default chain workflow. |
@@ -76,11 +76,14 @@ skill-loom edit --draft <draft-id>            # visual chain editor
 skill-loom chain project list                 # JSON on stdin; shared library
 skill-loom chain project apply                # JSON on stdin; copy referenced skills
 npm run podman:plan                           # inspect the Podman deployment plan
+npm run podman:host -- plan                   # inspect a persistent Linux host plan
 skill-loom-podman service status              # use the CLI bridge for a Podman deployment
 LOOM_PODMAN_CONNECTION=loom-host skill-loom-podman service status # remote Podman host
 ```
 
 Unix uses a private socket; Windows uses mutually authenticated loopback TLS and requires a protected private profile on local NTFS/ReFS storage (PowerShell 7, or Windows PowerShell 5.1 with .NET 4.7.2+). Unsafe existing Windows profiles are rejected, not reconfigured; see the [administrator guide](docs/admin-guide.md#cli-flags). For trusted remote Podman clients, see [remote client access](docs/admin-guide.md#remote-client-access). Remaining blocked and unverified capabilities are listed in [known gaps](docs/current-gaps.md).
+
+For a persistent rootless Linux host and same-VPN client, follow the [hosted Podman setup runbook](docs/admin-guide.md#persistent-linux-host-service-quadlet).
 
 ## Tech Stack
 

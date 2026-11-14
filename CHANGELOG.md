@@ -8,6 +8,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Added
 
+- A persistent Linux host deployment manager using rootless Podman Quadlets, with install, lifecycle, update/rollback, and stopped-volume backup commands; it publishes no HTTP port by default and supports trusted remote clients over SSH.
 - A Podman deployment for Linux, macOS, and Windows hosts, with persistent config, global-skill, and project mounts, localhost-only default publishing, private-network mode, and a cross-platform plan command.
 - A `skill-loom-podman` CLI bridge that forwards command arguments and stdin to the running app container without using a shell, enabling host-side chain and apply operations against the shared service.
 - The standalone `loom-chain-workflow` package now includes the Podman bridge for clients using an existing SSH-backed named Podman connection, so a remote agent can search the hosted global catalog and shared chains without exposing the Skill Loom server.
@@ -46,6 +47,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Changed
 
+- The persistent-host guide now walks from Linux account and rootless Podman socket setup through Quadlet installation and remote-client registration, and identifies Git as a host-install prerequisite.
 - The host-global `~/.agents/skills/` directory, configurable with `LOOM_SKILLS_DIR`, is now the sole source for the default authoring catalog. External installation tools own provisioning and updates; remote snapshots and bundles remain compatibility surfaces rather than the default workflow.
 - New chains are stored in the shared Loom library and are visible from each registered project context. Applying a chain creates independent project-local skill copies; later global changes do not rewrite them.
 - Shared chain execution now uses the already-active agent session. The container path keeps the application loopback-bound and requires private authenticated ingress for non-local access.

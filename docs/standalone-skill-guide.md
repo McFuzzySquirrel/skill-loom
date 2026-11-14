@@ -88,7 +88,8 @@ versioned manifest containing only the selected chain's global packages and
 copies them to the local `.agents/skills/` directory without overwriting an
 existing package. Remote clients cannot install or update packages in the
 host-global catalog. For host setup, permissions, and troubleshooting, see
-[Remote client access](admin-guide.md#remote-client-access).
+[persistent Linux host setup](admin-guide.md#persistent-linux-host-service-quadlet)
+and [remote client access](admin-guide.md#remote-client-access).
 
 ## Copy Selected Host Skills to a Client Project
 

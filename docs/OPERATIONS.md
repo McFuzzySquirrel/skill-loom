@@ -90,11 +90,26 @@ proof that a person reviewed the content.
 | `~/.config/loom/active-run.json` | Single global active-run pointer used for health reporting and startup recovery. | Holds only the active run's project path, run id, and status. |
 | `~/.config/loom/chains/*.json` | Shared chain library, visible from every registered project context. | Versioned JSON written atomically. Back up with the config directory. |
 | Podman volume `skill-loom-config` | Container deployment's config, shared chains, and derived index. | Persists across `podman:down`; inspect and back up with `podman volume export`. |
+| `~/.config/containers/systemd/skill-loom-*` | Rootless Linux host deployment's managed Quadlet units. | Managed by `npm run podman:host`; use `install --replace` only for intentional unit changes. |
+| `~/.local/state/skill-loom-host/skill-loom-app.container` | Previous app Quadlet retained for rollback after an update. | Keep with the rootless host account; the referenced prior image must remain local for rollback. |
+| `$XDG_RUNTIME_DIR/podman/podman.sock` | Rootless Podman API socket for the host account. | Enable with `systemctl --user enable --now podman.socket`; remote Podman clients reach it over SSH. Never publish it over TCP. |
 | `<project>/.loom/chains/*.json` | Legacy project-local chain definitions. | Copied into the shared library on first access; original files remain. Corrupt files and id collisions are reported. |
 | `<project>/.agents/skills/` | Project-local copies installed by applying a shared chain. | Global source updates do not rewrite these copies; existing packages are never overwritten. |
 | `<project>/.loom/runs/*.json` | Run snapshots, statuses, actions, and a bounded terminal tail per step. | At most a **200-line or 32 KiB** tail per step; never a full transcript. `.loom/runs/` is **git-ignored** by this repository's `.gitignore`. |
 | `<project>/.loom/portable-runs/*.json` | Separate standalone-skill run snapshots, resolved input values, package fingerprints, attempts, and bounded summaries. A reused host-global package is recorded with `source: "global"` and its reviewed absolute path instead of a project copy. | Contains local input values and machine-local package paths; created and Git-ignored by the portable helper. Writes use same-directory temporary files and atomic replacement; directory fsync is attempted where supported and may be skipped on platforms that reject it. It does not use native run records or the global active-run pointer. |
 | `~/.copilot/config.json` | Copilot's own persistent folder-trust configuration. | Skill Loom only reads `trustedFolders`; it never writes this file. |
+
+The persistent hosted deployment uses rootless Podman Quadlets and a systemd
+user manager on Linux. `loginctl enable-linger` keeps that manager available
+across logout and reboot. Install and update require no staged or unstaged
+tracked changes in the source checkout. The manager publishes no host HTTP
+port by default and uses the same read-only global-skills and writable
+workspace mounts as the local launcher.
+Enable the rootless `podman.socket` for SSH-backed client connections; it
+listens on a Unix socket and must not be reconfigured as an unauthenticated
+TCP service.
+Remote clients use SSH-backed Podman access, not an exposed Skill Loom HTTP
+endpoint. See the [host installation procedure](admin-guide.md#persistent-linux-host-service-quadlet).
 
 Current portable helpers reject preparation or step execution if another
 unfinished portable run is recorded in the project. The scan is limited to
@@ -191,7 +206,7 @@ Watch a run with `skill-loom run attach --run <id>` (Ctrl-] detaches), `run show
 
 Skill Loom is a **loopback-only** single-user application. The server binds to `127.0.0.1` and rejects non-loopback hosts. The app has **no authentication** and must not be exposed directly to a public or untrusted network. In the Podman deployment, the Caddy proxy shares the pod's network namespace and forwards to the loopback-bound app; the default host publish binds only to `127.0.0.1`. A private deployment may use a private authenticated platform/VPN ingress as its access boundary. Do not configure anonymous ingress, a public port, or multi-user access.
 
-Trusted remote clients may run the packaged `skill-loom-podman` helper over an SSH-backed Podman connection. SSH and Podman authorize access to the host account's containers and mounts; this is not Skill Loom user authentication or a per-command permission boundary. The helper uses `podman exec` to invoke the in-container CLI, which uses the existing private control transport. It does not expose the HTTP server or control socket. Chain-based and standalone client-local copies transfer only bounded selected global packages (up to 100 packages, 2,000 files, and 20 MiB decoded content), require exact catalog ids and package fingerprints for the standalone path, and do not send the client project path to the host. A live second-machine SSH flow has not yet been verified; see [known gaps](current-gaps.md#execution-gates).
+Trusted remote clients may run the packaged `skill-loom-podman` helper over an SSH-backed Podman connection. SSH and Podman authorize access to the host account's containers and mounts; this is not Skill Loom user authentication or a per-command permission boundary. The helper uses `podman exec` to invoke the in-container CLI, which uses the existing private control transport. It does not expose the HTTP server or control socket. Chain-based and standalone client-local copies transfer only bounded selected global packages (up to 100 packages, 2,000 files, and 20 MiB decoded content), require exact catalog ids and package fingerprints for the standalone path, and do not send the client project path to the host. A live second-machine SSH flow has not yet been verified; see [known gaps](current-gaps.md#execution-gates). The persistent Linux host manager installs the same service as rootless Quadlets, publishes no host HTTP port by default, and requires a clean checkout for image builds; reboot persistence and backup/restore remain unverified.
 
 The server owns all filesystem traversal, path canonicalization, persistence, CLI process spawning, and PTY handling. Harness processes are spawned with an executable plus an argument array, never a shell command string; project paths are canonicalized and traversal outside the intended project data directory is rejected. The chain editor performs no shell execution and receives only typed API data.
 

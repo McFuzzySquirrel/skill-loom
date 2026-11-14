@@ -38,6 +38,7 @@
 | [ADR-0032](0032-host-global-skills-and-current-session-chains.md) | Use host-global skills and shared chains in the current session | Accepted | 2026-11-12 |
 | [ADR-0033](0033-podman-ssh-remote-clients.md) | Connect remote clients to private hosts through Podman SSH | Accepted | 2026-11-12 |
 | [ADR-0034](0034-repo-first-chains-and-selected-skill-transfer.md) | Keep repo chains canonical and publish by revision | Accepted | 2026-11-13 |
+| [ADR-0035](0035-persistent-rootless-podman-host.md) | Manage persistent Linux hosts with rootless Podman Quadlets | Accepted | 2026-11-14 |
 
 ## Rules
 

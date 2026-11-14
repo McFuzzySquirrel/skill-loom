@@ -87,7 +87,30 @@ Evidence: `README.md` (product and feature scope, catalog/index, project skills)
 - Keep host credentials outside the image and inject them through the single-user platform's secret mechanism only if the active agent session requires them.
 - Document that access control is supplied by the private platform/VPN boundary or trusted proxy. Do not bind the Loom server to a non-loopback interface or add anonymous network access.
 - Add container smoke checks for persistent chain/index state across restarts, mounted skill discovery, project apply, and health/status behavior.
-- **Status:** Linux image build and command-planning tests are available. Runtime persistence and Podman Machine mount behavior on macOS/Windows remain unverified.
+- **Status:** Linux image build and cross-platform local command-planning tests are available. A separate rootless Linux Quadlet manager now installs and manages a persistent host service and defaults to no host HTTP publishing. Runtime persistence and Podman Machine mount behavior on macOS/Windows remain unverified; dedicated-host reboot, update/rollback, backup/restore, and second-client VPN verification are pending.
+
+### Persistent hosted Linux service follow-up
+
+The local Podman launcher remains the cross-platform path. For a service hosted
+on a separate Linux machine, `scripts/podman-host.mjs` provides rootless
+Quadlet installation and management from a tracked-clean source checkout:
+
+- install/start/stop/restart/status/logs using the dedicated user's systemd
+  manager, with `loginctl enable-linger` for reboot persistence;
+- enable the rootless `podman.socket` so trusted remote clients can reach the
+  Podman API through SSH without publishing a TCP endpoint;
+- build app images tagged by commit, update the app unit, retain the previous
+  app image/unit for rollback, and attempt recovery when an update fails;
+- export the persistent config volume only after the app is stopped; skill and
+  workspace directories remain separately administered host paths;
+- keep host HTTP publishing disabled by default, with an optional loopback-only
+  port; remote clients continue to connect over SSH-backed Podman.
+
+**Status:** implementation and mock-backed unit coverage are present. Quadlet
+generation has not been validated by a live systemd user manager, and a
+dedicated Linux host has not been exercised through reboot, update failure,
+rollback, or backup/restore. Do not claim those deployment gates passed until
+they are run on a real host.
 
 ### 6. Remove superseded surfaces and update documentation
 

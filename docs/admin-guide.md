@@ -20,12 +20,12 @@ See [Architecture decisions](adr/README.md) for the durable choices behind this 
 
 - **Node.js 24 or newer.** `package.json` declares `node >= 24`. The build, typecheck, Node test suites, and package smoke test for the 0.1.0 documentation refresh ran on Node 26.13.0, the same version recorded in the live evidence. A Node 24.22.2 toolchain was used earlier in development.
 - **npm**.
-- **Podman** (optional) for the container deployment. On macOS and Windows, initialize a Podman Machine first; the launcher starts an existing machine and passes host paths through Podman's mount handling.
+- **Podman** (optional) for the local container deployment. A persistent Linux host requires rootless Podman 4.4 or newer, cgroup v2, a systemd user manager, and the rootless `podman.socket`. On macOS and Windows, initialize a Podman Machine first for the local launcher.
 - **A native build toolchain for `node-pty`:** Python 3, `make`, and a C++ compiler. Debian/Ubuntu: `sudo apt install build-essential python3`. macOS: Xcode Command Line Tools.
 - **Stable OpenCode CLI 2.2.5 or newer** for OpenCode chains, installed and authenticated. The minimum does not establish automatic signal compatibility.
 - **GitHub Copilot CLI 1.0.105** for Copilot chains, installed and authenticated.
 - **A desktop browser**, only if you use the chain editor (`skill-loom edit`). Everything else is CLI and skill driven.
-- **Git**, optional. It is used for the `git init` option and the dirty-tree preflight warning.
+- **Git.** Optional for a local installation; required for persistent host installation and updates, which tag images by commit and reject staged or unstaged tracked changes.
 - **Disk access** to the project folders you register. Run records can contain terminal output and should be treated as sensitive local data.
 
 Harness CLIs are deliberately not dependencies of this package. Install them with their own installers and confirm they resolve from the `PATH` used to launch Skill Loom.
@@ -129,6 +129,152 @@ Stop the service before export or import. Podman does not validate Skill Loom's
 config or chain records during import; verify the restored data before relying
 on it.
 
+### Persistent Linux host service (Quadlet)
+
+For a service that survives logouts and host reboots, use the rootless Linux
+host manager. It is separate from the cross-platform `podman:up` launcher:
+the host manager requires Linux, Podman 4.4 or newer with cgroup v2, Node.js
+24+, and a systemd user service manager. Run it as a dedicated non-root Linux
+account with rootless Podman configured. Keep the checkout on the host; the
+container image is built from that checkout and tagged with its Git commit.
+
+#### Prepare the host
+
+Install Podman 4.4 or newer, Node.js 24+, Git, and an SSH server using the
+Linux distribution's package manager. For example, on Debian/Ubuntu:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y podman git openssh-server
+```
+
+Install Node.js 24+ using the [official Node.js instructions](https://nodejs.org/en/download).
+Podman package versions vary by distribution; use the [official Podman
+installation guide](https://podman.io/docs/installation) if the packaged
+version is older than 4.4. Confirm the dedicated account has a
+working rootless Podman setup (including subordinate UID/GID mappings when
+required by the distribution) and that the host uses cgroup v2. Create the
+service account if it does not already exist:
+
+```bash
+sudo useradd --create-home --shell /bin/bash loom
+sudo loginctl enable-linger loom
+```
+
+If `loom` already exists, skip `useradd`. Enable linger for that account so
+its user manager runs after logout and at boot. Switch to the account (for
+example, with `sudo -iu loom`) and verify its tools and systemd user manager:
+
+```bash
+node --version
+git --version
+podman --version
+podman info --format '{{.Host.CgroupsVersion}}'
+systemctl --user show-environment
+```
+
+The Podman info command must report cgroup version `2` or `v2`. Enable the
+rootless Podman API socket; remote Podman clients reach this Unix socket over
+SSH, not over a TCP port:
+
+```bash
+systemctl --user enable --now podman.socket
+systemctl --user is-active podman.socket
+```
+
+Make the host's SSH service reachable only through the intended VPN/firewall
+policy. Add each trusted client's public key to the `loom` account using the
+host's normal SSH administration process. Podman access grants control of all
+containers and mounts owned by `loom`; do not share this account with
+untrusted clients.
+
+#### Install Skill Loom
+
+As `loom`, clone the repository into a directory the account owns (or use an
+existing clean checkout):
+
+```bash
+git clone https://github.com/McFuzzySquirrel/skill-loom.git "$HOME/skill-loom"
+cd "$HOME/skill-loom"
+export LOOM_SKILLS_DIR="$HOME/.agents/skills"
+export LOOM_PROJECT_DIR="$HOME/workspace"
+npm run podman:host -- plan
+npm run podman:host -- install
+```
+
+`install` creates the skills and workspace directories if needed, builds the
+image, writes managed Quadlet units under
+`~/.config/containers/systemd/`, starts the app and proxy, and checks the
+in-container CLI health. The skills mount is read-only in the container; the
+workspace is writable. Keep both host paths accessible to the dedicated user.
+Quadlet bind-mount paths must be absolute and cannot contain whitespace,
+commas, colons, or other unsupported unit characters.
+The config volume `skill-loom-config` persists application config, the shared
+chain library, and the derived index. Exclude credentials and local environment
+files from the checkout build context; `.containerignore` excludes common
+secret-file patterns.
+
+Choose `LOOM_PROJECT_DIR` as the one host project this service should use (or
+leave the default workspace directory). The manager creates the directory if
+it is missing. `LOOM_SKILLS_DIR` is the externally provisioned skill catalog;
+the container mounts it read-only. Quadlet bind-mount paths must be absolute
+and cannot contain whitespace, commas, colons, or other unsupported unit
+characters.
+
+No host HTTP port is published by default. If a local browser/editor endpoint
+is explicitly needed on the server itself, set `LOOM_PODMAN_HOST_PORT` to a
+port number; the generated binding is still `127.0.0.1` only. Do not expose it
+through a VPN, proxy, or public interface: Skill Loom has no application
+authentication. Trusted remote agent clients use the SSH-backed Podman
+connection below; they do not connect to the HTTP endpoint.
+
+After installation, verify the host-managed units:
+
+```bash
+npm run podman:host -- status
+```
+
+Install and update refuse staged or unstaged tracked changes in the checkout.
+Run these commands from the checkout for lifecycle and image management. A host administrator
+can SSH into the machine as `loom` and run the same commands there; a regular
+remote client uses the Podman bridge for Skill Loom CLI operations but cannot
+start or stop the host's systemd service.
+
+```bash
+npm run podman:host -- status
+npm run podman:host -- logs app
+npm run podman:host -- restart
+npm run podman:host -- update
+npm run podman:host -- rollback
+npm run podman:host -- stop
+npm run podman:host -- start
+```
+
+`update` builds the current commit's image and retains the previous app unit
+and image for `rollback`; failed updates attempt to restore the prior service.
+Use `install --replace` only after reviewing existing generated units. It is
+for an intentional unit/configuration change, such as changing the mounted
+host paths or loopback port. `backup` exports only the config volume and
+requires an absolute, new archive path and a stopped app. The archive is
+created with owner-only permissions:
+
+```bash
+npm run podman:host -- backup --output "$HOME/skill-loom-config.tar"
+```
+
+To restore, stop the service, import the archive as the same rootless Podman
+user, then start the service:
+
+```bash
+npm run podman:host -- stop
+podman volume import skill-loom-config "$HOME/skill-loom-config.tar"
+npm run podman:host -- start
+```
+
+Back up the host skills and workspace directories separately. A real systemd
+reboot/persistence and host backup/restore cycle have not yet been live-tested;
+see [known gaps](current-gaps.md#execution-gates).
+
 ### Remote client access
 
 A remote agent can use the same hosted catalog and shared chains through
@@ -141,14 +287,19 @@ system.
 
 On each client, install the `loom-chain-workflow` standalone skill package.
 The package includes the `skill-loom-podman` helper and needs Node.js 24+ and
-the Podman CLI; it does not need a Skill Loom checkout or a copy of the private
-npm package. Create a named SSH connection using the identity authorized by
-the host administrator:
+the Podman CLI. Install the skill using the client's usual Agent Skill
+installation method; its canonical package is
+`.github/skills/loom-chain-workflow` in this repository. A client with the
+skill and its helper installed does not need the Skill Loom server checkout or
+the private npm package. Ask the host administrator to authorize the client's
+SSH public key and provide the host's VPN-reachable DNS name and SSH port.
+Create a named SSH connection:
 
 ```bash
 podman system connection add --identity ~/.ssh/loom_host_ed25519 \
   loom-host ssh://loom@podman-host.example
 export LOOM_PODMAN_CONNECTION=loom-host
+podman --connection loom-host ps
 skill-loom-podman service status
 ```
 
@@ -156,11 +307,19 @@ For PowerShell, use the same `podman system connection add` arguments with the
 client's Windows SSH key path, then set
 `$env:LOOM_PODMAN_CONNECTION = "loom-host"`. The name must match a connection
 shown by `podman system connection list`. Loom stores neither SSH keys nor
-connection credentials. If the `skill-loom-podman` command is not installed,
-run `scripts/skill-loom-podman.mjs` from the installed workflow skill package
+connection credentials. Keep the connection name available in every shell
+that runs the bridge. If the `skill-loom-podman` command is not installed, run
+`scripts/skill-loom-podman.mjs` from the installed workflow skill package
 with Node.js.
 
-The host administrator registers `/workspace` once as the project context.
+The first authorized client (or the host administrator using the same client
+setup) registers the mounted project once and records the returned project id:
+
+```bash
+printf '%s' '{"path":"/workspace"}' | skill-loom-podman project open
+skill-loom-podman project list
+```
+
 Remote users can discover the hosted catalog and create/select shared chains
 using that host project id. `skill-loom-podman chain project apply` writes into
 the host's mounted project. To write into a remote client's local project, use
@@ -858,6 +1017,22 @@ A running owner serves the built application, not changes made to source files. 
 ### The server refuses to start with a host error
 
 `LOOM_HOST` must be loopback. Use `127.0.0.1`, `::1`, or `localhost`. Startup aborts for any other value; this is the security boundary, not a bug.
+
+### A remote Podman client cannot connect to the hosted service
+
+On the host, verify the dedicated account's user manager and rootless socket:
+
+```bash
+sudo loginctl show-user loom --property=Linger
+sudo -iu loom
+systemctl --user is-active podman.socket
+```
+
+Linger must be enabled and the socket active. On the client, verify VPN
+reachability, SSH key authorization for `loom`, and the named connection with
+`podman system connection list`; then try `podman --connection loom-host ps`.
+Do not work around a failed connection by exposing Podman's API over TCP or
+publishing Skill Loom's HTTP port.
 
 ### The port is already in use
 

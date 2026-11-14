@@ -5,6 +5,15 @@ node_modules
 dist
 coverage
 *.tgz
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
 .agents/skills/*
 !.agents/skills/create-project-documentation
 !.agents/skills/create-project-documentation/**

@@ -47,6 +47,8 @@ skill-loom-podman service status
 `loom-chain-workflow` includes the `skill-loom-podman` client helper, so the
 remote machine does not need a Skill Loom checkout or npm package. Install the
 standalone skill package as described in the [standalone skill guide](standalone-skill-guide.md#connect-to-hosted-podman).
+For first-time host setup, SSH socket activation, and host-key authorization,
+see the [persistent Linux host setup](admin-guide.md#persistent-linux-host-service-quadlet).
 The SSH connection must be configured and usable by the same OS user running
 the agent. Podman access grants control of that rootless Podman account's
 containers and mounts; it is not a narrowly scoped Skill Loom permission.
