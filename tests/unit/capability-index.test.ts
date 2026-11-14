@@ -777,18 +777,28 @@ describe('capability index', () => {
     });
   });
 
-  it('builds for the repository local roots and packaged scenario skills', async () => {
+  it('builds for the single host-global skill root', async () => {
     const root = await makeRoot();
+    const globalSkillsDirectory = join(root, 'home', '.agents', 'skills');
+    await writeSkill(join(globalSkillsDirectory, 'scientific-method'), {
+      name: 'scientific-method',
+      description: 'Apply the scientific method to a question.',
+    });
     const sources = defaultCapabilitySourceRoots({
       projectPath: join(root, 'project'),
       harness: 'opencode',
       homeDirectory: join(root, 'home'),
+      globalSkillsDirectory,
       includeBundled: true,
     });
-    const bundled = sources.find((source) => source.source === 'builtin');
-    expect(bundled).toBeDefined();
+    expect(sources).toEqual([{
+      directory: globalSkillsDirectory,
+      harness: 'opencode',
+      source: 'personal',
+    }]);
     const collection = await collect(sources);
-    expect(collection.packages.some((packageInfo) => packageInfo.source === 'builtin')).toBe(true);
+    expect(collection.packages).toHaveLength(1);
+    expect(collection.packages[0]?.source).toBe('personal');
 
     const index = new CapabilityIndex(indexOptions(join(root, 'config')));
     await index.rebuild(collection);

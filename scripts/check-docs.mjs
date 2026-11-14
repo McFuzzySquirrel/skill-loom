@@ -268,7 +268,9 @@ function checkRelativeLinks(root, files, failures) {
       .replace(/`[^`]*`/g, '');
     for (const match of text.matchAll(linkPattern)) {
       const link = match[1];
-      if (/^(?:https?:|mailto:|#)/i.test(link)) {
+      if (
+        /^(?:https?:|mailto:|#|source:|node:|route:|block:|typical:)/i.test(link)
+      ) {
         continue;
       }
 

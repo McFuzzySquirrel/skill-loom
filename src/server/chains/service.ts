@@ -75,8 +75,8 @@ export function chainRevision(chain: Chain): string {
 
 const mutationLocks = new Map<string, Promise<void>>();
 
-async function withChainMutation<T>(projectPath: string, chainId: string, operation: () => Promise<T>): Promise<T> {
-  const key = `${projectPath}\0${chainId}`;
+async function withChainMutation<T>(scope: string, chainId: string, operation: () => Promise<T>): Promise<T> {
+  const key = `${scope}\0${chainId}`;
   const previous = mutationLocks.get(key) ?? Promise.resolve();
   let release!: () => void;
   const current = new Promise<void>((resolve) => { release = resolve; });
@@ -95,7 +95,11 @@ function assertRevision(existing: Chain, expectedRevision: string | undefined): 
     throw new ChainServiceError(
       CHAIN_SERVICE_ERROR_CODES.STALE,
       'The chain changed since it was loaded. Reload it before applying this change.',
-      { chainId: existing.id },
+      {
+        chainId: existing.id,
+        expectedRevision,
+        actualRevision: chainRevision(existing),
+      },
     );
   }
 }
@@ -149,6 +153,8 @@ export type ChainStoreFactory = (projectPath: string) => ChainStore;
 export interface ChainServiceOptions {
   /** Store factory seam. Defaults to the filesystem-backed project store. */
   createStore?: ChainStoreFactory;
+  /** Stable path used to serialize mutations when multiple project contexts share one store. */
+  mutationScope?: (projectPath: string) => string;
   /** Clock seam for deterministic timestamps. */
   now?: () => Date;
   /** Id seam for deterministic documents in tests. */
@@ -214,7 +220,7 @@ class ProjectChainService implements ChainService {
     draft: ChainDraft,
     options: UpdateChainOptions = {},
   ): Promise<Chain> {
-    return withChainMutation(projectPath, chainId, async () => {
+    return withChainMutation(this.mutationScopeFor(projectPath), chainId, async () => {
       const store = this.storeFor(projectPath);
       const existing = await store.read(chainId);
       assertRevision(existing, options.expectedRevision);
@@ -234,7 +240,7 @@ class ProjectChainService implements ChainService {
     options: DuplicateChainOptions = {},
   ): Promise<Chain> {
     const store = this.storeFor(projectPath);
-    return withChainMutation(projectPath, chainId, async () => {
+    return withChainMutation(this.mutationScopeFor(projectPath), chainId, async () => {
       const source = await store.read(chainId);
       assertRevision(source, options.expectedRevision);
       const name = await this.duplicateName(store, source, options);
@@ -310,7 +316,7 @@ class ProjectChainService implements ChainService {
   }
 
   async remove(projectPath: string, chainId: string, options: RemoveChainOptions = {}): Promise<void> {
-    await withChainMutation(projectPath, chainId, async () => {
+    await withChainMutation(this.mutationScopeFor(projectPath), chainId, async () => {
       const store = this.storeFor(projectPath);
       if (options.expectedRevision !== undefined) {
         assertRevision(await store.read(chainId), options.expectedRevision);
@@ -323,6 +329,10 @@ class ProjectChainService implements ChainService {
     const factory =
       this.options.createStore ?? ((path: string) => createChainStore({ projectPath: path }));
     return factory(projectPath);
+  }
+
+  private mutationScopeFor(projectPath: string): string {
+    return this.options.mutationScope?.(projectPath) ?? projectPath;
   }
 
   private buildChain(

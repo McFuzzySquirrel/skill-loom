@@ -6,12 +6,16 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   CatalogInstallError,
   SKILL_INSTALL_ERROR_CODES,
+  applyChainSkillsToProject,
+  exportChainSkillsForClient,
+  exportSelectedCatalogSkillsForClient,
   installSkillIntoProject,
   reviewSkillInstall,
 } from '../../src/server/catalog/install.js';
 import type { CatalogResponse, CatalogService } from '../../src/server/catalog/merge.js';
 import { snapshotPackageFingerprint, snapshotReviewFingerprint } from '../../src/server/catalog/snapshot-fingerprint.js';
 import { REMOTE_SNAPSHOT_CONTENT, type SkillEntry } from '../../src/server/catalog/types.js';
+import { validateSkillTransfer } from '../../.github/skills/loom-chain-workflow/scripts/skill-loom-podman.mjs';
 
 let root: string;
 let projectPath: string;
@@ -53,15 +57,32 @@ function catalogWith(entries: SkillEntry[]): CatalogService {
   return {
     defaultHarness: 'opencode',
     async getCatalog(): Promise<CatalogResponse> {
+      const bySource = {
+        project: 0,
+        personal: 0,
+        custom: 0,
+        plugin: 0,
+        builtin: 0,
+        'loom-extra': 0,
+        remote: 0,
+      };
+      const groups = new Map<SkillEntry['source'], SkillEntry[]>();
+      for (const item of entries) {
+        bySource[item.source] += 1;
+        const group = groups.get(item.source) ?? [];
+        group.push(item);
+        groups.set(item.source, group);
+      }
       return {
         harness: 'opencode',
         query: '',
         total: entries.length,
-        counts: {
-          total: entries.length,
-          bySource: { project: 0, personal: entries.length, custom: 0, plugin: 0, builtin: 0, 'loom-extra': 0, remote: 0 },
-        },
-        groups: entries.length === 0 ? [] : [{ source: entries[0]!.source, count: entries.length, entries }],
+        counts: { total: entries.length, bySource },
+        groups: [...groups].map(([source, groupEntries]) => ({
+          source,
+          count: groupEntries.length,
+          entries: groupEntries,
+        })),
         agents: [],
         warnings: [],
         elapsedMs: 1,
@@ -92,6 +113,123 @@ async function expectInstallError(operation: Promise<unknown>, code: string): Pr
 }
 
 describe.skipIf(process.platform === 'win32')('catalog skill install', () => {
+  it('uses the reviewed package fingerprint for selected client export', async () => {
+    const personal = entry();
+    const catalogService = catalogWith([personal]);
+    const reviewed = await reviewSkillInstall(
+      { catalogService },
+      {
+        projectId: 'project-1',
+        projectPath,
+        harness: 'opencode',
+        candidate: { id: personal.id, source: 'personal' },
+      },
+    );
+    const fingerprint = reviewed.candidate.fingerprint;
+    const transfer = await exportSelectedCatalogSkillsForClient(
+      { catalogService },
+      {
+        projectId: 'project-1',
+        projectPath,
+        harness: 'opencode',
+        selections: [{ id: personal.id, fingerprint }],
+      },
+    );
+
+    expect(transfer.skills[0]?.fingerprint).toBe(fingerprint);
+    expect(validateSkillTransfer(transfer, [{ id: personal.id, fingerprint }])).toHaveLength(1);
+  });
+
+  it('applies and exports the exact bound remote package over a same-named personal package', async () => {
+    const remotePath = join(root, 'remote-skills', 'release-notes');
+    await mkdir(remotePath, { recursive: true });
+    const remoteSkillContent = Buffer.from('---\nname: release-notes\ndescription: Hosted version\n---\nREMOTE\n');
+    await writeFile(join(remotePath, 'SKILL.md'), remoteSkillContent);
+    const remoteFiles = [{ path: 'SKILL.md', content: remoteSkillContent, executable: false }];
+    const binding = {
+      sourceId: 'hosted-skills',
+      revision: 'a'.repeat(40),
+      repositoryPath: 'skills/release-notes',
+    };
+    const personal = entry();
+    const remote = entry({
+      id: 'opencode-remote-release-notes',
+      source: 'remote',
+      sourceId: binding.sourceId,
+      revision: binding.revision,
+      repositoryPath: binding.repositoryPath,
+      path: join(remotePath, 'SKILL.md'),
+      packagePath: remotePath,
+      [REMOTE_SNAPSHOT_CONTENT]: {
+        fingerprint: snapshotPackageFingerprint(remoteFiles),
+        reviewFingerprint: snapshotReviewFingerprint(remoteFiles),
+        executablePaths: [],
+      },
+    });
+    const catalogService = catalogWith([personal, remote]);
+    const chain = {
+      harness: 'opencode' as const,
+      steps: [{
+        id: 'step-one',
+        kind: 'skill' as const,
+        skillName: 'release-notes',
+        skillBinding: binding,
+        instruction: 'Write the notes.',
+      }],
+    };
+    const transfer = await exportChainSkillsForClient(
+      { catalogService },
+      { projectId: 'project-1', projectPath, chain },
+    );
+    const installed = await applyChainSkillsToProject(
+      { catalogService },
+      { projectId: 'project-1', projectPath, chain },
+    );
+
+    expect(Buffer.from(transfer.skills[0]!.files[0]!.content, 'base64')).toEqual(remoteSkillContent);
+    expect(installed.installed).toMatchObject([{ name: 'release-notes', source: 'remote' }]);
+    await expect(readFile(join(projectPath, '.agents', 'skills', 'release-notes', 'SKILL.md')))
+      .resolves.toEqual(remoteSkillContent);
+  });
+
+  it('exports only referenced global packages for client-local apply', async () => {
+    const projectSource = join(root, 'project-skill');
+    await mkdir(projectSource, { recursive: true });
+    await writeFile(join(projectSource, 'SKILL.md'), '---\nname: release-notes\n---\nPROJECT\n');
+    const personal = entry();
+    const project = entry({
+      id: 'opencode-project-release-notes',
+      source: 'project',
+      path: join(projectSource, 'SKILL.md'),
+      packagePath: projectSource,
+    });
+    const transfer = await exportChainSkillsForClient(
+      { catalogService: catalogWith([project, personal]) },
+      {
+        projectId: 'project-1',
+        projectPath,
+        chain: {
+          harness: 'opencode',
+          steps: [{ id: 'step-one', kind: 'skill', skillName: 'release-notes', instruction: 'Write notes.' }],
+        },
+      },
+    );
+
+    expect(transfer).toMatchObject({
+      format: 'skill-loom-project-skills',
+      version: 1,
+      skills: [{
+        name: 'release-notes',
+        directory: 'release-notes',
+        files: [
+          { path: 'SKILL.md', content: skillContent.toString('base64') },
+          { path: 'templates/note.md', content: templateContent.toString('base64') },
+        ],
+      }],
+    });
+    await expect(access(join(projectPath, '.agents'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('reviews a candidate without writing to the project', async () => {
     const review = await reviewSkillInstall(
       { catalogService: catalogWith([entry()]) },

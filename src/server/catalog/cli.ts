@@ -34,6 +34,7 @@ const USAGE = `Usage:
     --path <repository-path> [--config-dir <path>]
   skill-loom catalog skill review [--config-dir <path>]                # JSON on stdin
   skill-loom catalog skill install [--config-dir <path>]               # JSON on stdin
+  skill-loom catalog skill export [--config-dir <path>]                # JSON on stdin
 
 Source and snapshot read-only commands work offline. Project catalog discovery
 and mutations require the running local service. Project page reads
@@ -49,7 +50,10 @@ Skill review reads {"projectId":"...","harness":"opencode","candidate":
 "repositoryPath":"...","fingerprint":"..."}} and returns a reviewDigest.
 Skill install repeats that request with the digest and "confirmed":true.
 Installation targets the project's shared .agents/skills directory, never
-overwrites, and never suffixes a conflicting name.`;
+overwrites, and never suffixes a conflicting name. Skill export reads a
+registered "projectId", "harness", and selected {"id":"...","fingerprint":"..."}
+entries; it returns only those unchanged host-global packages as a bounded
+versioned manifest. It never accepts a client project path.`;
 
 export async function runCatalogCli(
   argv: readonly string[],
@@ -89,7 +93,7 @@ export async function runCatalogCli(
             ? ['config-dir', 'source', 'revision', 'kind', 'search', 'offset', 'limit']
           : operation === 'snapshot inspect'
             ? ['config-dir', 'source', 'revision', 'kind', 'path']
-            : operation === 'skill review' || operation === 'skill install'
+            : operation === 'skill review' || operation === 'skill install' || operation === 'skill export'
               ? ['config-dir']
               : null;
     if (allowed === null) throw new CatalogCliUsageError('Unknown catalog command.');
@@ -129,10 +133,10 @@ export async function runCatalogCli(
     const configDirectory = resolveConfigDir({ env });
     let result: unknown;
     if (['source add', 'source remove', 'source refresh', 'limits set', 'limits source', 'project page',
-      'skill review', 'skill install'].includes(operation)) {
+      'skill review', 'skill install', 'skill export'].includes(operation)) {
       let input: unknown;
       if (operation === 'source add' || operation === 'limits set' || operation === 'project page' ||
-          operation === 'skill review' || operation === 'skill install') {
+          operation === 'skill review' || operation === 'skill install' || operation === 'skill export') {
         input = await readJsonStdin(options.stdin);
       } else if (operation === 'limits source') {
         const parsed = z.strictObject({ limits: z.unknown() }).safeParse(await readJsonStdin(options.stdin));
@@ -144,7 +148,9 @@ export async function runCatalogCli(
           ...(operation === 'source refresh' && flags.has('revision') ? { revision: required('revision') } : {}),
         };
       }
-      const response = await callControl(configDirectory, `catalog.${operation.replace(' ', '.')}`, input);
+      const controlOperation = operation === 'skill export'
+        ? 'catalog.skills.export' : `catalog.${operation.replace(' ', '.')}`;
+      const response = await callControl(configDirectory, controlOperation, input);
       if (!response.ok) {
         options.stderr.write(`${JSON.stringify(response)}\n`);
         return 1;

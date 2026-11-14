@@ -12,6 +12,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { executePortableRequest } from '../../src/portable/runtime.js';
 import { createConfigStore } from '../../src/server/config/store.js';
 import { createCatalogService, createDefaultCatalogAdapters } from '../../src/server/catalog/merge.js';
+import type { CatalogResponse, CatalogService } from '../../src/server/catalog/merge.js';
+import type { SkillEntry } from '../../src/server/catalog/types.js';
 import { attachControlTerminal, callControl, startControlServer, streamControlEvents } from '../../src/server/control.js';
 import { runCli } from '../../src/server/cli.js';
 import { startServer } from '../../src/server/index.js';
@@ -19,6 +21,7 @@ import { acquireProfileOwner } from '../../src/server/profile-owner.js';
 import type { PreflightReport } from '../../src/server/preflight/engine.js';
 import type { RunOrchestrator } from '../../src/server/runs/orchestrator.js';
 import { CHAIN_VERSION, parseChain } from '../../src/server/chains/model.js';
+import { createChainService } from '../../src/server/chains/service.js';
 import { createRunRecord } from '../../src/server/runs/model.js';
 import { createRunOwner } from '../../src/server/runs/owner.js';
 import { createRunStore } from '../../src/server/runs/store.js';
@@ -26,6 +29,440 @@ import { createLoomServices } from '../../src/server/services.js';
 import { createTerminalManager, TerminalSubscriberConflictError } from '../../src/server/terminal/pty.js';
 
 describe.skipIf(process.platform === 'win32')('local control transport', () => {
+  it('publishes only when a repository chain’s exact remote skill binding exists', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-remote-chain-publish-')));
+    const project = join(root, 'project');
+    const configDirectory = join(root, 'config');
+    await mkdir(project);
+    const config = createConfigStore({ env: { LOOM_CONFIG_DIR: configDirectory } });
+    await config.update({});
+    const binding = {
+      sourceId: 'hosted-skills',
+      revision: 'a'.repeat(40),
+      repositoryPath: 'skills/release-notes',
+    };
+    const entries: SkillEntry[] = [
+      {
+        id: 'opencode-personal-release-notes',
+        harness: 'opencode',
+        source: 'personal',
+        name: 'release-notes',
+        description: 'Personal release notes',
+        path: join(root, 'personal', 'release-notes', 'SKILL.md'),
+        packagePath: join(root, 'personal', 'release-notes'),
+        enabled: true,
+      },
+      {
+        id: 'opencode-remote-release-notes',
+        harness: 'opencode',
+        source: 'remote',
+        name: 'release-notes',
+        description: 'Hosted release notes',
+        path: join(root, 'remote', 'release-notes', 'SKILL.md'),
+        packagePath: join(root, 'remote', 'release-notes'),
+        enabled: true,
+        ...binding,
+      },
+    ];
+    const catalogService: CatalogService = {
+      defaultHarness: 'opencode',
+      async getCatalog(): Promise<CatalogResponse> {
+        return {
+          harness: 'opencode',
+          query: '',
+          total: entries.length,
+          counts: {
+            total: entries.length,
+            bySource: { project: 0, personal: 1, custom: 0, plugin: 0, builtin: 0, 'loom-extra': 0, remote: 1 },
+          },
+          groups: [
+            { source: 'personal', count: 1, entries: [entries[0]!] },
+            { source: 'remote', count: 1, entries: [entries[1]!] },
+          ],
+          agents: [],
+          warnings: [],
+          elapsedMs: 1,
+        };
+      },
+    };
+    const services = createLoomServices({ configStore: config, catalogService, preflightEnv: {} });
+    const server = await startControlServer(config, { services });
+    try {
+      const opened = await callControl(configDirectory, 'project.open', { path: project });
+      if (!opened.ok) throw new Error('Project registration failed.');
+      const projectId = (opened.result as { project: { id: string } }).project.id;
+      const makeChain = (id: string, skillBinding = binding) => ({
+        version: CHAIN_VERSION,
+        id,
+        name: 'Remote release notes',
+        harness: 'opencode',
+        sessionMode: 'shared',
+        steps: [{
+          id: 'step-one',
+          skillName: 'release-notes',
+          skillBinding,
+          instruction: 'Write the notes.',
+        }],
+        inputs: [],
+        automaticPermissionOptIn: false,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      });
+
+      const published = await callControl(configDirectory, 'chain.project.publish', {
+        projectId,
+        repoChainId: 'repo-remote',
+        chain: makeChain('repo-remote'),
+      });
+      expect(published).toMatchObject({
+        ok: true,
+        result: { chain: { name: 'Remote release notes' } },
+      });
+
+      const missingBinding = await callControl(configDirectory, 'chain.project.publish', {
+        projectId,
+        repoChainId: 'repo-missing-remote',
+        chain: makeChain('repo-missing-remote', { ...binding, revision: 'b'.repeat(40) }),
+      });
+      expect(missingBinding).toMatchObject({
+        ok: false,
+        error: { code: 'SKILL_INSTALL_CANDIDATE_NOT_FOUND' },
+      });
+    } finally {
+      await server.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('exports only exact reviewed catalog selections and rejects changed packages', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-selected-export-')));
+    const project = join(root, 'project');
+    const globalSkills = join(root, 'host-skills');
+    const configDirectory = join(root, 'config');
+    const selected = join(globalSkills, 'formatting');
+    const unselected = join(globalSkills, 'private-helper');
+    await mkdir(project);
+    await mkdir(selected, { recursive: true });
+    await mkdir(unselected, { recursive: true });
+    await writeFile(join(selected, 'SKILL.md'), '---\nname: formatting\n---\nFormat safely.\n');
+    await writeFile(join(selected, 'helper.mjs'), 'export {};\n');
+    await writeFile(join(unselected, 'SKILL.md'), '---\nname: formatting\n---\nDo not export.\n');
+    const config = createConfigStore({ env: { LOOM_CONFIG_DIR: configDirectory } });
+    await config.update({});
+    const services = createLoomServices({
+      configStore: config,
+      preflightEnv: { LOOM_CAPABILITY_INDEX: '0', LOOM_SKILLS_DIR: globalSkills },
+    });
+    const server = await startControlServer(config, { services });
+    try {
+      const opened = await callControl(configDirectory, 'project.open', { path: project });
+      if (!opened.ok) throw new Error('Project registration failed.');
+      const projectId = (opened.result as { project: { id: string } }).project.id;
+      const page = await callControl(configDirectory, 'catalog.project.page', {
+        projectId, harness: 'opencode', sources: ['personal'], offset: 0, limit: 50, warningsOffset: 0,
+      });
+      if (!page.ok) throw new Error('Catalog query failed.');
+      const selectedEntry = (page.result as { entries: Array<{ id: string; name: string }> }).entries
+        .find((entry) => entry.name === 'formatting');
+      if (selectedEntry === undefined) throw new Error('Selected catalog entry was not discovered.');
+      const review = await callControl(configDirectory, 'catalog.skill.review', {
+        projectId, harness: 'opencode', candidate: { id: selectedEntry.id, source: 'personal' },
+      });
+      if (!review.ok) throw new Error('Catalog selection review failed.');
+      const fingerprint = (review.result as { candidate: { fingerprint: string } }).candidate.fingerprint;
+
+      const request = {
+        projectId,
+        harness: 'opencode',
+        selections: [{ id: selectedEntry.id, fingerprint }],
+      };
+      let output = '';
+      let error = '';
+      const exportExitCode = await runCli(['catalog', 'skill', 'export', '--config-dir', configDirectory], {
+        env: {},
+        stdin: Readable.from([JSON.stringify(request)]),
+        stdout: { write: (chunk) => { output += String(chunk); return true; }, isTTY: false },
+        stderr: { write: (chunk) => { error += String(chunk); return true; } },
+      });
+      expect(exportExitCode, error).toBe(0);
+      expect(error).toBe('');
+      const exported = JSON.parse(output) as { ok: boolean; result: unknown };
+      expect(exported).toMatchObject({
+        ok: true,
+        result: {
+          format: 'skill-loom-project-skills', version: 2,
+          skills: [{ id: selectedEntry.id, fingerprint, name: 'formatting', directory: 'formatting' }],
+        },
+      });
+      expect(JSON.stringify(exported)).toContain(Buffer.from('---\nname: formatting\n---\nFormat safely.\n').toString('base64'));
+      expect(JSON.stringify(exported)).not.toContain(Buffer.from('---\nname: formatting\n---\nDo not export.\n').toString('base64'));
+      await expect(access(join(project, '.agents'))).rejects.toMatchObject({ code: 'ENOENT' });
+
+      const added = join(globalSkills, 'added-after-query');
+      await mkdir(added);
+      await writeFile(join(added, 'SKILL.md'), '---\nname: added-after-query\n---\nVisible on refresh.\n');
+      const refreshedPage = await callControl(configDirectory, 'catalog.project.page', {
+        projectId, harness: 'opencode', query: 'added-after-query',
+        sources: ['personal'], offset: 0, limit: 50, warningsOffset: 0,
+      });
+      expect(refreshedPage).toMatchObject({
+        ok: true,
+        result: { entries: [expect.objectContaining({ name: 'added-after-query' })] },
+      });
+
+      await writeFile(join(selected, 'helper.mjs'), 'changed after package review\n');
+      expect(await callControl(configDirectory, 'catalog.skills.export', request))
+        .toMatchObject({ ok: false, error: { code: 'SKILL_INSTALL_CANDIDATE_CHANGED' } });
+      expect(await callControl(configDirectory, 'catalog.skills.export', {
+        projectId, harness: 'opencode', selections: [{ id: 'opencode-personal-not-found', fingerprint }],
+      })).toMatchObject({ ok: false, error: { code: 'SKILL_INSTALL_CANDIDATE_NOT_FOUND' } });
+      expect(await callControl(configDirectory, 'catalog.skills.export', {
+        projectId, projectPath: project, harness: 'opencode', selections: [{ id: selectedEntry.id, fingerprint }],
+      })).toMatchObject({ ok: false, error: { code: 'CONTROL_INVALID_REQUEST' } });
+    } finally {
+      await server.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('publishes repository chains with catalog checks and revision-checked hosted updates', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-repo-chain-publish-')));
+    const project = join(root, 'project');
+    const globalSkills = join(root, 'host-skills');
+    const configDirectory = join(root, 'config');
+    await mkdir(project);
+    for (const [directory, name] of [
+      ['unique-review', 'unique-review'],
+      ['ambiguous-a', 'ambiguous-review'],
+      ['ambiguous-b', 'ambiguous-review'],
+    ] as const) {
+      const packagePath = join(globalSkills, directory);
+      await mkdir(packagePath, { recursive: true });
+      await writeFile(join(packagePath, 'SKILL.md'), `---\nname: ${name}\n---\nReview safely.\n`);
+    }
+    const config = createConfigStore({ env: { LOOM_CONFIG_DIR: configDirectory } });
+    await config.update({});
+    const services = createLoomServices({
+      configStore: config,
+      preflightEnv: { LOOM_CAPABILITY_INDEX: '0', LOOM_SKILLS_DIR: globalSkills },
+    });
+    const server = await startControlServer(config, { services });
+    try {
+      const opened = await callControl(configDirectory, 'project.open', { path: project });
+      if (!opened.ok) throw new Error('Project registration failed.');
+      const projectId = (opened.result as { project: { id: string } }).project.id;
+      const makeChain = (id: string, name: string, skillName: string) => ({
+        version: CHAIN_VERSION,
+        id,
+        name,
+        harness: 'opencode',
+        sessionMode: 'shared',
+        steps: [{ id: 'step-1', kind: 'skill', skillName, instruction: 'Apply the skill.' }],
+        inputs: [],
+        automaticPermissionOptIn: false,
+        createdAt: '2026-02-01T00:00:00.000Z',
+        updatedAt: '2026-02-01T00:00:00.000Z',
+      });
+      const repoChain = makeChain('repo-review', 'Repo review', 'unique-review');
+      let cliOutput = '';
+      let cliError = '';
+      const publishExitCode = await runCli(['chain', 'project', 'publish', '--config-dir', configDirectory], {
+        env: {},
+        stdin: Readable.from([JSON.stringify({ projectId, repoChainId: repoChain.id, chain: repoChain })]),
+        stdout: { write: (chunk) => { cliOutput += String(chunk); return true; }, isTTY: false },
+        stderr: { write: (chunk) => { cliError += String(chunk); return true; } },
+      });
+      expect(publishExitCode, cliError).toBe(0);
+      const published = JSON.parse(cliOutput) as {
+        result: { chain: { id: string; name: string }; revision: string };
+      };
+      expect(published.result).toMatchObject({
+        chain: { name: 'Repo review' },
+        revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+      });
+
+      const nextChain = {
+        ...repoChain,
+        steps: [{ id: 'step-1', kind: 'skill', skillName: 'unique-review', instruction: 'Use the latest guidance.' }],
+      };
+      const updated = await callControl(configDirectory, 'chain.project.publish', {
+        projectId,
+        repoChainId: repoChain.id,
+        chain: nextChain,
+        publication: {
+          repoChainId: repoChain.id,
+          hostedChainId: published.result.chain.id,
+          hostedRevision: published.result.revision,
+        },
+      });
+      expect(updated).toMatchObject({
+        ok: true,
+        result: { chain: { id: published.result.chain.id }, revision: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      });
+
+      const stale = await callControl(configDirectory, 'chain.project.publish', {
+        projectId,
+        repoChainId: repoChain.id,
+        chain: repoChain,
+        publication: {
+          repoChainId: repoChain.id,
+          hostedChainId: published.result.chain.id,
+          hostedRevision: published.result.revision,
+        },
+      });
+      expect(stale).toMatchObject({
+        ok: false,
+        error: {
+          code: 'CHAIN_STALE',
+          details: {
+            expectedRevision: published.result.revision,
+            actualRevision: expect.stringMatching(/^[a-f0-9]{64}$/),
+          },
+        },
+      });
+
+      const collision = await callControl(configDirectory, 'chain.project.publish', {
+        projectId,
+        repoChainId: 'repo-review-copy',
+        chain: makeChain('repo-review-copy', 'Repo review', 'unique-review'),
+      });
+      expect(collision).toMatchObject({ ok: false, error: { code: 'CHAIN_NAME_EXISTS' } });
+
+      const missing = await callControl(configDirectory, 'chain.project.publish', {
+        projectId,
+        repoChainId: 'repo-missing-skill',
+        chain: makeChain('repo-missing-skill', 'Missing skill', 'not-installed'),
+      });
+      expect(missing).toMatchObject({
+        ok: false,
+        error: { code: 'SKILL_INSTALL_CANDIDATE_NOT_FOUND' },
+      });
+
+      const ambiguous = await callControl(configDirectory, 'chain.project.publish', {
+        projectId,
+        repoChainId: 'repo-ambiguous-skill',
+        chain: makeChain('repo-ambiguous-skill', 'Ambiguous skill', 'ambiguous-review'),
+      });
+      expect(ambiguous).toMatchObject({
+        ok: false,
+        error: { code: 'SKILL_INSTALL_CANDIDATE_CHANGED' },
+      });
+
+      const listing = await callControl(configDirectory, 'chain.project.list', { projectId });
+      expect(listing).toMatchObject({
+        ok: true,
+        result: { chains: [expect.objectContaining({ id: published.result.chain.id, name: 'Repo review' })] },
+      });
+    } finally {
+      await server.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('applies a shared chain’s global skills to the registered project without overwriting', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'loom-chain-apply-'));
+    const project = join(root, 'project');
+    const globalSkills = join(root, 'host', '.agents', 'skills');
+    const configDirectory = join(root, 'config');
+    const skillDirectory = join(globalSkills, 'formatting');
+    await mkdir(project);
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      join(skillDirectory, 'SKILL.md'),
+      '---\nname: formatting\ndescription: Format project files.\n---\n\nFormat carefully.\n',
+    );
+    const config = createConfigStore({ env: { LOOM_CONFIG_DIR: configDirectory } });
+    await config.update({});
+    const services = createLoomServices({
+      configStore: config,
+      preflightEnv: { LOOM_SKILLS_DIR: globalSkills },
+    });
+    const registration = await services.projectRegistry.openProject(project);
+    const legacyChain = await createChainService().create(registration.canonicalPath, {
+      name: 'Formatting chain',
+      harness: 'opencode',
+      sessionMode: 'shared',
+      steps: [{ id: 'step-one', skillName: 'formatting', instruction: 'Format the changed files.' }],
+      inputs: [],
+    });
+    const server = await startControlServer(config, { services });
+    try {
+      const opened = await callControl(configDirectory, 'project.open', { path: project });
+      if (!opened.ok) throw new Error('Project registration failed.');
+      const projectId = (opened.result as { project: { id: string } }).project.id;
+      const request = { projectId, chainId: legacyChain.id };
+      let output = '';
+      let error = '';
+      const exitCode = await runCli(['chain', 'project', 'apply', '--config-dir', configDirectory], {
+        env: {},
+        stdin: Readable.from([JSON.stringify(request)]),
+        stdout: { write: (chunk) => { output += String(chunk); return true; }, isTTY: false },
+        stderr: { write: (chunk) => { error += String(chunk); return true; } },
+      });
+      expect(exitCode, error).toBe(0);
+      expect(error).toBe('');
+      expect(JSON.parse(output)).toMatchObject({
+        ok: true,
+        result: {
+          projectId,
+          installed: [{
+            name: 'formatting',
+            destinationPath: join(registration.canonicalPath, '.agents', 'skills', 'formatting'),
+            fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+          }],
+        },
+      });
+      output = '';
+      error = '';
+      const exportExitCode = await runCli(['chain', 'project', 'export', '--config-dir', configDirectory], {
+        env: {},
+        stdin: Readable.from([JSON.stringify(request)]),
+        stdout: { write: (chunk) => { output += String(chunk); return true; }, isTTY: false },
+        stderr: { write: (chunk) => { error += String(chunk); return true; } },
+      });
+      expect(exportExitCode, error).toBe(0);
+      expect(JSON.parse(output)).toMatchObject({
+        ok: true,
+        result: {
+          format: 'skill-loom-project-skills',
+          version: 1,
+          skills: [{ name: 'formatting', files: [{ path: 'SKILL.md' }] }],
+        },
+      });
+      const installedPath = join(project, '.agents', 'skills', 'formatting', 'SKILL.md');
+      expect(await readFile(installedPath, 'utf8')).toContain('Format carefully.');
+      await expect(access(join(project, '.loom', 'chains', `${legacyChain.id}.json`))).resolves.toBeUndefined();
+      await expect(access(join(configDirectory, 'chains', `${legacyChain.id}.json`))).resolves.toBeUndefined();
+      await expect(services.chainService.get(registration.canonicalPath, legacyChain.id))
+        .resolves.toMatchObject({
+          id: legacyChain.id,
+          createdAt: legacyChain.createdAt,
+          updatedAt: legacyChain.updatedAt,
+        });
+
+      const conflict = await callControl(configDirectory, 'chain.project.apply', request);
+      expect(conflict).toMatchObject({ ok: false });
+      expect(await readFile(installedPath, 'utf8')).toContain('Format carefully.');
+
+      const missingChain = await services.chainService.create(registration.canonicalPath, {
+        name: 'Missing skill chain',
+        harness: 'opencode',
+        sessionMode: 'shared',
+        steps: [{ id: 'step-one', skillName: 'not-installed-globally', instruction: 'Continue.' }],
+        inputs: [],
+      });
+      expect(await callControl(configDirectory, 'chain.project.apply', {
+        projectId, chainId: missingChain.id,
+      })).toMatchObject({
+        ok: false,
+        error: { code: 'SKILL_INSTALL_CANDIDATE_NOT_FOUND' },
+      });
+    } finally {
+      await server.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('reviews project coordination through the CLI without modifying run records', async () => {
     const root = await mkdtemp(join(tmpdir(), 'loom-coordination-review-'));
     const project = join(root, 'project');
@@ -120,12 +557,13 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
     }
   });
 
-  it('serves ranked capability-index entries through the project catalog page', async () => {
+  it('serves ranked capability-index entries from the host-global catalog', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-capability-page-')));
     const project = join(root, 'project');
     const configDirectory = join(root, 'config');
     const home = join(root, 'home');
-    const skill = join(project, '.agents', 'skills', 'body-only-review');
+    const globalSkillsDirectory = join(home, '.agents', 'skills');
+    const skill = join(globalSkillsDirectory, 'body-only-review');
     await mkdir(skill, { recursive: true });
     await mkdir(home, { recursive: true });
     await writeFile(join(skill, 'SKILL.md'), [
@@ -145,9 +583,10 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
     ].join('\n'));
     const config = createConfigStore({ env: { LOOM_CONFIG_DIR: configDirectory } });
     await config.update({});
+    await mkdir(project, { recursive: true });
     const services = createLoomServices({
       configStore: config,
-      preflightEnv: { LOOM_CAPABILITY_INDEX: '1' },
+      preflightEnv: { LOOM_CAPABILITY_INDEX: '1', LOOM_SKILLS_DIR: globalSkillsDirectory },
       preflightHomeDirectory: home,
     });
     const server = await startControlServer(config, { services });
@@ -162,7 +601,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       const projectId = (opened.result as { project: { id: string } }).project.id;
       const response = await callControl(configDirectory, 'catalog.project.page', {
         projectId, harness: 'opencode', query: 'attestation bundle',
-        sources: ['project'], tags: ['release'], tools: ['grep'], inputs: ['release_manifest'],
+        sources: ['personal'], tags: ['release'], tools: ['grep'], inputs: ['release_manifest'],
         hasTools: true,
       });
       expect(response).toMatchObject({
@@ -180,7 +619,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
           },
           entries: [{
             name: 'body-only-review',
-            source: 'project',
+            source: 'personal',
             fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
             metadata: {
               tags: ['review', 'release'],
@@ -202,13 +641,13 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
     }
   });
 
-  it('reviews and installs a catalog skill into the shared project root', async () => {
+  it('reviews and installs a host-global catalog skill into the shared project root', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-skill-install-')));
     const project = join(root, 'project');
     const configDirectory = join(root, 'config');
     const home = join(root, 'home');
-    const extra = join(root, 'extra-skills');
-    const packagePath = join(extra, 'note-writer');
+    const globalSkillsDirectory = join(root, 'global-skills');
+    const packagePath = join(globalSkillsDirectory, 'note-writer');
     await mkdir(project, { recursive: true });
     await mkdir(home, { recursive: true });
     await mkdir(packagePath, { recursive: true });
@@ -217,10 +656,13 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       '---\nname: note-writer\ndescription: Writes review notes.\n---\n\nWrite review notes.\n',
     );
     const config = createConfigStore({ env: { LOOM_CONFIG_DIR: configDirectory } });
-    await config.update({ extraSkillDirectories: [extra] });
+    await config.update({});
     const services = createLoomServices({
       configStore: config,
-      preflightEnv: { LOOM_CAPABILITY_INDEX: '1' },
+      preflightEnv: {
+        LOOM_CAPABILITY_INDEX: '1',
+        LOOM_SKILLS_DIR: globalSkillsDirectory,
+      },
       preflightHomeDirectory: home,
     });
     const server = await startControlServer(config, { services });
@@ -229,7 +671,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       if (!opened.ok) throw new Error('Project registration failed.');
       const projectId = (opened.result as { project: { id: string } }).project.id;
       const page = await callControl(configDirectory, 'catalog.project.page', {
-        projectId, harness: 'opencode', query: 'note-writer', sources: ['loom-extra'], limit: 10,
+        projectId, harness: 'opencode', query: 'note-writer', sources: ['personal'], limit: 10,
       });
       if (!page.ok) throw new Error('Catalog page failed.');
       const entries = (page.result as {
@@ -251,7 +693,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
             path: join(project, '.agents', 'skills', 'note-writer'),
             conflict: null,
           },
-          candidate: { name: 'note-writer', source: 'loom-extra' },
+          candidate: { name: 'note-writer', source: 'personal' },
           totalFiles: 1,
           reviewDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
         },
@@ -272,7 +714,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
         ok: true,
         result: {
           name: 'note-writer',
-          source: 'loom-extra',
+          source: 'personal',
           destinationPath: join(project, '.agents', 'skills', 'note-writer'),
           totalFiles: 1,
           fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -716,6 +1158,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
 
   it('shares profile updates between the CLI and the running UI owner', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-control-app-')));
+    const globalSkillsDirectory = join(root, 'global-skills');
     const configStore = createConfigStore({ env: { LOOM_CONFIG_DIR: root }, homeDirectory: () => join(root, 'home') });
     const copilotRunner = vi.fn(async ({ cwd }: { cwd: string }) => {
       const skillsRoot = join(cwd, '.agents', 'skills');
@@ -753,6 +1196,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       configStore,
       catalogService: createCatalogService({
         configStore,
+        globalSkillsDirectory: () => globalSkillsDirectory,
         adapters: createDefaultCatalogAdapters({ homeDirectory: join(root, 'home'), copilotRunner }),
       }),
       runRecoverOnStartup: false,
@@ -805,10 +1249,10 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       });
       if (!opened.ok) throw new Error('Project registration failed.');
       const projectId = (opened.result as { project: { id: string } }).project.id;
-      const localSkill = join(project, '.agents', 'skills', 'local-review');
+      const localSkill = join(globalSkillsDirectory, 'local-review');
       await mkdir(localSkill, { recursive: true });
       await writeFile(join(localSkill, 'SKILL.md'), '---\nname: local-review\ndescription: Local review\n---\nReview locally.\n');
-      const secondSkill = join(project, '.agents', 'skills', 'local-review-two');
+      const secondSkill = join(globalSkillsDirectory, 'local-review-two');
       await mkdir(secondSkill, { recursive: true });
       await writeFile(join(secondSkill, 'SKILL.md'), '---\nname: local-review-two\ndescription: Local review\n---\nReview locally.\n');
       let catalogOutput = '';
@@ -818,7 +1262,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       })).toBe(0);
       expect(JSON.parse(catalogOutput)).toMatchObject({
         ok: true, result: {
-          total: 2, entries: [{ name: 'local-review', source: 'project' }],
+          total: 2, entries: [{ name: 'local-review', source: 'personal' }],
           nextOffset: 1, snapshotId: expect.any(String),
         },
       });
@@ -920,7 +1364,6 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
       expect(JSON.parse(projectBundleOutput)).toMatchObject({ ok: true, result: { path: projectBundlePath } });
       const projectBundle = JSON.parse(await readFile(projectBundlePath, 'utf8'));
       expect(projectBundle).toMatchObject({ skills: [{ name: 'local-review' }] });
-      expect(copilotRunner).toHaveBeenCalled();
       const portableProject = join(root, 'portable-project');
       await mkdir(portableProject);
       const portableReview = await executePortableRequest({

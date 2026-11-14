@@ -14,9 +14,7 @@ import {
   unlink,
 } from 'node:fs/promises';
 import type { Stats } from 'node:fs';
-import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import {
   REMOTE_SNAPSHOT_CONTENT,
@@ -30,11 +28,7 @@ import {
 import { frontmatterString, parseSkillFrontmatter } from './frontmatter.js';
 import { extractSkillMetadata, type SkillMetadata } from './skill-metadata.js';
 import type { CatalogService } from './merge.js';
-import {
-  OPENCODE_PERSONAL_SKILLS_SEGMENTS,
-  OPENCODE_PROJECT_SKILLS_SEGMENTS,
-} from './opencode.js';
-import { SHARED_PROJECT_SKILLS_SEGMENTS, SHARED_SKILLS_SEGMENTS } from './project-paths.js';
+import { resolveGlobalSkillsDirectory } from './global-skills.js';
 import type { RemoteSkillSource } from '../config/schema.js';
 import {
   RemoteSourceError,
@@ -347,51 +341,16 @@ export function defaultCapabilitySourceRoots(options: {
   projectPath: string;
   harness: SkillHarness;
   homeDirectory?: string;
+  globalSkillsDirectory?: string;
   extraDirectories?: readonly string[];
   includeBundled?: boolean;
 }): CapabilitySourceRoot[] {
-  if (options.harness !== 'opencode') return [];
-  const home = options.homeDirectory ?? homedir();
-  const roots: CapabilitySourceRoot[] = [
-    {
-      directory: join(options.projectPath, ...SHARED_PROJECT_SKILLS_SEGMENTS),
-      harness: 'opencode',
-      source: 'project',
-      projectPath: options.projectPath,
-    },
-    {
-      directory: join(options.projectPath, ...OPENCODE_PROJECT_SKILLS_SEGMENTS),
-      harness: 'opencode',
-      source: 'project',
-      projectPath: options.projectPath,
-    },
-    {
-      directory: join(home, ...SHARED_SKILLS_SEGMENTS),
-      harness: 'opencode',
-      source: 'personal',
-    },
-    {
-      directory: join(home, ...OPENCODE_PERSONAL_SKILLS_SEGMENTS),
-      harness: 'opencode',
-      source: 'personal',
-    },
-  ];
-  for (const directory of options.extraDirectories ?? []) {
-    roots.push({
-      directory,
-      harness: 'opencode',
-      source: 'loom-extra',
-      sourceDirectory: directory,
-    });
-  }
-  if (options.includeBundled !== false) {
-    roots.push({
-      directory: fileURLToPath(new URL('../chains/scenario-skills', import.meta.url)),
-      harness: 'opencode',
-      source: 'builtin',
-    });
-  }
-  return roots;
+  return [{
+    directory: options.globalSkillsDirectory
+      ?? resolveGlobalSkillsDirectory(process.env, options.homeDirectory),
+    harness: options.harness,
+    source: 'personal',
+  }];
 }
 
 /**

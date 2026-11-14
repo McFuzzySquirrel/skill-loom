@@ -47,6 +47,7 @@ function assertPackageContents(files) {
     'package/dist/skills/loom-chain-workflow.zip',
     'package/dist/skills/loom-chain-workflow/SKILL.md',
     'package/dist/skills/loom-chain-workflow/LICENSE',
+    'package/dist/skills/loom-chain-workflow/scripts/skill-loom-podman.mjs',
   ];
   for (const path of required) {
     if (!files.includes(path)) {
@@ -315,20 +316,27 @@ async function smokeScenarioDiscoverySkill() {
 async function smokeChainWorkflowSkill() {
   const archive = await readFile(join(repoRoot, 'dist', 'skills', 'loom-chain-workflow.zip'));
   const files = unzipSync(archive);
-  const skill = files['loom-chain-workflow/SKILL.md'];
-  const license = files['loom-chain-workflow/LICENSE'];
-  if (!skill || !license || Object.keys(files).length !== 2) {
+  const skillFiles = [
+    'SKILL.md',
+    'scripts/skill-loom-podman.mjs',
+    'scripts/skill-loom-podman.d.mts',
+  ];
+  const packageFiles = [...skillFiles, 'LICENSE'];
+  if (Object.keys(files).length !== packageFiles.length ||
+      packageFiles.some((path) => !files[`loom-chain-workflow/${path}`])) {
     throw new Error('The loom-chain-workflow archive has unexpected or missing files.');
   }
   for (const directory of [
     join(repoRoot, '.github', 'skills', 'loom-chain-workflow'),
     join(repoRoot, 'skill', 'loom-chain-workflow'),
   ]) {
-    if (!(await readFile(join(directory, 'SKILL.md'))).equals(skill)) {
-      throw new Error(`The loom-chain-workflow package is missing or out of sync: ${directory}`);
+    for (const path of skillFiles) {
+      if (!(await readFile(join(directory, path))).equals(files[`loom-chain-workflow/${path}`])) {
+        throw new Error(`The loom-chain-workflow package is missing or out of sync: ${directory}/${path}`);
+      }
     }
   }
-  if (!(await readFile(join(repoRoot, 'LICENSE'))).equals(license)) {
+  if (!(await readFile(join(repoRoot, 'LICENSE'))).equals(files['loom-chain-workflow/LICENSE'])) {
     throw new Error('The loom-chain-workflow archive has an unexpected license.');
   }
 }
@@ -391,6 +399,17 @@ async function main() {
     );
     if (!version.stdout.includes(`Skill Loom ${packageVersion}`)) {
       throw new Error(`Unexpected --version output: ${version.stdout.trim()}`);
+    }
+    const podmanHelp = await execFileAsync(
+      npmCommand,
+      [...npmArguments, 'exec', '--yes', `--package=${tarball}`, '--', 'skill-loom-podman', '--help'],
+      {
+        cwd: repoRoot, maxBuffer: 20 * 1024 * 1024,
+        env: { ...process.env, CI: '1', npm_config_cache: join(temporaryRoot, 'npm-cache') },
+      },
+    );
+    if (!podmanHelp.stdout.includes('Usage: skill-loom-podman')) {
+      throw new Error(`Unexpected Podman CLI help output: ${podmanHelp.stdout.trim()}`);
     }
 
     const installedRoot = join(temporaryRoot, 'installed-package');

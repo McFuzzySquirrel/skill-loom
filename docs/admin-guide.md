@@ -1,16 +1,16 @@
 # Skill Loom Administrator Guide
 
-This guide is for the person installing, configuring, backing up, upgrading, and troubleshooting Skill Loom on a local machine. End-user workflows are in the [user guide](user-guide.md); the full operator contract is in [OPERATIONS.md](OPERATIONS.md).
+This guide is for the person installing, configuring, backing up, upgrading, and troubleshooting Skill Loom locally or as a private single-user Podman service. End-user workflows are in the [user guide](user-guide.md); the full operator contract is in [OPERATIONS.md](OPERATIONS.md).
 
 ## Responsibilities and Architecture
 
-Skill Loom is a **single-user local web application**. The administrator is usually the same person as the user. There is no server fleet, hosted control plane, database, or multi-tenant deployment.
+Skill Loom is a **single-user application**. It can run locally or in a private Podman container; the administrator is usually the same person as the user. There is no multi-tenant deployment or public unauthenticated service.
 
 At runtime:
 
 - A Fastify server on `127.0.0.1:7373` serves the minimal JSON API (health, lifecycle, and draft/chain read and save) and the built chain editor (the only web screen, opened with `skill-loom edit`).
 - A Vite dev server on `127.0.0.1:5173` serves the chain editor during development and proxies `/api` to Fastify.
-- The server owns configuration, project registration, filesystem browsing, skill discovery, chain and run persistence, preflight, PTY transport, and run orchestration.
+- The server owns configuration, project registration, filesystem access, global skill discovery, shared chain persistence, and compatibility run services.
 - Harness CLIs are spawned as child processes or PTYs with an executable and argument array, never a shell string.
 - The `skill-loom` CLI and the chain editor are typed API clients; neither can spawn processes or choose executables.
 
@@ -20,11 +20,12 @@ See [Architecture decisions](adr/README.md) for the durable choices behind this 
 
 - **Node.js 24 or newer.** `package.json` declares `node >= 24`. The build, typecheck, Node test suites, and package smoke test for the 0.1.0 documentation refresh ran on Node 26.13.0, the same version recorded in the live evidence. A Node 24.22.2 toolchain was used earlier in development.
 - **npm**.
+- **Podman** (optional) for the local container deployment. A persistent Linux host requires rootless Podman 4.4 or newer, cgroup v2, a systemd user manager, and the rootless `podman.socket`. On macOS and Windows, initialize a Podman Machine first for the local launcher.
 - **A native build toolchain for `node-pty`:** Python 3, `make`, and a C++ compiler. Debian/Ubuntu: `sudo apt install build-essential python3`. macOS: Xcode Command Line Tools.
 - **Stable OpenCode CLI 2.2.5 or newer** for OpenCode chains, installed and authenticated. The minimum does not establish automatic signal compatibility.
 - **GitHub Copilot CLI 1.0.105** for Copilot chains, installed and authenticated.
 - **A desktop browser**, only if you use the chain editor (`skill-loom edit`). Everything else is CLI and skill driven.
-- **Git**, optional. It is used for the `git init` option and the dirty-tree preflight warning.
+- **Git.** Optional for a local installation; required for persistent host installation and updates, which tag images by commit and reject staged or unstaged tracked changes.
 - **Disk access** to the project folders you register. Run records can contain terminal output and should be treated as sensitive local data.
 
 Harness CLIs are deliberately not dependencies of this package. Install them with their own installers and confirm they resolve from the `PATH` used to launch Skill Loom.
@@ -51,9 +52,325 @@ npm run dev
 
 This starts the API on `127.0.0.1:7373` and Vite on `127.0.0.1:5173`. Open the Vite URL; Vite proxies `/api` to the API.
 
+### With Podman
+
+The same Linux image runs on Podman hosts. The launcher builds the image, creates
+the app and Caddy proxy in one pod, and mounts persistent Loom state, the
+host-global skills directory, and one selected project. The app itself remains
+bound to `127.0.0.1` inside the pod.
+
+Set the global skills and project directories explicitly when the process
+working directory is not the project you intend to use. The Loom config and
+shared chain library persist in the Podman named volume `skill-loom-config`.
+Linux/macOS:
+
+```bash
+export LOOM_SKILLS_DIR="$HOME/.agents/skills"
+export LOOM_PROJECT_DIR="/absolute/path/to/project"
+npm run podman:plan
+npm run podman:up
+npm run podman:down
+```
+
+PowerShell:
+
+```powershell
+$env:LOOM_SKILLS_DIR = "$HOME\.agents\skills"
+$env:LOOM_PROJECT_DIR = "C:\path\to\project"
+npm run podman:plan
+npm run podman:up
+npm run podman:down
+```
+
+The local proxy is published only on `127.0.0.1:4317`; change it with
+`LOOM_PODMAN_PORT`. Add `--private-network` to `npm run podman:up --` to publish
+no host port. Do not route the proxy through a private or public ingress: the
+HTTP service has no application authentication. Use the SSH-backed Podman
+bridge for remote CLI access; remote editor and HTTP access are unsupported.
+
+The host skills directory is an operator-managed source, mounted read-only and
+outside the image. See the [Host Catalog Operations guide](host-catalog-operations.md)
+for its package layout, safe add/update/remove workflow, refresh behavior,
+backup, permissions, and troubleshooting. Updating mounted packages does not
+require rebuilding the application image; existing client copies remain
+unchanged.
+
+On macOS and Windows, Podman Machine must be initialized and running under the
+same user with access to the selected host directories. `LOOM_PODMAN_PLATFORM`
+can select `linux/amd64` or `linux/arm64` for cross-architecture builds. Plan
+tests simulate Linux, macOS, and Windows command selection; only the Linux
+image build has been run here. Verify mounts and runtime behavior on the target
+Podman Machine before relying on a hosted deployment.
+
+The container's local control socket lives inside the app container and cannot
+be reached by running `skill-loom` directly on the host. Use the
+`skill-loom-podman` bridge (or `npm run podman:cli --` from a checkout) for CLI
+operations; it forwards the argument array and stdin with `podman exec`.
+Register the mounted project inside the container as `/workspace`:
+
+```bash
+printf '%s' '{"path":"/workspace"}' | skill-loom-podman project open
+skill-loom-podman service status
+```
+
+The bridge uses the same shared config, chain library, global skill mount, and
+project mount as the service. `podman:up` and `podman:down` remain the service
+lifecycle controls. `podman:down` intentionally leaves the config volume in
+place. Inspect and back up that volume with Podman's volume tools before
+removing or replacing it:
+
+```bash
+podman volume export skill-loom-config --output loom-config-backup.tar
+podman volume import skill-loom-config loom-config-backup.tar
+```
+
+Stop the service before export or import. Podman does not validate Skill Loom's
+config or chain records during import; verify the restored data before relying
+on it.
+
+### Persistent Linux host service (Quadlet)
+
+For a service that survives logouts and host reboots, use the rootless Linux
+host manager. It is separate from the cross-platform `podman:up` launcher:
+the host manager requires Linux, Podman 4.4 or newer with cgroup v2, Node.js
+24+, and a systemd user service manager. Run it as a dedicated non-root Linux
+account with rootless Podman configured. Keep the checkout on the host; the
+container image is built from that checkout and tagged with its Git commit.
+
+#### Prepare the host
+
+Install Podman 4.4 or newer, Node.js 24+, Git, and an SSH server using the
+Linux distribution's package manager. For example, on Debian/Ubuntu:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y podman git openssh-server
+```
+
+Install Node.js 24+ using the [official Node.js instructions](https://nodejs.org/en/download).
+Podman package versions vary by distribution; use the [official Podman
+installation guide](https://podman.io/docs/installation) if the packaged
+version is older than 4.4. Confirm the dedicated account has a
+working rootless Podman setup (including subordinate UID/GID mappings when
+required by the distribution) and that the host uses cgroup v2. Create the
+service account if it does not already exist:
+
+```bash
+sudo useradd --create-home --shell /bin/bash loom
+sudo loginctl enable-linger loom
+```
+
+If `loom` already exists, skip `useradd`. Enable linger for that account so
+its user manager runs after logout and at boot. Switch to the account (for
+example, with `sudo -iu loom`) and verify its tools and systemd user manager:
+
+```bash
+node --version
+git --version
+podman --version
+podman info --format '{{.Host.CgroupsVersion}}'
+systemctl --user show-environment
+```
+
+The Podman info command must report cgroup version `2` or `v2`. Enable the
+rootless Podman API socket; remote Podman clients reach this Unix socket over
+SSH, not over a TCP port:
+
+```bash
+systemctl --user enable --now podman.socket
+systemctl --user is-active podman.socket
+```
+
+Make the host's SSH service reachable only through the intended VPN/firewall
+policy. Add each trusted client's public key to the `loom` account using the
+host's normal SSH administration process. Podman access grants control of all
+containers and mounts owned by `loom`; do not share this account with
+untrusted clients.
+
+#### Install Skill Loom
+
+As `loom`, clone the repository into a directory the account owns (or use an
+existing clean checkout):
+
+```bash
+git clone https://github.com/McFuzzySquirrel/skill-loom.git "$HOME/skill-loom"
+cd "$HOME/skill-loom"
+export LOOM_SKILLS_DIR="$HOME/.agents/skills"
+export LOOM_PROJECT_DIR="$HOME/workspace"
+npm run podman:host -- plan
+npm run podman:host -- install
+```
+
+`install` creates the skills and workspace directories if needed, builds the
+image, writes managed Quadlet units under
+`~/.config/containers/systemd/`, starts the app and proxy, and checks the
+in-container CLI health. The skills mount is read-only in the container; the
+workspace is writable. Keep both host paths accessible to the dedicated user.
+Quadlet bind-mount paths must be absolute and cannot contain whitespace,
+commas, colons, or other unsupported unit characters.
+The config volume `skill-loom-config` persists application config, the shared
+chain library, and the derived index. Exclude credentials and local environment
+files from the checkout build context; `.containerignore` excludes common
+secret-file patterns.
+
+Choose `LOOM_PROJECT_DIR` as the one host project this service should use (or
+leave the default workspace directory). The manager creates the directory if
+it is missing. `LOOM_SKILLS_DIR` is the externally provisioned skill catalog;
+the container mounts it read-only. Quadlet bind-mount paths must be absolute
+and cannot contain whitespace, commas, colons, or other unsupported unit
+characters.
+
+No host HTTP port is published by default. If a local browser/editor endpoint
+is explicitly needed on the server itself, set `LOOM_PODMAN_HOST_PORT` to a
+port number; the generated binding is still `127.0.0.1` only. Do not expose it
+through a VPN, proxy, or public interface: Skill Loom has no application
+authentication. Trusted remote agent clients use the SSH-backed Podman
+connection below; they do not connect to the HTTP endpoint.
+
+After installation, verify the host-managed units:
+
+```bash
+npm run podman:host -- status
+```
+
+Install and update refuse staged or unstaged tracked changes in the checkout.
+Run these commands from the checkout for lifecycle and image management. A host administrator
+can SSH into the machine as `loom` and run the same commands there; a regular
+remote client uses the Podman bridge for Skill Loom CLI operations but cannot
+start or stop the host's systemd service.
+
+```bash
+npm run podman:host -- status
+npm run podman:host -- logs app
+npm run podman:host -- restart
+npm run podman:host -- update
+npm run podman:host -- rollback
+npm run podman:host -- stop
+npm run podman:host -- start
+```
+
+`update` builds the current commit's image and retains the previous app unit
+and image for `rollback`; failed updates attempt to restore the prior service.
+Use `install --replace` only after reviewing existing generated units. It is
+for an intentional unit/configuration change, such as changing the mounted
+host paths or loopback port. `backup` exports only the config volume and
+requires an absolute, new archive path and a stopped app. The archive is
+created with owner-only permissions:
+
+```bash
+npm run podman:host -- backup --output "$HOME/skill-loom-config.tar"
+```
+
+To restore, stop the service, import the archive as the same rootless Podman
+user, then start the service:
+
+```bash
+npm run podman:host -- stop
+podman volume import skill-loom-config "$HOME/skill-loom-config.tar"
+npm run podman:host -- start
+```
+
+Back up the host skills and workspace directories separately. On the approved
+Ubuntu 26.04 ARM64 host, the rootless `podman.socket` remained active after a
+reboot, and a config-volume export/import/restore check passed using a
+disposable volume. The `skill-loom-app` container remained stopped, so this
+does not verify Quadlet app startup at boot. The host manager's `backup`
+command, image update/rollback, and service-level restore remain unverified;
+see [known gaps](current-gaps.md#execution-gates).
+
+### Remote client access
+
+A remote agent can use the same hosted catalog and shared chains through
+Podman's SSH transport. It does not use Caddy, the editor port, or a new
+Skill Loom network endpoint. Keep the app loopback-bound and configure a
+dedicated rootless Podman account on the host. Anyone authorized to use that
+account's Podman connection can control its containers and mounts, so grant
+SSH access only to trusted clients; the bridge is not a per-command permission
+system.
+
+On each client, install the `loom-chain-workflow` standalone skill package.
+The package includes the `skill-loom-podman` helper and needs Node.js 24+ and
+the Podman CLI. Install the skill using the client's usual Agent Skill
+installation method; its canonical package is
+`.github/skills/loom-chain-workflow` in this repository. A client with the
+skill and its helper installed does not need the Skill Loom server checkout or
+the private npm package. Ask the host administrator to authorize the client's
+SSH public key and provide the host's VPN-reachable DNS name and SSH port.
+Create a named SSH connection:
+
+```bash
+podman system connection add --identity ~/.ssh/loom_host_ed25519 \
+  loom-host ssh://loom@podman-host.example
+export LOOM_PODMAN_CONNECTION=loom-host
+podman --connection loom-host ps
+skill-loom-podman service status
+```
+
+For PowerShell, use the same `podman system connection add` arguments with the
+client's Windows SSH key path, then set
+`$env:LOOM_PODMAN_CONNECTION = "loom-host"`. The name must match a connection
+shown by `podman system connection list`. Loom stores neither SSH keys nor
+connection credentials. Keep the connection name available in every shell
+that runs the bridge. If the `skill-loom-podman` command is not installed, run
+`scripts/skill-loom-podman.mjs` from the installed workflow skill package
+with Node.js.
+
+The first authorized client (or the host administrator using the same client
+setup) registers the mounted project once and records the returned project id:
+
+```bash
+printf '%s' '{"path":"/workspace"}' | skill-loom-podman project open
+skill-loom-podman project list
+```
+
+Remote users can discover the hosted catalog and create/select shared chains
+using that host project id. `skill-loom-podman chain project apply` writes into
+the host's mounted project. To write into a remote client's local project, use
+the bridge's `chain project apply-local` command with the local absolute path.
+That path stays on the client; the bridge requests a bounded, versioned
+manifest of only the chain's global packages and writes them locally without
+overwriting an existing skill. Transfers are limited to 100 packages, 2,000
+files, and 20 MiB decoded content. Remote clients cannot provision or update
+the host-global skills directory; maintain that read-only mount through the
+host's existing package-management process.
+
+Remote agents can author chains in their client repository's tracked
+`chains/<id>.json` files with the local `skill-loom chain repo` commands, then
+publish explicitly through `skill-loom-podman chain repo publish`. The bridge
+transmits the host project id, validated chain content, and optional hosted
+id/revision mapping; it never sends the local repository path. The host checks
+skill references against its current catalog and rejects missing, ambiguous,
+or conflicting names. Revision conflicts preserve the repo file, hosted chain,
+and sidecar; compare both copies before using the explicit `republish` flow.
+See the [repository-chain authoring and recovery procedure](standalone-skill-guide.md#create-and-publish-a-repository-chain).
+
+The bridge contract and local export are covered by automated tests. A live
+second-machine journey passed with a trusted tailnet client and a dedicated
+Ubuntu 26.04 ARM64 host running rootless Podman 5.7.0: catalog query/review,
+selected-skill copy, active-session local chain execution, first publish,
+revision-checked update, and an isolated stale-revision conflict. The config
+volume was exported and restored through a disposable volume, and the rootless
+Podman socket was verified active after reboot. The app container remained
+stopped; this does not prove that the Quadlet app starts after reboot or that
+image update/rollback works live. SELinux was disabled. Unauthorized-identity
+denial, enforcing SELinux, alternate platforms, a live chain-package copy, and
+repeating the local run after disconnect remain unverified. The pre-pilot
+backup timing gate was missed and accepted as an exception. See
+[known gaps](current-gaps.md#execution-gates) and the
+[implementation evidence](plans/hosted-catalog-repo-chains-implementation-plan.md).
+
+The bridge can also copy exact reviewed catalog selections into a remote
+client's local repository before a chain exists. The local project path stays
+on the client; the host receives only the registered project id, harness, entry
+ids, and verified package fingerprints. See the [standalone skill guide](standalone-skill-guide.md#copy-selected-host-skills-to-a-client-project)
+for the review and copy commands. Existing `apply-local` behavior remains
+available for chain-based copies.
+
 ### From a packed package
 
-The npm package is named `skill-loom-cli` and exposes the `skill-loom` binary. It is still `"private": true`, so there is no registry release. Build and pack locally:
+The npm package is named `skill-loom-cli` and exposes `skill-loom` and
+`skill-loom-podman` binaries. It is still `"private": true`, so there is no
+registry release. Build and pack locally:
 
 ```bash
 npm run build
@@ -63,7 +380,11 @@ npx --yes --package=./skill-loom-cli-0.1.0.tgz skill-loom
 
 The CLI accepts `--help`, `--version`, `--no-open`, `--port <number>`, and `--config-dir <path>`. It starts the same production server, prints the config directory and loopback URL, and opens a browser only when stdout is a TTY and `CI` is unset.
 
-The tarball contains `dist/src`, `dist/web`, the compiled package metadata, `docs/OPERATIONS.md`, and the manifest. Source, tests, build scripts, and the other documentation files are excluded. Installing the package still builds the native `node-pty` module.
+The tarball contains `dist/src`, `dist/web`, `dist/skills` (including the
+standalone Podman bridge), the compiled package metadata,
+`docs/OPERATIONS.md`, and the manifest. Source, tests, build scripts, and the
+other documentation files are excluded. Installing the package still builds
+the native `node-pty` module.
 
 To install the command globally instead of running the tarball through `npx`:
 
@@ -94,6 +415,7 @@ The server reads configuration from the environment on each operation and from `
 | Setting | Default | Behavior |
 |---|---|---|
 | `LOOM_CONFIG_DIR` | `~/.config/loom` | Overrides the global config, recent-project, active-run pointer, drafts, and catalog snapshot directory. A relative value is resolved against the server working directory. |
+| `LOOM_SKILLS_DIR` | `~/.agents/skills` | The single host-global skill catalog. External installation tools own provisioning and updates. |
 | `LOOM_HOST` | `127.0.0.1` | Bind host. Only `127.0.0.0/8`, `::1`, and `localhost` are accepted; anything else aborts startup. `localhost` is normalized to `127.0.0.1`. |
 | `LOOM_PORT` | `7373` | TCP port from 1 to 65535. |
 | `LOOM_WEB_ROOT` | discovered `dist/web` | Optional built-editor directory override for controlled deployments and tests. |
@@ -116,8 +438,7 @@ The config document is versioned and strict:
 
 - `harnessCommands` optionally overrides the executable name or absolute path. A missing entry resolves from `PATH`. A broken override is a block; Skill Loom does not silently fall back to the default name.
 - On Windows, PATH lookup for an extensionless name also checks for a native `.exe` in each directory. It does not search for `.cmd` or `.bat` wrappers or invoke them through a shell; configure an appropriate native executable instead. This does not imply Windows managed-run support.
-- `extraSkillDirectories` is the global extra-skill search list stored in the config file; there is no editor for it, so change it while the service is stopped.
-- `remoteSkillSources` stores validated HTTPS/SSH Git URLs and optional refs for skill packages and supported native agents. Pinned snapshots live under `<LOOM_CONFIG_DIR>/catalog-sources/`; credentials are never stored.
+- `extraSkillDirectories` and `remoteSkillSources` are retained for compatibility but are not part of the global catalog workflow. The active authoring catalog scans only `LOOM_SKILLS_DIR`; Loom does not fetch remote skill repositories.
 - `remoteCatalogLimits` controls finite Git staging, output, timeout, snapshot,
   and per-package budgets. `skill-loom catalog limits set` edits global
   defaults and `catalog limits source` sets optional per-source overrides. Older version 1 configs are read
@@ -486,7 +807,7 @@ inspect both files and the live process state rather than assuming rollback.
 
 ## Identity, Secrets, and TLS
 
-The browser HTTP interface has **no application identity, authentication, or authorization**. It is **loopback-only** by design and refuses a non-loopback host. There is no browser HTTPS listener and no supported reverse-proxy deployment. Do not expose the port through a proxy, tunnel, container publish, or remote host.
+The browser HTTP interface has **no application identity, authentication, or authorization**. The service binds to loopback and refuses a non-loopback host. Direct remote HTTP and editor access are unsupported. Publish a container proxy only on loopback; do not route it through a private or public ingress. Trusted remote clients use the SSH-backed Podman bridge for CLI operations.
 
 The Unix local control endpoint uses an owner-only runtime directory and a
 per-instance bearer capability in `control.json`, readable only by the profile
@@ -557,26 +878,57 @@ resources, not escaped descendants; it does not lift the containment gate.
 
 Harness credentials belong to OpenCode or Copilot and stay in their own stores or environment. Skill Loom may inspect command output, credential-file presence, or environment-variable presence as authentication evidence, but it never reads credential values into its config, logs, or API responses. Preflight reports presence only.
 
-If you need multi-user or remote access, this project does not provide it. Treat that as a new architecture and security decision, not a configuration change.
+Skill Loom does not provide multi-user access or direct remote HTTP/editor
+access. Trusted remote CLI/skill workflows use the SSH-backed Podman bridge
+described above; this grants broad access to the dedicated Podman account, not
+per-command Skill Loom authorization. Direct network access to the HTTP
+service remains out of scope and requires a separate architecture and security
+decision.
+
+## Global Skills and Shared Chains
+
+The authoring catalog scans only `~/.agents/skills/`, or the absolute directory
+set by `LOOM_SKILLS_DIR`. Provision and update packages with the host's existing
+installation tools. Loom does not clone remote repositories or maintain a
+second global skill installation. The capability index is disposable and
+rebuilds from the current directory contents.
+
+Saved chains are shared under `<LOOM_CONFIG_DIR>/chains/`; project ids on the
+chain commands identify the project context for the editor and apply workflow.
+On the first access for a project, valid chains in its legacy
+`<project>/.loom/chains/` directory are copied to the library without removing
+or rewriting the original files. Corrupt files and id collisions are reported.
+
+`skill-loom chain project apply` reads `{"projectId":"...","chainId":"..."}`
+from stdin. It resolves the chain's skill names against the current global
+catalog and copies only those packages into the project's shared
+`.agents/skills/` root. It never overwrites an existing package; missing or
+ambiguous names fail explicitly. If a copy fails after earlier packages were
+installed, the error reports those completed copies. The current-session
+`loom-chain-workflow` companion skill then follows the saved prompt order in
+the active agent session; it does not launch a child harness or persist a run
+record.
 
 ## Storage and Backups
 
 | Path | Contents | Notes |
 |---|---|---|
-| `~/.config/loom/config.json` | Global config, executable overrides, extra skill directories, remote sources, recent projects, managed-workspace ownership, and UI preferences (unused by the chain editor). | Override the directory with `LOOM_CONFIG_DIR`. POSIX creation requests owner-only permissions; Windows service startup requires a verified protected private profile. |
+| `~/.agents/skills/` | The single host-global skill catalog. | External tools provision and update packages. `LOOM_SKILLS_DIR` overrides this path. |
+| `~/.config/loom/config.json` | Global config, executable overrides, recent projects, managed-workspace ownership, and UI preferences (unused by the chain editor). | Override the directory with `LOOM_CONFIG_DIR`. POSIX creation requests owner-only permissions; Windows service startup requires a verified protected private profile. |
 | `~/.config/loom/drafts/*.json` | Project-independent chain drafts. | Separate from project chains; back up with the config directory. |
 | Caller-chosen file (`*.loom-discovery.json`) | A user-prepared discovery handoff containing the goal and exact selected candidate packages. | Not retained by the server. It can contain private or redistribution-restricted content; protect or remove it according to your local policy. |
 | `~/.config/loom/test-workspaces/<uuid>/` | Managed disposable projects created by `skill-loom workspace create`. | Retained until explicit `workspace remove`. Cleanup refuses the workspace holding the global active run. |
 | `~/.config/loom/discovery-workspaces/<uuid>/` | Reviewed handoff, bundled `scenario-discovery` package, managed project, result file, and run state for interactive scenario discovery (managed through the CLI control channel). | Retained until explicit cleanup. Cleanup refuses the workspace holding the global active run. |
 | `~/.config/loom/active-run.json` | Single global active-run pointer. | Holds the active run's project path, run id, and status. Do not edit while a run is live. |
 | `~/.config/loom/profile-owner.sqlite` | Profile ownership lock. | One server may own a profile at a time. Do not remove or replace this file while the server is running; the operating system releases the lock on process exit. Store the profile on a filesystem that supports SQLite locking. |
-| `~/.config/loom/capability-index.sqlite` | Derived capability index for chain authoring, containing bounded package metadata and text, declared tags/tools/inputs/outputs, fingerprints, and remote binding identity. | Disposable and excluded from backups. Owner-only and capped at 64 MiB; safe to delete while the service is stopped. Schema version 2 rebuilds older indexes. Corrupt, unsafe, unsupported, or oversized data falls back to the fresh catalog scan. Enabled by default; set `LOOM_CAPABILITY_INDEX=0` to force the scan. `catalog project page` uses it for ranked snippets, metadata filters, facets, coverage, and exact remote binding identity. |
+| `~/.config/loom/capability-index.sqlite` | Derived index of the configured global skill catalog. | Disposable and excluded from backups. Owner-only and capped at 64 MiB; safe to delete while the service is stopped. Corrupt, unsafe, unsupported, or oversized data falls back to the fresh catalog scan. |
 | `~/.config/loom/control.json` | Temporary local control endpoint and bearer capability; Windows also includes client TLS credentials. | Private to the profile owner; do not share, commit, back up, or remove while the server is running. |
-| `~/.config/loom/chains/*.json` (legacy) | Chains written by the removed global-template library. | No current command reads or writes this directory; keep it only when preserving an old installation. |
-| `<project>/.loom/chains/*.json` | Saved project chains. | Versioned JSON, atomic writes. Back up or version these recipes. |
+| `~/.config/loom/chains/*.json` | Shared chain library, visible from every registered project context. | Versioned JSON written atomically. Back up with the config directory. |
+| `<project>/.loom/chains/*.json` | Legacy project-local chain definitions. | On first chain access they are copied into the shared library; originals are retained. Corrupt records and id collisions are reported. |
 | `<project>/.loom/runs/*.json` | Run snapshots, statuses, actions, and bounded tails. | At most 200 lines or 32 KiB per step. Never a full transcript. This repository git-ignores `.loom/runs/`. |
 | `<project>/.loom/portable-runs/*.json` | Standalone-skill run snapshots, resolved input values, package fingerprints, and attempts. Reused host-global packages are recorded as `source: "global"` with their absolute path. | Created and Git-ignored by the portable helper. Contains local input values and machine-local package paths; do not treat it as a portable backup. |
-| `<project>/.agents/skills/` | Newly copied and bundle-imported skill packages for either harness. | Independent project files; deleting a chain does not remove them. Include these in recipe backups when needed. Existing packages are not migrated. A host-global package reused by a portable run is not copied here. |
+| `<project>/.agents/skills/` | Skill packages copied when a chain is applied. | Independent project files; deleting a chain does not remove them, and later changes to the global source do not rewrite them. Existing packages are never overwritten. |
+| Podman volume `skill-loom-config` | Container deployment's config, shared chains, and derived index. | Persists across `podman:down`; use Podman's volume tools for inspection and backup. |
 | `<project>/.opencode/agents/` and `<project>/.github/agents/` | Explicitly copied remote native agent definitions for the corresponding harness. | Copy never overwrites; chain preflight verifies the selected definition fingerprint. These are harness-specific and are not translated. |
 | Caller-chosen file (`*.loom.json`) | Portable chain and skill bundles. | Version 1 contains skills; version 2 can also contain one selected native agent and its pinned identity. No run history or input defaults; review package contents and redistribution rights before sharing. Not a complete backup. |
 | `~/.copilot/config.json` | Copilot's own folder-trust configuration. | Skill Loom only reads `trustedFolders`; it never writes this file. |
@@ -588,16 +940,20 @@ temporary control capability is not included:
 cp -a ~/.config/loom ~/loom-config-backup
 ```
 
-Back up a project's recipes by copying `<project>/.loom/chains/`. Run records are optional history; because they can contain terminal output, treat backups as sensitive and keep them out of version control. This repository already ignores `.loom/runs/`.
+Back up the shared chain library under `~/.config/loom/chains/` with the config directory. Legacy project chain files remain after migration and can be copied back if needed. Run records are optional compatibility history; because they can contain terminal output, treat backups as sensitive and keep them out of version control.
 
 Restore by stopping the server, replacing the config or chain directory, and starting again. Validate the restored JSON before use; valid chain version 1 and 2 documents migrate to version 3 on read, while unsupported versions or corrupt documents are rejected.
 
 Managed test and discovery workspaces are working directories, not security sandboxes. They use the normal harness permissions and authentication available to the server process. Discovery workspaces persist candidate package contents and goals until explicit cleanup; protect the configured Skill Loom storage directory accordingly. Keep disk usage under review and use `skill-loom workspace remove` for explicit cleanup; do not remove a directory while its run is active.
 
 
-### Portable bundle administration
+### Legacy portable bundle administration
 
-Users can export saved project chains with their referenced skill packages and import them into another local installation. See the [sharing workflow](user-guide.md#share-a-chain-and-its-skills). This does not add remote access, user accounts, or a hosted sharing service.
+Portable bundles and their review/import commands remain for compatibility, but
+they are not the default chain-sharing workflow. New chains live in the shared
+library and are applied directly from the host-global catalog.
+
+Users can export saved project chains with their referenced skill packages and import them into another local installation. See the [legacy sharing workflow](user-guide.md#legacy-share-a-chain-as-a-bundle). This does not add remote access, user accounts, or a hosted sharing service.
 
 The `skill-loom-chain` bundle is JSON with base64-encoded package files and executable flags. Version 1 remains the export for chains without a selected native agent; version 2 adds the selected native agent identity and definition. Export uses the exact remote snapshot bound to a skill step; unbound legacy steps retain project-local precedence and fail on unresolved ambiguity. The server validates both preview and import, rejects unsupported versions, unsafe paths, symlinks, special files, excluded credential/dependency directories, duplicate paths, mismatched skill metadata, and incomplete packages. Limits are 100 skill packages, 2,000 combined files, 20 MiB decoded content, and 30 MiB per import request. Existing skill and agent files are never overwritten, and permission opt-in is reset. Ordinary file contents are not secret-scanned; review remains essential.
 
@@ -605,7 +961,7 @@ Inside a host session, the portable runner may reuse a host-global package that 
 
 Remote snapshots store a bounded versioned executable-mode index derived from Git and checked against the package fingerprint. A legacy snapshot without this index can be refreshed at the same revision; Loom verifies its contents before adding the index. On Windows, bundle import, portable preparation, and catalog copy preserve executable intent using paired version-1 records under the package's `.loom/installed-modes.json` and the project's `.loom/package-modes/`. Remote copies use verified snapshot modes; bundled copies use a shipped content-bound mode manifest; other filesystem copies need intact installed-mode records or a complete Git index. Contributors must regenerate the bundled manifest with `npm run update:scenario-modes` after changing those packages; upstream snapshots are checked out byte-for-byte, without Git line-ending conversion.
 
-Back up both installed-mode records with their package. Missing, unsafe, inconsistent, or unexpected metadata blocks review and export; Windows shared packages without either record are also blocked, including legacy shared packages. Restore the complete records and files, or reinstall a reviewed bundle into a fresh directory. Ordinary rollback removes only the failing attempt's registry receipt; crashes retain evidence for operator inspection after confirming no installer is active. Existing-path edits retain mode intent but invalidate previous content approval; new or removed paths need a new reviewed installation. Only validated operational mode metadata is omitted from bundle inventories. See the [Windows mode and recovery instructions](user-guide.md#share-a-chain-and-its-skills), including explicit Git staging when `core.filemode=false`.
+Back up both installed-mode records with their package. Missing, unsafe, inconsistent, or unexpected metadata blocks review and export; Windows shared packages without either record are also blocked, including legacy shared packages. Restore the complete records and files, or reinstall a reviewed bundle into a fresh directory. Ordinary rollback removes only the failing attempt's registry receipt; crashes retain evidence for operator inspection after confirming no installer is active. Existing-path edits retain mode intent but invalidate previous content approval; new or removed paths need a new reviewed installation. Only validated operational mode metadata is omitted from bundle inventories. See the legacy Windows mode and recovery instructions in the [bundle section](user-guide.md#legacy-share-a-chain-as-a-bundle), including explicit Git staging when `core.filemode=false`.
 
 These are mode-preservation and point-in-time review guarantees, not authenticated package metadata, protected content, descendant containment, or proof of power-loss durability where directory fsync is unavailable. Windows private IPC is a separate control-transport guarantee. Reviewed managed-execution safeguards and durable project claims remain in place.
 
@@ -653,7 +1009,7 @@ There is no published release channel or automated upgrade mechanism in `0.1.0`.
 Upgrade procedure for a checkout:
 
 1. Stop Skill Loom and let `SIGINT`/`SIGTERM` close PTYs and child processes.
-2. Back up `~/.config/loom` and each project's `.loom/chains/`.
+2. Back up `~/.config/loom`, including its shared `chains/` library, and retain legacy project chain files until migration is verified.
 3. Fetch or replace the checkout with the new version.
 4. Run `npm install` (the native `node-pty` build may need to rerun) and `npm run build`.
 5. Start the server, open `skill-loom edit` for a chain, and call `/api/health`.
@@ -677,7 +1033,7 @@ Config, chain, run, and active-run documents carry explicit versions. Unknown ve
 - **Native fork is available only on OpenCode's headless surface.** Supervised OpenCode and all Copilot forks use a deterministic handoff note, not a native session fork.
 - **One active run globally.** A second start is rejected while a run is starting, running, paused, or awaiting user input.
 - **Run history is bounded.** A step tail is at most 200 lines or 32 KiB; there is no full transcript.
-- **No authentication, TLS, or remote access.** This is intentional, not a missing configuration.
+- **No HTTP application authentication or remote editor.** Keep the HTTP service loopback-only and do not expose it through a proxy, VPN, tunnel, or public port. Trusted remote CLI/skill clients use SSH-backed Podman; that grants host-account container access, not per-command authorization.
 - **No published npm package or Git release tag.** Version `0.1.0` is declared locally and the package is private.
 - **Live evidence is platform-specific.** Historical probes cover Linux ARM64 with OpenCode 2.2.5 and Copilot CLI 1.0.105. The supplied passing execution probe covers Linux x64 with OpenCode 2.2.6 and Copilot CLI 1.0.107, with a Copilot exact-version warning. Other platforms and versions remain unverified.
 
@@ -690,6 +1046,22 @@ A running owner serves the built application, not changes made to source files. 
 ### The server refuses to start with a host error
 
 `LOOM_HOST` must be loopback. Use `127.0.0.1`, `::1`, or `localhost`. Startup aborts for any other value; this is the security boundary, not a bug.
+
+### A remote Podman client cannot connect to the hosted service
+
+On the host, verify the dedicated account's user manager and rootless socket:
+
+```bash
+sudo loginctl show-user loom --property=Linger
+sudo -iu loom
+systemctl --user is-active podman.socket
+```
+
+Linger must be enabled and the socket active. On the client, verify VPN
+reachability, SSH key authorization for `loom`, and the named connection with
+`podman system connection list`; then try `podman --connection loom-host ps`.
+Do not work around a failed connection by exposing Podman's API over TCP or
+publishing Skill Loom's HTTP port.
 
 ### The port is already in use
 
@@ -742,7 +1114,7 @@ For the full troubleshooting contract, including the dirty Git tree, node-pty, m
 ## Recovery and Support
 
 - **Run recovery:** restart the server, inspect the interrupted run with `skill-loom run show`, then use `run review-action` and `run action` to retry, continue, or restart. Nothing replays silently.
-- **Data recovery:** restore `~/.config/loom` or `<project>/.loom/chains/` from backup. Run history is optional and may be deleted when no run is active.
+- **Data recovery:** restore `~/.config/loom` or retained `<project>/.loom/chains/` files from backup. Run history is optional and may be deleted when no run is active.
 - **Stale active pointer:** let startup recovery clear it; do not remove it while a run is live.
 - **Support ownership and intake:** see [SUPPORT.md](SUPPORT.md).
 - **Release notes and validation evidence:** see [releases/0.1.0.md](releases/0.1.0.md) and [evidence](evidence/).

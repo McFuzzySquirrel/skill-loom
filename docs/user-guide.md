@@ -1,16 +1,17 @@
 # Skill Loom User Guide
 
-This guide is for the person using Skill Loom to design reusable skill workflows ("chains"), share them as portable bundles, and run them. Skill Loom is driven by its **CLI** and companion **Agent Skills**; its only web screen is a visual **chain editor**. Installation and machine administration are in the [administrator guide](admin-guide.md). To work with the skills alone and no Skill Loom service, see the [standalone skill guide](standalone-skill-guide.md).
+This guide is for the person using Skill Loom to design shared skill workflows ("chains"), apply them to projects, and run them in the current agent session. Skill Loom is driven by its **CLI** and companion **Agent Skills**; its only web screen is a visual **chain editor**. Installation and machine administration are in the [administrator guide](admin-guide.md). For repository-canonical chains, hosted-skill copies, and the compatibility bundle procedure, see the [standalone skill guide](standalone-skill-guide.md).
 
 ## Who This Is For
 
-Skill Loom is a **single-user, local** tool. There are no accounts, roles, sharing links, or remote services. The service binds to loopback and sends no telemetry.
+Skill Loom is a **single-user** tool. It can run locally or in a private Podman container; there are no accounts or multi-tenant controls. The app binds to loopback and sends no telemetry. Remote CLI access uses an authenticated SSH-backed Podman connection; it does not expose a Skill Loom control endpoint.
 
 ## Before You Begin
 
 - Node.js 24 or newer. The `loom-chain-workflow` and `scenario-discovery` skills offer to install the CLI when `skill-loom --version` fails, and ask for approval first. To install it yourself, follow the [administrator guide](admin-guide.md#installation).
-- For managed runs or tests, the harness installed and authenticated: stable OpenCode 2.2.5 or newer, or GitHub Copilot CLI 1.0.105. Skill Loom does not install or authenticate harnesses.
+- An agent session with the global skills catalog available. The host decides whether to load each named skill.
 - For Copilot, the project folder trusted in Copilot's own trust dialog.
+- For remote use, the standalone `loom-chain-workflow` skill, Node.js 24+, Podman CLI, and an operator-configured SSH Podman connection.
 
 On Windows, service startup also requires a protected private profile on a local fixed NTFS/ReFS drive and PowerShell 7 or Windows PowerShell 5.1 with .NET 4.7.2+. Unsafe profile ACLs are refused, not repaired. See [identity, secrets, and TLS](admin-guide.md#identity-secrets-and-tls).
 
@@ -18,16 +19,119 @@ On Windows, service startup also requires a protected private profile on a local
 
 | You want to | Use |
 |---|---|
-| Find skills and propose a workflow | The `scenario-discovery` skill, or `skill-loom catalog` and `discovery` |
-| Add one reviewed skill to a project | The `loom-skill-catalog` skill, or `skill-loom catalog skill review` and `install` |
-| Coordinate discovery, testing, import, and running | The `loom-chain-workflow` skill |
-| Create, inspect, or edit chain data | `skill-loom chain ...` |
+| Find skills | Search the host-global `~/.agents/skills/` catalog with `skill-loom catalog` or the current host |
+| Create, inspect, or edit shared chains | `skill-loom chain ...` and `skill-loom edit` |
+| Keep a chain canonical in a repository and publish it explicitly | `skill-loom chain repo ...` and `skill-loom-podman chain repo publish` |
+| Copy required skills into a registered host project | `skill-loom chain project apply` |
+| Copy required skills into a remote client's local project | `skill-loom-podman chain project apply-local` |
+| Copy selected host skills before a chain exists | `skill-loom-podman catalog skills copy-local` |
+| Run a chain in the current agent session | The `loom-chain-workflow` skill |
 | Change step order, instructions, or inputs visually | `skill-loom edit` |
-| Share a chain with its skills | `skill-loom bundle create` and `bundle inspect` |
-| Run a bundle in the current agent session | The `loom-run-bundle` skill |
-| Run a chain under a managed harness | `skill-loom run ...` |
+| Use the legacy bundle-based workflow | `skill-loom bundle ...` and `loom-run-bundle` (compatibility only) |
 
-Run `skill-loom --help` and, for example, `skill-loom chain --help` for the exact commands of the installed version. Structured input is passed as JSON on stdin; every command prints a versioned JSON envelope. Mutations need a review digest and explicit confirmation, so review output before approving it.
+Run `skill-loom --help`, `skill-loom chain project --help`, and `skill-loom chain repo --help` for the exact commands of the installed version. Structured input is passed as JSON on stdin; every command prints a versioned JSON envelope.
+
+## Use a Hosted Podman Service Remotely
+
+The remote workflow uses Podman's SSH transport to invoke the existing app CLI;
+it does not connect through the editor's HTTP proxy. Ask the administrator for
+the host and SSH identity to use, then configure a named Podman connection on
+the client:
+
+```sh
+podman system connection add --identity ~/.ssh/loom_host_ed25519 \
+  loom-host ssh://loom@podman-host.example
+export LOOM_PODMAN_CONNECTION=loom-host
+skill-loom-podman service status
+```
+
+`loom-chain-workflow` includes the `skill-loom-podman` client helper, so the
+remote machine does not need a Skill Loom checkout or npm package. Install the
+standalone skill package as described in the [standalone skill guide](standalone-skill-guide.md#connect-to-hosted-podman).
+For first-time host setup, SSH socket activation, and host-key authorization,
+see the [persistent Linux host setup](admin-guide.md#persistent-linux-host-service-quadlet).
+The SSH connection must be configured and usable by the same OS user running
+the agent. Podman access grants control of that rootless Podman account's
+containers and mounts; it is not a narrowly scoped Skill Loom permission.
+
+Use the registered project id on the Podman host as the shared-chain context.
+Applying to the registered host project writes into its mounted `/workspace`
+using `chain project apply`. To apply to the remote client's own checkout,
+select the local path explicitly:
+
+```sh
+skill-loom-podman chain project apply-local \
+  --project /absolute/path/to/local/repo \
+  --project-id <host-project-id> \
+  --chain-id <chain-id>
+```
+
+The helper sends only the project and chain ids to the host, transfers only
+the referenced global skill packages, and writes them into the client's local
+`.agents/skills/` directory without overwriting existing packages. Skill
+package provisioning remains an operator/host maintenance task; remote clients
+cannot modify the hosted global skills root. See the [administrator guide](admin-guide.md#remote-client-access).
+
+For repo-first authoring, create and edit the canonical chain under the client's
+tracked `chains/` directory with `skill-loom chain repo`. Publish or update its
+shared-library copy explicitly with `skill-loom-podman chain repo publish`;
+the bridge never sends the client path. The
+[standalone skill guide](standalone-skill-guide.md#create-and-publish-a-repository-chain)
+covers local commands, the publication sidecar, revision conflicts, and
+interrupted-publish recovery.
+
+To copy a selected host-global skill before creating a chain, search with
+`catalog project page`, review the exact `personal` entry with `catalog skill
+review`, and pass its entry id and returned whole-package fingerprint to
+`catalog skills copy-local`. This writes only to the client repository and does
+not require a chain. The [standalone skill guide](standalone-skill-guide.md#copy-selected-host-skills-to-a-client-project)
+shows the JSON shapes and recovery behavior.
+
+## Run a Shared Chain
+
+1. Make sure your intended skills are installed in the host-global
+   `~/.agents/skills/` directory, or the directory set by `LOOM_SKILLS_DIR`.
+   Skill Loom indexes this directory; your existing installation tools own
+   package provisioning and updates.
+2. Select a registered project and a shared chain. Chains are stored in the
+   Loom profile and are available from every registered project context.
+   Existing `<project>/.loom/chains/` files are copied into the shared library
+   the first time that project is accessed; the originals are retained.
+3. Collect the chain's required inputs and apply its skill packages:
+
+   ```sh
+   printf '%s' '{"projectId":"...","chainId":"..."}' | skill-loom chain project apply
+   ```
+
+   Apply copies only the chain's current global packages into the project's
+   `.agents/skills/` directory. It does not overwrite existing packages; resolve
+   any missing-skill or destination-conflict error before continuing.
+4. If the active host needs a skill refresh, refresh it before proceeding. Use
+   `loom-chain-workflow` to carry out the ordered steps in this conversation.
+   The workflow never launches another harness and does not persist run
+   inputs or outcomes.
+
+The chain's harness and session-mode fields do not switch the active session.
+Skill Loom guarantees saved prompt order only; the host may not load a named
+skill.
+
+### Run a repository chain locally
+
+Use `loom-chain-workflow` to run a tracked chain from `chains/<id>.json` in the
+current repository. This path is local and works after disconnecting from the
+hosted service; it does not call Skill Loom or Podman. The chain's skills must
+already be present under the repository's `.agents/skills/`.
+
+If the repository has multiple chains, select one explicitly. The workflow
+validates and previews the selected definition, resolves skill names only from
+the repository's local packages, collects declared inputs, and asks for
+confirmation before following the steps in order in the current session.
+Missing or ambiguous skills, invalid chains, unsupported versions, and
+unresolved required inputs stop the run. The harness and session-mode fields do
+not change the active session, and no run record, inputs, or outcomes are
+persisted. If the chain changes during execution, the workflow stops for a new
+review; after an interruption, it rereads the chain and asks which step to
+resume.
 
 ## Main Workflows
 
@@ -47,13 +151,27 @@ skill-loom service stop
 
 ### Register remote skill repositories
 
+These commands remain for compatibility; the default chain workflow does not
+use remote snapshots. Add skills to `LOOM_SKILLS_DIR` with your existing
+installation method instead.
+
+An explicitly bound repository-chain step still resolves only against its
+configured remote source, revision, and repository path when applying or
+publishing. If that exact snapshot is unavailable, the operation fails rather
+than substituting a same-named personal skill.
+
 `skill-loom catalog source add` reads `{"repository":"https://...","ref":"main"}`. Nothing is fetched until you run `catalog source refresh`, which pins a commit. Use `catalog snapshot page` and `catalog snapshot inspect` to review a pinned revision. Skill Loom never executes repository files while registering, refreshing, or browsing.
 
-### Discover candidate skills
+### Legacy: discover candidates and create a bundle
 
-Ask an agent: **"Use scenario-discovery to propose a workflow for reviewing our API changes."** The skill asks for the outcome and whether remote repositories are in scope. It expands the outcome into a few short capability queries, searches project and approved remote skills, and reranks the shortlist before inspecting it. `catalog project page` uses the derived capability index by default and returns ranked matches with bounded snippets, a content fingerprint, declared tags/tools/inputs/outputs, `metadataCoverage` counts, and the exact remote `sourceId`, `revision`, and `repositoryPath`; `retrieval.mode` shows whether the index or the fresh scan answered. Set `LOOM_CAPABILITY_INDEX=0` to force the scan. You can narrow a search by source, enabled state, tag, tool, input, or output, or by whether a skill declares any tag, tool, input, or output. The response includes `metadataFacets`, which lists every declared value in the filtered scope with its count, so you can discover a tool or tag before filtering by it. Metadata filters are applied only by the indexed path: if the fresh scan answers, a `METADATA_FILTER_UNSUPPORTED` warning tells the skill to verify those claims from the packages. Treat a snippet as a ranking signal only: the skill reads every selected package in full, as untrusted data without running its scripts, then proposes ordered steps and inputs and shows every package file for your review before anything is packaged. Its result is a reviewed `.loom.json` bundle or a draft; it never imports or runs one.
+The `scenario-discovery` bundle workflow is retained for existing portable
+artifacts, not for new chain authoring. It may inspect the current global
+catalog and produce a `.loom.json` bundle; it does not fetch remote skill
+repositories or change the default current-session workflow. For new work, use
+`loom-chain-workflow` to create or select a shared chain and run it in the
+active session.
 
-### Install a reviewed skill into a project
+### Legacy: install one reviewed catalog skill
 
 Ask an agent: **"Find a skill for writing release notes and add it to this project."** The `loom-skill-catalog` skill searches only registered sources, reads the complete package, and installs one candidate into `<project>/.agents/skills/`. It does not create a chain. For public registry discovery, use the separate `find-skills` skill; Skill Loom does not browse a marketplace.
 
@@ -89,7 +207,7 @@ In the editor you can:
 
 The editor cannot create chains, change a chain's harness, or add skill steps; use the CLI or skills for those. Skill Loom guarantees prompt order, not that a harness loads a named skill.
 
-### Share a chain and its skills
+### Legacy: share a chain as a bundle
 
 ```sh
 skill-loom bundle create --draft <id> --output /absolute/path/chain.loom.json
@@ -99,11 +217,11 @@ skill-loom bundle inspect --bundle /absolute/path/chain.loom.json
 
 A bundle contains the chain and the complete packages of every referenced skill (version 2 also one pinned native agent). Create never overwrites an existing file. Inspect is read-only, needs no service, and reports instructions, inputs, every package file, executable bits, and conflicts with an optional `--project`. Review the packages as untrusted content before sharing or importing.
 
-### Import a shared chain
+### Legacy: import a shared bundle
 
 `skill-loom bundle review` then `bundle import` (JSON on stdin) install a bundle into a project. Review reports the destination, existing-package conflicts, and a `reviewDigest`. Import needs that exact digest plus `"confirmed":true`; reusing an existing identical package needs `reuseSkills`, and differing contents need separate `differingReuseConfirmed`. Skills are installed under the project's `.agents/skills/` and an existing skill is never overwritten. Import does not start a run.
 
-### Run an exported chain inside your harness
+### Legacy: run an exported bundle
 
 Install the `loom-run-bundle` skill into the target project's `.agents/skills/` (build it with `npm run build:portable-skill` in a checkout, or copy `dist/skills/loom-run-bundle/`). In your harness session, invoke it with an absolute path to the `.loom.json` bundle. It inspects, asks you to review and confirm installation, then runs exactly one step at a time. If your host catalog already reports a global package for a bundled skill, the runner can reference that package instead of copying it; you must select it explicitly, and the helper re-fingerprints it before every step so an edited package blocks the run. See the [standalone skill guide](standalone-skill-guide.md) for the full procedure, recovery, and caveats.
 
@@ -123,7 +241,7 @@ Portable runs are supervised by default: confirm each step, then record its outc
 
 Preflight states which mechanism applies before a run starts.
 
-### Run a chain under a managed harness
+### Legacy: run a chain under a managed harness
 
 ```sh
 skill-loom run preflight        # JSON on stdin; no model call
@@ -147,7 +265,13 @@ The editor has a skip-to-content landmark, real headings and buttons, keyboard r
 
 ## Privacy and Data Handling
 
-Skill Loom is loopback-only and sends no telemetry, crash reports, or remote logs. Git network access happens only when you explicitly refresh a registered repository. Credentials are not stored or logged. Run input values stay in local files under the project's `.loom/` directory.
+Skill Loom sends no telemetry, crash reports, or remote logs. The default
+catalog and chain workflow do not fetch repositories; skill provisioning is
+owned by your existing host tools. Credentials are not stored or logged.
+Current-session input values and outcomes are not persisted by Loom. Legacy
+managed or portable runs may keep input values and bounded run data under
+`.loom/`; shared chain definitions and input defaults are stored in the Loom
+profile.
 
 ## Troubleshooting
 

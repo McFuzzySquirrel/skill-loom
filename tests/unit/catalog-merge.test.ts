@@ -86,6 +86,7 @@ function adapter(
     async discover(request): Promise<SkillDiscoveryResult> {
       calls.push({
         projectPath: request.projectPath,
+        globalSkillsDirectory: request.globalSkillsDirectory,
         extraDirectories: [...request.extraDirectories],
       });
       return { entries: entries.map((item) => ({ ...item })), warnings: [...warnings] };
@@ -310,7 +311,7 @@ describe('catalog merge', () => {
     const adapters = createDefaultCatalogAdapters();
 
     expect(adapters.map((item) => item.harness)).toEqual(['opencode', 'copilot']);
-    expect(adapters.map((item) => item.usesExtraDirectories)).toEqual([true, false]);
+    expect(adapters.map((item) => item.usesExtraDirectories)).toEqual([false, false]);
   });
 });
 
