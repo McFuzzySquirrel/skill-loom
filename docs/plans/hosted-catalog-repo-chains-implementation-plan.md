@@ -1,6 +1,6 @@
 # Hosted skill catalog and repo-first chains: implementation plan
 
-**Status:** P1 documentation and P2 selected-skill transfer are implemented; P3 repository chains and revision-checked publication are implemented, with core automated gates passing. The latest package-smoke reruns were blocked by an npm registry 404 for `fast-json-stringify@7.3.6`; the P1 target-host verification gate remains open; P4–P6 have not started.
+**Status:** P1 documentation, automated contract, and native Linux mount-permission checks are implemented; the live catalog sync/query/restore scenario remains open. P2 selected-skill transfer is complete. P3 repository chains and revision-checked publication are implemented; core automated gates and final local-tarball package smoke pass, with the real-host pilot still open. P4's offline repo-chain workflow is implemented and packaged, but active-session execution scenarios remain unrun. P5–P6 have not started.
 
 **Overview:** [One-page implementation overview](hosted-catalog-repo-chains-overview.html)
 
@@ -191,14 +191,14 @@ P1 and P2 may proceed in parallel after P0. P3 and P4 require the data/identity 
 
 **Checklist:**
 
-- [ ] Add a companion workflow mode that locates and parses the repo chain file, validates the supported schema, and shows the selected chain before starting.
-- [ ] Resolve each skill step against the target repo's `.agents/skills/`; report missing or ambiguous skill names and stop rather than substituting a global package silently.
-- [ ] Collect declared inputs, substitute only declared placeholders, and preserve the saved step order and instructions.
-- [ ] Execute steps in the already-active agent session only. Do not spawn a harness, imply that the chain's harness field switches the session, or persist run inputs/outcomes.
-- [ ] Retain the product truth that chain order is prompt order, not a guarantee that the host loads a named skill.
-- [ ] Treat chain and package text as untrusted data and retain the host's tool-approval rules.
-- [ ] Define clear behavior for interrupted sessions: re-read the chain and ask the user which step to resume; do not claim persisted recovery.
-- [ ] Add skill contract/manual scenarios for successful local run, missing skill, invalid chain, missing input, changed chain during run, and interrupted run.
+- [x] Add a companion workflow mode that locates and parses the repo chain file, validates the supported schema, and shows the selected chain before starting.
+- [x] Resolve each skill step against the target repo's `.agents/skills/`; report missing or ambiguous skill names and stop rather than substituting a global package silently.
+- [x] Collect declared inputs, substitute only declared placeholders, and preserve the saved step order and instructions.
+- [x] Execute steps in the already-active agent session only. Do not spawn a harness, imply that the chain's harness field switches the session, or persist run inputs/outcomes.
+- [x] Retain the product truth that chain order is prompt order, not a guarantee that the host loads a named skill.
+- [x] Treat chain and package text as untrusted data and retain the host's tool-approval rules.
+- [x] Define clear behavior for interrupted sessions: re-read the chain and ask the user which step to resume; do not claim persisted recovery.
+- [x] Add skill contract/manual scenarios for successful local run, missing skill, invalid chain, missing input, changed chain during run, and interrupted run.
 
 **Exit gate:** A remote client can disconnect from the hosted service and run a valid repo-local chain using its local `.agents/skills/`, with correct ordering and input handling; unsupported/missing states stop clearly and do not spawn another process.
 
@@ -344,10 +344,10 @@ Do not record credentials, private keys, tokens, or unnecessary tailnet hostname
 | Phase | Status | Acceptance criteria | Evidence / next action |
 | --- | --- | --- | --- |
 | P0 — Contract | Complete | All | ADR-0034 and `P0-CONTRACT-01`; user-approved decisions recorded. Live host validation is not part of P0 and remains unrun for P6. |
-| P1 — Host catalog operations | In progress — guide and automated contract complete; target-host check remains open | AC-01, AC-02, AC-10, AC-12 | `P1-DOC-AUTO-01` passed. Native Podman mount access, UID/GID, and SELinux checks remain not run. |
+| P1 — Host catalog operations | In progress — guide, automated contract, and native Linux mount-permission check complete; catalog sync/query/restore scenario remains open | AC-01, AC-02, AC-10, AC-12 | `P1-DOC-AUTO-01` and `P1-PODMAN-MOUNT-01`; Podman mount access and UID/GID passed on this Linux host. SELinux is disabled here; catalog update/query/rollback through the app remains unrun. |
 | P2 — Selected-skill transfer | Complete — automated control and bridge contract | AC-03, AC-04, AC-05, AC-09, AC-10 | `P2-CONTROL-BRIDGE-01` passed. Real second-machine SSH/Podman remains a P6 live gate. |
-| P3 — Repo chain and publish | Complete — automated contract; real-host pilot remains open | AC-08, AC-11 | `P3-CHAIN-PUBLISH-01`; real SSH/Podman and second-machine operation remain unrun. |
-| P4 — Local execution | Not started | AC-06, AC-07 | Not run. |
+| P3 — Repo chain and publish | Complete — automated contract and local package smoke; real-host pilot remains open | AC-08, AC-11 | `P3-CHAIN-PUBLISH-01` and `P3-PACKAGE-LOCAL-01`; real SSH/Podman and second-machine operation remain unrun. |
+| P4 — Local execution | In progress — workflow implemented and packaged; active-session execution scenarios remain unrun | AC-06, AC-07 | `P4-LOCAL-WORKFLOW-01` records the skill contract and automated gates. The manual successful-run and failure/recovery scenarios still need an active-session exercise. |
 | P5 — Remote workflow | Not started | AC-03, AC-06, AC-07, AC-08, AC-09 | Not run. |
 | P6 — Docs and rollout | Not started | AC-01–AC-12 | Product validation not run. |
 
@@ -366,6 +366,9 @@ Do not record credentials, private keys, tokens, or unnecessary tailnet hostname
 | P1P2-GATES-01 | 2026-11-13T23:52+02:00; uncommitted | P1/P2 / repository gates | Passed | Linux, Node v26.13.0, npm 11.20.0; `npm run check`; `npm run typecheck`; `npm test`; `npm run test:package`; `git diff --check`. | Docs integrity, server/web typechecks, package smoke, and diff check passed. Tests: 63 files passed, 5 skipped; 926 tests passed, 33 skipped. Package smoke: 543 files, 538 distribution files. | No real Podman container, host filesystem permission, SELinux, second-machine, or SSH interoperability check was run. |
 | P1P2-GATES-02 | 2026-11-14T00:00+02:00; uncommitted | P1/P2 / repository gates | Passed | Linux, Node v26.13.0, npm 11.20.0; `npm run build:portable-skill`; `npm run check`; `npm run typecheck`; `npm test`; `npm run test:package`; `git diff --check`. | Canonical bridge package built and mirrors synced. Documentation integrity, server/web typechecks, tests (63 files passed, 5 skipped; 926 passed, 33 skipped), package smoke (543 files, 538 distribution files), and diff check passed. | No container was started and no host-mounted package, target-host permissions, SELinux, second-machine, or SSH interoperability check was run. P1 remains open for its host-dependent exit gate; real remote pilot remains P6. |
 | P3-CHAIN-PUBLISH-01 | 2026-11-14T13:27+02:00; uncommitted | P3 / AC-08, AC-11 | Implemented; core automated gates passed; final package install blocked | Linux, Node v26.12.0, npm 11.20.0; `npm run build:portable-skill`; focused repo-chain/control tests; `npm run check`; `npm run typecheck`; `npm test`; `npm run test:package`; `git diff --check`. | Repo files and sidecars are versioned and atomic; host publish validates catalog references and requires the last hosted revision. Tests cover create/update, migrations, ID/name conflicts, missing/ambiguous skills, stale revisions, path privacy, interrupted transport, explicit link, and guarded republish. Full suite: 66 files passed, 5 skipped; 946 passed, 33 skipped. Final focused rerun: 4 files, 41 tests passed. Package smoke passed once before the last minor edits (633 files, 628 distribution files); two later attempts reached `npm exec` but could not install the tarball because the npm registry returned 404 for `fast-json-stringify@7.3.6`. | Real SSH/Podman publication, cross-machine behavior, and target-host filesystem behavior remain unrun; retain them as P6 live gates. The final package installation gate remains unverified pending registry availability. |
+| P1-PODMAN-MOUNT-01 | 2026-11-14T14:34+02:00; uncommitted | P1 / AC-01, AC-10 mount-permission evidence | Passed — native Linux rootless Podman mount check | Linux, Podman 5.7.0; ephemeral `node:24-bookworm-slim` container with `--userns=keep-id:uid=1000,gid=1000 --user 1000:1000`, the configured `$HOME/.agents/skills` bind-mounted read-only and a temporary project bind-mounted writable; `podman info --format '{{.Host.Security.SELinuxEnabled}}'`. | All 68 catalog `SKILL.md` files were readable as UID 1000; catalog write failed with `EROFS`; project write/read succeeded. Podman reports SELinux disabled; `getenforce` and the host SELinux enforce file were unavailable. | Native Linux UID/GID and read-only mount behavior are verified for this host. SELinux labeling and the catalog add/query/update/restore scenario remain unrun. |
+| P3-PACKAGE-LOCAL-01 | 2026-11-14T14:40+02:00; uncommitted | P3 / package smoke | Passed — local tarball, no publication | Linux, Node v26.12.0, npm 11.20.0; `npm run test:package`. | The script ran `npm pack` from this worktree and installed/smoke-tested its local tarball; package smoke passed with 633 files, 628 distribution files. No published version was used. | No follow-up for package smoke. Real SSH/Podman publication remains a P6 live gate. |
+| P4-LOCAL-WORKFLOW-01 | 2026-11-14T14:40+02:00; uncommitted | P4 / skill contract; runtime AC not yet exercised | Passed — implementation and automated repository gates | Linux, Node v26.12.0, npm 11.20.0; canonical `loom-chain-workflow` updated; `npm run check`; `npm run typecheck`; `npm test`; `npm run test:package`; `git diff --check`. | Added the offline repo-chain flow, strict current-schema checks, local-only skill resolution, preview/input/confirmation behavior, active-session ordering, changed-file/interruption handling, and six manual scenarios. Checks passed; full suite: 66 files passed, 5 skipped; 946 tests passed, 33 skipped. Local package smoke passed (633 files, 628 distribution files). | No active-session chain run was performed because the workflow requires a user to select and confirm a specific chain. AC-06/AC-07 and the manual scenarios remain open for a target-session exercise. |
 
 ### Entry template for implementation runs
 

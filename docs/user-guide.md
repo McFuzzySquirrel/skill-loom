@@ -115,6 +115,24 @@ The chain's harness and session-mode fields do not switch the active session.
 Skill Loom guarantees saved prompt order only; the host may not load a named
 skill.
 
+### Run a repository chain locally
+
+Use `loom-chain-workflow` to run a tracked chain from `chains/<id>.json` in the
+current repository. This path is local and works after disconnecting from the
+hosted service; it does not call Skill Loom or Podman. The chain's skills must
+already be present under the repository's `.agents/skills/`.
+
+If the repository has multiple chains, select one explicitly. The workflow
+validates and previews the selected definition, resolves skill names only from
+the repository's local packages, collects declared inputs, and asks for
+confirmation before following the steps in order in the current session.
+Missing or ambiguous skills, invalid chains, unsupported versions, and
+unresolved required inputs stop the run. The harness and session-mode fields do
+not change the active session, and no run record, inputs, or outcomes are
+persisted. If the chain changes during execution, the workflow stops for a new
+review; after an interruption, it rereads the chain and asks which step to
+resume.
+
 ## Main Workflows
 
 ### Start the service

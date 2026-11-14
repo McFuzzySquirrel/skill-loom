@@ -8,6 +8,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Added
 
+- An offline `loom-chain-workflow` path to validate and run a tracked repository chain from its local `.agents/skills/` in the active session, with explicit chain selection, input collection, and change/interruption handling.
 - Repo-local chain authoring in tracked `chains/<id>.json` files, versioned hosted-publication sidecars, and explicit revision-checked publish, compare, recovery, and republish commands through the SSH-backed Podman bridge.
 - A persistent Linux host deployment manager using rootless Podman Quadlets, with install, lifecycle, update/rollback, and stopped-volume backup commands; it publishes no HTTP port by default and supports trusted remote clients over SSH.
 - A Podman deployment for Linux, macOS, and Windows hosts, with persistent config, global-skill, and project mounts, localhost-only default publishing, private-network mode, and a cross-platform plan command.
