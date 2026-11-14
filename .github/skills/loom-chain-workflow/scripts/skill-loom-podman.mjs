@@ -338,7 +338,13 @@ export async function runPodmanCli(
         projectId: request.projectId,
         repoChainId: request.chainId,
         chain: repo.chain,
-        ...(publication === null ? {} : { publication }),
+        ...(publication === null ? {} : {
+          publication: {
+            repoChainId: publication.repoChainId,
+            hostedChainId: publication.hostedChainId,
+            hostedRevision: publication.hostedRevision,
+          },
+        }),
       };
       const published = await requestHostedChain(
         spawn,

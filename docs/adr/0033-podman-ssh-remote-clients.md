@@ -31,7 +31,7 @@ status: Accepted
 - **Check:** `npm run check && npm run typecheck && npm test && git diff --check`.
 - **Check:** `npm run test:package` and `npm run podman:plan`.
 - **Expected:** The packaged bridge selects the configured Podman connection, invokes the in-container CLI without a shell, and client-local apply writes only validated, selected global packages without overwriting existing skills or transmitting the client path.
-- **Manual check:** A second-machine SSH connection to a real hosted Podman service has not yet been run; this limitation is tracked in [known gaps](../current-gaps.md#execution-gates).
+- **Manual check:** Passed for one trusted tailnet client connected to an Ubuntu 26.04 ARM64 host running rootless Podman 5.7.0; catalog copy and repo-chain create/update were exercised. SELinux was disabled, and other platforms plus host reboot/backup recovery remain unverified. See the [P6 pilot evidence](../plans/hosted-catalog-repo-chains-implementation-plan.md#evidence-recorded-while-planning-and-executing).
 
 ## Decision Drivers
 

@@ -188,7 +188,11 @@ describe('Portable Podman CLI bridge', () => {
     );
 
     expect(exitCode).toBe(1);
-    expect(JSON.parse(remoteInput)).toMatchObject({ publication: previous });
+    expect(JSON.parse(remoteInput).publication).toEqual({
+      repoChainId: previous.repoChainId,
+      hostedChainId: previous.hostedChainId,
+      hostedRevision: previous.hostedRevision,
+    });
     expect(JSON.parse(await readFile(sidecar, 'utf8'))).toEqual(previous);
     expect(output.errors()).toContain('"code":"CHAIN_STALE"');
   });
@@ -323,9 +327,10 @@ describe('Portable Podman CLI bridge', () => {
     expect(exitCode).toBe(0);
     expect(remoteCalls).toBe(2);
     expect(JSON.parse(remoteInputs[0]!)).toEqual({ projectId: 'host-project', chainId: 'hosted-chain-1' });
-    expect(JSON.parse(remoteInputs[1]!)).toMatchObject({
+    expect(JSON.parse(remoteInputs[1]!).publication).toEqual({
       repoChainId: chain.id,
-      publication: { hostedChainId: 'hosted-chain-1', hostedRevision: 'b'.repeat(64) },
+      hostedChainId: 'hosted-chain-1',
+      hostedRevision: 'b'.repeat(64),
     });
     expect(remoteInputs.join('')).not.toContain(projectPath);
     expect(JSON.parse(await readFile(sidecar, 'utf8'))).toMatchObject({ hostedRevision: 'c'.repeat(64) });

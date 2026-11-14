@@ -1,6 +1,6 @@
 ---
 name: loom-chain-workflow
-description: Search host-global skills, create or select shared or repository-local chains, apply skills, and run ordered steps in the current agent session.
+description: Search host-global skills, copy selected packages into a repository, create shared or repository-local chains, and run ordered steps in the current agent session.
 ---
 
 # Create or run a Skill Loom chain
@@ -121,6 +121,117 @@ Manual contract scenarios for this path:
   fresh review of the changed definition.
 - **Interrupted session:** reread and validate the chain, then ask which step
   to resume; do not assert that any step outcome was saved.
+
+### Author a repo-first chain from a hosted catalog
+
+Use this path when the user wants to select host-catalog skills, copy them into
+the current repository, author and run that repository's chain, and optionally
+publish a copy to the hosted shared library. The repository chain and its local
+`.agents/skills/` packages remain canonical. A catalog query or publication is
+not required to run an already-local repository chain.
+
+1. **Choose the mode and connection.** For an offline run of an existing local
+   chain, use the repository-local procedure above and do not contact a host.
+   For hosted catalog discovery or publication, use `skill-loom-podman` and
+   require `LOOM_PODMAN_CONNECTION` to name the user's selected, configured
+   SSH-backed Podman connection. Do not invoke the bridge for a remote workflow
+   while that setting is absent or ambiguous. Use that same bridge for every
+   hosted request. If it fails, stop and report the failure; never retry through
+   default/local Podman or a different host.
+2. **Select the host project.** Run `<bridge> project list` and ask the user to
+   select the registered host project. If the selected Podman deployment has
+   no registered project, register only its mounted `/workspace` using
+   `<bridge> project open` with `{"path":"/workspace"}`. Do not register or
+   send the remote client's local project path to the host. Keep the selected
+   host project id for catalog and publication operations.
+3. **Search and select exact catalog entries.** Search the host catalog with
+   `<bridge> catalog project page`, using one to three short capability queries
+   with the selected host project id, active harness, and `sources:["personal"]`.
+   Follow entry and warning cursors, surface warnings, and show candidate names
+   and exact entry ids. For each selected candidate, obtain its current
+   fingerprint with `<bridge> catalog skill review` using JSON on stdin:
+   `{"projectId":"...","harness":"copilot","candidate":{"id":"...","source":"personal"}}`.
+   Use the returned `candidate.fingerprint`; a catalog page may omit it. Show
+   the exact id, name, fingerprint, and returned inventory before copying. Do
+   not select by display name alone or reconstruct a fingerprint. The operator
+   provisions this catalog, so do not fetch repositories or silently refresh
+   its source.
+4. **Copy selected packages to the client repository.** After the user confirms
+   the exact selections and local destination, run:
+
+   ```text
+   skill-loom-podman catalog skills copy-local --project <absolute-local-repo> \
+     --project-id <host-project-id> --harness <harness> \
+     --selection <entry-id> <fingerprint> [--selection <entry-id> <fingerprint> ...]
+   ```
+
+   The absolute path is consumed by the client-side helper; it is not included
+   in the host request. The helper validates the complete bounded manifest
+   before writing under `<repo>/.agents/skills/`, refuses existing packages,
+   and does not execute package files. If any package conflicts, validation
+   fails, or the result reports partial success, stop and show the exact
+   outcome; do not retry by overwriting or changing the selection implicitly.
+   This is also the complete **standalone-skill** path: the user may stop after
+   the selected packages are copied, without creating or publishing a chain.
+5. **Author and validate the repository chain.** Propose the ordered scenario
+   from the user's requested outcome and the selected local packages. Confirm
+   the chain definition before saving it in `chains/<chain-id>.json`; do not
+   create a shared-library chain as a substitute. Keep the repo chain id stable
+   across edits, preserve `createdAt`, and update `updatedAt`. Use
+   `skill-loom chain repo create`, `update`, or `validate` when that local CLI
+   is available; these commands do not start a service. If it is unavailable,
+   create the file in the current session, then check the complete strict
+   version-3 schema, unique step and input ids, declared placeholders, exact
+   local skill resolution, and timestamps before claiming it is valid. Write a
+   new chain without replacing an existing id; use same-directory temporary
+   file plus rename for file updates. Keep hosted identity only in
+   `chains/<chain-id>.publish.json`, not in the chain document.
+6. **Run locally.** Follow “Run a repository-local chain offline” above. Resolve
+   skills only from the selected repo's `.agents/skills/`, preview all ordered
+   steps and inputs, collect missing required values, and ask for confirmation.
+   Once the packages and chain are local, execution needs no hosted service or
+   Podman connection and uses only the already-active session.
+7. **Offer publication separately.** Publication is optional and must be an
+   explicit user decision after local validation. Show the selected host
+   project/library, repo chain name and id, and whether this is a first publish
+   or update. Before updating, read the sidecar mapping and query the exact
+   hosted id with `<bridge> chain project show`; compare its current revision
+   with the mapped revision and show both. Before a first publish, list the
+   hosted library and call out any same-name or id collision. Ask for explicit
+   confirmation before mutation. If a collision exists, stop and resolve it
+   explicitly; do not rename, copy, or overwrite implicitly. Then run
+   `skill-loom-podman chain repo publish --project <absolute-local-repo>
+   --project-id <host-project-id> --chain-id <chain-id>`. The helper sends chain
+   content and host context, never the client path. Report the resulting hosted
+   id and revision and the local sidecar update.
+8. **Stop on conflicts and recover explicitly.** A stale update must preserve
+   both copies; show expected/current revisions and compare the two definitions
+   without retrying. Republish only after the user reviews both copies and
+   explicitly confirms the exact currently observed hosted revision, using
+   `skill-loom-podman chain repo republish` with
+   `--confirm-hosted-revision <sha256>`. If a first publish may have completed
+   but its response was lost, inspect the hosted library and compare the exact
+   chain before using `chain repo link` to recover the mapping; never publish
+   again blindly. If the mapping is divergent or the hosted chain differs,
+   stop for an explicit comparison and confirmation.
+
+Manual contract scenarios for this path:
+
+- **Mode and remote connection:** choose offline local execution without a
+  service call, or hosted mode with the explicitly selected SSH connection.
+  When the selected connection fails, stop without invoking local Podman or
+  changing the local project.
+- **Standalone selected-skill copy:** choose exact catalog ids and
+  fingerprints, copy only those packages into a disposable repo without making
+  a chain, and verify an existing package remains unchanged on conflict.
+- **Repo-first chain:** copy a selected package, create and validate a local
+  chain, then run it after disconnecting from the hosted service; verify the
+  chain remains the repo source of truth.
+- **Explicit publish and update:** confirm the target before first publish and
+  update; verify the sidecar revision advances only after success, while a
+  stale conflict preserves both records and never triggers an automatic retry.
+
+### Use a shared-library chain
 
 1. Select the connection before running any service command:
    - For a local service, use `skill-loom`.

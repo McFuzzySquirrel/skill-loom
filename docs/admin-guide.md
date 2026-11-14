@@ -341,9 +341,13 @@ or conflicting names. Revision conflicts preserve the repo file, hosted chain,
 and sidecar; compare both copies before using the explicit `republish` flow.
 See the [repository-chain authoring and recovery procedure](standalone-skill-guide.md#create-and-publish-a-repository-chain).
 
-The bridge contract and local export are covered by automated tests. A
-second-machine connection to a real hosted Podman service has not yet been
-live-tested; track this as unverified in the [known gaps](current-gaps.md#execution-gates).
+The bridge contract and local export are covered by automated tests. A live
+second-machine journey passed with a trusted tailnet client and a dedicated
+Ubuntu 26.04 ARM64 host running rootless Podman 5.7.0: catalog query/review,
+selected-skill copy, active-session local chain execution, first publish, and
+revision-checked update. SELinux was disabled. This does not verify other
+client/host platforms, enforcing SELinux, reboot persistence, or a backup/restore
+cycle; see [known gaps](current-gaps.md#execution-gates).
 
 The bridge can also copy exact reviewed catalog selections into a remote
 client's local repository before a chain exists. The local project path stays

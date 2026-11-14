@@ -214,8 +214,10 @@ it up with the [admin guide's Podman volume procedure](admin-guide.md#with-podma
 ## Scope and verification status
 
 This is an operator-controlled procedure. There is no Loom-managed fetcher or
-scheduled sync. The Podman plan and automated tests verify the intended
-read-only mount contract, but a real second-machine SSH/Podman session and
-target-host UID/GID or SELinux behavior still require the approved Linux pilot.
-Record that evidence in the hosted-catalog implementation plan; do not infer it
-from this guide.
+scheduled sync. Native Linux UID/GID and read-only mount behavior, plus a
+disposable app-level catalog add/update/restore scenario, have been verified on
+this host. A separate Ubuntu 26.04 ARM64 host with rootless Podman 5.7.0 also
+passed the approved SSH/Podman catalog and repo-chain pilot over a trusted
+tailnet connection. SELinux enforcement, reboot persistence, and backup/restore
+remain unverified; see the hosted-catalog implementation plan for exact
+evidence and limits.

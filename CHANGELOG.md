@@ -49,6 +49,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Changed
 
+- The repo-first workflow now obtains the selected package fingerprint from `catalog skill review` when discovery omits it.
 - The offline repository-chain workflow distinguishes an unsupported local CLI validator from invalid chain data and explicitly recognizes the allowed top-level `automaticPermissionOptIn` field.
 - The persistent-host guide now walks from Linux account and rootless Podman socket setup through Quadlet installation and remote-client registration, and identifies Git as a host-install prerequisite.
 - The host-global `~/.agents/skills/` directory, configurable with `LOOM_SKILLS_DIR`, is now the sole source for the default authoring catalog. External installation tools own provisioning and updates; remote snapshots and bundles remain compatibility surfaces rather than the default workflow.
@@ -73,6 +74,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Fixed
 
+- The Podman chain-publish bridge now omits the sidecar version wrapper from strict hosted update requests, so confirmed repository-chain updates pass control validation.
 - Remote source refresh now keeps a package whose `SKILL.md` has malformed frontmatter, using the directory-name fallback instead of aborting the whole snapshot with `CONTROL_INTERNAL_ERROR`.
 - The chain editor now blocks step, input, and reorder mutations while a save is in flight and keeps any newer edit if one still arrives, adopting only the server's identity fields instead of silently replacing newer work.
 - `skill-loom edit` now asks the running profile owner for its actual HTTP endpoint instead of guessing from `LOOM_PORT`; it fails with a clear message when the endpoint is unavailable.
