@@ -331,6 +331,16 @@ files, and 20 MiB decoded content. Remote clients cannot provision or update
 the host-global skills directory; maintain that read-only mount through the
 host's existing package-management process.
 
+Remote agents can author chains in their client repository's tracked
+`chains/<id>.json` files with the local `skill-loom chain repo` commands, then
+publish explicitly through `skill-loom-podman chain repo publish`. The bridge
+transmits the host project id, validated chain content, and optional hosted
+id/revision mapping; it never sends the local repository path. The host checks
+skill references against its current catalog and rejects missing, ambiguous,
+or conflicting names. Revision conflicts preserve the repo file, hosted chain,
+and sidecar; compare both copies before using the explicit `republish` flow.
+See the [repository-chain authoring and recovery procedure](standalone-skill-guide.md#create-and-publish-a-repository-chain).
+
 The bridge contract and local export are covered by automated tests. A
 second-machine connection to a real hosted Podman service has not yet been
 live-tested; track this as unverified in the [known gaps](current-gaps.md#execution-gates).

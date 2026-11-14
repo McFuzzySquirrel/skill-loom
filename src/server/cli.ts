@@ -10,6 +10,7 @@ import { runCatalogCli } from './catalog/cli.js';
 import { callControl, ControlError } from './control.js';
 import { WindowsControlSecurityError } from './windows-control.js';
 import { runControlCli } from './control-cli.js';
+import { runRepoChainCli } from './repo-chains/cli.js';
 import { createBundleCli } from './bundle-cli.js';
 import type { ServerSettings } from './app.js';
 import { resolveConfigDir } from './config/store.js';
@@ -78,6 +79,7 @@ Usage:
   skill-loom edit (--draft <id> | --project <id> --chain <id>) [--no-open] [--port <number>] [--config-dir <path>]
   skill-loom project --help
   skill-loom chain --help
+  skill-loom chain repo --help
   skill-loom run --help
   skill-loom workspace --help
 
@@ -271,6 +273,13 @@ export async function runCli(
   }
   if (argv[0] === 'catalog') {
     return runCatalogCli(argv.slice(1), { stdout, stderr, env, stdin: dependencies.stdin ?? process.stdin });
+  }
+  if (argv[0] === 'chain' && argv[1] === 'repo') {
+    return runRepoChainCli(argv, {
+      stdout,
+      stderr,
+      stdin: dependencies.stdin ?? process.stdin,
+    });
   }
   if (argv[0] === 'project' || argv[0] === 'chain' ||
       (argv[0] === 'bundle' && (argv[1] === 'review' || argv[1] === 'import')) ||

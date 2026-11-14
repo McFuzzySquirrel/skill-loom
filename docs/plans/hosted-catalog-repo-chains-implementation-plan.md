@@ -1,6 +1,6 @@
 # Hosted skill catalog and repo-first chains: implementation plan
 
-**Status:** In progress; P1 documentation and P2 selected-skill transfer are implemented. The P1 target-host verification gate remains open; P3–P6 have not started.
+**Status:** P1 documentation and P2 selected-skill transfer are implemented; P3 repository chains and revision-checked publication are implemented, with core automated gates passing. The latest package-smoke reruns were blocked by an npm registry 404 for `fast-json-stringify@7.3.6`; the P1 target-host verification gate remains open; P4–P6 have not started.
 
 **Overview:** [One-page implementation overview](hosted-catalog-repo-chains-overview.html)
 
@@ -165,15 +165,15 @@ P1 and P2 may proceed in parallel after P0. P3 and P4 require the data/identity 
 
 **Checklist:**
 
-- [ ] Implement local chain create/read/update/validate behavior using the existing strict versioned chain model where compatible; keep writes atomic and preserve unknown-version rejection.
-- [ ] Choose and document a repo path that does not accidentally cause the host's legacy `.loom/chains/` importer to duplicate or reinterpret an authored source.
-- [ ] Define identity mapping between a repo chain and hosted chain, including initial publish, re-publish, rename, copy, and duplicate-name handling.
-- [ ] Add a client-side publish operation that reads the local file locally and sends validated structured content through the existing SSH Podman control path. Do not send the local file path to the host.
-- [ ] On first publish, create the shared record and return a stable hosted ID/revision to the client. On updates, require the last observed revision and return a conflict with enough information to reload and compare.
-- [ ] Preserve the repo as canonical. Do not silently pull host edits into the repo or let the editor mutate the published copy without warning about divergence.
-- [ ] Resolve how publication state is retained without adding unsupported fields to the strict chain document; use the approved sidecar or explicit republish protocol from P0.
-- [ ] Validate skill references against the hosted catalog at publication or define an explicit unresolved-reference behavior. Do not claim a chain is transferable if its packages are absent or ambiguous.
-- [ ] Add tests for valid/invalid local files, supported chain-version migration, stable identity, first publication, update, stale revision, duplicate ID/name, missing skill, and interrupted/failed transport.
+- [x] Implement local chain create/read/update/validate behavior using the existing strict versioned chain model; writes use atomic replacement and unknown versions remain rejected.
+- [x] Store repo sources in tracked `chains/<chain-id>.json`, separate from the host's legacy `.loom/chains/` importer.
+- [x] Keep stable repo identity through edits and renames; copies get a new ID and no inherited mapping. Unique-name conflicts are explicit.
+- [x] Add client-side publish/update through the SSH-backed Podman control path; the request contains chain content and registered host context, never the client path.
+- [x] First publish creates the shared record and returns its hosted ID/revision. Updates use the sidecar revision; stale conflicts preserve both copies and return expected/current revisions.
+- [x] Keep the repo chain canonical. Comparison and recovery use explicit hosted IDs; divergent mappings require explicit confirmation, and republish requires the exact currently observed hosted revision.
+- [x] Store the versioned mapping in `chains/<chain-id>.publish.json`, not in the strict chain document.
+- [x] Resolve unbound skills to exactly one host-global catalog entry and bound skills to their exact source id, revision, and repository path; missing or ambiguous references block publication.
+- [x] Add tests for local validation and migration, identity and copy behavior, publication/update, stale revision, duplicate ID/name, missing/ambiguous skills, sidecar failures, and interrupted transport recovery.
 
 **Exit gate:** A chain authored in a repo can be validated and published. The shared library lists and reads it. A second publish updates only the matching chain with the expected revision; stale revisions and collisions preserve both copies and explain recovery.
 
@@ -346,7 +346,7 @@ Do not record credentials, private keys, tokens, or unnecessary tailnet hostname
 | P0 — Contract | Complete | All | ADR-0034 and `P0-CONTRACT-01`; user-approved decisions recorded. Live host validation is not part of P0 and remains unrun for P6. |
 | P1 — Host catalog operations | In progress — guide and automated contract complete; target-host check remains open | AC-01, AC-02, AC-10, AC-12 | `P1-DOC-AUTO-01` passed. Native Podman mount access, UID/GID, and SELinux checks remain not run. |
 | P2 — Selected-skill transfer | Complete — automated control and bridge contract | AC-03, AC-04, AC-05, AC-09, AC-10 | `P2-CONTROL-BRIDGE-01` passed. Real second-machine SSH/Podman remains a P6 live gate. |
-| P3 — Repo chain and publish | Not started | AC-08, AC-11 | Not run. |
+| P3 — Repo chain and publish | Complete — automated contract; real-host pilot remains open | AC-08, AC-11 | `P3-CHAIN-PUBLISH-01`; real SSH/Podman and second-machine operation remain unrun. |
 | P4 — Local execution | Not started | AC-06, AC-07 | Not run. |
 | P5 — Remote workflow | Not started | AC-03, AC-06, AC-07, AC-08, AC-09 | Not run. |
 | P6 — Docs and rollout | Not started | AC-01–AC-12 | Product validation not run. |
@@ -365,6 +365,7 @@ Do not record credentials, private keys, tokens, or unnecessary tailnet hostname
 | P2-CONTROL-BRIDGE-01 | 2026-11-13T23:55+02:00; uncommitted | P2 / AC-03, AC-04, AC-05, AC-09, AC-10 | Passed — automated control and bridge contract | Linux, Node v26.13.0, npm 11.20.0; `npm test -- --run tests/unit/catalog-install.test.ts tests/unit/podman.test.ts tests/unit/podman-cli.test.ts tests/integration/control.test.ts`. | 4 focused files passed, 41 tests. Integration exercised catalog query/review and `catalog skill export` with exact ID/fingerprint, rejects changed identity and a client path, and exports no unselected duplicate-name entry. Bridge tests exercised the selected SSH flag, client-only path, complete validation, executable mode, no-overwrite/symlink conflicts, limits, and partial-success report. | Fake bridge/control tests are not a real SSH/Podman session. Existing chain-based `apply-local` remains covered by the full suite. |
 | P1P2-GATES-01 | 2026-11-13T23:52+02:00; uncommitted | P1/P2 / repository gates | Passed | Linux, Node v26.13.0, npm 11.20.0; `npm run check`; `npm run typecheck`; `npm test`; `npm run test:package`; `git diff --check`. | Docs integrity, server/web typechecks, package smoke, and diff check passed. Tests: 63 files passed, 5 skipped; 926 tests passed, 33 skipped. Package smoke: 543 files, 538 distribution files. | No real Podman container, host filesystem permission, SELinux, second-machine, or SSH interoperability check was run. |
 | P1P2-GATES-02 | 2026-11-14T00:00+02:00; uncommitted | P1/P2 / repository gates | Passed | Linux, Node v26.13.0, npm 11.20.0; `npm run build:portable-skill`; `npm run check`; `npm run typecheck`; `npm test`; `npm run test:package`; `git diff --check`. | Canonical bridge package built and mirrors synced. Documentation integrity, server/web typechecks, tests (63 files passed, 5 skipped; 926 passed, 33 skipped), package smoke (543 files, 538 distribution files), and diff check passed. | No container was started and no host-mounted package, target-host permissions, SELinux, second-machine, or SSH interoperability check was run. P1 remains open for its host-dependent exit gate; real remote pilot remains P6. |
+| P3-CHAIN-PUBLISH-01 | 2026-11-14T13:27+02:00; uncommitted | P3 / AC-08, AC-11 | Implemented; core automated gates passed; final package install blocked | Linux, Node v26.12.0, npm 11.20.0; `npm run build:portable-skill`; focused repo-chain/control tests; `npm run check`; `npm run typecheck`; `npm test`; `npm run test:package`; `git diff --check`. | Repo files and sidecars are versioned and atomic; host publish validates catalog references and requires the last hosted revision. Tests cover create/update, migrations, ID/name conflicts, missing/ambiguous skills, stale revisions, path privacy, interrupted transport, explicit link, and guarded republish. Full suite: 66 files passed, 5 skipped; 946 passed, 33 skipped. Final focused rerun: 4 files, 41 tests passed. Package smoke passed once before the last minor edits (633 files, 628 distribution files); two later attempts reached `npm exec` but could not install the tarball because the npm registry returned 404 for `fast-json-stringify@7.3.6`. | Real SSH/Podman publication, cross-machine behavior, and target-host filesystem behavior remain unrun; retain them as P6 live gates. The final package installation gate remains unverified pending registry availability. |
 
 ### Entry template for implementation runs
 

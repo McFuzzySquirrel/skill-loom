@@ -95,7 +95,11 @@ function assertRevision(existing: Chain, expectedRevision: string | undefined): 
     throw new ChainServiceError(
       CHAIN_SERVICE_ERROR_CODES.STALE,
       'The chain changed since it was loaded. Reload it before applying this change.',
-      { chainId: existing.id },
+      {
+        chainId: existing.id,
+        expectedRevision,
+        actualRevision: chainRevision(existing),
+      },
     );
   }
 }

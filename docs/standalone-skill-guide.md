@@ -135,6 +135,89 @@ package was incomplete. Resolve that state explicitly before retrying. Host
 catalog updates do not replace these project-local copies. Existing
 `chain project apply-local` remains the chain-based alternative.
 
+## Create and Publish a Repository Chain
+
+Repo-authored chains live in the tracked top-level `chains/` directory, not
+`.loom/chains/` (which remains the legacy import location). Use the local
+`skill-loom` CLI to create, read, validate, update, and copy these files; the
+hosted bridge alone provides publication, not local authoring. Create and
+update accept a draft as JSON on stdin:
+
+```sh
+skill-loom chain repo create --repo /absolute/path/to/local/repo <<'JSON'
+{"draft":{"name":"Review changes","harness":"opencode","sessionMode":"shared","steps":[{"id":"step-1","kind":"skill","skillName":"review","instruction":"Review the requested changes."}],"inputs":[]}}
+JSON
+
+skill-loom chain repo list --repo /absolute/path/to/local/repo
+skill-loom chain repo show --repo /absolute/path/to/local/repo --id <repo-chain-id>
+skill-loom chain repo validate --repo /absolute/path/to/local/repo --id <repo-chain-id>
+```
+
+Create, show, and update return a revision; use the last observed revision when
+updating. Create and update enforce unique names. `copy` assigns a new repo ID
+and does not copy a publication mapping. Model validation does not prove that
+referenced skills exist; publication checks skill names against the host
+catalog. An unbound
+skill name must resolve to exactly one host-global entry. A remote-bound skill
+must match the exact source id, revision, and repository path.
+
+Publish explicitly from the client with the same SSH-backed bridge:
+
+```sh
+skill-loom-podman chain repo publish \
+  --project /absolute/path/to/local/repo \
+  --project-id <host-project-id> \
+  --chain-id <repo-chain-id>
+```
+
+The bridge reads the chain and sidecar on the client and sends only the
+registered host project id, repo chain id, chain content, and (for updates) the
+sidecar's hosted chain id/revision. The local path is never sent. First publish
+creates one shared-library copy; later publishes update only that mapped id
+using the last observed revision. Rename the repo chain without changing its
+id so the sidecar remains attached. The sidecar at
+`chains/<repo-chain-id>.publish.json` is versioned and should be committed with
+the chain. Published chain JSON is limited to 60 KiB by the hosted control
+request size.
+
+On `CHAIN_STALE`, neither copy nor the sidecar is changed. Compare
+`skill-loom chain repo show` with the hosted record:
+
+```sh
+printf '%s' '{"projectId":"<host-project-id>","chainId":"<hosted-chain-id>"}' \
+  | skill-loom-podman chain project show
+```
+
+To intentionally replace the hosted copy after comparing it, provide the exact
+revision you observed:
+
+```sh
+skill-loom-podman chain repo republish \
+  --project /absolute/path/to/local/repo \
+  --project-id <host-project-id> \
+  --chain-id <repo-chain-id> \
+  --confirm-hosted-revision <observed-sha256>
+```
+
+The bridge re-reads the hosted chain and refuses if that revision changed. If a
+first publish may have completed but its response was lost, inspect the shared
+library and recover by exact hosted id:
+
+```sh
+skill-loom-podman chain repo link \
+  --project /absolute/path/to/local/repo \
+  --project-id <host-project-id> \
+  --chain-id <repo-chain-id> \
+  --hosted-chain-id <hosted-chain-id>
+```
+
+`link` records the mapping only when the two chain contents match. If they
+differ, compare both copies; repeat with `--confirm-divergence` only when the
+selected hosted id is intentional. A successful link preserves both contents
+and records the current hosted revision; it does not merge them. A failed
+local sidecar write reports the hosted id and revision for the same recovery
+procedure. Host name collisions never auto-adopt another shared chain.
+
 ## Workflow
 
 ### 1. Discover and package (optional)

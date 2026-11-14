@@ -1,6 +1,6 @@
 # Skill Loom User Guide
 
-This guide is for the person using Skill Loom to design shared skill workflows ("chains"), apply them to projects, and run them in the current agent session. Skill Loom is driven by its **CLI** and companion **Agent Skills**; its only web screen is a visual **chain editor**. Installation and machine administration are in the [administrator guide](admin-guide.md). For standalone hosted-skill copies and the compatibility bundle procedure, see the [standalone skill guide](standalone-skill-guide.md).
+This guide is for the person using Skill Loom to design shared skill workflows ("chains"), apply them to projects, and run them in the current agent session. Skill Loom is driven by its **CLI** and companion **Agent Skills**; its only web screen is a visual **chain editor**. Installation and machine administration are in the [administrator guide](admin-guide.md). For repository-canonical chains, hosted-skill copies, and the compatibility bundle procedure, see the [standalone skill guide](standalone-skill-guide.md).
 
 ## Who This Is For
 
@@ -21,6 +21,7 @@ On Windows, service startup also requires a protected private profile on a local
 |---|---|
 | Find skills | Search the host-global `~/.agents/skills/` catalog with `skill-loom catalog` or the current host |
 | Create, inspect, or edit shared chains | `skill-loom chain ...` and `skill-loom edit` |
+| Keep a chain canonical in a repository and publish it explicitly | `skill-loom chain repo ...` and `skill-loom-podman chain repo publish` |
 | Copy required skills into a registered host project | `skill-loom chain project apply` |
 | Copy required skills into a remote client's local project | `skill-loom-podman chain project apply-local` |
 | Copy selected host skills before a chain exists | `skill-loom-podman catalog skills copy-local` |
@@ -28,7 +29,7 @@ On Windows, service startup also requires a protected private profile on a local
 | Change step order, instructions, or inputs visually | `skill-loom edit` |
 | Use the legacy bundle-based workflow | `skill-loom bundle ...` and `loom-run-bundle` (compatibility only) |
 
-Run `skill-loom --help` and `skill-loom chain project --help` for the exact commands of the installed version. Structured input is passed as JSON on stdin; every command prints a versioned JSON envelope.
+Run `skill-loom --help`, `skill-loom chain project --help`, and `skill-loom chain repo --help` for the exact commands of the installed version. Structured input is passed as JSON on stdin; every command prints a versioned JSON envelope.
 
 ## Use a Hosted Podman Service Remotely
 
@@ -70,6 +71,14 @@ the referenced global skill packages, and writes them into the client's local
 `.agents/skills/` directory without overwriting existing packages. Skill
 package provisioning remains an operator/host maintenance task; remote clients
 cannot modify the hosted global skills root. See the [administrator guide](admin-guide.md#remote-client-access).
+
+For repo-first authoring, create and edit the canonical chain under the client's
+tracked `chains/` directory with `skill-loom chain repo`. Publish or update its
+shared-library copy explicitly with `skill-loom-podman chain repo publish`;
+the bridge never sends the client path. The
+[standalone skill guide](standalone-skill-guide.md#create-and-publish-a-repository-chain)
+covers local commands, the publication sidecar, revision conflicts, and
+interrupted-publish recovery.
 
 To copy a selected host-global skill before creating a chain, search with
 `catalog project page`, review the exact `personal` entry with `catalog skill

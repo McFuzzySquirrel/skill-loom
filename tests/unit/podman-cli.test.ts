@@ -42,6 +42,21 @@ function validManifest() {
   };
 }
 
+function validRepoChain(id = 'repo-chain-1') {
+  return {
+    version: 3,
+    id,
+    name: 'Repository review',
+    harness: 'opencode',
+    sessionMode: 'shared',
+    steps: [{ id: 'step-1', kind: 'instruction', instruction: 'Review the changes.' }],
+    inputs: [],
+    automaticPermissionOptIn: false,
+    createdAt: '2026-02-01T00:00:00.000Z',
+    updatedAt: '2026-02-01T00:00:00.000Z',
+  };
+}
+
 describe('Portable Podman CLI bridge', () => {
   it('forwards CLI args and stdin without a shell, with an explicit remote connection when configured', () => {
     expect(createPodmanCliArgs(['chain', 'project', 'apply'], false)).toEqual([
@@ -77,6 +92,294 @@ describe('Portable Podman CLI bridge', () => {
     expect(() => createPodmanCliArgs(['service', 'start'], false)).toThrow('podman:up');
     expect(() => createPodmanCliArgs(['service', 'stop'], false)).toThrow('podman:up');
     expect(createPodmanCliArgs(['service', 'status'], false)).toContain('status');
+  });
+
+  it('publishes the local chain through the selected connection and persists only the hosted id and revision', async () => {
+    root = await realpath(await mkdtemp(join(tmpdir(), 'loom-podman-publish-')));
+    const projectPath = join(root, 'project');
+    const chainsPath = join(projectPath, 'chains');
+    await mkdir(chainsPath, { recursive: true });
+    const chain = validRepoChain();
+    await writeFile(join(chainsPath, `${chain.id}.json`), JSON.stringify(chain));
+    const output = streams();
+    let invokedArgs: string[] = [];
+    let remoteInput = '';
+    const hostChain = { ...chain, id: 'hosted-chain-1' };
+    const exitCode = await runPodmanCli(
+      ['chain', 'repo', 'publish', '--project', projectPath, '--project-id', 'host-project', '--chain-id', chain.id],
+      {
+        env: { LOOM_PODMAN_CONNECTION: 'hosted' },
+        stdin: { isTTY: false },
+        stdout: output.stdout,
+        stderr: output.stderr,
+        spawnSync: (_command: string, args: string[], options: { input: string }) => {
+          invokedArgs = args;
+          remoteInput = options.input;
+          return {
+            status: 0,
+            stdout: JSON.stringify({
+              protocolVersion: 1,
+              ok: true,
+              result: { chain: hostChain, revision: 'a'.repeat(64) },
+            }),
+            stderr: '',
+          };
+        },
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(invokedArgs.slice(0, 3)).toEqual(['--connection', 'hosted', 'exec']);
+    expect(invokedArgs.slice(-3)).toEqual(['chain', 'project', 'publish']);
+    expect(remoteInput).not.toContain(projectPath);
+    expect(JSON.parse(remoteInput)).toMatchObject({
+      projectId: 'host-project',
+      repoChainId: chain.id,
+      chain,
+    });
+    const sidecar = join(chainsPath, `${chain.id}.publish.json`);
+    expect(JSON.parse(await readFile(sidecar, 'utf8'))).toEqual({
+      version: 1,
+      repoChainId: chain.id,
+      hostedChainId: hostChain.id,
+      hostedRevision: 'a'.repeat(64),
+    });
+    expect(output.errors()).toBe('');
+  });
+
+  it('leaves publication state unchanged after a hosted revision conflict', async () => {
+    root = await realpath(await mkdtemp(join(tmpdir(), 'loom-podman-publish-conflict-')));
+    const projectPath = join(root, 'project');
+    const chainsPath = join(projectPath, 'chains');
+    await mkdir(chainsPath, { recursive: true });
+    const chain = validRepoChain();
+    await writeFile(join(chainsPath, `${chain.id}.json`), JSON.stringify(chain));
+    const sidecar = join(chainsPath, `${chain.id}.publish.json`);
+    const previous = {
+      version: 1,
+      repoChainId: chain.id,
+      hostedChainId: 'hosted-chain-1',
+      hostedRevision: 'a'.repeat(64),
+    };
+    await writeFile(sidecar, JSON.stringify(previous));
+    const output = streams();
+    let remoteInput = '';
+
+    const exitCode = await runPodmanCli(
+      ['chain', 'repo', 'publish', '--project', projectPath, '--project-id', 'host-project', '--chain-id', chain.id],
+      {
+        env: {},
+        stdin: { isTTY: false },
+        stdout: output.stdout,
+        stderr: output.stderr,
+        spawnSync: (_command: string, _args: string[], options: { input: string }) => {
+          remoteInput = options.input;
+          return {
+            status: 1,
+            stdout: '',
+            stderr: `${JSON.stringify({
+              protocolVersion: 1,
+              ok: false,
+              error: { code: 'CHAIN_STALE', message: 'Reload before updating.' },
+            })}\n`,
+          };
+        },
+      },
+    );
+
+    expect(exitCode).toBe(1);
+    expect(JSON.parse(remoteInput)).toMatchObject({ publication: previous });
+    expect(JSON.parse(await readFile(sidecar, 'utf8'))).toEqual(previous);
+    expect(output.errors()).toContain('"code":"CHAIN_STALE"');
+  });
+
+  it('reports an uncertain first-publish transport outcome without writing a mapping', async () => {
+    root = await realpath(await mkdtemp(join(tmpdir(), 'loom-podman-publish-interrupted-')));
+    const projectPath = join(root, 'project');
+    const chainsPath = join(projectPath, 'chains');
+    await mkdir(chainsPath, { recursive: true });
+    const chain = validRepoChain();
+    await writeFile(join(chainsPath, `${chain.id}.json`), JSON.stringify(chain));
+    const output = streams();
+    const exitCode = await runPodmanCli(
+      ['chain', 'repo', 'publish', '--project', projectPath, '--project-id', 'host-project', '--chain-id', chain.id],
+      {
+        env: {},
+        stdin: { isTTY: false },
+        stdout: output.stdout,
+        stderr: output.stderr,
+        spawnSync: () => ({ status: 125, stdout: '', stderr: 'SSH connection lost.' }),
+      },
+    );
+
+    expect(exitCode).toBe(1);
+    expect(output.errors()).toContain('"code":"PUBLISH_OUTCOME_UNKNOWN"');
+    expect(output.errors()).toContain('chain repo link');
+    await expect(readFile(join(chainsPath, `${chain.id}.publish.json`), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('recovers a lost first-publish response only when the explicit hosted chain matches', async () => {
+    root = await realpath(await mkdtemp(join(tmpdir(), 'loom-podman-publish-link-')));
+    const projectPath = join(root, 'project');
+    const chainsPath = join(projectPath, 'chains');
+    await mkdir(chainsPath, { recursive: true });
+    const chain = validRepoChain();
+    await writeFile(join(chainsPath, `${chain.id}.json`), JSON.stringify(chain));
+    const output = streams();
+    let invokedArgs: string[] = [];
+    let remoteInput = '';
+    const hosted = { ...chain, id: 'hosted-chain-1', updatedAt: '2026-02-02T00:00:00.000Z' };
+
+    const exitCode = await runPodmanCli(
+      ['chain', 'repo', 'link', '--project', projectPath, '--project-id', 'host-project', '--chain-id', chain.id, '--hosted-chain-id', hosted.id],
+      {
+        env: { LOOM_PODMAN_CONNECTION: 'hosted' },
+        stdin: { isTTY: false },
+        stdout: output.stdout,
+        stderr: output.stderr,
+        spawnSync: (_command: string, args: string[], options: { input: string }) => {
+          invokedArgs = args;
+          remoteInput = options.input;
+          return {
+            status: 0,
+            stdout: JSON.stringify({
+              protocolVersion: 1,
+              ok: true,
+              result: { chain: hosted, revision: 'b'.repeat(64) },
+            }),
+            stderr: '',
+          };
+        },
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(invokedArgs.slice(-3)).toEqual(['chain', 'project', 'show']);
+    expect(remoteInput).toBe(JSON.stringify({ projectId: 'host-project', chainId: hosted.id }));
+    expect(remoteInput).not.toContain(projectPath);
+    expect(JSON.parse(await readFile(join(chainsPath, `${chain.id}.publish.json`), 'utf8')))
+      .toMatchObject({ hostedChainId: hosted.id, hostedRevision: 'b'.repeat(64) });
+  });
+
+  it('requires an explicitly confirmed current hosted revision before republishing a conflict', async () => {
+    root = await realpath(await mkdtemp(join(tmpdir(), 'loom-podman-republish-')));
+    const projectPath = join(root, 'project');
+    const chainsPath = join(projectPath, 'chains');
+    await mkdir(chainsPath, { recursive: true });
+    const chain = validRepoChain();
+    await writeFile(join(chainsPath, `${chain.id}.json`), JSON.stringify(chain));
+    const sidecar = join(chainsPath, `${chain.id}.publish.json`);
+    await writeFile(sidecar, JSON.stringify({
+      version: 1,
+      repoChainId: chain.id,
+      hostedChainId: 'hosted-chain-1',
+      hostedRevision: 'a'.repeat(64),
+    }));
+    const output = streams();
+    const remoteInputs: string[] = [];
+    let remoteCalls = 0;
+    const hostChain = { ...chain, id: 'hosted-chain-1' };
+
+    const exitCode = await runPodmanCli(
+      [
+        'chain', 'repo', 'republish',
+        '--project', projectPath,
+        '--project-id', 'host-project',
+        '--chain-id', chain.id,
+        '--confirm-hosted-revision', 'b'.repeat(64),
+      ],
+      {
+        env: {},
+        stdin: { isTTY: false },
+        stdout: output.stdout,
+        stderr: output.stderr,
+        spawnSync: (_command: string, args: string[], options: { input: string }) => {
+          remoteCalls += 1;
+          remoteInputs.push(options.input);
+          if (args.at(-1) === 'show') {
+            return {
+              status: 0,
+              stdout: JSON.stringify({
+                protocolVersion: 1,
+                ok: true,
+                result: { chain: hostChain, revision: 'b'.repeat(64) },
+              }),
+              stderr: '',
+            };
+          }
+          return {
+            status: 0,
+            stdout: JSON.stringify({
+              protocolVersion: 1,
+              ok: true,
+              result: { chain: hostChain, revision: 'c'.repeat(64) },
+            }),
+            stderr: '',
+          };
+        },
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(remoteCalls).toBe(2);
+    expect(JSON.parse(remoteInputs[0]!)).toEqual({ projectId: 'host-project', chainId: 'hosted-chain-1' });
+    expect(JSON.parse(remoteInputs[1]!)).toMatchObject({
+      repoChainId: chain.id,
+      publication: { hostedChainId: 'hosted-chain-1', hostedRevision: 'b'.repeat(64) },
+    });
+    expect(remoteInputs.join('')).not.toContain(projectPath);
+    expect(JSON.parse(await readFile(sidecar, 'utf8'))).toMatchObject({ hostedRevision: 'c'.repeat(64) });
+  });
+
+  it('refuses republish when the hosted revision changes after comparison', async () => {
+    root = await realpath(await mkdtemp(join(tmpdir(), 'loom-podman-republish-stale-')));
+    const projectPath = join(root, 'project');
+    const chainsPath = join(projectPath, 'chains');
+    await mkdir(chainsPath, { recursive: true });
+    const chain = validRepoChain();
+    await writeFile(join(chainsPath, `${chain.id}.json`), JSON.stringify(chain));
+    const sidecar = join(chainsPath, `${chain.id}.publish.json`);
+    const previous = {
+      version: 1,
+      repoChainId: chain.id,
+      hostedChainId: 'hosted-chain-1',
+      hostedRevision: 'a'.repeat(64),
+    };
+    await writeFile(sidecar, JSON.stringify(previous));
+    const output = streams();
+    let remoteCalls = 0;
+    const exitCode = await runPodmanCli(
+      [
+        'chain', 'repo', 'republish',
+        '--project', projectPath,
+        '--project-id', 'host-project',
+        '--chain-id', chain.id,
+        '--confirm-hosted-revision', 'b'.repeat(64),
+      ],
+      {
+        env: {},
+        stdin: { isTTY: false },
+        stdout: output.stdout,
+        stderr: output.stderr,
+        spawnSync: () => {
+          remoteCalls += 1;
+          return {
+            status: 0,
+            stdout: JSON.stringify({
+              protocolVersion: 1,
+              ok: true,
+              result: { chain: { ...chain, id: 'hosted-chain-1' }, revision: 'c'.repeat(64) },
+            }),
+            stderr: '',
+          };
+        },
+      },
+    );
+
+    expect(exitCode).toBe(1);
+    expect(remoteCalls).toBe(1);
+    expect(output.errors()).toContain('"code":"REPO_PUBLICATION_STALE"');
+    expect(JSON.parse(await readFile(sidecar, 'utf8'))).toEqual(previous);
   });
 
   it('uses the selected SSH connection and keeps client project paths out of the remote request', async () => {

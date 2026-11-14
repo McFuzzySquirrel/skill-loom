@@ -22,6 +22,7 @@ import {
 import { CatalogError, SKILL_SOURCES } from './catalog/types.js';
 import { CatalogCopyError } from './catalog/copy.js';
 import {
+  SKILL_INSTALL_ERROR_CODES,
   CatalogInstallError,
   applyChainSkillsToProject,
   exportChainSkillsForClient,
@@ -40,7 +41,7 @@ import { DraftPayloadSchema } from './chains/drafts.js';
 import { HARNESS_IDS } from './config/schema.js';
 import { BundleError, exportBundle, MAX_BUNDLE_REQUEST_BYTES } from './chains/bundle.js';
 import { MAX_BUNDLE_SKILLS } from '../portable/bundle.js';
-import { CHAIN_VERSION, ChainError, validateChain, type Chain } from './chains/model.js';
+import { CHAIN_VERSION, ChainError, parseChainDocument, validateChain, type Chain } from './chains/model.js';
 import { chainRevision, ChainServiceError } from './chains/service.js';
 import { ChainStoreError } from './chains/store.js';
 import { FolderPathError } from './projects/paths.js';
@@ -512,6 +513,80 @@ async function dispatch(
       }));
       return withRevision(await services.chainService.update(
         await projectPath(request.projectId), request.chainId, request.draft, { expectedRevision: request.expectedRevision },
+      ));
+    }
+    case 'chain.project.publish': {
+      const request = parse(z.strictObject({
+        projectId: z.string().max(255),
+        repoChainId: sourceId,
+        chain: z.unknown(),
+        publication: z.strictObject({
+          repoChainId: sourceId,
+          hostedChainId: sourceId,
+          hostedRevision: revision,
+        }).optional(),
+      }));
+      const localChain = parseChainDocument(request.chain).chain;
+      if (localChain.id !== request.repoChainId ||
+          (request.publication !== undefined && request.publication.repoChainId !== request.repoChainId)) {
+        throw new ControlError(
+          'REPO_PUBLICATION_ID_MISMATCH',
+          'The repository chain id does not match the publication identity.',
+          { repoChainId: request.repoChainId, chainId: localChain.id },
+        );
+      }
+
+      const path = await projectPath(request.projectId);
+      const skillSteps = localChain.steps.filter((step) => step.kind !== 'instruction');
+      if (skillSteps.length > 0) {
+        const catalog = await services.catalogService.getCatalog({
+          projectPath: path,
+          harness: localChain.harness,
+        });
+        const entries = catalog.groups.flatMap((group) => group.entries);
+        for (const step of skillSteps) {
+          const matches = entries.filter((entry) => step.skillBinding === undefined
+            ? entry.source === 'personal' && entry.name === step.skillName
+            : entry.source === 'remote' && entry.name === step.skillName &&
+              entry.sourceId === step.skillBinding.sourceId &&
+              entry.revision === step.skillBinding.revision &&
+              entry.repositoryPath === step.skillBinding.repositoryPath);
+          if (matches.length !== 1) {
+            throw new CatalogInstallError(
+              matches.length === 0
+                ? SKILL_INSTALL_ERROR_CODES.CANDIDATE_NOT_FOUND
+                : SKILL_INSTALL_ERROR_CODES.CANDIDATE_CHANGED,
+              matches.length === 0
+                ? `The skill "${step.skillName}" is not available in the hosted catalog.`
+                : `The skill "${step.skillName}" has an ambiguous hosted catalog identity.`,
+              {
+                projectId: request.projectId,
+                skillName: step.skillName,
+                ...(step.skillBinding === undefined ? {} : { skillBinding: step.skillBinding }),
+                matches: matches.map((entry) => entry.id),
+              },
+            );
+          }
+        }
+      }
+
+      const draft = {
+        name: localChain.name,
+        harness: localChain.harness,
+        sessionMode: localChain.sessionMode,
+        steps: localChain.steps,
+        inputs: localChain.inputs,
+        automaticPermissionOptIn: localChain.automaticPermissionOptIn,
+        ...(localChain.agent === undefined ? {} : { agent: localChain.agent }),
+      };
+      if (request.publication === undefined) {
+        return withRevision(await services.chainService.create(path, draft, { uniqueName: true }));
+      }
+      return withRevision(await services.chainService.update(
+        path,
+        request.publication.hostedChainId,
+        draft,
+        { expectedRevision: request.publication.hostedRevision, uniqueName: true },
       ));
     }
     case 'chain.project.remove': {

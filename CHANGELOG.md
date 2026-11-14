@@ -8,6 +8,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Added
 
+- Repo-local chain authoring in tracked `chains/<id>.json` files, versioned hosted-publication sidecars, and explicit revision-checked publish, compare, recovery, and republish commands through the SSH-backed Podman bridge.
 - A persistent Linux host deployment manager using rootless Podman Quadlets, with install, lifecycle, update/rollback, and stopped-volume backup commands; it publishes no HTTP port by default and supports trusted remote clients over SSH.
 - A Podman deployment for Linux, macOS, and Windows hosts, with persistent config, global-skill, and project mounts, localhost-only default publishing, private-network mode, and a cross-platform plan command.
 - A `skill-loom-podman` CLI bridge that forwards command arguments and stdin to the running app container without using a shell, enabling host-side chain and apply operations against the shared service.

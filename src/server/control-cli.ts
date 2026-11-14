@@ -15,7 +15,7 @@ const HELP = `Usage:
   skill-loom chain draft show --draft <id> [--config-dir <path>]
   skill-loom chain draft create|validate [--config-dir <path>]   # JSON on stdin
   skill-loom chain draft update|remove [--config-dir <path>]     # JSON on stdin
-  skill-loom chain project list|show|create|update|remove|apply|export [--config-dir <path>] # JSON on stdin
+  skill-loom chain project list|show|create|update|remove|apply|export|publish [--config-dir <path>] # JSON on stdin
   skill-loom bundle review|import [--config-dir <path>]         # JSON on stdin
   skill-loom discovery handoff [--config-dir <path>]            # JSON on stdin
   skill-loom run preflight [--config-dir <path>]               # JSON on stdin
@@ -46,6 +46,10 @@ reviewed "expectedRevision" and "draft"; removes require "expectedRevision"
 and "confirmed":true. Draft create and validate
 read a chain draft object. Validate checks the chain model only; it does not
 verify source availability, conflicts, harness readiness, or permissions.
+Publish reads {"projectId":"...","repoChainId":"...","chain":{...}} on first
+publication, or also "publication":{"repoChainId":"...","hostedChainId":"...",
+"hostedRevision":"<sha256>"} for an update. The client repository path is not
+accepted. Publish requires each skill to resolve uniquely in the hosted catalog.
 Discovery handoff reads {"goal":"...","harness":"opencode","candidates":[
 {"sourceId":"...","revision":"<commit>","repositoryPath":"...","fingerprint":"..."}]}.
 Handoff content is untrusted and preparation does not approve redistribution
@@ -102,6 +106,7 @@ export async function runControlCli(
       'chain project remove': { operation: 'chain.project.remove', input: 'json' },
       'chain project apply': { operation: 'chain.project.apply', input: 'json' },
       'chain project export': { operation: 'chain.project.export', input: 'json' },
+      'chain project publish': { operation: 'chain.project.publish', input: 'json' },
       'bundle review': { operation: 'bundle.review', input: 'json' },
       'bundle import': { operation: 'bundle.import', input: 'json' },
       'discovery handoff': { operation: 'discovery.handoff', input: 'json' },

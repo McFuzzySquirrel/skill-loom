@@ -13,7 +13,7 @@ Skill Loom does not author skills and does not execute a skill as a callable com
 
 See the [visual tour](docs/visual-tour.md) for the chain editor.
 
-New users: follow the [quick start](docs/quick-start.md) to find global skills, create or select a shared chain, apply it to a project, and run it in the current session. For the full workflow, see the [user guide](docs/user-guide.md); for installation and operations, see the [administrator guide](docs/admin-guide.md) and [host catalog operations guide](docs/host-catalog-operations.md). The [standalone skill guide](docs/standalone-skill-guide.md) covers hosted selected-skill copies and the compatibility bundle workflow.
+New users: follow the [quick start](docs/quick-start.md) to find global skills, create or select a shared chain, apply it to a project, and run it in the current session. For the full workflow, see the [user guide](docs/user-guide.md); for installation and operations, see the [administrator guide](docs/admin-guide.md) and [host catalog operations guide](docs/host-catalog-operations.md). The [standalone skill guide](docs/standalone-skill-guide.md) covers repo-first chains, hosted selected-skill copies, and the compatibility bundle workflow.
 
 ## Table of Contents
 
@@ -61,10 +61,11 @@ The product promise is deliberately narrow:
 | Companion workflow | `loom-chain-workflow` selects a shared chain, applies its global skills to a project, and carries out its ordered steps in the current agent session. |
 | Visual chain editor | `skill-loom edit` opens a local editor to drag steps into a new order, edit instructions, manage `{{inputs}}`, and save back to the draft or project chain. It is the only web screen. |
 | Shared chain library | Create, validate, update, and remove chains in one Loom library, visible from every registered project context. Legacy project chain files are copied on first access and retained. |
+| Repo-first chains | Keep canonical chains in tracked `chains/<id>.json` files and explicitly publish revision-checked copies to the hosted library. |
 | Global skill catalog | Search only the configured host-global `.agents/skills` tree. Existing external tools own package installation and updates. |
 | Apply chain to project | `skill-loom chain project apply` copies only the chain's referenced global packages into `<project>/.agents/skills/`; it never overwrites an existing package. |
 | Podman deployment | `npm run podman:up`, `podman:down`, and `podman:plan` support cross-platform local deployment; `podman:host` installs and manages a persistent Linux rootless Quadlet service. |
-| Podman CLI bridge | `skill-loom-podman` forwards CLI commands and stdin into the running app container, including through a named SSH-backed Podman connection; it can copy exact reviewed catalog selections into a client-local project before a chain exists. |
+| Podman CLI bridge | `skill-loom-podman` forwards commands over a named SSH-backed Podman connection, copies exact reviewed catalog selections, and publishes repo chains without sending the client path. |
 | Scenario examples | Illustrative starter chains for business, student, app developer, and game developer workflows. See the [scenario chain guide](docs/scenario-chains.md). |
 | Compatibility surfaces | Bundle, remote-source, and managed-run commands remain during the pivot but are not part of the default chain workflow. |
 

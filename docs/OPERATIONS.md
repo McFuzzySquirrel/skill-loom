@@ -89,6 +89,7 @@ proof that a person reviewed the content.
 | User-selected download location (`*.loom-discovery.json`) | A self-contained discovery handoff with goal, harness, exact pinned candidate identities, and selected package files. | Returned on stdout by `skill-loom discovery handoff`; not persisted by the server. Treat it as potentially private and redistribution-restricted. Maximum 100 packages, 2,000 files, 20 MiB decoded content, and 30 MiB JSON. |
 | `~/.config/loom/active-run.json` | Single global active-run pointer used for health reporting and startup recovery. | Holds only the active run's project path, run id, and status. |
 | `~/.config/loom/chains/*.json` | Shared chain library, visible from every registered project context. | Versioned JSON written atomically. Back up with the config directory. |
+| `<repo>/chains/<chain-id>.json` and `<repo>/chains/<chain-id>.publish.json` | Tracked repo-authored chain source and its versioned hosted-id/revision mapping. | The repo file is canonical; publication is explicit and revision-checked. Copies get a new id and no mapping. |
 | Podman volume `skill-loom-config` | Container deployment's config, shared chains, and derived index. | Persists across `podman:down`; inspect and back up with `podman volume export`. |
 | `~/.config/containers/systemd/skill-loom-*` | Rootless Linux host deployment's managed Quadlet units. | Managed by `npm run podman:host`; use `install --replace` only for intentional unit changes. |
 | `~/.local/state/skill-loom-host/skill-loom-app.container` | Previous app Quadlet retained for rollback after an update. | Keep with the rootless host account; the referenced prior image must remain local for rollback. |
@@ -110,6 +111,10 @@ listens on a Unix socket and must not be reconfigured as an unauthenticated
 TCP service.
 Remote clients use SSH-backed Podman access, not an exposed Skill Loom HTTP
 endpoint. See the [host installation procedure](admin-guide.md#persistent-linux-host-service-quadlet).
+Repo-authored chain documents and their publication sidecars are client-owned,
+tracked files under `<repo>/chains/`; the bridge forwards content and hosted
+identity/revision only, never the client path. A hosted revision conflict
+preserves both copies and requires explicit comparison before republishing.
 
 Current portable helpers reject preparation or step execution if another
 unfinished portable run is recorded in the project. The scan is limited to

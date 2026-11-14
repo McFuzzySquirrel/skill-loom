@@ -307,6 +307,9 @@ class FileChainStore implements ChainStore {
       if (!entry.name.endsWith(CHAIN_FILE_EXTENSION) || entry.name.startsWith('.')) {
         continue;
       }
+      if (entry.name.endsWith('.publish.json')) {
+        continue;
+      }
 
       const chainId = entry.name.slice(0, -CHAIN_FILE_EXTENSION.length);
       const path = join(root.chainsDirectory, entry.name);

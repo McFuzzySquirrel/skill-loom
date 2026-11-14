@@ -118,6 +118,140 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
     }
   });
 
+  it('publishes repository chains with catalog checks and revision-checked hosted updates', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'loom-repo-chain-publish-')));
+    const project = join(root, 'project');
+    const globalSkills = join(root, 'host-skills');
+    const configDirectory = join(root, 'config');
+    await mkdir(project);
+    for (const [directory, name] of [
+      ['unique-review', 'unique-review'],
+      ['ambiguous-a', 'ambiguous-review'],
+      ['ambiguous-b', 'ambiguous-review'],
+    ] as const) {
+      const packagePath = join(globalSkills, directory);
+      await mkdir(packagePath, { recursive: true });
+      await writeFile(join(packagePath, 'SKILL.md'), `---\nname: ${name}\n---\nReview safely.\n`);
+    }
+    const config = createConfigStore({ env: { LOOM_CONFIG_DIR: configDirectory } });
+    await config.update({});
+    const services = createLoomServices({
+      configStore: config,
+      preflightEnv: { LOOM_CAPABILITY_INDEX: '0', LOOM_SKILLS_DIR: globalSkills },
+    });
+    const server = await startControlServer(config, { services });
+    try {
+      const opened = await callControl(configDirectory, 'project.open', { path: project });
+      if (!opened.ok) throw new Error('Project registration failed.');
+      const projectId = (opened.result as { project: { id: string } }).project.id;
+      const makeChain = (id: string, name: string, skillName: string) => ({
+        version: CHAIN_VERSION,
+        id,
+        name,
+        harness: 'opencode',
+        sessionMode: 'shared',
+        steps: [{ id: 'step-1', kind: 'skill', skillName, instruction: 'Apply the skill.' }],
+        inputs: [],
+        automaticPermissionOptIn: false,
+        createdAt: '2026-02-01T00:00:00.000Z',
+        updatedAt: '2026-02-01T00:00:00.000Z',
+      });
+      const repoChain = makeChain('repo-review', 'Repo review', 'unique-review');
+      let cliOutput = '';
+      let cliError = '';
+      const publishExitCode = await runCli(['chain', 'project', 'publish', '--config-dir', configDirectory], {
+        env: {},
+        stdin: Readable.from([JSON.stringify({ projectId, repoChainId: repoChain.id, chain: repoChain })]),
+        stdout: { write: (chunk) => { cliOutput += String(chunk); return true; }, isTTY: false },
+        stderr: { write: (chunk) => { cliError += String(chunk); return true; } },
+      });
+      expect(publishExitCode, cliError).toBe(0);
+      const published = JSON.parse(cliOutput) as {
+        result: { chain: { id: string; name: string }; revision: string };
+      };
+      expect(published.result).toMatchObject({
+        chain: { name: 'Repo review' },
+        revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+      });
+
+      const nextChain = {
+        ...repoChain,
+        steps: [{ id: 'step-1', kind: 'skill', skillName: 'unique-review', instruction: 'Use the latest guidance.' }],
+      };
+      const updated = await callControl(configDirectory, 'chain.project.publish', {
+        projectId,
+        repoChainId: repoChain.id,
+        chain: nextChain,
+        publication: {
+          repoChainId: repoChain.id,
+          hostedChainId: published.result.chain.id,
+          hostedRevision: published.result.revision,
+        },
+      });
+      expect(updated).toMatchObject({
+        ok: true,
+        result: { chain: { id: published.result.chain.id }, revision: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      });
+
+      const stale = await callControl(configDirectory, 'chain.project.publish', {
+        projectId,
+        repoChainId: repoChain.id,
+        chain: repoChain,
+        publication: {
+          repoChainId: repoChain.id,
+          hostedChainId: published.result.chain.id,
+          hostedRevision: published.result.revision,
+        },
+      });
+      expect(stale).toMatchObject({
+        ok: false,
+        error: {
+          code: 'CHAIN_STALE',
+          details: {
+            expectedRevision: published.result.revision,
+            actualRevision: expect.stringMatching(/^[a-f0-9]{64}$/),
+          },
+        },
+      });
+
+      const collision = await callControl(configDirectory, 'chain.project.publish', {
+        projectId,
+        repoChainId: 'repo-review-copy',
+        chain: makeChain('repo-review-copy', 'Repo review', 'unique-review'),
+      });
+      expect(collision).toMatchObject({ ok: false, error: { code: 'CHAIN_NAME_EXISTS' } });
+
+      const missing = await callControl(configDirectory, 'chain.project.publish', {
+        projectId,
+        repoChainId: 'repo-missing-skill',
+        chain: makeChain('repo-missing-skill', 'Missing skill', 'not-installed'),
+      });
+      expect(missing).toMatchObject({
+        ok: false,
+        error: { code: 'SKILL_INSTALL_CANDIDATE_NOT_FOUND' },
+      });
+
+      const ambiguous = await callControl(configDirectory, 'chain.project.publish', {
+        projectId,
+        repoChainId: 'repo-ambiguous-skill',
+        chain: makeChain('repo-ambiguous-skill', 'Ambiguous skill', 'ambiguous-review'),
+      });
+      expect(ambiguous).toMatchObject({
+        ok: false,
+        error: { code: 'SKILL_INSTALL_CANDIDATE_CHANGED' },
+      });
+
+      const listing = await callControl(configDirectory, 'chain.project.list', { projectId });
+      expect(listing).toMatchObject({
+        ok: true,
+        result: { chains: [expect.objectContaining({ id: published.result.chain.id, name: 'Repo review' })] },
+      });
+    } finally {
+      await server.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('applies a shared chain’s global skills to the registered project without overwriting', async () => {
     const root = await mkdtemp(join(tmpdir(), 'loom-chain-apply-'));
     const project = join(root, 'project');
