@@ -49,6 +49,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Changed
 
+- The offline repository-chain workflow distinguishes an unsupported local CLI validator from invalid chain data and explicitly recognizes the allowed top-level `automaticPermissionOptIn` field.
 - The persistent-host guide now walks from Linux account and rootless Podman socket setup through Quadlet installation and remote-client registration, and identifies Git as a host-install prerequisite.
 - The host-global `~/.agents/skills/` directory, configurable with `LOOM_SKILLS_DIR`, is now the sole source for the default authoring catalog. External installation tools own provisioning and updates; remote snapshots and bundles remain compatibility surfaces rather than the default workflow.
 - New chains are stored in the shared Loom library and are visible from each registered project context. Applying a chain creates independent project-local skill copies; later global changes do not rewrite them.

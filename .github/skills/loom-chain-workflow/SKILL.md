@@ -42,19 +42,27 @@ catalog; the repo chain and its project-local skills are the source of truth.
    so. If there is more than one, show each chain's name and id and ask the user
    which one to run; never choose implicitly.
 2. Read and parse the selected JSON without modifying it. Validate it with
-   `skill-loom chain repo validate --repo <repo-path> --id <chain-id>` when that
-   local CLI is available; this command does not start or connect to a service.
-   Otherwise, accept only the current strict version-3 shape: an id matching
+   `skill-loom chain repo validate --repo <repo-path> --id <chain-id>` only if
+   `skill-loom chain repo --help` confirms that command exists; it does not
+   start or connect to a service. An unknown-command or `CLI_USAGE` response
+   means this CLI cannot validate repository chains; it is not evidence that
+   the chain is invalid. If working in a Skill Loom checkout with the built
+   CLI, use `node <checkout>/dist/src/server/cli.js chain repo validate
+   --repo <repo-path> --id <chain-id>`. Otherwise, accept only the current
+   strict version-3 shape: an id matching
    `[a-z0-9][a-z0-9_-]{0,63}`, a non-empty name, a `copilot` or `opencode`
    harness, a `shared`, `fresh`, or `fork` session mode, at least one uniquely
    identified step with a non-empty instruction, inputs (defaulting to an
    empty array), and valid offset-bearing `createdAt`/`updatedAt` timestamps.
-   Skill steps have a
-   non-empty `skillName`; instruction steps have `kind: "instruction"` and no
-   skill name. Input names match `[A-Za-z][A-Za-z0-9_]*`; optional labels are
-   non-empty strings, `defaultValue` may be any string, and `required` and
-   `automaticPermissionOptIn` are booleans when present (defaulting to false).
-   A skill binding has exactly
+   The only top-level fields are `version`, `id`, `name`, `harness`,
+   `sessionMode`, `steps`, `inputs`, `automaticPermissionOptIn`, `agent`,
+   `createdAt`, and `updatedAt`. In particular, `automaticPermissionOptIn` is
+   an allowed top-level boolean that defaults to `false`; do not reject it.
+   Skill steps have a non-empty `skillName`; instruction steps have
+   `kind: "instruction"` and no skill name. Input names match
+   `[A-Za-z][A-Za-z0-9_]*`; optional labels are non-empty strings,
+   `defaultValue` may be any string, and an input's `required` boolean defaults
+   to `false`. A skill binding has exactly
    `sourceId`, `revision`, and `repositoryPath`; an optional agent has exactly
    `harness`, `name`, `sourceId`, `revision`, `repositoryPath`, `agentPath`, and
    `fingerprint`, with their chain-schema types and formats. Reject unknown
