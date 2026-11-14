@@ -5,6 +5,11 @@
 # Skill Loom
 
 [![Node.js >=24](https://img.shields.io/badge/Node.js-%3E%3D24-339933?logo=nodedotjs&logoColor=white)](package.json)
+[![TypeScript 7](https://img.shields.io/badge/TypeScript-7.0.2-3178C6?logo=typescript&logoColor=white)](package.json)
+[![React 19](https://img.shields.io/badge/React-19.3.1-61DAFB?logo=react&logoColor=20232A)](package.json)
+[![Fastify 5](https://img.shields.io/badge/Fastify-5.12.8-000000?logo=fastify&logoColor=white)](package.json)
+[![MIT Licensed](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat-square)](LICENSE)
+[![Cross-platform verification](https://github.com/McFuzzySquirrel/skill-loom/workflows/Cross-platform%20verification/badge.svg)](https://github.com/McFuzzySquirrel/skill-loom/actions/workflows/cross-platform-verification.yml)
 
 Skill Loom is a single-user workspace for building shared chains from skills already installed in a host-global `.agents/skills` directory. Its CLI and companion Agent Skills find and save ordered workflows, copy selected packages into a project when needed, and run steps in the current agent session. The only web screen is a visual chain editor, opened with `skill-loom edit`. Podman can host a persistent service; trusted remote CLI clients use SSH-backed Podman without exposing the Skill Loom HTTP service. Exported bundles remain a compatibility feature.
 
