@@ -49,12 +49,14 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Changed
 
+- Refreshed the current Archify architecture and hosted-catalog overview to match repo-canonical chains, the SSH-backed Podman boundary, and the approved pilot evidence; added a linked repo-first authoring walkthrough.
+- Documentation now distinguishes the SSH-backed remote CLI workflow from the loopback-only HTTP service and records the hosted-catalog pilot's verified scope and accepted exceptions.
 - The repo-first workflow now obtains the selected package fingerprint from `catalog skill review` when discovery omits it.
 - The offline repository-chain workflow distinguishes an unsupported local CLI validator from invalid chain data and explicitly recognizes the allowed top-level `automaticPermissionOptIn` field.
 - The persistent-host guide now walks from Linux account and rootless Podman socket setup through Quadlet installation and remote-client registration, and identifies Git as a host-install prerequisite.
 - The host-global `~/.agents/skills/` directory, configurable with `LOOM_SKILLS_DIR`, is now the sole source for the default authoring catalog. External installation tools own provisioning and updates; remote snapshots and bundles remain compatibility surfaces rather than the default workflow.
 - New chains are stored in the shared Loom library and are visible from each registered project context. Applying a chain creates independent project-local skill copies; later global changes do not rewrite them.
-- Shared chain execution now uses the already-active agent session. The container path keeps the application loopback-bound and requires private authenticated ingress for non-local access.
+- Shared and repo-local chain execution use the already-active agent session. Trusted remote CLI/skill work uses SSH-backed Podman; the application HTTP service and editor remain loopback-only.
 - Indexed retrieval is the default for `catalog project page`. `LOOM_CAPABILITY_INDEX=0` forces the fresh scan. The default index now contains the configured host-global skills root only.
 - The web application is reduced to the chain editor. Projects, catalogs, discovery, libraries, test workspaces, runs, themes, and the terminal are CLI-, skill-, or harness-driven.
 - Chain documents use version 3 for exact remote skill bindings and optional native-agent identity. Valid version 1 and 2 records migrate on read.

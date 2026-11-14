@@ -6,7 +6,7 @@
 
 [![Node.js >=24](https://img.shields.io/badge/Node.js-%3E%3D24-339933?logo=nodedotjs&logoColor=white)](package.json)
 
-Skill Loom is a single-user workspace for building shared chains from skills already installed in a host-global `.agents/skills` directory. Its CLI and companion Agent Skills find and save ordered workflows, copy selected packages into a project when needed, and run steps in the current agent session. The only web screen is a visual chain editor, opened with `skill-loom edit`. Podman is available for private, persistent hosting; trusted remote clients can use an SSH-backed Podman connection without exposing the server. Exported bundles remain a compatibility feature.
+Skill Loom is a single-user workspace for building shared chains from skills already installed in a host-global `.agents/skills` directory. Its CLI and companion Agent Skills find and save ordered workflows, copy selected packages into a project when needed, and run steps in the current agent session. The only web screen is a visual chain editor, opened with `skill-loom edit`. Podman can host a persistent service; trusted remote CLI clients use SSH-backed Podman without exposing the Skill Loom HTTP service. Exported bundles remain a compatibility feature.
 
 Skill Loom does not author skills and does not execute a skill as a callable command. Each chain step is sent to a local harness as a prompt; skills are **model-invoked** context. The chain order is prompt order, **not a guarantee** that a harness loads or fires a named skill. A harness may decline to load a skill even when preflight resolved it.
 
@@ -52,7 +52,7 @@ The product promise is deliberately narrow:
 - **One host catalog.** Skills are indexed from `~/.agents/skills` (or `LOOM_SKILLS_DIR`) and provisioned by the user's existing installation method.
 - **Deterministic prompt order.** The active agent follows the saved step order, but the host decides whether to load a named skill.
 - **Model-invoked skills.** The harness decides whether to load a named skill. Skill Loom reports skill observation only when the harness exposes evidence, and never blocks a step on it.
-- **Private single-user deployment.** The server remains loopback-bound. Podman can host persistent Loom state behind a local loopback port or a private authenticated platform/VPN ingress; anonymous public access is unsupported.
+- **Single-user deployment.** The server remains loopback-bound and has no application authentication. The supported remote workflow is CLI/skill access through a trusted SSH-backed Podman connection, not direct HTTP or editor access.
 
 ## Features
 
@@ -103,33 +103,44 @@ Versions are pinned in `package.json` and `package-lock.json`.
 
 ## Architecture
 
-The CLI and the chain editor are typed API clients. Every filesystem, persistence, process, and PTY operation happens in the server, which is mounted through one Fastify composition root. Harness-specific behavior lives behind adapters rather than in routes or run orchestration.
+The CLI and chain editor use the local owner for shared state, control, and managed-run compatibility. Repository-chain files and selected skill copies are client-local; the companion workflow runs steps in the active agent session. Trusted remote catalog and publication operations use the SSH-backed Podman bridge, never remote HTTP.
 
 ```mermaid
 flowchart LR
-  Browser["skill-loom CLI · Companion skills<br/>Chain editor (React SPA)"]
-  API["Fastify server<br/>127.0.0.1:7373"]
-  Routes["Minimal HTTP routes (health, lifecycle, draft/chain save)"]
-  Services["Config · Projects · Catalog<br/>Chains · Preflight · Runs"]
-  Store["Versioned JSON<br/>~/.config/loom · project/.loom"]
-  PTY["Server-owned PTY and child processes"]
-  OpenCode["OpenCode 2.2.5"]
-  Copilot["GitHub Copilot CLI 1.0.105"]
+  User["User / active agent session"]
+  Local["skill-loom CLI · companion skills"]
+  Editor["Chain editor"]
+  Bridge["skill-loom-podman"]
+  SSH["Authorized SSH-backed Podman connection"]
+  App["Loopback Skill Loom service<br/>CLI · control · editor API"]
+  Catalog["Host-global skills<br/>read-only mount"]
+  Library["Shared chain library"]
+  Repo["Client repository<br/>chains/ · .agents/skills/"]
+  Agent["Current client agent session"]
+  Compatibility["Managed-run compatibility<br/>server-owned PTY"]
 
-  Browser -->|"JSON"| API
-  API --> Routes
-  Routes --> Services
-  Services --> Store
-  Services --> PTY
-  PTY --> OpenCode
-  PTY --> Copilot
+  User --> Local
+  User --> Editor
+  Local -->|"local CLI/control"| App
+  Editor -->|"local HTTP"| App
+  Local --> Agent
+  Bridge --> SSH
+  SSH -->|"podman exec"| App
+  App --> Catalog
+  App --> Library
+  Bridge -->|"validated, no-overwrite copy"| Repo
+  Local -->|"repo chain prompts"| Agent
+  App -.-> Compatibility
 ```
 
 The pre-pivot end-to-end explainer is kept in the [documentation archive](docs/archive/README.md) for history only; its browser and project screens no longer exist.
 
+For the current product map, see the [architecture explainer](docs/diagrams/skill-loom-architecture.html), the [repo-first remote authoring walkthrough](docs/diagrams/repo-first-remote-authoring.html), and the [hosted-catalog rollout overview](docs/plans/hosted-catalog-repo-chains-overview.html).
+
 Key boundaries and the decisions behind them:
 
 - The server is loopback-only with no authentication — [ADR-0001](docs/adr/0001-loopback-only-single-user-server.md).
+- Remote CLI/skill access uses trusted SSH-backed Podman, not HTTP ingress; the repo chain remains canonical and hosted publication is revision-checked — [ADR-0033](docs/adr/0033-podman-ssh-remote-clients.md), [ADR-0034](docs/adr/0034-repo-first-chains-and-selected-skill-transfer.md), and [ADR-0035](docs/adr/0035-persistent-rootless-podman-host.md).
 - Harness command, discovery, trust, fork, and advancement differences live in adapters — [ADR-0002](docs/adr/0002-harness-capability-descriptors.md) and [ADR-0008](docs/adr/0008-session-modes-with-deterministic-handoff.md).
 - Skills remain model-invoked prompt context — [ADR-0003](docs/adr/0003-model-invoked-skill-prompts.md).
 - Runs freeze their chain and keep only a bounded tail — [ADR-0004](docs/adr/0004-frozen-run-snapshots-and-bounded-tails.md).
@@ -341,7 +352,7 @@ The CLI flags `--port` and `--config-dir` set `LOOM_PORT` and `LOOM_CONFIG_DIR`.
 
 ## Security and privacy
 
-Skill Loom is a **single-user** tool with no application authentication. The app binds to loopback and refuses non-loopback `LOOM_HOST`. Podman publishes to localhost by default; private hosting is supported only behind a private authenticated platform/VPN ingress. Anonymous public access is unsupported.
+Skill Loom is a **single-user** tool with no application authentication. The app binds to loopback and refuses non-loopback `LOOM_HOST`. Do not expose its HTTP service or editor through a proxy, tunnel, VPN, or public port. Trusted remote CLI/skill clients use an authorized SSH-backed Podman connection, which grants broad control of that Podman account's containers and mounts.
 
 The server owns all filesystem traversal, persistence, process spawning, and PTY handling. The browser performs no shell execution and receives only typed JSON API data. Skill Loom sends no telemetry, crash reports, or remote logs. Git network access occurs only when a user explicitly refreshes a registered repository; user-invoked harness CLIs and package installation may also use the network. Harness credentials are not persisted or logged. Local control uses a separate, temporary bearer capability in a private profile file; Windows also stores temporary client TLS credentials there. See the [administrator guide](docs/admin-guide.md#identity-secrets-and-tls).
 
@@ -369,7 +380,7 @@ Skill Loom is released under the [MIT License](LICENSE). Contributions are accep
 
 ## What's Next
 
-There is no committed roadmap. [Known gaps](docs/current-gaps.md) lists the blocked and unverified capabilities, including the managed multi-step automatic OpenCode journey and the publication decision. Per-step model or harness selection is not supported and would require a new product decision.
+There is no committed roadmap. [Known gaps](docs/current-gaps.md) lists the blocked and unverified capabilities. The hosted catalog and repo-first workflow is closed for its approved Ubuntu 26.04 ARM64 rollout, with the accepted backup-timing exception and unverified platform combinations recorded in the [implementation plan](docs/plans/hosted-catalog-repo-chains-implementation-plan.md). The managed multi-step automatic OpenCode journey remains blocked; per-step model or harness selection is not supported.
 
 ## License
 

@@ -35,7 +35,8 @@ status: Accepted
 - **Check:** `npm run check && npm run typecheck && npm test && git diff --check`.
 - **Check:** `npm run test:package && npm run podman:host -- plan`.
 - **Expected:** Host planning shows rootless Quadlet units and no `PublishPort` unless an optional loopback port is configured. Mock-backed tests cover preflight, generated units, argument-array lifecycle calls, health checking, and install.
-- **Manual check:** Install as a dedicated Linux user on a cgroup-v2/systemd host; verify `podman.socket`, `systemctl --user status`, reboot persistence, a successful update and rollback, stopped-volume backup/restore, and a second client using SSH-backed Podman. These checks remain pending; see [known gaps](../current-gaps.md#execution-gates).
+- **Manual evidence:** On Ubuntu 26.04 ARM64 with rootless Podman 5.7.0, `podman.socket` remained active after reboot and an authorized second client reached the Podman service. A config-volume export/import/re-export check passed using a disposable volume. The app container remained stopped during reboot; this does not verify Quadlet app startup or persistence.
+- **Still unverified:** Live Quadlet app install/start and boot recovery, image update/rollback, the host manager's `backup` command, service-level restore, SELinux-enforcing behavior, and unauthorized-identity denial. See [known gaps](../current-gaps.md#execution-gates) and the [hosted-catalog evidence register](../plans/hosted-catalog-repo-chains-implementation-plan.md#evidence-recorded-while-planning-and-executing). The pre-pilot backup timing gate was missed and accepted as an exception.
 
 ## Decision Drivers
 
@@ -49,7 +50,7 @@ status: Accepted
 - Hosted installation requires Linux, rootless Podman 4.4+, cgroup v2, systemd user services, Node.js 24+, and a tracked-clean source checkout.
 - The dedicated host account's Podman access controls containers and mounts and is therefore trusted host-account access, not per-command authorization.
 - The optional HTTP port remains loopback-only; a remote browser/editor use case requires a separate authenticated ingress decision.
-- Unit tests do not establish reboot persistence, update recovery, backup restoration, or interoperability with another VPN client.
+- Unit tests do not establish live service behavior. The recorded socket-reboot, disposable-volume, and authorized-client checks cover only their stated scope; they do not establish app boot startup, update recovery, or broader platform interoperability.
 
 ## Links
 

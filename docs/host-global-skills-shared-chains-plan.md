@@ -1,5 +1,11 @@
 # Skill Loom host-global skills and shared chains pivot
 
+> **Historical plan:** This early pivot plan is superseded by the
+> [hosted-catalog and repo-first chains implementation plan](plans/hosted-catalog-repo-chains-implementation-plan.md).
+> Its phase status and deployment assumptions describe the earlier baseline,
+> not current behavior or verification. Use the current guides and known-gaps
+> page for present-day instructions and status.
+
 ## Direction
 
 Make the host's `.agents/skills` directory the sole catalog source for authoring chains. Store chains in one shared Loom library, then let a user select a chain for a project, copy its required skill packages into that project's `.agents/skills`, and run the ordered steps in the already-active project agent session.

@@ -54,16 +54,27 @@ skill discovery if needed, then ask the agent to use `loom-chain-workflow` in
 the current session. Skill Loom does not launch a second harness or persist a
 run record. The host decides whether to load a named skill.
 
+## Repository-canonical chains
+
+For a chain that should live with a repository, create and validate it with
+`skill-loom chain repo` under `chains/<id>.json`. Keep its skill packages in
+that repository's `.agents/skills/`, then run it in the active agent session
+with `loom-chain-workflow`. This local path does not need the hosted service.
+Publishing or updating a shared-library copy is optional and explicit; the
+SSH-backed Podman bridge requires the last observed hosted revision. See the
+[repo-first workflow](diagrams/repo-first-remote-authoring.html) and the
+[standalone skill guide](standalone-skill-guide.md#create-and-publish-a-repository-chain).
+
 ## Podman deployment
 
 Set `LOOM_SKILLS_DIR` and `LOOM_PROJECT_DIR` to host paths, then run
 `npm run podman:plan` and `npm run podman:up`. The config and shared chain
 library persist in the `skill-loom-config` Podman volume. The default
-proxy binds to `127.0.0.1:4317`. For private hosted use, run
-`npm run podman:up -- --private-network` and provide an authenticated private
-platform/VPN ingress; never expose the app directly to an untrusted network.
-Use `skill-loom-podman` for CLI operations against the running container. The
-selected host project is mounted as `/workspace`; register it with
+proxy binds to `127.0.0.1:4317`. To run without publishing a host HTTP port,
+use `npm run podman:up -- --private-network`. Do not
+expose the app or editor through a network ingress. Trusted remote CLI/skill
+clients use `skill-loom-podman` over a configured SSH-backed Podman connection.
+The selected host project is mounted as `/workspace`; register it with
 `skill-loom-podman project open` and `{"path":"/workspace"}` on stdin.
 See the [administrator guide](admin-guide.md#with-podman) for PowerShell,
 Podman Machine, and architecture details.

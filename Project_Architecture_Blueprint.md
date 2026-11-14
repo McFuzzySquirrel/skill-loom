@@ -1,6 +1,6 @@
 # Project Architecture Blueprint — Skill Loom
 
-*Generated: 2026-11-13 · Package version `0.1.0` · Configuration: `PROJECT_TYPE=Auto-detect`, `ARCHITECTURE_PATTERN=Auto-detect`, `DIAGRAM_TYPE=C4`, `DETAIL_LEVEL=Comprehensive`, `INCLUDES_CODE_EXAMPLES=true`, `INCLUDES_IMPLEMENTATION_PATTERNS=true`, `INCLUDES_DECISION_RECORDS=true`, `FOCUS_ON_EXTENSIBILITY=true`.*
+*Generated: 2026-11-14 · Package version `0.1.0` · Configuration: `PROJECT_TYPE=Auto-detect`, `ARCHITECTURE_PATTERN=Auto-detect`, `DIAGRAM_TYPE=C4`, `DETAIL_LEVEL=Comprehensive`, `INCLUDES_CODE_EXAMPLES=true`, `INCLUDES_IMPLEMENTATION_PATTERNS=true`, `INCLUDES_DECISION_RECORDS=true`, `FOCUS_ON_EXTENSIBILITY=true`.*
 
 This document is the reference for how Skill Loom is actually built. It describes the code that exists, not an aspirational pattern. File paths and symbols are named so a maintainer can go straight from this document to the implementation.
 
@@ -30,7 +30,7 @@ Skill Loom is a **single-user modular monolith** with a **ports-and-adapters** c
 - **Layered server**: composition root → routes/control dispatch → domain services → stores → filesystem/processes.
 - **Ports and adapters**: harness differences live behind `HarnessAdapter`; catalog adapters scan one configured host-global skills root; runner strategies belong to retained managed runs.
 - **Command/control split**: chain mutations and project apply go through a private, authenticated local control protocol; the HTTP surface is deliberately minimal. Current-session step execution is performed by the active agent, not the server.
-- **Single-user security**: the server is loopback-only, with a private control transport. Podman adds a same-pod proxy and requires localhost publishing or private authenticated ingress.
+- **Single-user security**: the HTTP service is loopback-only and has no application authentication. Podman publishes only on localhost by default; trusted remote CLI/skill work uses SSH-backed Podman, not remote HTTP/editor access.
 - **Document-oriented persistence**: versioned JSON documents with Zod schemas and atomic replacement. Shared chains are profile-owned; frozen run snapshots are limited to the compatibility run subsystem.
 
 The classic labels “Clean Architecture” or “Hexagonal” only partly apply. Domain modules do not depend on Fastify, but they do use Node built-ins directly, and several shared contract modules import server model types. The accurate description is **modular monolith with adapter seams**, not a textbook clean-architecture dependency inversion everywhere.
@@ -41,14 +41,14 @@ The classic labels “Clean Architecture” or “Hexagonal” only partly apply
 
 ### 2.1 Guiding principles evident in the code
 
-1. **The server owns its side effects.** Filesystem, process, PTY, and network operations happen in `src/server`; the active host agent performs the prompts and tool actions for the default current-session workflow. The browser and CLI are typed clients (`src/server/cli.ts`).
+1. **Each owner controls its side effects.** The Loom server owns its profile, shared library, catalog reads, and managed-run PTY. The repository-chain CLI and Podman bridge write only to client-local repo paths; the active host agent performs current-session prompts and tools.
 2. **One composition root.** `buildApp()` in `src/server/app.ts` constructs config, services, run ownership, terminal management, routes, and error handling. Tests inject the same seams.
 3. **Harness differences are data, not branches.** Compatibility preflight and managed-run code consume `HarnessDescriptor`/`HarnessAdapter`; current-session chain execution does not start another harness (`src/server/harness/types.ts`, `.github/skills/loom-chain-workflow/SKILL.md`).
-4. **Current-session chains are prompt workflows.** The library stores ordered steps; the active agent follows them in the existing session. The compatibility run subsystem separately snapshots chains and retains only bounded terminal tails.
-5. **Persistence is versioned and atomic.** Config, shared chains, and compatibility run records have explicit schemas and atomic writes (`config/store.ts:atomicWriteJson`, `chains/store.ts`).
+4. **Current-session chains are prompt workflows.** Shared-library and repo-local chains both run in the existing agent session. Repo files under `chains/` are canonical; a hosted shared-library copy is optional and revision-checked. The compatibility run subsystem separately snapshots chains and retains bounded terminal tails.
+5. **Persistence is versioned and atomic.** Config, shared chains, repo-chain files and publish sidecars, and compatibility run records have explicit schemas and atomic writes (`config/store.ts:atomicWriteJson`, `chains/store.ts`, `repo-chains/store.ts`).
 6. **Explicit signals beat heuristics.** Automatic runs advance only on `osc-working-idle` or `process-exit`; supervised runs advance only when the user says so (`runs/automatic.ts`, `runs/supervised.ts`, ADR-0007).
-7. **Review gates are scoped to their operation.** Compatibility mutations and managed-run starts use digests plus explicit confirmations; current global-skill apply uses safe path checks and refuses overwrites without requiring provenance review (`control.ts`, `catalog/install.ts`, ADR-0032).
-8. **Project and chain identity is deterministic.** Project ids and chain revisions are path- or content-derived; chain skill steps resolve names against the current host-global catalog when applied (`projects/registry.ts`, `chains/service.ts`, `catalog/install.ts`).
+7. **Review gates are scoped to their operation.** Compatibility mutations and managed-run starts use digests plus explicit confirmations. Selected catalog transfer requires exact identity and fingerprint; repo-chain publication requires the expected hosted revision (`control.ts`, `catalog/install.ts`, `repo-chains/`).
+8. **Project and chain identity is deterministic.** Project ids and chain revisions are path- or content-derived; repo chains keep stable ids and store hosted identity in a separate versioned sidecar (`projects/registry.ts`, `chains/service.ts`, `repo-chains/`).
 9. **Compatibility uncertainty is surfaced, never guessed.** Managed-run preflight reports ambiguous auth/trust and unobservable skill firing; project apply fails for missing or ambiguous global skill names instead of choosing one (`preflight/engine.ts`, `runs/observations.ts`, `catalog/install.ts`).
 10. **The product is CLI/skill-driven with one web screen.** The web UI is only the chain editor (ADR-0027, ADR-0028).
 
@@ -61,6 +61,8 @@ The classic labels “Clean Architecture” or “Hexagonal” only partly apply
 | Active agent ↔ chain workflow | The companion skill reads shared chain data and carries out ordered prompts in the current session; no child harness or run record |
 | Server ↔ harness | Shell-free executable + argument array and server-owned PTY only for retained managed-run compatibility |
 | Server ↔ filesystem | Canonical paths, global catalog scans, shared chain persistence, bounded no-overwrite copies into project `.agents/skills/` |
+| Repo-chain CLI ↔ client repository | Strict versioned files under `chains/`; local writes do not pass through the hosted server |
+| Podman bridge ↔ client repository | Validated selected packages and publication metadata stay on the client; the repository path is not sent to the host |
 | Server ↔ remote Git | Compatibility-only source and snapshot support; not used by the default catalog or chain workflow |
 | Host CLI ↔ Podman service | `skill-loom-podman` forwards an argument array and stdin with `podman exec`; no shell string |
 | Web UI ↔ execution | No run/workspace HTTP routes; the editor saves chains and drafts only |
@@ -70,7 +72,7 @@ The classic labels “Clean Architecture” or “Hexagonal” only partly apply
 
 - **CQRS-like split without separate models**: mutations flow through control operations; reads are small HTTP `GET`s. Both share the same domain services.
 - **Strategy + registry**: run mode selects a runner strategy; harness/catalog registries resolve adapters.
-- **Shared library + project copy**: chains live under the Loom config directory and resolve skill names from the current host-global catalog; apply copies selected packages into a project without overwriting existing ones.
+- **Shared library + repo source**: shared chains live under the Loom config directory; repo-first chains live in tracked `chains/` files and may publish a revision-checked copy. Exact catalog selections copy into project `.agents/skills/` without overwriting existing packages.
 - **Snapshot + pointer (compatibility)**: managed-run documents are snapshots plus a global `active-run.json` pointer for cross-project exclusivity.
 - **Reviewed command pattern (compatibility)**: where required, review produces a digest, the mutation re-computes and compares it, then requires `confirmed: true`.
 - **Filesystem as database**: one JSON document per aggregate, guarded by naming conventions and atomic replacement rather than a transactional store.
@@ -79,7 +81,7 @@ The classic labels “Clean Architecture” or “Hexagonal” only partly apply
 
 ## 3. Architecture Visualization
 
-The Mermaid views below stay readable as text. Related explorable views are available for the [system map and run flows](docs/diagrams/skill-loom-architecture.html), [chain-save sequence](docs/diagrams/chain-save-sequence.html), and [portable handoff](docs/diagrams/portable-handoff-workflow.html).
+The Mermaid views below stay readable as text. Related explorable views are available for the [system map and run flows](docs/diagrams/skill-loom-architecture.html), [repo-first remote authoring](docs/diagrams/repo-first-remote-authoring.html), [hosted-catalog rollout](docs/plans/hosted-catalog-repo-chains-overview.html), [chain-save sequence](docs/diagrams/chain-save-sequence.html), and [portable handoff](docs/diagrams/portable-handoff-workflow.html).
 
 ### 3.1 C4 Level 1 — System context
 
@@ -87,18 +89,21 @@ The Mermaid views below stay readable as text. Related explorable views are avai
 flowchart LR
   User["Developer / operator"]
   Agent["Coding agent<br/>(OpenCode or Copilot CLI)"]
-  Loom["Skill Loom<br/>local service + CLI"]
+  Loom["Skill Loom<br/>local or hosted service + CLI"]
   Global["Host-global skills<br/>~/.agents/skills"]
   FS["Loom profile and<br/>project filesystem"]
+  Repo["Client repo<br/>chains/ + .agents/skills/"]
   Harness["Harness CLIs<br/>(managed-run compatibility)"]
   Remote["Remote Git<br/>(compatibility only)"]
 
   User -->|"CLI commands, JSON envelopes"| Loom
-  Agent -->|"companion skills call the CLI"| Loom
+  Agent -->|"shared-chain CLI calls"| Loom
+  Agent -->|"repo-chain workflow reads local files"| Repo
   Agent -->|"uses project copies in its current session"| FS
   User -->|"chain editor in browser"| Loom
   Loom -->|"indexes"| Global
-  Loom -->|"reads/writes chains; copies selected skills"| FS
+  Loom -->|"shared chains and selected-skill exports"| FS
+  Agent -->|"active-session steps"| Repo
   Loom -.->|"legacy managed runs only"| Harness
   Loom -.->|"legacy source support only"| Remote
 ```
@@ -110,6 +115,7 @@ flowchart TB
   subgraph Client["Client surfaces"]
     CLI["skill-loom CLI<br/>dist/src/server/cli.js"]
     Skill["Companion skills<br/>scenario-discovery<br/>loom-chain-workflow<br/>loom-run-bundle"]
+    RepoCLI["Repo-chain CLI<br/>chains/ + publish sidecar"]
     PodmanCLI["skill-loom-podman<br/>packaged Podman exec bridge"]
     Web["React chain editor<br/>dist/web"]
   end
@@ -129,6 +135,7 @@ flowchart TB
   end
 
   Agent["Active host agent session"]
+  Repo["Client repository<br/>chains/ · .agents/skills/"]
   Harness["Harness CLIs<br/>legacy managed runs"]
   Proxy["Caddy proxy<br/>same Podman pod"]
 
@@ -138,6 +145,9 @@ flowchart TB
   Web -->|"JSON /api"| Fastify
   Skill -->|"CLI invocations"| CLI
   Skill -->|"current-session steps"| Agent
+  Skill -->|"repo-chain prompt flow"| Repo
+  RepoCLI -->|"local atomic files"| Repo
+  PodmanCLI -->|"selected copy / publication metadata"| Repo
   Proxy --> Fastify
 
   Fastify --> Services
@@ -171,10 +181,12 @@ flowchart LR
 
 The client uses its own configured SSH identity and named Podman connection;
 the connection authorizes container access rather than adding Skill Loom
-authentication. Client-local apply exports only the selected chain's global
-packages in a manifest capped at 100 packages, 2,000 files, and 20 MiB. The
-local project path never leaves the client. The normal server and control
-transport remain loopback/private inside the host.
+authentication. Client-local transfer validates selected package identities
+and writes under `.agents/skills/` without sending the local project path.
+Repo-chain publish sends chain content and host context, not the client path;
+the sidecar advances only after success and update requests require its last
+observed hosted revision. The normal server and control transport remain
+loopback/private inside the host.
 
 ### 3.3 C4 Level 3 — Server components
 
@@ -985,7 +997,7 @@ The optional Podman deployment builds the same server from `Containerfile`; it e
 - Static SPA served from `dist/web`; missing non-API GETs fall back to `index.html`.
 - Control endpoint runs alongside HTTP in the same process.
 - Harness CLIs are spawned only by the retained managed-run compatibility subsystem. The default chain workflow runs in the active host agent session.
-- All persistent state is local in a host profile or Podman named volume; there is no cloud dependency.
+- Service-owned state is local in a host profile or Podman named volume. Repo-chain sources, publication sidecars, and client-local skill copies remain in the client repository; there is no cloud dependency.
 
 ### 12.3 Platform adaptation
 
@@ -999,7 +1011,7 @@ Native scope and identity have platform-specific tests and fixtures. CI runs the
 ### 12.4 Podman deployment
 
 - `scripts/podman.mjs` builds and starts the app and Caddy proxy in one pod. The app remains bound to loopback inside the pod.
-- The default publication is a host loopback port (`127.0.0.1:4317`); `--private-network` publishes no host port and requires private authenticated platform/VPN ingress.
+- The default publication is a host loopback port (`127.0.0.1:4317`); `--private-network` publishes no host port. Do not route the HTTP proxy through an ingress; trusted remote CLI access uses SSH-backed Podman.
 - The named volume `skill-loom-config` stores config, the shared chain library, and the derived capability index. `podman:down` removes the pod but retains this volume.
 - The host-global skills directory is mounted read-only at `/var/lib/loom/skills`; one selected project is mounted read-write at `/workspace`.
 - `scripts/podman-host.mjs` manages a persistent Linux host installation as rootless Podman Quadlets under the user's systemd manager. It builds commit-tagged app images when the tracked checkout is clean, installs lifecycle units, retains the previous app unit for rollback, and exports the config volume only when the app is stopped.
@@ -1007,8 +1019,8 @@ Native scope and identity have platform-specific tests and fixtures. CI runs the
 - The hosted Quadlet deployment publishes no host HTTP port by default. Remote client control remains `podman exec` over an SSH-backed Podman connection; it does not expose the loopback-only app or editor to the VPN.
 - `skill-loom-podman` runs the CLI inside the app container using a structured `podman exec` argument array and forwards stdin. A remote client selects a preconfigured SSH-backed connection with `LOOM_PODMAN_CONNECTION`; Podman/SSH authorization is the host access boundary. Host `skill-loom` cannot reach the container-local control socket.
 - Client-local apply requests `chain.project.export`, which returns a bounded, versioned manifest of selected host-global packages; the bridge validates and writes it into the client's local `.agents/skills/` without sending the local project path to the host or overwriting existing packages. Remote clients cannot provision the host-global catalog.
-- This second-machine SSH flow has not received a live end-to-end test; see [known gaps](docs/current-gaps.md#platform-and-version-coverage).
-- On macOS and Windows the launcher starts Podman Machine and relies on Podman's host-path translation. `LOOM_PODMAN_PLATFORM` can select `linux/amd64` or `linux/arm64`. Linux Podman runtime/persistence has been exercised; macOS/Windows runtime mounts remain unverified.
+- A trusted second-machine SSH/Podman journey passed on one Ubuntu 26.04 ARM64 host with rootless Podman 5.7.0. Exact catalog copy, local repo-chain run, first publish/update, and a stale-revision conflict passed. A disposable config-volume restore and Podman-socket reboot check also passed. The app container remained stopped, so Quadlet app boot startup and image update/rollback are unverified. SELinux-enforcing behavior, unauthorized-identity denial, alternate platforms, live chain-package transfer, and a local run after disconnect remain unverified; see [known gaps](docs/current-gaps.md#execution-gates).
+- On macOS and Windows the launcher starts Podman Machine and relies on Podman's host-path translation. `LOOM_PODMAN_PLATFORM` can select `linux/amd64` or `linux/arm64`. Their runtime mounts remain unverified.
 
 ### 12.5 Development topology
 
@@ -1018,7 +1030,7 @@ Native scope and identity have platform-specific tests and fixtures. CI runs the
 
 ### 12.6 Operations and upgrade path
 
-- Back up the config directory (including shared chains), the externally managed global skill root, and project `.agents/skills` copies as needed. For Podman, back up `skill-loom-config` and the mounted host directories.
+- Back up the config directory (including shared chains), the externally managed global skill root, and project `chains/`, publication sidecars, and `.agents/skills/` copies as needed. For Podman, back up `skill-loom-config` and the mounted host directories.
 - Treat run records and active-run pointers as compatibility state; control metadata is process state, not a backup target.
 - Stop the service before upgrading; one owner per profile.
 - Schema versions are explicit; older versions are rejected rather than silently reinterpreted.

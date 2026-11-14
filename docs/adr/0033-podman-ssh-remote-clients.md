@@ -31,7 +31,8 @@ status: Accepted
 - **Check:** `npm run check && npm run typecheck && npm test && git diff --check`.
 - **Check:** `npm run test:package` and `npm run podman:plan`.
 - **Expected:** The packaged bridge selects the configured Podman connection, invokes the in-container CLI without a shell, and client-local apply writes only validated, selected global packages without overwriting existing skills or transmitting the client path.
-- **Manual check:** Passed for one trusted tailnet client connected to an Ubuntu 26.04 ARM64 host running rootless Podman 5.7.0; catalog copy and repo-chain create/update were exercised. SELinux was disabled, and other platforms plus host reboot/backup recovery remain unverified. See the [P6 pilot evidence](../plans/hosted-catalog-repo-chains-implementation-plan.md#evidence-recorded-while-planning-and-executing).
+- **Manual evidence:** One trusted tailnet client completed catalog review/copy, local repo-chain execution, first publish/update, and an isolated stale-revision conflict against an Ubuntu 26.04 ARM64 host running rootless Podman 5.7.0. A disposable config-volume restore and Podman-socket reboot check also passed; the app remained stopped after reboot. SELinux was disabled.
+- **Still unverified:** Unauthorized-identity denial, SELinux-enforcing behavior, alternate platforms, live chain-package transfer, and repeating local execution after disconnect. Quadlet app boot startup and live image update/rollback were not established. The pre-pilot backup timing gate was missed and accepted as an exception. See the [P6 evidence register](../plans/hosted-catalog-repo-chains-implementation-plan.md#evidence-recorded-while-planning-and-executing) and [known gaps](../current-gaps.md#execution-gates).
 
 ## Decision Drivers
 
@@ -45,7 +46,7 @@ status: Accepted
 - A remote client needs Node.js 24+, Podman, the standalone workflow skill package, and an administrator-configured SSH-backed Podman connection.
 - Authorization is as broad as the host account's Podman access, including control over its containers and mounts; administrators must grant it only to trusted clients.
 - Host-project apply continues to target the mounted `/workspace`; client-local apply transfers only the selected chain's global packages and never provisions the host catalog.
-- Automated contract tests do not establish interoperability with a real second machine; live SSH verification remains outstanding.
+- Automated contract tests do not establish interoperability beyond the one recorded live host/client combination; broader platform and identity claims remain unverified.
 
 ## Links
 

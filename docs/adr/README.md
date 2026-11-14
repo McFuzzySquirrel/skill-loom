@@ -35,7 +35,7 @@
 | [ADR-0029](0029-catalog-resolved-global-skill-reuse.md) | Reuse catalog-resolved host-global skill packages in portable runs | Superseded for the default workflow by [ADR-0032](0032-host-global-skills-and-current-session-chains.md) | 2026-11-11 |
 | [ADR-0030](0030-capability-index-and-model-reranking.md) | Locate chain-authoring skills through a derived capability index | Superseded for source scope and review by [ADR-0032](0032-host-global-skills-and-current-session-chains.md) | 2026-11-11 |
 | [ADR-0031](0031-reviewed-skill-installation.md) | Install one reviewed catalog skill through the CLI | Superseded for chain apply by [ADR-0032](0032-host-global-skills-and-current-session-chains.md) | 2026-11-11 |
-| [ADR-0032](0032-host-global-skills-and-current-session-chains.md) | Use host-global skills and shared chains in the current session | Accepted | 2026-11-12 |
+| [ADR-0032](0032-host-global-skills-and-current-session-chains.md) | Use host-global skills and shared chains in the current session | Accepted; remote ingress superseded by [ADR-0033](0033-podman-ssh-remote-clients.md) | 2026-11-12 |
 | [ADR-0033](0033-podman-ssh-remote-clients.md) | Connect remote clients to private hosts through Podman SSH | Accepted | 2026-11-12 |
 | [ADR-0034](0034-repo-first-chains-and-selected-skill-transfer.md) | Keep repo chains canonical and publish by revision | Accepted | 2026-11-13 |
 | [ADR-0035](0035-persistent-rootless-podman-host.md) | Manage persistent Linux hosts with rootless Podman Quadlets | Accepted | 2026-11-14 |

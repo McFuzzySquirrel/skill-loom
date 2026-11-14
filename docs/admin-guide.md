@@ -84,10 +84,9 @@ npm run podman:down
 
 The local proxy is published only on `127.0.0.1:4317`; change it with
 `LOOM_PODMAN_PORT`. Add `--private-network` to `npm run podman:up --` to publish
-no host port. In that mode, expose the service only through a private
-authenticated platform/VPN ingress. Do not bind the application to a
-non-loopback address or expose it directly to the internet; the service has no
-application authentication.
+no host port. Do not route the proxy through a private or public ingress: the
+HTTP service has no application authentication. Use the SSH-backed Podman
+bridge for remote CLI access; remote editor and HTTP access are unsupported.
 
 The host skills directory is an operator-managed source, mounted read-only and
 outside the image. See the [Host Catalog Operations guide](host-catalog-operations.md)
@@ -271,8 +270,12 @@ podman volume import skill-loom-config "$HOME/skill-loom-config.tar"
 npm run podman:host -- start
 ```
 
-Back up the host skills and workspace directories separately. A real systemd
-reboot/persistence and host backup/restore cycle have not yet been live-tested;
+Back up the host skills and workspace directories separately. On the approved
+Ubuntu 26.04 ARM64 host, the rootless `podman.socket` remained active after a
+reboot, and a config-volume export/import/restore check passed using a
+disposable volume. The `skill-loom-app` container remained stopped, so this
+does not verify Quadlet app startup at boot. The host manager's `backup`
+command, image update/rollback, and service-level restore remain unverified;
 see [known gaps](current-gaps.md#execution-gates).
 
 ### Remote client access
@@ -344,10 +347,17 @@ See the [repository-chain authoring and recovery procedure](standalone-skill-gui
 The bridge contract and local export are covered by automated tests. A live
 second-machine journey passed with a trusted tailnet client and a dedicated
 Ubuntu 26.04 ARM64 host running rootless Podman 5.7.0: catalog query/review,
-selected-skill copy, active-session local chain execution, first publish, and
-revision-checked update. SELinux was disabled. This does not verify other
-client/host platforms, enforcing SELinux, reboot persistence, or a backup/restore
-cycle; see [known gaps](current-gaps.md#execution-gates).
+selected-skill copy, active-session local chain execution, first publish,
+revision-checked update, and an isolated stale-revision conflict. The config
+volume was exported and restored through a disposable volume, and the rootless
+Podman socket was verified active after reboot. The app container remained
+stopped; this does not prove that the Quadlet app starts after reboot or that
+image update/rollback works live. SELinux was disabled. Unauthorized-identity
+denial, enforcing SELinux, alternate platforms, a live chain-package copy, and
+repeating the local run after disconnect remain unverified. The pre-pilot
+backup timing gate was missed and accepted as an exception. See
+[known gaps](current-gaps.md#execution-gates) and the
+[implementation evidence](plans/hosted-catalog-repo-chains-implementation-plan.md).
 
 The bridge can also copy exact reviewed catalog selections into a remote
 client's local repository before a chain exists. The local project path stays
@@ -797,7 +807,7 @@ inspect both files and the live process state rather than assuming rollback.
 
 ## Identity, Secrets, and TLS
 
-The browser HTTP interface has **no application identity, authentication, or authorization**. The service binds to loopback and refuses a non-loopback host. Direct public exposure is unsupported. A container proxy may be used only when published to localhost or protected by a private authenticated platform/VPN ingress; do not expose it anonymously.
+The browser HTTP interface has **no application identity, authentication, or authorization**. The service binds to loopback and refuses a non-loopback host. Direct remote HTTP and editor access are unsupported. Publish a container proxy only on loopback; do not route it through a private or public ingress. Trusted remote clients use the SSH-backed Podman bridge for CLI operations.
 
 The Unix local control endpoint uses an owner-only runtime directory and a
 per-instance bearer capability in `control.json`, readable only by the profile
@@ -868,7 +878,12 @@ resources, not escaped descendants; it does not lift the containment gate.
 
 Harness credentials belong to OpenCode or Copilot and stay in their own stores or environment. Skill Loom may inspect command output, credential-file presence, or environment-variable presence as authentication evidence, but it never reads credential values into its config, logs, or API responses. Preflight reports presence only.
 
-If you need multi-user or remote access, this project does not provide it. Treat that as a new architecture and security decision, not a configuration change.
+Skill Loom does not provide multi-user access or direct remote HTTP/editor
+access. Trusted remote CLI/skill workflows use the SSH-backed Podman bridge
+described above; this grants broad access to the dedicated Podman account, not
+per-command Skill Loom authorization. Direct network access to the HTTP
+service remains out of scope and requires a separate architecture and security
+decision.
 
 ## Global Skills and Shared Chains
 
@@ -1018,7 +1033,7 @@ Config, chain, run, and active-run documents carry explicit versions. Unknown ve
 - **Native fork is available only on OpenCode's headless surface.** Supervised OpenCode and all Copilot forks use a deterministic handoff note, not a native session fork.
 - **One active run globally.** A second start is rejected while a run is starting, running, paused, or awaiting user input.
 - **Run history is bounded.** A step tail is at most 200 lines or 32 KiB; there is no full transcript.
-- **No application authentication.** Direct public access is unsupported. A private Podman deployment relies on an authenticated platform/VPN ingress or localhost-only publishing; do not expose its proxy anonymously.
+- **No HTTP application authentication or remote editor.** Keep the HTTP service loopback-only and do not expose it through a proxy, VPN, tunnel, or public port. Trusted remote CLI/skill clients use SSH-backed Podman; that grants host-account container access, not per-command authorization.
 - **No published npm package or Git release tag.** Version `0.1.0` is declared locally and the package is private.
 - **Live evidence is platform-specific.** Historical probes cover Linux ARM64 with OpenCode 2.2.5 and Copilot CLI 1.0.105. The supplied passing execution probe covers Linux x64 with OpenCode 2.2.6 and Copilot CLI 1.0.107, with a Copilot exact-version warning. Other platforms and versions remain unverified.
 

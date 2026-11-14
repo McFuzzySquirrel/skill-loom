@@ -4,7 +4,7 @@ Skill Loom is a single-user local tool for assembling, saving, and running order
 
 ## Repository Invariants
 
-- The server binds to loopback only. Reject non-loopback hosts; there is no authentication, TLS, or supported remote deployment.
+- The HTTP server binds to loopback only. Reject non-loopback hosts; there is no HTTP application authentication or supported remote HTTP/editor access. Trusted remote CLI/skill workflows use the SSH-backed Podman bridge.
 - The server owns filesystem, persistence, process, and PTY access. Spawn harnesses with an executable plus argument array, never a shell string.
 - Skills are model-invoked prompt context. Chain order is prompt order, not a guarantee that a harness loads a named skill.
 - The product is CLI- and skill-driven; the only web screen is the chain editor opened by `skill-loom edit`.
@@ -25,6 +25,7 @@ Update the documentation in the same change as the behavior it describes, or sta
 - `docs/admin-guide.md` — update prerequisites, configuration, storage, backups, upgrades, and troubleshooting when deployment or configuration changes.
 - `docs/OPERATIONS.md` — update the operator contract when data locations, harness prerequisites, trust, permissions, or security behavior changes.
 - `docs/standalone-skill-guide.md` — update the skill-only procedure when bundle inspection, installation, reuse, execution, or recovery changes.
+- `docs/diagrams/` and `docs/plans/*overview.html` — refresh the checked Archify source and output together when architecture, workflow, security boundaries, or verification evidence changes.
 - `docs/adr/NNNN-kebab-title.md` — record a durable decision as one record with `applies_to`, imperative rules, and a runnable verification check; supersede the old record instead of rewriting it.
 - `docs/adr/README.md` — add or update the row for every record you add, supersede, or re-date, in identifier order.
 - Before finishing, run `npm run check`, `npm run typecheck`, `npm test`, and `git diff --check`. Run `npm run test:package` for packaging changes, and live probes only with real harness CLIs and credentials.

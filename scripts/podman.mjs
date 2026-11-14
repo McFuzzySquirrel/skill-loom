@@ -159,7 +159,9 @@ function runUp(plan) {
 
   if (plan.privateNetwork) {
     process.stdout.write(`Skill Loom is listening on the private Podman network at port 8080. Pod: ${POD_NAME}\n`);
-    process.stdout.write('Expose it only through a private authenticated platform/VPN ingress.\n');
+    process.stdout.write(
+      'Use SSH-backed Podman for remote CLI access; do not expose the HTTP proxy through an ingress.\n',
+    );
   } else {
     process.stdout.write(`Skill Loom is available at http://127.0.0.1:${String(plan.port)}\n`);
   }

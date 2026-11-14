@@ -40,7 +40,8 @@ status: Accepted
 - **Check:** `npm run check && npm run typecheck && npm test && git diff --check`.
 - **Expected:** Documentation and decision indexes pass their repository gates; existing strict-chain, revision-precondition, catalog identity, transfer, and Podman-boundary regressions remain green.
 - **Implementation checks:** Add tests for repo source parsing and atomic writes; sidecar validation and mapping; create/update/rename/copy behavior; stale and deliberate republish; exact entry ID plus fingerprint; and client-path privacy.
-- **Live check:** On the selected native Linux Podman host, use a real authorized SSH-backed client to verify read-only catalog discovery, selected package transfer, repo-local execution, publication, update, conflict, and rollback. Automated contract tests do not satisfy this live gate.
+- **Live evidence:** `P6-PILOT-01` records a trusted second-machine catalog query/review and selected-package copy, local active-session chain run, and first publish/update on Ubuntu 26.04 ARM64 with rootless Podman 5.7.0. `P6-STALE-CONFLICT-01` verifies that a stale update preserves the repo sidecar and hosted record. `P6-BACKUP-RESTORE-01` verifies export/import/re-export through a disposable volume, and `P6-REBOOT-03` verifies the rootless Podman socket remains active after reboot. See the [implementation plan](../plans/hosted-catalog-repo-chains-implementation-plan.md#evidence-recorded-while-planning-and-executing).
+- **Still unverified:** unauthorized-identity denial, SELinux-enforcing behavior, alternate platforms, live transfer of a chain-referenced package set, and repeating local execution after disconnect. The app container remained stopped during reboot; Quadlet app startup at boot and live image update/rollback were not established. The pre-pilot backup timing gate was missed and accepted as an exception. Do not claim these checks passed.
 
 ## Decision Drivers
 

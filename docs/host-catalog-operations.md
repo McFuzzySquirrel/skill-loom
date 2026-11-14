@@ -218,6 +218,10 @@ scheduled sync. Native Linux UID/GID and read-only mount behavior, plus a
 disposable app-level catalog add/update/restore scenario, have been verified on
 this host. A separate Ubuntu 26.04 ARM64 host with rootless Podman 5.7.0 also
 passed the approved SSH/Podman catalog and repo-chain pilot over a trusted
-tailnet connection. SELinux enforcement, reboot persistence, and backup/restore
-remain unverified; see the hosted-catalog implementation plan for exact
-evidence and limits.
+tailnet connection. The rootless Podman socket remained active after reboot,
+and a config-volume export/import/restore check passed with a disposable
+volume; the app container remained stopped. SELinux enforcement, Quadlet app
+startup at boot, host-manager image update/rollback, unauthorized-identity
+denial, and alternate platforms remain unverified. The pre-pilot backup timing
+gate was missed and accepted as an exception. See the hosted-catalog
+implementation plan for exact evidence and limits.

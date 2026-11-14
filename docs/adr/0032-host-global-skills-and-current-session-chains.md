@@ -8,7 +8,7 @@ applies_to:
   - "scripts/podman.mjs"
   - "Containerfile"
   - ".github/skills/loom-chain-workflow/**"
-status: Accepted
+status: Accepted; remote ingress superseded by ADR-0033
 ---
 
 # ADR-0032: Use host-global skills and shared chains in the current session
@@ -17,6 +17,10 @@ status: Accepted
 - **Date:** 2026-11-12
 
 **Technical Story:** A single host-global skill directory is simpler to keep current than project catalogs and pinned snapshots. A shared chain library can reference those packages, copy only the selected skills into a project, and let the active agent session perform the ordered work without a second harness process.
+
+**Partial supersession:** The private HTTP-ingress rule below is superseded by
+[ADR-0033](0033-podman-ssh-remote-clients.md). Remote clients use the
+SSH-backed Podman bridge; do not expose the HTTP proxy through an ingress.
 
 ## Agent Rules
 

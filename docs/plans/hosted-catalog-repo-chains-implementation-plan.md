@@ -353,6 +353,9 @@ Do not record credentials, private keys, tokens, or unnecessary tailnet hostname
 
 ### Evidence recorded while planning and executing
 
+Evidence entries are chronological. Later entries update earlier statuses; the
+current P6 decision is recorded in `P6-CLOSEOUT-01` and the plan status above.
+
 | ID | Date / commit | Phase / AC | Status | Environment and exact action | Result / evidence | Follow-up |
 | --- | --- | --- | --- | --- | --- | --- |
 | PLAN-DOC-01 | 2026-11-13T22:38+02:00; uncommitted | Planning docs; no product AC | Passed | Node v26.13.0, npm 11.20.0; `npm run check`; `git diff --check`. | Both passed. | No product tests were run; implementation phases remain not started. |
@@ -404,7 +407,7 @@ ADR-0034 records the decisions approved for dependent implementation:
 
 1. **Repo chain path and format:** Tracked `chains/<chain-id>.json`, outside the legacy `.loom/chains/` importer.
 2. **Publish metadata:** A separate versioned `chains/<chain-id>.publish.json` sidecar stores the hosted ID and last successful revision.
-3. **First live target:** Native Linux Podman host. Real SSH/Podman interoperability remains unverified until the P6 pilot.
+3. **First live target:** Native Linux Podman host. The approved Ubuntu 26.04 ARM64 SSH/Podman pilot and its bounded follow-up checks are recorded in the P6 evidence register.
 4. **Selected-skill identity:** Exact catalog entry ID plus a verified package fingerprint. A path/name change requires rediscovery and reselection.
 5. **Publication behavior:** Repo chain IDs persist across edits and renames; copies get new IDs. Updates require the sidecar revision. A stale conflict preserves both records and needs explicit comparison and user-confirmed republish.
 

@@ -91,12 +91,29 @@ describe('operator documentation gate', () => {
       '[user guide](docs/user-guide.md)',
       '[user guide](docs/missing-guide.md)',
     );
+    writeFileSync(
+      join(root, 'docs', 'example.archify.md'),
+      [
+        '[pilot](source:pilot)',
+        '[node](node:diagram.node)',
+        '[route](route:diagram.start~diagram.end)',
+        '[details](block:panel)',
+        '[value](typical:measured value)',
+      ].join('\n'),
+      'utf8',
+    );
 
     const result = runCheck(root, ['--integrity']);
+    const output = outputOf(result);
 
     expect(result.status).not.toBe(0);
-    expect(outputOf(result)).toContain('link target does not exist');
-    expect(outputOf(result)).toContain('docs/missing-guide.md');
+    expect(output).toContain('link target does not exist');
+    expect(output).toContain('docs/missing-guide.md');
+    expect(output).not.toContain('link target does not exist: source:');
+    expect(output).not.toContain('link target does not exist: node:');
+    expect(output).not.toContain('link target does not exist: route:');
+    expect(output).not.toContain('link target does not exist: block:');
+    expect(output).not.toContain('link target does not exist: typical:');
   });
 
   it('fails when a required heading is missing', () => {
