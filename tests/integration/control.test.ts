@@ -300,7 +300,7 @@ describe.skipIf(process.platform === 'win32')('local control transport', () => {
           projectId,
           installed: [{
             name: 'formatting',
-            destinationPath: join(project, '.agents', 'skills', 'formatting'),
+            destinationPath: join(registration.canonicalPath, '.agents', 'skills', 'formatting'),
             fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
           }],
         },

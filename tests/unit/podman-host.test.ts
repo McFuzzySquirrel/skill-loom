@@ -8,8 +8,11 @@ import {
   runPodmanHost,
 } from '../../scripts/podman-host.mjs';
 
+// These tests exercise Linux Quadlet paths and host files; Windows paths are not valid host inputs.
+const itWithPosixHostPaths = process.platform === 'win32' ? it.skip : it;
+
 describe('Persistent Podman host deployment', () => {
-  it('creates a rootless SSH-only Quadlet deployment with persistent and scoped mounts', () => {
+  itWithPosixHostPaths('creates a rootless SSH-only Quadlet deployment with persistent and scoped mounts', () => {
     const files = createQuadletFiles({
       homeDirectory: '/srv/loom',
       skillsDirectory: '/srv/loom/skills',
@@ -30,7 +33,7 @@ describe('Persistent Podman host deployment', () => {
     expect(files['skill-loom-proxy.container']).toContain('Volume=/opt/skill-loom/container/Caddyfile:/etc/caddy/Caddyfile:ro');
   });
 
-  it('allows only an optional loopback host port and validates host paths and image tags', () => {
+  itWithPosixHostPaths('allows only an optional loopback host port and validates host paths and image tags', () => {
     const files = createQuadletFiles({ hostPort: 4317, imageTag: '0123456789ab' });
     expect(files['skill-loom.pod']).toContain('PublishPort=127.0.0.1:4317:8080');
     expect(() => createQuadletFiles({ hostPort: 0 })).toThrow('LOOM_PODMAN_HOST_PORT');
@@ -40,7 +43,7 @@ describe('Persistent Podman host deployment', () => {
     expect(() => createQuadletFiles({ imageTag: 'latest;rm' })).toThrow('Image tags');
   });
 
-  it('plans immutable image builds and a dedicated systemd user unit set', () => {
+  itWithPosixHostPaths('plans immutable image builds and a dedicated systemd user unit set', () => {
     const plan = createPodmanHostPlan({
       env: {
         HOME: '/srv/loom',
@@ -66,7 +69,7 @@ describe('Persistent Podman host deployment', () => {
     expect(plan.files['skill-loom.pod']).toContain('PublishPort=127.0.0.1:4317:8080');
   });
 
-  it('manages the service through argument arrays and checks the in-container CLI health', async () => {
+  itWithPosixHostPaths('manages the service through argument arrays and checks the in-container CLI health', async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
     const output = { write: (_text: string) => true };
     const result = await runPodmanHost(['start'], {
@@ -89,7 +92,7 @@ describe('Persistent Podman host deployment', () => {
     ]);
   });
 
-  it('installs the generated units and starts the app only after host preflight', async () => {
+  itWithPosixHostPaths('installs the generated units and starts the app only after host preflight', async () => {
     const root = mkdtempSync(join(tmpdir(), 'skill-loom-host-test-'));
     try {
       const calls: Array<{ command: string; args: string[] }> = [];
@@ -146,7 +149,7 @@ describe('Persistent Podman host deployment', () => {
     }
   });
 
-  it('updates to a commit-tagged image and restores the retained app unit on rollback', async () => {
+  itWithPosixHostPaths('updates to a commit-tagged image and restores the retained app unit on rollback', async () => {
     const root = mkdtempSync(join(tmpdir(), 'skill-loom-update-test-'));
     try {
       const unitDirectory = join(root, '.config/containers/systemd');
@@ -212,7 +215,7 @@ describe('Persistent Podman host deployment', () => {
     }
   });
 
-  it('backs up only a stopped service volume and refuses to overwrite an archive', async () => {
+  itWithPosixHostPaths('backs up only a stopped service volume and refuses to overwrite an archive', async () => {
     const root = mkdtempSync(join(tmpdir(), 'skill-loom-backup-test-'));
     try {
       const destination = join(root, 'config.tar');

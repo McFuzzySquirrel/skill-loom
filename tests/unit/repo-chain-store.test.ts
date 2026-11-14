@@ -69,7 +69,7 @@ describe('repository chain store', () => {
 
     expect(await repository.service.get(repository.root, created.id)).toEqual(created);
     expect(await repository.readPublication(created.id)).toBeNull();
-    expect(path).toBe(join(root!, 'chains', `${created.id}.json`));
+    expect(path).toBe(join(repository.root, 'chains', `${created.id}.json`));
     expect(await readFile(path, 'utf8')).toContain('"version": 3');
     expect(await repository.service.update(
       repository.root,
