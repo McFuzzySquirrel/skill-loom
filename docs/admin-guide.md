@@ -89,11 +89,16 @@ HTTP service has no application authentication. Use the SSH-backed Podman
 bridge for remote CLI access; remote editor and HTTP access are unsupported.
 
 The host skills directory is an operator-managed source, mounted read-only and
-outside the image. See the [Host Catalog Operations guide](host-catalog-operations.md)
-for its package layout, safe add/update/remove workflow, refresh behavior,
-backup, permissions, and troubleshooting. Updating mounted packages does not
-require rebuilding the application image; existing client copies remain
-unchanged.
+outside the image for Podman deployments. When the server runs directly on the
+host, it reads `LOOM_SKILLS_DIR` (default `~/.agents/skills`) from the server
+process environment; no mount is needed. For Podman, the host directory must be
+a persistent mount at `/var/lib/loom/skills` in the container. Check the
+planned mount with `npm run podman:plan` and the live mount with
+`podman inspect skill-loom-app`; it should be read-only. See the
+[Host Catalog Operations guide](host-catalog-operations.md) for its package
+layout, safe add/update/remove workflow, permissions, backup, and
+troubleshooting. Updating mounted packages does not require rebuilding the
+application image; existing client copies remain unchanged.
 
 On macOS and Windows, Podman Machine must be initialized and running under the
 same user with access to the selected host directories. `LOOM_PODMAN_PLATFORM`

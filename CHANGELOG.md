@@ -49,6 +49,7 @@ The package version `0.1.0` is private and has no Git release tag or npm publica
 
 ### Changed
 
+- Clarified where the host-global skill catalog lives, how Podman persistence and mount verification work, and that direct host deployments need no container mount.
 - Refreshed the current Archify architecture and hosted-catalog overview to match repo-canonical chains, the SSH-backed Podman boundary, and the approved pilot evidence; added a linked repo-first authoring walkthrough.
 - Documentation now distinguishes the SSH-backed remote CLI workflow from the loopback-only HTTP service and records the hosted-catalog pilot's verified scope and accepted exceptions.
 - The repo-first workflow now obtains the selected package fingerprint from `catalog skill review` when discovery omits it.
