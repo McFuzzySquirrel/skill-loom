@@ -31,6 +31,24 @@ On Windows, service startup also requires a protected private profile on a local
 
 Run `skill-loom --help`, `skill-loom chain project --help`, and `skill-loom chain repo --help` for the exact commands of the installed version. Structured input is passed as JSON on stdin; every command prints a versioned JSON envelope.
 
+## Provision Skills for Discovery
+
+The default catalog reads skill packages from the Loom server's
+`~/.agents/skills/` directory, or from the directory set by `LOOM_SKILLS_DIR`.
+Put each package directly under that root, with its own root-level `SKILL.md`;
+use your normal tools to install or sync packages there. Loom does not fetch
+remote repositories. The catalog is shared by projects, while skills copied
+into a project are independent copies.
+
+When the server runs directly on your machine, it reads that machine's
+directory and no mount is needed. When it runs in Podman, the host directory
+must be persistently mounted into the container. The standard launcher mounts
+it read-only at `/var/lib/loom/skills`; check `npm run podman:plan` before
+starting and verify the live mount with `podman inspect skill-loom-app`. A
+container on the same physical machine still needs this mount. See the
+[host catalog operations guide](host-catalog-operations.md) for permissions,
+verification, and backup steps.
+
 ## Use a Hosted Podman Service Remotely
 
 The remote workflow uses Podman's SSH transport to invoke the existing app CLI;
