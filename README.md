@@ -89,7 +89,7 @@ LOOM_PODMAN_CONNECTION=loom-host skill-loom-podman service status # remote Podma
 
 Unix uses a private socket; Windows uses mutually authenticated loopback TLS and requires a protected private profile on local NTFS/ReFS storage (PowerShell 7, or Windows PowerShell 5.1 with .NET 4.7.2+). Unsafe existing Windows profiles are rejected, not reconfigured; see the [administrator guide](docs/admin-guide.md#cli-flags). For trusted remote Podman clients, see [remote client access](docs/admin-guide.md#remote-client-access). Remaining blocked and unverified capabilities are listed in [known gaps](docs/current-gaps.md).
 
-For a persistent rootless Linux host and same-VPN client, follow the [hosted Podman setup runbook](docs/admin-guide.md#persistent-linux-host-service-quadlet).
+For a persistent rootless Linux host and a client on a trusted network (VPN or LAN), follow the [hosted Podman setup runbook](docs/admin-guide.md#persistent-linux-host-service-quadlet).
 
 ## Tech Stack
 

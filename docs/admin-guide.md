@@ -186,11 +186,13 @@ systemctl --user enable --now podman.socket
 systemctl --user is-active podman.socket
 ```
 
-Make the host's SSH service reachable only through the intended VPN/firewall
-policy. Add each trusted client's public key to the `loom` account using the
-host's normal SSH administration process. Podman access grants control of all
-containers and mounts owned by `loom`; do not share this account with
-untrusted clients.
+Make the host's SSH service reachable only through the intended private
+network and firewall policy. This can be a VPN such as Tailscale or a trusted
+LAN; restrict SSH to the intended client devices or subnet and do not expose it
+to the public internet. Add each trusted client's public key to the `loom`
+account using the host's normal SSH administration process. Podman access
+grants control of all containers and mounts owned by `loom`; do not share this
+account with untrusted clients.
 
 #### Install Skill Loom
 
@@ -286,12 +288,14 @@ see [known gaps](current-gaps.md#execution-gates).
 ### Remote client access
 
 A remote agent can use the same hosted catalog and shared chains through
-Podman's SSH transport. It does not use Caddy, the editor port, or a new
+Podman's SSH transport. The client can reach the host over a VPN or directly
+over a trusted LAN; Tailscale is not required when the LAN provides a
+controlled route to SSH. It does not use Caddy, the editor port, or a new
 Skill Loom network endpoint. Keep the app loopback-bound and configure a
 dedicated rootless Podman account on the host. Anyone authorized to use that
-account's Podman connection can control its containers and mounts, so grant
-SSH access only to trusted clients; the bridge is not a per-command permission
-system.
+account's Podman connection can control its containers and mounts, so limit
+SSH access to trusted clients and the intended private network; the bridge is
+not a per-command permission system.
 
 On each client, install the `loom-chain-workflow` standalone skill package.
 The package includes the `skill-loom-podman` helper and needs Node.js 24+ and
@@ -300,8 +304,10 @@ installation method; its canonical package is
 `.github/skills/loom-chain-workflow` in this repository. A client with the
 skill and its helper installed does not need the Skill Loom server checkout or
 the private npm package. Ask the host administrator to authorize the client's
-SSH public key and provide the host's VPN-reachable DNS name and SSH port.
-Create a named SSH connection:
+SSH public key and provide a host name or IP address and SSH port reachable
+from the client. Use the VPN-reachable DNS name when connecting over a VPN, or
+the host's LAN name/address when connecting directly over a trusted LAN. The
+same named Podman SSH connection works for either route:
 
 ```bash
 podman system connection add --identity ~/.ssh/loom_host_ed25519 \
@@ -349,7 +355,9 @@ or conflicting names. Revision conflicts preserve the repo file, hosted chain,
 and sidecar; compare both copies before using the explicit `republish` flow.
 See the [repository-chain authoring and recovery procedure](standalone-skill-guide.md#create-and-publish-a-repository-chain).
 
-The bridge contract and local export are covered by automated tests. A live
+The bridge contract and local export are covered by automated tests. The
+connection instructions are network-agnostic SSH setup, but only the tailnet
+route below has been live-verified; a LAN-only route has not. A live
 second-machine journey passed with a trusted tailnet client and a dedicated
 Ubuntu 26.04 ARM64 host running rootless Podman 5.7.0: catalog query/review,
 selected-skill copy, active-session local chain execution, first publish,
@@ -812,7 +820,7 @@ inspect both files and the live process state rather than assuming rollback.
 
 ## Identity, Secrets, and TLS
 
-The browser HTTP interface has **no application identity, authentication, or authorization**. The service binds to loopback and refuses a non-loopback host. Direct remote HTTP and editor access are unsupported. Publish a container proxy only on loopback; do not route it through a private or public ingress. Trusted remote clients use the SSH-backed Podman bridge for CLI operations.
+The browser HTTP interface has **no application identity, authentication, or authorization**. The service binds to loopback and refuses a non-loopback host. Direct remote HTTP and editor access are unsupported. Publish a container proxy only on loopback; do not route it through a private or public ingress. Trusted remote clients use the SSH-backed Podman bridge for CLI operations over a VPN or a trusted LAN, with SSH access restricted by network policy and authorized keys.
 
 The Unix local control endpoint uses an owner-only runtime directory and a
 per-instance bearer capability in `control.json`, readable only by the profile
@@ -1062,9 +1070,10 @@ sudo -iu loom
 systemctl --user is-active podman.socket
 ```
 
-Linger must be enabled and the socket active. On the client, verify VPN
-reachability, SSH key authorization for `loom`, and the named connection with
-`podman system connection list`; then try `podman --connection loom-host ps`.
+Linger must be enabled and the socket active. On the client, verify VPN or
+trusted-LAN reachability, SSH key authorization for `loom`, and the named
+connection with `podman system connection list`; then try
+`podman --connection loom-host ps`.
 Do not work around a failed connection by exposing Podman's API over TCP or
 publishing Skill Loom's HTTP port.
 
